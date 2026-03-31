@@ -7,7 +7,7 @@ Thank you for your interest in contributing to the Hush web client. This guide c
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22 or later
-- A GitHub Personal Access Token (PAT) with `read:packages` scope (for `@gethush/hush-crypto`)
+- A GitHub Personal Access Token (PAT) with `read:packages` scope (for `@hushhq/hush-crypto`)
 - A running [hush-server](https://github.com/hushhq/hush-server) instance (for end-to-end dev)
 
 ---
@@ -17,7 +17,7 @@ Thank you for your interest in contributing to the Hush web client. This guide c
 **1. Configure npm for GitHub Packages auth:**
 
 ```bash
-echo "@gethush:registry=https://npm.pkg.github.com" >> ~/.npmrc
+echo "@hushhq:registry=https://npm.pkg.github.com" >> ~/.npmrc
 echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT" >> ~/.npmrc
 ```
 

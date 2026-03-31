@@ -1,6 +1,6 @@
 {
   "name": "hush-web",
   "requires": {
-    "@gethush/hush-crypto": "0.2.0"
+    "@hushhq/hush-crypto": "0.2.0"
   }
 }
