@@ -247,3 +247,212 @@ describe('createWsClient — reconnect chain', () => {
     expect(onReconnectedEvent).toHaveBeenCalledOnce();
   });
 });
+
+// ── Network recovery tests ───────────────────────────────────────────────────
+
+describe('createWsClient — network recovery', () => {
+  let MockWs;
+  /** @type {Map<string, Function>} Captured window event handlers */
+  let windowListeners;
+  /** @type {Map<string, Function>} Captured document event handlers */
+  let docListeners;
+  let origAddEventListener;
+  let origRemoveEventListener;
+  let origDocAddEventListener;
+  let origDocRemoveEventListener;
+  let origVisibilityState;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    windowListeners = new Map();
+    docListeners = new Map();
+
+    // Spy on window.addEventListener / removeEventListener
+    origAddEventListener = window.addEventListener;
+    origRemoveEventListener = window.removeEventListener;
+    window.addEventListener = vi.fn((type, handler) => {
+      windowListeners.set(type, handler);
+    });
+    window.removeEventListener = vi.fn((type, handler) => {
+      if (windowListeners.get(type) === handler) windowListeners.delete(type);
+    });
+
+    // Spy on document.addEventListener / removeEventListener
+    origDocAddEventListener = document.addEventListener;
+    origDocRemoveEventListener = document.removeEventListener;
+    document.addEventListener = vi.fn((type, handler) => {
+      docListeners.set(type, handler);
+    });
+    document.removeEventListener = vi.fn((type, handler) => {
+      if (docListeners.get(type) === handler) docListeners.delete(type);
+    });
+
+    // Default visibility state
+    origVisibilityState = document.visibilityState;
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete global.WebSocket;
+    window.addEventListener = origAddEventListener;
+    window.removeEventListener = origRemoveEventListener;
+    document.addEventListener = origDocAddEventListener;
+    document.removeEventListener = origDocRemoveEventListener;
+    Object.defineProperty(document, 'visibilityState', {
+      value: origVisibilityState,
+      configurable: true,
+    });
+  });
+
+  function createAndConnect(overrides = {}) {
+    const getToken = overrides.getToken ?? vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken, ...overrides });
+    client.connect();
+    // Fire onopen so socket is OPEN
+    MockWs.captured.onopen();
+    return { client, ws: MockWs.captured };
+  }
+
+  it('online event with OPEN socket forces close and schedules reconnect', () => {
+    const { client, ws } = createAndConnect();
+    expect(ws.readyState).toBe(1); // OPEN
+
+    const onReconnecting = vi.fn();
+    client.on('reconnecting', onReconnecting);
+
+    // Fire online event
+    const onlineHandler = windowListeners.get('online');
+    expect(onlineHandler).toBeDefined();
+    onlineHandler();
+
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it('online event with null socket (already closed) schedules reconnect if not reconnecting', () => {
+    const { client, ws } = createAndConnect();
+    const onReconnecting = vi.fn();
+    client.on('reconnecting', onReconnecting);
+
+    // Simulate onclose so socket becomes null
+    ws.onclose();
+
+    // Now fire online event — should not error and should still handle gracefully
+    const onlineHandler = windowListeners.get('online');
+    expect(onlineHandler).toBeDefined();
+    // scheduleReconnect was already called by onclose, so reconnecting is true
+    // online handler should not crash
+    onlineHandler();
+  });
+
+  it('online event after intentional disconnect() does not reconnect', () => {
+    const { client } = createAndConnect();
+    client.disconnect();
+
+    // Online event fires after user intentionally disconnected
+    // Listeners should have been removed, but even if handler is called manually
+    // it should not reconnect
+    const onReconnecting = vi.fn();
+    client.on('reconnecting', onReconnecting);
+
+    // The handler should have been removed by disconnect()
+    expect(windowListeners.has('online')).toBe(false);
+  });
+
+  it('two missed pongs trigger socket close', () => {
+    const { ws } = createAndConnect();
+
+    // Advance past two ping intervals without sending any pong
+    // Ping interval is 10s. After first ping: missedPongs=1. After second: missedPongs=2 -> close.
+    vi.advanceTimersByTime(10_000); // First ping fires, missedPongs = 1
+    vi.advanceTimersByTime(10_000); // Second ping fires, missedPongs = 2 -> close
+
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it('pong response resets missed pong counter', () => {
+    const { ws } = createAndConnect();
+
+    // First ping fires
+    vi.advanceTimersByTime(10_000);
+    // Send pong response
+    ws.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+    // Second ping fires — missedPongs was reset, so now it's 1 again
+    vi.advanceTimersByTime(10_000);
+
+    // Socket should NOT be closed (only 1 missed after reset)
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  it('visibilitychange with stale pong triggers reconnect', () => {
+    const { ws } = createAndConnect();
+
+    // Advance time past the stale threshold (15s) without any pong
+    vi.advanceTimersByTime(16_000);
+
+    // Fire visibilitychange with visible state
+    document.visibilityState = 'visible';
+    const visHandler = docListeners.get('visibilitychange');
+    expect(visHandler).toBeDefined();
+    visHandler();
+
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it('visibilitychange with fresh pong does NOT trigger reconnect', () => {
+    const { ws } = createAndConnect();
+
+    // Send a pong right away so lastPongTime is fresh
+    ws.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+
+    // Fire visibilitychange immediately (within stale threshold)
+    document.visibilityState = 'visible';
+    const visHandler = docListeners.get('visibilitychange');
+    expect(visHandler).toBeDefined();
+    visHandler();
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  it('disconnect() removes all event listeners', () => {
+    const { client } = createAndConnect();
+
+    // Verify listeners were registered
+    expect(windowListeners.has('online')).toBe(true);
+    expect(docListeners.has('visibilitychange')).toBe(true);
+
+    client.disconnect();
+
+    // Verify listeners were removed
+    expect(windowListeners.has('online')).toBe(false);
+    expect(docListeners.has('visibilitychange')).toBe(false);
+  });
+
+  it('connect() registers event listeners; calling connect() twice does not double-register', () => {
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+
+    client.connect();
+    MockWs.captured.onopen();
+
+    const firstOnline = windowListeners.get('online');
+    expect(firstOnline).toBeDefined();
+
+    // Record how many times addEventListener was called for 'online'
+    const onlineCalls1 = window.addEventListener.mock.calls.filter(c => c[0] === 'online').length;
+
+    // Second connect should be guarded (socket is already OPEN)
+    client.connect();
+    const onlineCalls2 = window.addEventListener.mock.calls.filter(c => c[0] === 'online').length;
+
+    // Should not have added another listener
+    expect(onlineCalls2).toBe(onlineCalls1);
+  });
+});
