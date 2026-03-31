@@ -12,6 +12,8 @@ const DEFAULT_WS_PATH = '/ws';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
 const RECONNECT_MULTIPLIER = 2;
+const MISSED_PONG_LIMIT = 2;
+const STALE_THRESHOLD_MS = 15_000;
 
 /**
  * @param {{ url?: string, getToken: () => string | null, onReconnected?: () => Promise<void> | void }} opts
@@ -57,6 +59,10 @@ export function createWsClient(opts) {
    * or listen for the 'reconnecting' and 'reconnected' events.
    */
   let reconnecting = false;
+  let intentionalClose = false;
+  let missedPongs = 0;
+  let lastPongTime = Date.now();
+  let listenersRegistered = false;
 
   function emit(type, data) {
     const cbs = listeners.get(type);
@@ -94,8 +100,10 @@ export function createWsClient(opts) {
   }
 
   function connect() {
+    intentionalClose = false;
     // readyState 1 === OPEN, 0 === CONNECTING. Avoid global WebSocket reference.
     if (socket && (socket.readyState === 1 || socket.readyState === 0)) return;
+    lastPongTime = Date.now();
     // Always embed a fresh token in the URL so the reconnected session is
     // immediately authenticated without a separate message round-trip.
     const token = getToken();
@@ -138,6 +146,8 @@ export function createWsClient(opts) {
         const data = JSON.parse(event.data);
         const type = data.type;
         if (type === 'pong') {
+          missedPongs = 0;
+          lastPongTime = Date.now();
           if (pingStart > 0) {
             lastRtt = Math.round(performance.now() - pingStart);
             pingStart = 0;
@@ -162,9 +172,13 @@ export function createWsClient(opts) {
     ws.onerror = () => {
       emit('error', {});
     };
+
+    registerNetworkListeners();
   }
 
   function disconnect() {
+    intentionalClose = true;
+    removeNetworkListeners();
     stopPing();
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -209,11 +223,67 @@ export function createWsClient(opts) {
 
   function startPing() {
     stopPing();
+    missedPongs = 0;
     pingTimer = setInterval(() => {
       if (!isConnected()) return;
+      missedPongs += 1;
+      if (missedPongs >= MISSED_PONG_LIMIT) {
+        console.warn('[ws] missed', missedPongs, 'pongs — forcing reconnect');
+        socket.close();
+        return;
+      }
       pingStart = performance.now();
       socket.send(JSON.stringify({ type: 'ping' }));
     }, PING_INTERVAL_MS);
+  }
+
+  // ── Network-aware reconnect ──────────────────────────────────────────────
+
+  function handleOnline() {
+    if (intentionalClose) return;
+    console.log('[ws] network online — forcing reconnect');
+    if (socket && (socket.readyState === 1 || socket.readyState === 0)) {
+      socket.close();
+      return; // onclose will call scheduleReconnect
+    }
+    if (!socket && !reconnecting) {
+      scheduleReconnect();
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState !== 'visible' || intentionalClose) return;
+    if (Date.now() - lastPongTime > STALE_THRESHOLD_MS) {
+      console.log('[ws] tab visible with stale connection — forcing reconnect');
+      if (socket && (socket.readyState === 1 || socket.readyState === 0)) {
+        socket.close();
+      } else if (!socket && !reconnecting) {
+        scheduleReconnect();
+      }
+    }
+  }
+
+  function registerNetworkListeners() {
+    if (listenersRegistered) return;
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    listenersRegistered = true;
+  }
+
+  function removeNetworkListeners() {
+    if (!listenersRegistered) return;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', handleOnline);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+    listenersRegistered = false;
   }
 
   function stopPing() {
