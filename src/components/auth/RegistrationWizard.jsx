@@ -76,7 +76,7 @@ function hasAdvancedPastUsername(step, visibleSteps) {
 const REG_SESSION_KEY = 'hush_reg_wizard';
 const REG_IDB_NAME = 'hush-reg-wizard';
 const REG_IDB_STORE = 'state';
-const REG_STATE_TTL_MS = 10 * 60_000; // 10 minutes — users need time to write down 12 words
+const REG_STATE_TTL_MS = 10 * 60_000; // 10 minutes - users need time to write down 12 words
 
 function createFreshMnemonicState() {
   const mnemonic = generateIdentityMnemonic();
@@ -238,7 +238,7 @@ export function RegistrationWizard({
     });
   }, [initialStep, syncSaved, visibleSteps]);
 
-  // Persist wizard state on every change — dual-write to sessionStorage + IDB.
+  // Persist wizard state on every change - dual-write to sessionStorage + IDB.
   useEffect(() => {
     saveWizardState({
       step,

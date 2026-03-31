@@ -31,7 +31,7 @@ function formatJoinDate(dateStr) {
 
 /**
  * Floating profile card that appears on left-click of a member row.
- * Visible to all users — no role gate here.
+ * Visible to all users - no role gate here.
  *
  * @param {{
  *   member: object,

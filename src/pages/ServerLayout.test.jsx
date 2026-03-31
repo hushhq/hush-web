@@ -118,7 +118,7 @@ vi.mock('../lib/api', () => ({
   getGuildMembers: vi.fn().mockResolvedValue([
     { id: 'u1', displayName: 'User One', role: 'member' },
   ]),
-  // Key maintenance deps — no-ops in test context
+  // Key maintenance deps - no-ops in test context
   uploadMLSKeyPackages: vi.fn().mockResolvedValue(undefined),
   getKeyPackageCount: vi.fn().mockResolvedValue(100),
   getHandshake: vi.fn().mockResolvedValue({ key_package_low_threshold: 10 }),
@@ -170,7 +170,7 @@ vi.mock('../components/GuildCreateModal', () => ({
   },
 }));
 
-// ChannelList also imports ServerSettingsModal — mock the whole component
+// ChannelList also imports ServerSettingsModal - mock the whole component
 vi.mock('../components/ChannelList', () => ({
   default: function MockChannelList() {
     return <div data-testid="channel-list" />;

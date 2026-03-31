@@ -36,12 +36,12 @@ function SignalIcon({ bars = 0, color = 'var(--hush-text-muted)', isReconnecting
 }
 
 /**
- * VoiceConnectedPanel — voice status panel shown above the user panel
+ * VoiceConnectedPanel - voice status panel shown above the user panel
  * when the user is connected to a voice channel.
  *
  * Shows connection status, channel name, and voice-specific controls
  * (screenshare, webcam for quality channels; disconnect always).
- * Mic/deafen live in UserPanel — never duplicated here.
+ * Mic/deafen live in UserPanel - never duplicated here.
  *
  * @param {object} props
  * @param {string} props.channelName - Name of the connected voice channel.
@@ -166,7 +166,7 @@ export default function Controls({
 
   return (
     <div className="ctrl-bar">
-      {/* Screen Share — hidden when showScreenShare false (e.g. low-latency voice) or mobile when not supported */}
+      {/* Screen Share - hidden when showScreenShare false (e.g. low-latency voice) or mobile when not supported */}
       {showScreenShare && (!isMobile || IS_SCREEN_SHARE_SUPPORTED) && (
         <button
           className={`ctrl-btn${isScreenSharing ? ' ctrl-btn--active' : ''}`}

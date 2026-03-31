@@ -46,20 +46,20 @@ function saveCollapsedMap(storageKey, map) {
   try {
     localStorage.setItem(`hush:categories-collapsed:${storageKey}`, JSON.stringify(map));
   } catch {
-    // localStorage not available — silently ignore
+    // localStorage not available - silently ignore
   }
 }
 
 // Sentinel droppable ID for the uncategorized bucket. Using useSortable with this
 // ID (disabled, so non-draggable) lets the null group participate in pointerWithin
-// detection identically to named categories — its container rect gets registered,
+// detection identically to named categories - its container rect gets registered,
 // the channel drag filter strips it (it's in categoryIdSet), and the inner channel
 // rows win, enabling correct SortableContext animation for uncategorized channels.
 const UNCATEGORIZED_SENTINEL = '__uncategorized__';
 
 
 function groupChannelsByParent(channels) {
-  // System channels are handled separately — exclude them from grouping
+  // System channels are handled separately - exclude them from grouping
   const nonSystemChannels = channels.filter((ch) => ch.type !== CHANNEL_TYPE_SYSTEM);
 
   const byParent = new Map();
@@ -414,7 +414,7 @@ function CategorySection({ group, collapsed = false, onToggleCollapsed, activeCh
 
   // Named categories are sortable; the null group uses the sentinel ID with
   // disabled=true so it's never draggable but its container rect is registered as
-  // a droppable — matching the named-category pattern exactly.
+  // a droppable - matching the named-category pattern exactly.
   const {
     attributes: sortableAttributes,
     listeners: sortableListeners,
@@ -448,7 +448,7 @@ function CategorySection({ group, collapsed = false, onToggleCollapsed, activeCh
   );
 
   const sectionStyle = {
-    willChange: 'transform', // pre-promote GPU layer — prevents font antialiasing shift on drag start
+    willChange: 'transform', // pre-promote GPU layer - prevents font antialiasing shift on drag start
     ...(isOver ? { background: 'var(--hush-hover)' } : undefined),
     ...(isCategory ? {
       transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -461,7 +461,7 @@ function CategorySection({ group, collapsed = false, onToggleCollapsed, activeCh
   if (!isCategory) {
     // Uncategorized bucket: no visible header, renders exactly like a named category
     // section internally. The ref registers the sentinel droppable rect so
-    // pointerWithin returns [UNCATEGORIZED_SENTINEL, channelId] — the filter in
+    // pointerWithin returns [UNCATEGORIZED_SENTINEL, channelId] - the filter in
     // collisionDetection strips the sentinel, leaving the specific channel row.
     return <div ref={setNodeRef}>{channelRows}</div>;
   }
@@ -672,7 +672,7 @@ function ChannelRow({ channel, isActive, onSelect, participantCount, voicePartic
 
 // Drop zone for removing a channel from all categories (parentId → null).
 // Always rendered with a fixed height so the layout is stable before and after
-// a channel drag starts — conditional rendering would cause layout shift, which
+// a channel drag starts - conditional rendering would cause layout shift, which
 // offsets the DragOverlay from the pointer. Toggle visibility via CSS only.
 function UncategorizeZone({ position, visible }) {
   const id = position === 'top' ? 'uncategorize-top' : 'uncategorize-bottom';
@@ -719,7 +719,7 @@ function UncategorizeZone({ position, visible }) {
 
 /**
  * Returns the display name for a system channel.
- * System channels have NULL encryptedMetadata — their name is derived from type.
+ * System channels have NULL encryptedMetadata - their name is derived from type.
  * @param {object} channel
  * @returns {string}
  */
@@ -828,7 +828,7 @@ export default function ChannelList({
         const updated = await getGuildChannels(token, serverId);
         onChannelsUpdated?.(updated);
       } catch {
-        // Delete failed — channel state unchanged
+        // Delete failed - channel state unchanged
       }
     }
     setConfirmDelete(null);
@@ -878,7 +878,7 @@ export default function ChannelList({
   // valid target types.
   //
   // IMPORTANT: uses args.active.id (dnd-kit's synchronous active ID) rather than
-  // the activeId React state. onDragStart calls setActiveId which is asynchronous —
+  // the activeId React state. onDragStart calls setActiveId which is asynchronous -
   // the state update may not be reflected in the first few collision-detection calls,
   // leaving activeId=null and causing the category path to be skipped entirely,
   // which makes category reordering unpredictable.
@@ -886,7 +886,7 @@ export default function ChannelList({
     const isDraggingCategory = categoryIdSet.has(args.active.id);
 
     if (isDraggingCategory) {
-      // Only real category IDs are valid targets — exclude the sentinel so dragging
+      // Only real category IDs are valid targets - exclude the sentinel so dragging
       // a category over the uncategorized section falls back to the nearest real
       // category via closestCenter rather than snapping to the sentinel.
       const isRealCat = (h) => categoryIdSet.has(h.id) && h.id !== UNCATEGORIZED_SENTINEL;
@@ -897,7 +897,7 @@ export default function ChannelList({
 
     // Channel drag: prefer the innermost channel row over its category container.
     // CategorySection registers its droppable before inner channel rows, so
-    // pointerWithin returns [categoryId, ...] first — filter it out so the specific
+    // pointerWithin returns [categoryId, ...] first - filter it out so the specific
     // channel row wins. Keep category hits as fallback for empty-category drops.
     const hits = pointerWithin(args);
     if (hits.length === 0) {

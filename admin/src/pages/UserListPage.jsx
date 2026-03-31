@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { listUsers, instanceBan, instanceUnban } from '../lib/adminApi.js';
 
 /**
- * UserListPage — shows user UUIDs, roles, creation dates, and status.
+ * UserListPage - shows user UUIDs, roles, creation dates, and status.
  * No usernames or identities are displayed (blind relay boundary).
  */
 
@@ -144,7 +144,7 @@ const PAGE_STYLES = {
 };
 
 function formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -385,7 +385,7 @@ export default function UserListPage({ apiKey }) {
               return (
                 <tr key={u.id}>
                   <td style={PAGE_STYLES.tdMono}>
-                    {u.id ? `${u.id.slice(0, 8)}...` : '—'}
+                    {u.id ? `${u.id.slice(0, 8)}...` : '-'}
                     {u.id && <CopyButton text={u.id} />}
                   </td>
                   <td style={PAGE_STYLES.td}>

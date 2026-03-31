@@ -1,5 +1,5 @@
 /**
- * App.test.jsx — Two-tab detection via BroadcastChannel
+ * App.test.jsx - Two-tab detection via BroadcastChannel
  *
  * Tests the useSingleTab hook behavior:
  * 1. isBlockedTab becomes true when session_active is received within 500ms of session_ping
@@ -58,7 +58,7 @@ vi.mock('./hooks/useSingleTab', () => ({
   useSingleTab: vi.fn(() => ({ isBlockedTab: false, takeOver: vi.fn() })),
 }));
 
-// jsdom doesn't implement matchMedia — provide a minimal stub so FaviconThemeSync
+// jsdom doesn't implement matchMedia - provide a minimal stub so FaviconThemeSync
 // doesn't throw when the normal app renders (isBlockedTab = false path).
 if (!window.matchMedia) {
   Object.defineProperty(window, 'matchMedia', {
@@ -86,7 +86,7 @@ import { useBootController } from './hooks/useBootController.jsx';
 import { cleanup } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
-// BroadcastChannel mock infrastructure — used by useSingleTab unit tests
+// BroadcastChannel mock infrastructure - used by useSingleTab unit tests
 // ---------------------------------------------------------------------------
 
 /**
@@ -174,12 +174,12 @@ describe('useSingleTab', () => {
     await act(async () => {
       const hookChannel = MockBroadcastChannel._instances[0];
       if (hookChannel?.onmessage) {
-        // Same tab ID — simulates pre-refresh page responding
+        // Same tab ID - simulates pre-refresh page responding
         hookChannel.onmessage({ data: { type: 'session_active', tabId: ownTabId } });
       }
     });
 
-    // Should NOT be blocked — it's the same tab refreshing
+    // Should NOT be blocked - it's the same tab refreshing
     expect(result.current.isBlockedTab).toBe(false);
   });
 
@@ -221,7 +221,7 @@ describe('useSingleTab', () => {
       vi.advanceTimersByTime(600);
     });
 
-    // Simulate another tab's ping — the primary tab should respond
+    // Simulate another tab's ping - the primary tab should respond
     const primaryChannel = MockBroadcastChannel._instances[0];
 
     // Create a "new tab" channel to receive the response
@@ -260,7 +260,7 @@ describe('useSingleTab', () => {
 // App integration: blocked-tab overlay rendering
 // ---------------------------------------------------------------------------
 
-describe('App — blocked-tab overlay', () => {
+describe('App - blocked-tab overlay', () => {
   beforeEach(() => {
     vi.useRealTimers();
     cleanup();
@@ -317,7 +317,7 @@ describe('App — blocked-tab overlay', () => {
 
     const { container } = render(<MemoryRouter><App /></MemoryRouter>);
 
-    // No Home, no overlay — just blank.
+    // No Home, no overlay - just blank.
     expect(screen.queryByText('Home')).not.toBeInTheDocument();
     expect(screen.queryByText(/already open/i)).not.toBeInTheDocument();
     expect(container.querySelector('[style]')).toBeTruthy();

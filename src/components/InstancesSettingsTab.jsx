@@ -24,7 +24,7 @@ function statusIndicator(state) {
 
 /**
  * Inline confirmation panel shown within the instance row.
- * Avoids portal complexity — styled inline below the row.
+ * Avoids portal complexity - styled inline below the row.
  *
  * @param {{ domain: string, serverCount: number, onConfirm: Function, onCancel: Function, loading: boolean }} props
  */
@@ -97,7 +97,7 @@ function InstanceRow({ instanceUrl, state, onDisconnect }) {
   return (
     <div className="ist-row">
       <div className="ist-row-inner">
-        {/* Status dot — color is dynamic per connection state */}
+        {/* Status dot - color is dynamic per connection state */}
         <div
           className="ist-status-dot"
           style={{ background: indicator.color }}
@@ -118,7 +118,7 @@ function InstanceRow({ instanceUrl, state, onDisconnect }) {
           </div>
         </div>
 
-        {/* Disconnect button — only shown when not already confirming */}
+        {/* Disconnect button - only shown when not already confirming */}
         {!confirming && (
           <button
             type="button"
@@ -149,7 +149,7 @@ function InstanceRow({ instanceUrl, state, onDisconnect }) {
  * Settings tab for managing connected instances.
  * Renders in UserSettingsModal alongside Account, Appearance, Audio & Video, and Devices.
  *
- * Uses InstanceContext directly (does not throw if missing — graceful degradation for
+ * Uses InstanceContext directly (does not throw if missing - graceful degradation for
  * environments where InstanceProvider has not been mounted yet).
  */
 export default function InstancesSettingsTab() {

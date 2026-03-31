@@ -62,7 +62,7 @@ describe('hushCrypto WASM bridge', () => {
     it('does not expose snake_case fields (camelCase contract enforced)', async () => {
       const result = await generateCredential('user123:device1');
 
-      // These would be the result if snake_case keys were accessed — must remain undefined.
+      // These would be the result if snake_case keys were accessed - must remain undefined.
       expect((result).signing_public_key).toBeUndefined();
       expect((result).signing_private_key).toBeUndefined();
       expect((result).credential_bytes).toBeUndefined();

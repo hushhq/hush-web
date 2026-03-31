@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
-// Stable hoisted mocks — must be created with vi.hoisted() so they exist
+// Stable hoisted mocks - must be created with vi.hoisted() so they exist
 // when vi.mock() factory functions run (factories execute before imports).
 // ---------------------------------------------------------------------------
 const {
@@ -120,7 +120,7 @@ vi.mock('livekit-client/e2ee-worker?worker', () => ({
   default: class MockWorker {},
 }));
 
-// Mock trackManager — no real audio/video in unit tests
+// Mock trackManager - no real audio/video in unit tests
 vi.mock('../lib/trackManager', () => ({
   attachRemoteTrackListeners: vi.fn(),
   preloadNoiseGateWorklet: vi.fn(),
@@ -349,7 +349,7 @@ describe('useRoom MLS voice E2EE', () => {
     expect(result.current.isVoiceReconnecting).toBe(false);
   });
 
-  it('MLS failure blocks voice entirely — no unencrypted fallback', async () => {
+  it('MLS failure blocks voice entirely - no unencrypted fallback', async () => {
     // Both getMLSVoiceGroupInfo and createVoiceGroup fail
     mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('Network error'));
     mockCreateVoiceGroup.mockRejectedValue(new Error('WASM failure'));
@@ -362,9 +362,9 @@ describe('useRoom MLS voice E2EE', () => {
       await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
     });
 
-    // Voice must be blocked — error set with clear message
+    // Voice must be blocked - error set with clear message
     expect(result.current.error).toMatch(/encrypted voice|please try again/i);
-    // E2EE must NOT be enabled — no unencrypted fallback
+    // E2EE must NOT be enabled - no unencrypted fallback
     expect(result.current.isE2EEEnabled).toBe(false);
     expect(result.current.isVoiceReconnecting).toBe(false);
   });

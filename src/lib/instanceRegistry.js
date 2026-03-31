@@ -1,10 +1,10 @@
 /**
- * Instance registry — IndexedDB-backed store for multi-instance connections.
+ * Instance registry - IndexedDB-backed store for multi-instance connections.
  *
  * Database: 'hush-instances' (version 1)
  * Object stores:
- *   - 'instances'   keyPath: 'instanceUrl' — per-instance JWT, userId, connectionState
- *   - 'guild-order' — single record key 'order' storing ordered guildId array
+ *   - 'instances'   keyPath: 'instanceUrl' - per-instance JWT, userId, connectionState
+ *   - 'guild-order' - single record key 'order' storing ordered guildId array
  *
  * Follows the raw IndexedDB API pattern from mlsStore.js and identityVault.js.
  * Callers receive the IDBDatabase handle from openInstanceRegistry() and pass it
@@ -16,7 +16,7 @@
 /** IndexedDB database name. */
 const DB_NAME = 'hush-instances';
 
-/** Database version — increment on schema changes. */
+/** Database version - increment on schema changes. */
 const DB_VERSION = 1;
 
 /** Store names. */
@@ -124,7 +124,7 @@ export function openInstanceRegistry(dbName = DB_NAME) {
         db.createObjectStore(STORE_INSTANCES, { keyPath: 'instanceUrl' });
       }
       if (!db.objectStoreNames.contains(STORE_GUILD_ORDER)) {
-        // No keyPath — records stored with explicit key 'order'.
+        // No keyPath - records stored with explicit key 'order'.
         db.createObjectStore(STORE_GUILD_ORDER);
       }
     };

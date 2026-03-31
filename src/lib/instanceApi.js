@@ -9,7 +9,7 @@
  *   api.getMLSGroupInfo(token, channelId);   // token forwarded, baseUrl injected
  *
  * Backwards compatibility with mlsGroup.js:
- *   mlsGroup.js calls every method as api.method(token, ...args) — passing the
+ *   mlsGroup.js calls every method as api.method(token, ...args) - passing the
  *   token explicitly. The factory honours that: when a truthy token is supplied
  *   as the first argument, it is used as-is; otherwise getToken() is called.
  *   This avoids any change to mlsGroup.js.

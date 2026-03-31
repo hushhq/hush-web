@@ -364,7 +364,7 @@ a[href]:active {
   transform: scale(0.98);
 }
 
-/* Home: auth choice buttons (Sign in / Register) — hover only.
+/* Home: auth choice buttons (Sign in / Register) - hover only.
    Base and hover in CSS so hover is not overridden by inline styles. */
 .home-auth-choice-btn {
   flex: 1;
@@ -395,13 +395,13 @@ a[href]:active {
   color: var(--hush-text-secondary);
 }
 
-/* Home: create/join room tabs — hover tonality on inactive tab */
+/* Home: create/join room tabs - hover tonality on inactive tab */
 .home-room-tabs button[data-active="false"]:hover {
   background: var(--hush-hover);
   color: var(--hush-text);
 }
 
-/* Back link/button — shared hover (Home, Roadmap-style) */
+/* Back link/button - shared hover (Home, Roadmap-style) */
 .back-link {
   background: none;
   border: none;
@@ -613,7 +613,7 @@ a[href]:active {
   background: var(--hush-elevated);
   border-radius: var(--radius-md);
   overflow: hidden;
-  /* NO border — video containers are windows, not cards */
+  /* NO border - video containers are windows, not cards */
 }
 
 .video-container video {
@@ -2204,7 +2204,7 @@ a[href]:active {
   line-height: 1.4;
 }
 
-/* Consecutive (collapsed) messages — reduced vertical spacing, no header */
+/* Consecutive (collapsed) messages - reduced vertical spacing, no header */
 .message-consecutive {
   padding-top: 1px;
   padding-bottom: 1px;
@@ -6499,7 +6499,7 @@ a[href]:active {
 /* ── Mobile Stack Navigation (<768px) ─────────────────────────────────── */
 
 @media (max-width: 639px) {
-  /* Stack container — clips overflow so stacks slide without scrollbars */
+  /* Stack container - clips overflow so stacks slide without scrollbars */
   .lay-container { position: relative; overflow: hidden; }
 
   .home-page {
@@ -6650,7 +6650,7 @@ a[href]:active {
   /* Remove border-left on member panel when inside mobile drawer */
   .mobile-member-drawer .ml-panel { border-left: none; }
 
-  /* Prevent iOS auto-zoom on focus — all inputs must be >= 16px on mobile */
+  /* Prevent iOS auto-zoom on focus - all inputs must be >= 16px on mobile */
   input, textarea, select, .chat-input, .dm-list-search-input {
     font-size: 16px !important;
   }

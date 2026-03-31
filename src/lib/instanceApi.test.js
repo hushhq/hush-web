@@ -44,7 +44,7 @@ describe('createInstanceApi', () => {
     api = createInstanceApi(BASE_URL, getToken);
   });
 
-  // ── Test 1: shape — all expected methods are present ────────────────────────
+  // ── Test 1: shape - all expected methods are present ────────────────────────
 
   it('returns an object with all MLS api methods', () => {
     const expectedMethods = [

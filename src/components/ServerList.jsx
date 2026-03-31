@@ -86,7 +86,7 @@ function instanceDomain(url) {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
-// Styles removed — see sl-* classes in global.css
+// Styles removed - see sl-* classes in global.css
 
 // ── SortableGuildIcon ─────────────────────────────────────────────────────────
 
@@ -323,7 +323,7 @@ export default function ServerList({
   userPermissionLevel = 0,
   compact = false,
 }) {
-  // Read InstanceContext without throwing — null when InstanceProvider is absent.
+  // Read InstanceContext without throwing - null when InstanceProvider is absent.
   const instanceCtx = useContext(InstanceContext);
 
   const mergedGuildsFromCtx = instanceCtx?.mergedGuilds ?? null;
@@ -337,7 +337,7 @@ export default function ServerList({
 
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  /** Map<guildId, { name: string, icon: string|null }> — decrypted metadata cache */
+  /** Map<guildId, { name: string, icon: string|null }> - decrypted metadata cache */
   const [metadataCache, setMetadataCache] = useState(new Map());
   const decryptingRef = useRef(new Set());
 
@@ -386,7 +386,7 @@ export default function ServerList({
           // Plaintext blobs start with '{' (0x7b), encrypted start with 0x01 version byte.
           const raw = fromBase64(guild.encryptedMetadata);
           if (raw.length > 0 && raw[0] === 0x7b) {
-            // Plaintext JSON — parse directly, skip MLS decryption.
+            // Plaintext JSON - parse directly, skip MLS decryption.
             const parsed = JSON.parse(new TextDecoder().decode(raw));
             setMetadataCache((prev) => {
               const next = new Map(prev);
@@ -405,7 +405,7 @@ export default function ServerList({
             return next;
           });
         } catch (err) {
-          // Silently ignore — metadata may not be decryptable yet (MLS group not joined).
+          // Silently ignore - metadata may not be decryptable yet (MLS group not joined).
         } finally {
           decryptingRef.current.delete(guildId);
         }
@@ -490,12 +490,12 @@ export default function ServerList({
       const inviteLink = buildGuildInviteLink(window.location.origin, guild.instanceUrl, invite.code, guildName);
       await navigator.clipboard.writeText(inviteLink);
     } catch {
-      // Clipboard API not available in this environment — silently skip.
+      // Clipboard API not available in this environment - silently skip.
     }
   }, [getToken, getTokenForInstance, metadataCache]);
 
   const handleMarkRead = useCallback((_guild) => {
-    // Phase U scaffolding — unread tracking wired in a later plan.
+    // Phase U scaffolding - unread tracking wired in a later plan.
   }, []);
 
   const handleInstanceInfo = useCallback((guild, url) => {

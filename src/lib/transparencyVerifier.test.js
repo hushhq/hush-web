@@ -1,5 +1,5 @@
 /**
- * Tests for transparencyVerifier.js — Merkle proof verification (RFC 6962),
+ * Tests for transparencyVerifier.js - Merkle proof verification (RFC 6962),
  * Ed25519 log signature verification, and TransparencyVerifier class paths.
  *
  * Also tests signTransparencyEntry from bip39Identity.js.
@@ -96,7 +96,7 @@ async function buildAuditPath(leafHashes, leafIndex) {
   return path;
 }
 
-// ── leafHash / nodeHash — RFC 6962 compliance ──────────────────────────────────
+// ── leafHash / nodeHash - RFC 6962 compliance ──────────────────────────────────
 
 describe('leafHash', () => {
   it('returns SHA-256(0x00 || data)', async () => {
@@ -377,7 +377,7 @@ describe('TransparencyVerifier', () => {
 
     // Simulate the verifier using only proof-level Merkle verification
     // (log signature verification is skipped when logPubKeyHex is not provided
-    // or when we mock the fetch — we just verify the inclusion proof path).
+    // or when we mock the fetch - we just verify the inclusion proof path).
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       json: async () => mockResponse,
@@ -516,7 +516,7 @@ describe('TransparencyVerifier', () => {
       logSig: mockResponse.entries[0].logSig,
       loggedAt: new Date().toISOString(),
     });
-    // proofs array still has only 1 element — proofs[1] is undefined
+    // proofs array still has only 1 element - proofs[1] is undefined
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,

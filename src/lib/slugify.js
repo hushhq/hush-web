@@ -67,8 +67,8 @@ export function slugify(name) {
  * Return a unique slug for a guild by appending a numeric suffix on collision.
  *
  * The first available slug is returned:
- *   - base slug (no suffix) — if not in existingSlugs
- *   - base-2, base-3, ... — until a free slot is found
+ *   - base slug (no suffix) - if not in existingSlugs
+ *   - base-2, base-3, ... - until a free slot is found
  *
  * @param {string} name - Raw guild name to slugify.
  * @param {string[]} existingSlugs - Array of slug strings already in use.

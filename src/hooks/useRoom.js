@@ -290,7 +290,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         }
 
         if (!keyProvider || !worker) {
-          throw new Error('Could not establish encrypted voice — E2EE is required.');
+          throw new Error('Could not establish encrypted voice - E2EE is required.');
         }
         if (isStale()) return;
 
@@ -358,7 +358,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         };
         attachRemoteTrackListeners(room, trackRefs, scheduleRemoteTracksUpdate, scheduleScreensUpdate);
 
-        // Connected: E2EE key is already applied before room.connect() — no
+        // Connected: E2EE key is already applied before room.connect() - no
         // additional setKey call needed here. setIsE2EEEnabled was already set
         // above after MLS key derivation succeeded.
         room.on(RoomEvent.Connected, () => {
@@ -400,7 +400,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             }
             setVoiceEpoch(epoch);
             voiceEpochRef.current = epoch;
-            console.log(`[livekit] Reconnected — frame key re-derived (epoch ${epoch})`);
+            console.log(`[livekit] Reconnected - frame key re-derived (epoch ${epoch})`);
           } catch (err) {
             console.error('[livekit] Frame key re-derivation after reconnect failed:', err);
           }
@@ -619,7 +619,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
       cleanupMicPipeline();
 
-      // Destroy local voice group state (fire-and-forget — server handles group
+      // Destroy local voice group state (fire-and-forget - server handles group
       // deletion when the last participant leaves via the LiveKit webhook)
       const chId = channelIdRef.current;
       if (chId) {

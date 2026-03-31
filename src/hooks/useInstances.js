@@ -1,5 +1,5 @@
 /**
- * useInstances — central orchestration hook for multi-instance connections.
+ * useInstances - central orchestration hook for multi-instance connections.
  *
  * Manages N simultaneous Hush instance connections in parallel. On mount,
  * it boots all known instances from IDB. Each boot performs:
@@ -161,7 +161,7 @@ export function useInstances() {
           );
           const parsed = JSON.parse(decoded);
           stamped.name = parsed.n || parsed.name || '';
-        } catch { /* encrypted blob — needs MLS key */ }
+        } catch { /* encrypted blob - needs MLS key */ }
       }
       return stamped;
     });
@@ -215,7 +215,7 @@ export function useInstances() {
       }
     }
     return all;
-    // NOTE: instanceStates is the trigger — recomputes when any instance state changes.
+    // NOTE: instanceStates is the trigger - recomputes when any instance state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceStates]);
 
@@ -248,7 +248,7 @@ export function useInstances() {
 
     ordered.sort((a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0));
     return [...ordered, ...unordered];
-    // NOTE: instanceStates is the trigger — mergedGuilds recomputes when it changes.
+    // NOTE: instanceStates is the trigger - mergedGuilds recomputes when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceStates, guildOrder]);
 
@@ -283,7 +283,7 @@ export function useInstances() {
     }, delay);
 
     flushState();
-  }, [flushState]); // bootInstance added via closure — intentional late binding
+  }, [flushState]); // bootInstance added via closure - intentional late binding
 
   // ── Per-instance WS event wiring ──────────────────────────────────────────
 
@@ -331,7 +331,7 @@ export function useInstances() {
       }
     };
     wsClient.on('member_left', handleMemberLeft);
-  }, [scheduleReconnect, flushState]); // disconnectInstance added via closure — stable ref
+  }, [scheduleReconnect, flushState]); // disconnectInstance added via closure - stable ref
 
   // ── bootInstance ──────────────────────────────────────────────────────────
 
@@ -357,7 +357,7 @@ export function useInstances() {
 
     const identityKey = identityKeyRef?.current;
     if (!identityKey) {
-      throw new Error('bootInstance: no identity key available — vault must be unlocked');
+      throw new Error('bootInstance: no identity key available - vault must be unlocked');
     }
 
     // Initialise or update entry in instancesRef.
@@ -396,13 +396,13 @@ export function useInstances() {
         jwt = result.token;
         authUser = result.user;
       } catch (err) {
-        // 404 means the key is unknown on this instance — authenticate as a federated user.
+        // 404 means the key is unknown on this instance - authenticate as a federated user.
         const isNotFound = err?.status === 404
           || err?.response?.status === 404
           || (typeof err?.message === 'string' && err.message.includes('unknown public key'));
         if (!isNotFound) throw err;
 
-        // The nonce was consumed by the failed verify — request a fresh challenge.
+        // The nonce was consumed by the failed verify - request a fresh challenge.
         const homeInstance = getActiveAuthInstanceUrlSync();
         const { nonce: fedNonce } = await requestChallenge(publicKeyBase64, instanceUrl);
         const fedNonceBytes = hexToBytes(fedNonce);
@@ -545,7 +545,7 @@ export function useInstances() {
 
   /**
    * Registers the current origin as a connected instance using an existing JWT.
-   * Skips challenge-response auth — used after registration/recovery when
+   * Skips challenge-response auth - used after registration/recovery when
    * the caller already has a valid session.
    *
    * @param {string} jwt - Existing JWT token
@@ -599,7 +599,7 @@ export function useInstances() {
         return;
       }
       guilds = stampGuilds(raw, instanceUrl);
-    } catch { /* no guilds yet — that's fine after fresh registration */ }
+    } catch { /* no guilds yet - that's fine after fresh registration */ }
     if (!isActiveGeneration()) {
       try { wsClient.disconnect(); } catch { /* noop */ }
       return;
@@ -744,7 +744,7 @@ export function useInstances() {
                 }
               }
             } catch {
-              // JWT invalid or network error — will show empty state.
+              // JWT invalid or network error - will show empty state.
             }
           }
         }

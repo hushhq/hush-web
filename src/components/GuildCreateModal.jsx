@@ -49,7 +49,7 @@ function getPolicyState(policy) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /**
- * Guild creation modal — server name input, instance picker, template picker.
+ * Guild creation modal - server name input, instance picker, template picker.
  *
  * Instance picker is ALWAYS visible (even with one instance) to teach the
  * multi-instance model. Pre-selected to the instance of the currently active
@@ -170,7 +170,7 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
           setSelectedTemplateId(def ? def.id : data[0].id);
         }
       } catch {
-        // Templates are optional — server uses its default on failure.
+        // Templates are optional - server uses its default on failure.
       }
       setTemplatesLoaded(true);
     })();
@@ -213,7 +213,7 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
 
     setLoading(true);
     try {
-      // Step 1: Create the guild. Send plaintext name as fallback — server wraps
+      // Step 1: Create the guild. Send plaintext name as fallback - server wraps
       // it as JSON metadata when MLS EncryptedMetadata is not provided.
       const guild = await createGuild(effectiveToken, null, selectedTemplateId, effectiveBaseUrl, trimmed);
 
@@ -312,7 +312,7 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
               />
             </div>
 
-            {/* Instance picker — ALWAYS visible, even with 1 instance */}
+            {/* Instance picker - ALWAYS visible, even with 1 instance */}
             <div>
               <label htmlFor="guild-instance" className="modal-field-label">Instance</label>
               {connectedInstances.length === 0 ? (
@@ -346,7 +346,7 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
               </div>
             )}
 
-            {/* Template picker — only shown when multiple templates exist */}
+            {/* Template picker - only shown when multiple templates exist */}
             {templatesLoaded && templates.length > 1 && (
               <div style={{ marginTop: '4px' }}>
                 <label className="modal-field-label">Template</label>

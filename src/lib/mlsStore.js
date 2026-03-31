@@ -25,7 +25,7 @@ const LAST_RESORT_KEY = 'lastResort';
 // ---------------------------------------------------------------------------
 
 // Complete list of object stores used by OpenMLS WASM StorageProvider.
-// Extracted from hush_crypto_bg.wasm binary — must match exactly.
+// Extracted from hush_crypto_bg.wasm binary - must match exactly.
 const STORAGE_PROVIDER_STORES = [
   'mls_confirmation_tag',
   'mls_encryption_key_pairs',
@@ -78,7 +78,7 @@ function bytesToHex(bytes) {
 }
 
 // ---------------------------------------------------------------------------
-// StorageProvider bridge — initialised once after openStore()
+// StorageProvider bridge - initialised once after openStore()
 // ---------------------------------------------------------------------------
 
 /**
@@ -102,7 +102,7 @@ function initStorageBridge(db) {
       const hexKey = bytesToHex(keyBytes);
       const cacheKey = `${storeName}:${hexKey}`;
       storageCache.set(cacheKey, new Uint8Array(valueBytes));
-      // Fire-and-forget persistence — correctness relies on preloadGroupState before WASM calls.
+      // Fire-and-forget persistence - correctness relies on preloadGroupState before WASM calls.
       try {
         const tx = db.transaction(storeName, 'readwrite');
         tx.objectStore(storeName).put({ key: hexKey, value: Array.from(valueBytes) });
@@ -113,7 +113,7 @@ function initStorageBridge(db) {
 
     /**
      * Read bytes for a key. Returns Uint8Array from cache or null if not found.
-     * Synchronous — preloadGroupState() must be called first.
+     * Synchronous - preloadGroupState() must be called first.
      * @param {string} storeName
      * @param {Uint8Array} keyBytes
      * @returns {Uint8Array|null}
@@ -234,7 +234,7 @@ function openStoreWithPrefix(dbNamePrefix, userId, deviceId) {
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
 
-      // v1 stores — create only if absent (handles fresh installs and upgrades).
+      // v1 stores - create only if absent (handles fresh installs and upgrades).
       if (!db.objectStoreNames.contains(STORE_CREDENTIAL)) {
         db.createObjectStore(STORE_CREDENTIAL, { keyPath: 'key' });
       }
@@ -245,7 +245,7 @@ function openStoreWithPrefix(dbNamePrefix, userId, deviceId) {
         db.createObjectStore(STORE_LAST_RESORT, { keyPath: 'key' });
       }
 
-      // v2 stores — added in version 2.
+      // v2 stores - added in version 2.
       for (const storeName of STORAGE_PROVIDER_STORES) {
         if (!db.objectStoreNames.contains(storeName)) {
           db.createObjectStore(storeName, { keyPath: 'key' });
@@ -428,7 +428,7 @@ export async function preloadGroupState(db) {
       const cacheKey = `${storeName}:${row.key}`;
       // Only populate from IDB if the cache doesn't already have a newer entry.
       // writeBytes() updates the cache synchronously but its IDB transaction may
-      // not have committed yet — clobbering the cache with stale IDB data was the
+      // not have committed yet - clobbering the cache with stale IDB data was the
       // root cause of "Group not found" after createGroup.
       if (!storageCache.has(cacheKey)) {
         storageCache.set(cacheKey, new Uint8Array(row.value));
@@ -506,7 +506,7 @@ export async function flushStorageCache(db) {
         tx.onerror = () => reject(tx.error);
       });
     } catch {
-      // Best-effort — individual store may not exist for older DBs during upgrade.
+      // Best-effort - individual store may not exist for older DBs during upgrade.
     }
   }
 }
@@ -604,7 +604,7 @@ export function listAllKeyPackages(db) {
 
 /**
  * Retrieve the last-resort KeyPackage. Returns null if not yet stored.
- * The last-resort KeyPackage is never consumed — it serves as a read-only fallback
+ * The last-resort KeyPackage is never consumed - it serves as a read-only fallback
  * when all regular KeyPackages have been exhausted.
  * @param {IDBDatabase} db
  * @returns {Promise<{ keyPackageBytes: Uint8Array, privateKeyBytes: Uint8Array, hashRefHex: string }|null>}
@@ -634,7 +634,7 @@ export async function setLastResort(db, payload) {
 }
 
 // ---------------------------------------------------------------------------
-// Local plaintext cache — self-sent messages
+// Local plaintext cache - self-sent messages
 // ---------------------------------------------------------------------------
 
 /**
@@ -666,7 +666,7 @@ export async function setLocalPlaintext(db, messageId, payload) {
 }
 
 // ---------------------------------------------------------------------------
-// Group epoch tracking — catchup on reconnect
+// Group epoch tracking - catchup on reconnect
 // ---------------------------------------------------------------------------
 
 /**
@@ -675,7 +675,7 @@ export async function setLocalPlaintext(db, messageId, payload) {
  *
  * @param {IDBDatabase} db
  * @param {string} channelId - Channel UUID (or composite key like "voice:uuid", "guild-meta:uuid")
- * @param {string} [instanceUrl] - Instance base URL for namespacing (optional — defaults to no namespace)
+ * @param {string} [instanceUrl] - Instance base URL for namespacing (optional - defaults to no namespace)
  * @returns {Promise<number|null>}
  */
 export async function getGroupEpoch(db, channelId, instanceUrl) {

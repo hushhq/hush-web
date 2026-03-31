@@ -6,7 +6,7 @@
  *   - flush: persist updated sync cache back to IDB after WASM calls
  *   - server round-trips: POST commits, GET GroupInfo, etc. via api.js
  *
- * All functions are stateless — all state lives in IndexedDB (via mlsStore/StorageProvider).
+ * All functions are stateless - all state lives in IndexedDB (via mlsStore/StorageProvider).
  * Dependencies are injected via a `deps` object for testability.
  *
  * deps shape:
@@ -70,7 +70,7 @@ function fromBase64(b64) {
  */
 function getCredFields(deps) {
   const cred = deps.credential;
-  if (!cred) throw new Error('[mlsGroup] No credential available — run uploadKeyPackagesAfterAuth first');
+  if (!cred) throw new Error('[mlsGroup] No credential available - run uploadKeyPackagesAfterAuth first');
   return {
     sigPriv: cred.signingPrivateKey,
     sigPub: cred.signingPublicKey,
@@ -128,7 +128,7 @@ export async function joinChannelGroup(deps, channelId) {
   const channelIdBytes = channelIdToBytes(channelId);
 
   const serverInfo = await api.getMLSGroupInfo(token, channelId);
-  if (!serverInfo?.groupInfo) return; // No group yet — channel was just created.
+  if (!serverInfo?.groupInfo) return; // No group yet - channel was just created.
 
   const groupInfoBytes = fromBase64(serverInfo.groupInfo);
 
@@ -168,17 +168,17 @@ export async function joinOrCreateChannelGroup(deps, channelId) {
 
   const serverInfo = await api.getMLSGroupInfo(token, channelId);
   if (serverInfo?.groupInfo) {
-    // Group exists on server — join via External Commit.
+    // Group exists on server - join via External Commit.
     await joinChannelGroup(deps, channelId);
   } else {
-    // No group on server — create it (we are the first member to enter).
+    // No group on server - create it (we are the first member to enter).
     try {
       await createChannelGroup(deps, channelId);
     } catch (err) {
       const msg = String(err?.message ?? err);
       if (msg.includes('GroupAlreadyExists') || msg.includes('already exists')) {
         // Race: another code path (e.g. ChannelList) already created this group.
-        // The epoch may not be stored yet — let the other path finish.
+        // The epoch may not be stored yet - let the other path finish.
         return;
       }
       throw err;
@@ -340,7 +340,7 @@ export async function decryptMessage(deps, channelId, messageBytes) {
     return { plaintext: text, senderIdentity: result.senderIdentity, type: result.type, epoch: result.epoch };
   }
 
-  // Commit or proposal — epoch may have advanced.
+  // Commit or proposal - epoch may have advanced.
   if (result.type === 'commit') {
     await mlsStore.setGroupEpoch(db, channelId, result.epoch);
   }
@@ -392,7 +392,7 @@ export async function catchupCommits(deps, channelId) {
 
   if (!commits?.length) return;
 
-  // Too many missed commits — epoch gap too large to replay safely; re-join.
+  // Too many missed commits - epoch gap too large to replay safely; re-join.
   if (commits.length >= 1000) {
     console.warn('[mlsGroup] Epoch gap too large, re-joining group for channel', channelId);
     await joinChannelGroup(deps, channelId);
@@ -449,7 +449,7 @@ export async function leaveChannelGroup(deps, channelId) {
 
 /**
  * Leave ALL channel groups for a guild (used on kick/ban/leave).
- * For kicked/banned members, no proposals are needed — just clean up local state.
+ * For kicked/banned members, no proposals are needed - just clean up local state.
  *
  * @param {object} deps
  * @param {string[]} channelIds
@@ -511,7 +511,7 @@ export async function performSelfUpdate(deps, channelId) {
 
 /**
  * Encodes a guild UUID to the UTF-8 bytes used as the guild metadata MLS group ID.
- * No prefix — guild UUID is used directly.
+ * No prefix - guild UUID is used directly.
  *
  * @param {string} guildId
  * @returns {Uint8Array}
@@ -566,7 +566,7 @@ export async function joinGuildMetadataGroup(deps, guildId) {
   const groupIdBytes = guildMetadataIdToBytes(guildId);
 
   const serverInfo = await api.getGuildMetadataGroupInfo(token, guildId);
-  if (!serverInfo?.groupInfo) return; // No metadata group yet — skip silently.
+  if (!serverInfo?.groupInfo) return; // No metadata group yet - skip silently.
 
   const groupInfoBytes = fromBase64(serverInfo.groupInfo);
 
@@ -585,7 +585,7 @@ export async function joinGuildMetadataGroup(deps, guildId) {
 
 /**
  * Export the 32-byte AES-256-GCM metadata key from the guild MLS group.
- * Read-only — does not mutate group state.
+ * Read-only - does not mutate group state.
  *
  * @param {object} deps
  * @param {string} guildId
@@ -598,14 +598,14 @@ export async function exportGuildMetadataKey(deps, guildId) {
 
   await mlsStore.preloadGroupState(db);
   const result = await hushCrypto.exportMetadataKey(groupIdBytes, sigPriv, sigPub, credBytes);
-  // No flush — export_secret is read-only (same pattern as exportVoiceFrameKey).
+  // No flush - export_secret is read-only (same pattern as exportVoiceFrameKey).
 
   return { metadataKeyBytes: result.metadataKeyBytes, epoch: result.epoch };
 }
 
 /**
  * Remove local guild metadata MLS group state (called when leaving a guild).
- * Does NOT send a leave proposal — the server handles epoch cleanup.
+ * Does NOT send a leave proposal - the server handles epoch cleanup.
  *
  * @param {object} deps
  * @param {string} guildId
@@ -670,7 +670,7 @@ export async function joinVoiceGroup(deps, channelId) {
 
   const serverInfo = await api.getMLSVoiceGroupInfo(token, channelId);
   if (!serverInfo?.groupInfo) {
-    // No voice group yet — become the first participant.
+    // No voice group yet - become the first participant.
     return createVoiceGroup(deps, channelId);
   }
 
@@ -707,7 +707,7 @@ export async function joinVoiceGroup(deps, channelId) {
 
 /**
  * Export a 32-byte voice frame key from the current epoch.
- * Read-only — does not mutate group state.
+ * Read-only - does not mutate group state.
  *
  * @param {object} deps
  * @param {string} channelId
@@ -720,7 +720,7 @@ export async function exportVoiceFrameKey(deps, channelId) {
 
   await mlsStore.preloadGroupState(db);
   const result = await hushCrypto.exportVoiceFrameKey(groupIdBytes, sigPriv, sigPub, credBytes);
-  // No flush — export_secret is read-only (no state mutation).
+  // No flush - export_secret is read-only (no state mutation).
 
   return { frameKeyBytes: result.frameKeyBytes, epoch: result.epoch };
 }
@@ -791,7 +791,7 @@ export async function performVoiceSelfUpdate(deps, channelId) {
 
 /**
  * Destroy local voice MLS group state when leaving a voice channel.
- * Does NOT call a server delete — the server handles cleanup via the LiveKit
+ * Does NOT call a server delete - the server handles cleanup via the LiveKit
  * webhook when the last participant leaves (voice_group_destroyed WS event).
  *
  * @param {object} deps

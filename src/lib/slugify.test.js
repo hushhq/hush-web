@@ -63,7 +63,7 @@ describe('slugify', () => {
     expect(slugify('Server 42')).toBe('server-42');
   });
 
-  it('is deterministic — same input always produces same output', () => {
+  it('is deterministic - same input always produces same output', () => {
     expect(slugify('Test Server')).toBe(slugify('Test Server'));
   });
 });

@@ -7,7 +7,7 @@
  *
  * Exports MLS credential, KeyPackage generation, and group lifecycle operations.
  * Signal Protocol functions (generateIdentity, generatePreKeyBundle,
- * performX3DH, encrypt, decrypt) have been removed — superseded by MLS (Phase M.2+).
+ * performX3DH, encrypt, decrypt) have been removed - superseded by MLS (Phase M.2+).
  *
  * NOTE: All group functions operate on groupId (channel UUID bytes), NOT groupStateBytes.
  * The WASM StorageProvider auto-persists state via window.mlsStorageBridge.
@@ -271,7 +271,7 @@ export async function exportGroupInfoBytes(groupIdBytes, sigPriv, sigPub, credBy
 /**
  * Export a 32-byte voice frame key from the current MLS epoch.
  * Uses MLS export_secret with label "hush-voice-frame-key" (RFC 9420 §8.4).
- * Pure derivation — no group state mutation.
+ * Pure derivation - no group state mutation.
  *
  * @param {Uint8Array} groupIdBytes - Voice group ID bytes (e.g. "voice:{channelId}" as UTF-8)
  * @param {Uint8Array} sigPriv - Signing private key
@@ -295,7 +295,7 @@ export async function exportVoiceFrameKey(groupIdBytes, sigPriv, sigPub, credByt
  * Uses MLS export_secret with label "hush-guild-metadata" (RFC 9420 §8.4).
  * Label is intentionally distinct from "hush-voice-frame-key" so metadata
  * and voice frame keys are cryptographically independent for the same group.
- * Pure derivation — no group state mutation.
+ * Pure derivation - no group state mutation.
  *
  * @param {Uint8Array} groupIdBytes - Group ID bytes (channel or guild UUID as UTF-8)
  * @param {Uint8Array} sigPriv - Signing private key

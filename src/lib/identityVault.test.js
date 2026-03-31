@@ -1,5 +1,5 @@
 /**
- * Tests for identityVault.js — AES-256-GCM vault encryption with PBKDF2-SHA256 PIN derivation
+ * Tests for identityVault.js - AES-256-GCM vault encryption with PBKDF2-SHA256 PIN derivation
  * and IndexedDB persistence. Uses fake-indexeddb (auto-imported in setup.js).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -84,7 +84,7 @@ describe('encryptVault / decryptVault round-trip', () => {
     const nonce1 = blob1.slice(0, 12);
     const nonce2 = blob2.slice(0, 12);
     // Nonces MUST differ: AES-GCM security relies on nonce uniqueness per key.
-    // If they match, two ciphertexts share a (nonce, key) pair — catastrophic.
+    // If they match, two ciphertexts share a (nonce, key) pair - catastrophic.
     expect(nonce1).not.toEqual(nonce2);
   });
 });

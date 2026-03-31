@@ -9,7 +9,7 @@ import {
 } from '../lib/adminApi.js';
 
 /**
- * ConfigPage — instance config management and server template CRUD.
+ * ConfigPage - instance config management and server template CRUD.
  */
 
 const PAGE_STYLES = {
@@ -252,9 +252,9 @@ function InstanceConfigSection({ apiKey }) {
           value={serverCreationPolicy}
           onChange={(e) => setServerCreationPolicy(e.target.value)}
         >
-          <option value="open">Open — any user can create guilds</option>
-          <option value="paid">Paid — reserved for paid accounts</option>
-          <option value="disabled">Disabled — only admins can create guilds</option>
+          <option value="open">Open - any user can create guilds</option>
+          <option value="paid">Paid - reserved for paid accounts</option>
+          <option value="disabled">Disabled - only admins can create guilds</option>
         </select>
       </div>
 

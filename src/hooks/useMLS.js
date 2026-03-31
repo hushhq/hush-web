@@ -1,5 +1,5 @@
 /**
- * MLS session hook — Phase M.3 channel-centric API only.
+ * MLS session hook - Phase M.3 channel-centric API only.
  *
  * Provides the channel-centric crypto API (MLS group):
  *    encryptForChannel(plaintext) -> { ciphertext: Uint8Array, localId: string }
@@ -8,7 +8,7 @@
  *    setCachedMessage(messageId, payload) -> void
  *
  * User-centric passthrough stubs (encryptForUser, decryptFromUser) have been removed.
- * Voice E2EE uses MLS voice groups — see mlsGroup.js (createVoiceGroup, joinVoiceGroup,
+ * Voice E2EE uses MLS voice groups - see mlsGroup.js (createVoiceGroup, joinVoiceGroup,
  * exportVoiceFrameKey, performVoiceSelfUpdate, destroyVoiceGroup).
  */
 
@@ -38,7 +38,7 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
   const api = _deps?.api ?? apiLib;
 
   // ---------------------------------------------------------------------------
-  // Shared deps builder — opens DB and loads credential on each call.
+  // Shared deps builder - opens DB and loads credential on each call.
   // Lazy: only called when an MLS operation is actually needed.
   // ---------------------------------------------------------------------------
 
@@ -77,7 +77,7 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
 
   /**
    * Encrypt plaintext for the channel MLS group.
-   * Returns a single ciphertext Uint8Array — no fan-out.
+   * Returns a single ciphertext Uint8Array - no fan-out.
    *
    * @param {string} plaintext
    * @returns {Promise<{ ciphertext: Uint8Array, localId: string }>}
@@ -158,7 +158,7 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
         timestamp: payload.timestamp ?? Date.now(),
       });
     } catch {
-      // Silent — cache errors must never surface to the user.
+      // Silent - cache errors must never surface to the user.
     }
   }
 
@@ -178,7 +178,7 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
       const deps = await buildDeps();
       return await mlsGroup.exportGuildMetadataKey(deps, guildId);
     } catch {
-      // Group state not yet available — caller falls back to showing UUID
+      // Group state not yet available - caller falls back to showing UUID
       return null;
     }
   }

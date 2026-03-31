@@ -1,5 +1,5 @@
 /**
- * ExplorePage — guild discovery page with category tabs, search, cards, and join flow.
+ * ExplorePage - guild discovery page with category tabs, search, cards, and join flow.
  *
  * Consumes GET /api/guilds/discover and POST /api/servers/:id/join from the backend.
  * Mounted at /explore behind AuthGuard.
@@ -104,7 +104,7 @@ export default function ExplorePage() {
           navigate('/home');
         }, 1200);
       } else if (result.status === 202) {
-        setJoinMessage('Request sent — you\'ll be notified when approved.');
+        setJoinMessage('Request sent - you\'ll be notified when approved.');
         setTimeout(() => setSelectedGuild(null), 2000);
       }
     } catch (err) {

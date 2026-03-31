@@ -2,7 +2,7 @@ import { useState } from 'react';
 import UserSettingsModal from './UserSettingsModal';
 
 /**
- * UserPanel — persistent user info panel at the very bottom of the channel
+ * UserPanel - persistent user info panel at the very bottom of the channel
  * sidebar. Always visible regardless of voice state.
  *
  * Shows avatar (initials), username, online status, and quick-access buttons

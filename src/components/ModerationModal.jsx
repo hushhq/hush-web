@@ -92,7 +92,7 @@ export default function ModerationModal({ action, member, onConfirm, onClose }) 
         </div>
 
         <div className="modal-form">
-          {/* Reason — required for all actions */}
+          {/* Reason - required for all actions */}
           <div>
             <label htmlFor="mod-reason" className="modal-field-label">
               Reason (required)

@@ -1,11 +1,11 @@
 /**
- * DeviceManagement — device list with revoke + linking controls.
+ * DeviceManagement - device list with revoke + linking controls.
  *
  * Displayed inside UserSettingsModal (Devices tab).
  *
  * Props:
- *   token         — JWT for API calls
- *   currentDeviceId — device ID for this browser session (shows "This device" badge)
+ *   token         - JWT for API calls
+ *   currentDeviceId - device ID for this browser session (shows "This device" badge)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -109,7 +109,7 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
         setTransparencyError?.(result.error);
       }
     } catch (err) {
-      // Log but don't block — the operation itself succeeded.
+      // Log but don't block - the operation itself succeeded.
       console.warn(`[transparency] post-${opName} verification failed:`, err);
     }
   }, [handshakeData, identityKeyRef, token, setTransparencyError]);

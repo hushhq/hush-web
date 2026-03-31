@@ -84,7 +84,7 @@ const ACTION_SUCCESS_MESSAGES = {
 };
 
 /**
- * MemberList — renders grouped member rows for a guild.
+ * MemberList - renders grouped member rows for a guild.
  *
  * On desktop: rendered inside the desktop sidebar panel (sidebar-desktop-inner).
  * On mobile: rendered inside the mobile-member-drawer container in ServerLayout.
@@ -177,7 +177,7 @@ export default function MemberList({
           const label = PERM_LABEL[level];
           return (
             <div key={level}>
-              <div className="ml-role-header">{label} — {sorted.length}</div>
+              <div className="ml-role-header">{label} - {sorted.length}</div>
               {sorted.map((m) => {
                 const memberId = getMemberId(m);
                 const isOnline = onlineUserIds.has(memberId);

@@ -120,7 +120,7 @@ describe('useMLS', () => {
         _deps: mockDeps,
       });
 
-      // The error must propagate — not be caught and wrapped in a plaintext fallback
+      // The error must propagate - not be caught and wrapped in a plaintext fallback
       await expect(encryptForChannel('test')).rejects.toThrow('MLS encrypt failed');
     });
 
@@ -273,7 +273,7 @@ describe('useMLS', () => {
         _deps: mockDeps,
       });
 
-      // Should not throw — silent failure for cache operations
+      // Should not throw - silent failure for cache operations
       await expect(
         setCachedMessage('msg-789', { content: 'test', timestamp: 0 })
       ).resolves.toBeUndefined();

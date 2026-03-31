@@ -170,7 +170,7 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('useAuth — performChallengeResponse', () => {
+describe('useAuth - performChallengeResponse', () => {
   it('sets token and user on successful challenge-response', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -240,7 +240,7 @@ describe('useAuth — performChallengeResponse', () => {
   });
 });
 
-describe('useAuth — performRegister', () => {
+describe('useAuth - performRegister', () => {
   it('registers, authenticates, and sets vaultState=unlocked', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -338,7 +338,7 @@ describe('useAuth — performRegister', () => {
   });
 });
 
-describe('useAuth — unlockVault', () => {
+describe('useAuth - unlockVault', () => {
   async function setupLockedVault(result) {
     // Complete auth to create user state.
     await act(async () => {
@@ -420,7 +420,7 @@ describe('useAuth — unlockVault', () => {
   });
 });
 
-describe('useAuth — PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
+describe('useAuth - PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
   it('wipes vault after 10 failures and throws VAULT_WIPED', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -446,7 +446,7 @@ describe('useAuth — PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
     // Since pinDelayMs is internal, let's just seed at count=9 and accept
     // that the 60s delay will apply. Instead, seed at count=2 so no delay.
 
-    // Reset to count=9 — the wipe will happen but with 60s delay first.
+    // Reset to count=9 - the wipe will happen but with 60s delay first.
     // Better: set count=9 but bypass delay by seeding to a count that has no delay
     // Delay table: threshold 9 → 60s, 7 → 30s, 5 → 5s, 3 → 1s, <3 → 0.
     // Use count=9 but only advances to 10 (wipe). The delay for count=9 is 60s → too slow.
@@ -481,7 +481,7 @@ describe('useAuth — PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
   }, 15_000);
 });
 
-describe('useAuth — performLogout', () => {
+describe('useAuth - performLogout', () => {
   it('clears all storage and resets state', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -558,13 +558,13 @@ describe('useAuth — performLogout', () => {
   });
 });
 
-describe('useAuth — session rehydration', () => {
+describe('useAuth - session rehydration', () => {
   it('sets vaultState=locked when JWT exists but session flag is absent (vault blob exists)', async () => {
     sessionStorage.setItem(JWT_KEY, 'valid-jwt');
     localStorage.setItem('hush_vault_user_user-42', 'aabb');
     // No VAULT_SESSION_FLAG.
 
-    // Vault blob must exist in IDB — otherwise it's a stale marker (PIN never set).
+    // Vault blob must exist in IDB - otherwise it's a stale marker (PIN never set).
     const fakeBlob = new Uint8Array(44);
     fakeBlob.set(new Uint8Array(32).fill(1), 12);
     _vaultBlobs.set('user-42', fakeBlob);
@@ -582,7 +582,7 @@ describe('useAuth — session rehydration', () => {
   it('sets vaultState=unlocked when vault marker exists but no blob (PIN never set)', async () => {
     sessionStorage.setItem(JWT_KEY, 'valid-jwt');
     localStorage.setItem('hush_vault_user_user-42', 'aabb');
-    // No blob in _vaultBlobs — simulates registration without PIN setup.
+    // No blob in _vaultBlobs - simulates registration without PIN setup.
 
     vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
       mockFetchOk({ id: 'user-42', username: 'eve', displayName: 'Eve' }),
@@ -663,14 +663,14 @@ describe('useAuth — session rehydration', () => {
   });
 
   it('sets vaultState=locked when JWT and session flag exist but derived key is absent (vault blob exists)', async () => {
-    // Session alive but no derived key — vault timeout='refresh' cleared it,
+    // Session alive but no derived key - vault timeout='refresh' cleared it,
     // or this is the first load after browser restart. Must prompt for PIN.
     sessionStorage.setItem(JWT_KEY, 'valid-jwt');
     sessionStorage.setItem('hush_vault_session_alive', '1');
     // No hush_vault_derived_key set.
     localStorage.setItem('hush_vault_user_user-43', 'aabb');
 
-    // Vault blob must exist — otherwise it's a stale marker.
+    // Vault blob must exist - otherwise it's a stale marker.
     const fakeBlob = new Uint8Array(44);
     fakeBlob.set(new Uint8Array(32).fill(1), 12);
     _vaultBlobs.set('user-43', fakeBlob);
@@ -686,7 +686,7 @@ describe('useAuth — session rehydration', () => {
   });
 
   it('falls back to locked if stored derived key fails to decrypt', async () => {
-    // Derived key in sessionStorage is corrupt or stale — auto-unlock fails,
+    // Derived key in sessionStorage is corrupt or stale - auto-unlock fails,
     // should fall back to PIN screen.
     sessionStorage.setItem(JWT_KEY, 'valid-jwt');
     sessionStorage.setItem('hush_vault_session_alive', '1');
@@ -728,7 +728,7 @@ describe('useAuth — session rehydration', () => {
   });
 });
 
-describe('useAuth — setPIN', () => {
+describe('useAuth - setPIN', () => {
   it('encrypts and saves key after unlock', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -764,7 +764,7 @@ describe('useAuth — setPIN', () => {
   });
 });
 
-describe('useAuth — skipPinSetup', () => {
+describe('useAuth - skipPinSetup', () => {
   it('clears the pending pin-setup state without logging out', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -785,7 +785,7 @@ describe('useAuth — skipPinSetup', () => {
   });
 });
 
-describe('useAuth — lockVault', () => {
+describe('useAuth - lockVault', () => {
   it('sets vaultState=locked without deleting vault data', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -844,7 +844,7 @@ describe('useAuth — lockVault', () => {
 
 // ── Guest session ──────────────────────────────────────────────────────────────
 
-describe('useAuth — guest session', () => {
+describe('useAuth - guest session', () => {
   /**
    * Builds a fake JWT with is_guest=true and the given expiry.
    * The client reads claims from the payload only (no sig verification).
@@ -885,7 +885,7 @@ describe('useAuth — guest session', () => {
   });
 
   it('guest JWT with T-5min remaining triggers hush_guest_expiry_warning event', async () => {
-    // Expires in exactly 5 minutes — warning fires immediately (warningMs <= 0).
+    // Expires in exactly 5 minutes - warning fires immediately (warningMs <= 0).
     const expiresAtMs = Date.now() + 5 * 60 * 1000;
     const guestToken = makeGuestJwt(expiresAtMs);
     vi.mocked(apiMod.requestGuestSession).mockResolvedValue({
@@ -957,7 +957,7 @@ describe('useAuth — guest session', () => {
 
 // ── Per-instance JWT storage ───────────────────────────────────────────────────
 
-describe('useAuth — per-instance JWT storage', () => {
+describe('useAuth - per-instance JWT storage', () => {
   it('setInstanceToken stores at the host-namespaced key', () => {
     setInstanceToken('https://chat.example.com', 'token-a');
     expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('token-a');

@@ -101,7 +101,7 @@ describe('saveInstance', () => {
     expect(all[0].jwt).toBe(record.jwt);
   });
 
-  it('upserts — second save with same instanceUrl replaces the first', async () => {
+  it('upserts - second save with same instanceUrl replaces the first', async () => {
     const record = makeRecord({ jwt: 'jwt-v1' });
     await saveInstance(db, record);
     await saveInstance(db, { ...record, jwt: 'jwt-v2' });

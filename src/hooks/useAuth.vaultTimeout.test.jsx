@@ -94,7 +94,7 @@ async function unlockPersistedVault(result) {
   await waitFor(() => expect(result.current.vaultState).toBe('unlocked'));
 }
 
-describe('useAuth — vault timeout', () => {
+describe('useAuth - vault timeout', () => {
   beforeEach(() => {
     cleanup();
     sessionStorage.clear();

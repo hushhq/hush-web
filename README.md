@@ -4,7 +4,7 @@
 
 # hush-web
 
-React web client for [Hush](https://gethush.live) — an end-to-end encrypted communication platform. The client runs OpenMLS compiled to WASM (`@gethush/hush-crypto`) directly in the browser. All encryption happens here, before any data reaches the server.
+React web client for [Hush](https://gethush.live) - an end-to-end encrypted communication platform. The client runs OpenMLS compiled to WASM (`@gethush/hush-crypto`) directly in the browser. All encryption happens here, before any data reaches the server.
 
 ---
 
@@ -93,7 +93,7 @@ docker build -t hush-web .
 
 ## Admin Dashboard
 
-The standalone admin dashboard is in `admin/`. It authenticates via API key (not as a Hush user) and has read-only access to UUIDs, member counts, and metrics — no plaintext content.
+The standalone admin dashboard is in `admin/`. It authenticates via API key (not as a Hush user) and has read-only access to UUIDs, member counts, and metrics - no plaintext content.
 
 ```bash
 cd admin
@@ -115,7 +115,7 @@ Variables prefixed with `VITE_` are embedded in the client bundle at build time.
 | `VITE_LIVEKIT_URL` | Yes | LiveKit WebSocket URL (e.g., `wss://chat.example.com/livekit`) |
 | `VITE_INSTANCE_NAME` | No | Display name shown in the client title |
 
-**Never put private keys, admin API keys, or any server-side secrets in `.env.local`** — Vite embeds these values in the JavaScript bundle.
+**Never put private keys, admin API keys, or any server-side secrets in `.env.local`** - Vite embeds these values in the JavaScript bundle.
 
 ---
 

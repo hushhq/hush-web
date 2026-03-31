@@ -1,5 +1,5 @@
 /**
- * InstanceContext — React context providing multi-instance state app-wide.
+ * InstanceContext - React context providing multi-instance state app-wide.
  *
  * This is a thin wrapper around useInstances. All business logic lives in the
  * hook; the context just makes it available without prop drilling.
@@ -35,7 +35,7 @@ export function InstanceProvider({ children }) {
 
 /**
  * Returns the multi-instance state from the nearest InstanceProvider.
- * Throws if used outside an InstanceProvider — always mount InstanceProvider
+ * Throws if used outside an InstanceProvider - always mount InstanceProvider
  * high in the tree (wrapping all guild/channel components).
  *
  * @returns {ReturnType<typeof useInstances>}

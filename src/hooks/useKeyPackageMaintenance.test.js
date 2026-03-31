@@ -1,7 +1,7 @@
 /**
  * Unit tests for useKeyPackageMaintenance hook.
  *
- * Focus: baseUrl threading — verifies that uploadMLSKeyPackages and
+ * Focus: baseUrl threading - verifies that uploadMLSKeyPackages and
  * getKeyPackageCount receive baseUrl from the hook's bound deps, not as a
  * separate argument passed by the caller.
  *
@@ -134,7 +134,7 @@ describe('useKeyPackageMaintenance', () => {
 
     apiModule.getKeyPackageCount.mockClear();
 
-    // Change baseUrl — the hook must re-run the on-mount effect with new bound URL.
+    // Change baseUrl - the hook must re-run the on-mount effect with new bound URL.
     rerender(makeDefaultProps({ baseUrl: 'https://second.instance.com' }));
 
     await waitFor(() => expect(apiModule.getKeyPackageCount).toHaveBeenCalled());
@@ -148,7 +148,7 @@ describe('useKeyPackageMaintenance', () => {
   it('does not call getKeyPackageCount when baseUrl is null', async () => {
     renderHook(() => useKeyPackageMaintenance(makeDefaultProps({ baseUrl: null })));
 
-    // Flush microtasks — nothing should fire.
+    // Flush microtasks - nothing should fire.
     await act(async () => {});
 
     expect(apiModule.getKeyPackageCount).not.toHaveBeenCalled();

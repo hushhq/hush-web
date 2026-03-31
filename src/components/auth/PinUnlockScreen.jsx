@@ -92,7 +92,7 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
       if (delayMs > 0) {
         startDelay(delayMs);
         setErrorMessage(
-          `Incorrect PIN — wait ${Math.ceil(delayMs / 1000)}s before trying again ` +
+          `Incorrect PIN - wait ${Math.ceil(delayMs / 1000)}s before trying again ` +
           `(${MAX_ATTEMPTS - newCount} attempt${MAX_ATTEMPTS - newCount !== 1 ? 's' : ''} remaining)`
         );
       } else {

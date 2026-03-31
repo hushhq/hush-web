@@ -1,11 +1,11 @@
 /**
- * MLS KeyPackage maintenance hook — replenishes KeyPackages at all trigger points.
+ * MLS KeyPackage maintenance hook - replenishes KeyPackages at all trigger points.
  *
- * Trigger 1: on mount (login/startup) — runs immediately when token+userId+deviceId are available.
- * Trigger 2: periodic 6h interval — re-runs maintenance every 6 hours while the app is open.
- * Trigger 3: key_packages.low WS event — server signals KeyPackage count is below threshold.
+ * Trigger 1: on mount (login/startup) - runs immediately when token+userId+deviceId are available.
+ * Trigger 2: periodic 6h interval - re-runs maintenance every 6 hours while the app is open.
+ * Trigger 3: key_packages.low WS event - server signals KeyPackage count is below threshold.
  *
- * All maintenance is silent — no UI side effects. The hook is safe to call unconditionally;
+ * All maintenance is silent - no UI side effects. The hook is safe to call unconditionally;
  * it guards against missing values internally.
  *
  * Mount point: ServerLayout (after wsClient is available and auth is confirmed).
@@ -55,7 +55,7 @@ async function replenishKeyPackages(token, userId, deviceId, threshold, deps) {
 
     const db = await store.openStore(userId, deviceId);
     const credential = await store.getCredential(db);
-    if (!credential) return; // No credential — key upload flow hasn't run yet.
+    if (!credential) return; // No credential - key upload flow hasn't run yet.
 
     // Generate NUM_KEY_PACKAGES regular KeyPackages.
     const kpBytesArray = [];
@@ -102,7 +102,7 @@ async function replenishKeyPackages(token, userId, deviceId, threshold, deps) {
       expiresAt,
     });
   } catch (err) {
-    // Silent — key maintenance errors must never surface to the user.
+    // Silent - key maintenance errors must never surface to the user.
     // eslint-disable-next-line no-console
     console.warn('[useKeyPackageMaintenance] replenishment failed:', err);
   }

@@ -19,7 +19,7 @@ function makeState(connectionState, guilds = []) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('InstancesSettingsTab — empty state', () => {
+describe('InstancesSettingsTab - empty state', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -38,7 +38,7 @@ describe('InstancesSettingsTab — empty state', () => {
   });
 });
 
-describe('InstancesSettingsTab — instance list', () => {
+describe('InstancesSettingsTab - instance list', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -78,7 +78,7 @@ describe('InstancesSettingsTab — instance list', () => {
   });
 });
 
-describe('InstancesSettingsTab — connection status indicator', () => {
+describe('InstancesSettingsTab - connection status indicator', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -126,7 +126,7 @@ describe('InstancesSettingsTab — connection status indicator', () => {
   });
 });
 
-describe('InstancesSettingsTab — disconnect flow', () => {
+describe('InstancesSettingsTab - disconnect flow', () => {
   beforeEach(() => {
     cleanup();
   });

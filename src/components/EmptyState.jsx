@@ -1,11 +1,11 @@
 /**
- * EmptyState — shown in the main content area when the user has no guild memberships.
+ * EmptyState - shown in the main content area when the user has no guild memberships.
  *
  * Renders:
  *   1. Welcome heading
  *   2. "Browse public servers" primary button
  *   3. Invite link explanation paragraph
- *   4. "Create a server" secondary button (conditional — visible only when at least one
+ *   4. "Create a server" secondary button (conditional - visible only when at least one
  *      connected instance has server_creation_policy = 'open')
  *   5. Footer links: "Get a server" and "Self-host" (external)
  *
@@ -34,7 +34,7 @@ export default function EmptyState({ instanceStates, onCreateServer, onBrowseSer
 
       <p className="empty-description">
         Your private space for encrypted screen sharing and chat.
-        No servers here yet — find one below or get your own.
+        No servers here yet - find one below or get your own.
       </p>
 
       <button
@@ -46,7 +46,7 @@ export default function EmptyState({ instanceStates, onCreateServer, onBrowseSer
       </button>
 
       <p className="empty-invite-hint">
-        Have an invite link? Just click it — you&apos;ll be connected automatically.
+        Have an invite link? Just click it - you&apos;ll be connected automatically.
       </p>
 
       {canCreateServer && (

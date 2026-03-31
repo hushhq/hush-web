@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getHealth } from '../lib/adminApi.js';
 
 /**
- * HealthPage — DB status, uptime, and version info.
+ * HealthPage - DB status, uptime, and version info.
  * Auto-refreshes every 30 seconds.
  */
 
@@ -102,7 +102,7 @@ const PAGE_STYLES = {
 };
 
 function formatUptime(seconds) {
-  if (seconds == null) return '—';
+  if (seconds == null) return '-';
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -114,7 +114,7 @@ function formatUptime(seconds) {
 }
 
 function formatTimestamp(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleString();
 }
 
@@ -196,7 +196,7 @@ export default function HealthPage({ apiKey }) {
             ) : (
               <span style={PAGE_STYLES.status(dbOk)}>
                 <span style={PAGE_STYLES.dot(dbOk)} />
-                {health?.dbStatus || (error ? 'unreachable' : '—')}
+                {health?.dbStatus || (error ? 'unreachable' : '-')}
               </span>
             )}
           </span>
@@ -204,7 +204,7 @@ export default function HealthPage({ apiKey }) {
         <div style={PAGE_STYLES.rowLast}>
           <span style={PAGE_STYLES.rowLabel}>Last check</span>
           <span style={PAGE_STYLES.rowValue}>
-            {lastRefresh ? lastRefresh.toLocaleTimeString() : '—'}
+            {lastRefresh ? lastRefresh.toLocaleTimeString() : '-'}
           </span>
         </div>
       </div>
@@ -214,7 +214,7 @@ export default function HealthPage({ apiKey }) {
         <div style={PAGE_STYLES.row}>
           <span style={PAGE_STYLES.rowLabel}>Version</span>
           <span style={PAGE_STYLES.rowValue}>
-            {loading && !health ? <span style={PAGE_STYLES.skeleton} /> : (health?.version || '—')}
+            {loading && !health ? <span style={PAGE_STYLES.skeleton} /> : (health?.version || '-')}
           </span>
         </div>
         <div style={PAGE_STYLES.row}>

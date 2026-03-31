@@ -30,7 +30,7 @@ function makeMockWs({ captureInstance = false, autoOpen = true } = {}) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('createWsClient — initial connection', () => {
+describe('createWsClient - initial connection', () => {
   let MockWs;
 
   beforeEach(() => {
@@ -116,7 +116,7 @@ describe('createWsClient — initial connection', () => {
 
 // ── Reconnect chain tests ─────────────────────────────────────────────────────
 
-describe('createWsClient — reconnect chain', () => {
+describe('createWsClient - reconnect chain', () => {
   let MockWs;
 
   beforeEach(() => {
@@ -142,7 +142,7 @@ describe('createWsClient — reconnect chain', () => {
     MockWs.captured.onclose && MockWs.captured.onclose();
     // Allow reconnect timer (1000ms base) to fire.
     vi.advanceTimersByTime(1100);
-    // New WS instance created — fire its onopen.
+    // New WS instance created - fire its onopen.
     const second = MockWs.mock.results[1]?.value;
     if (second?.onopen) await second.onopen();
     return second;
@@ -250,7 +250,7 @@ describe('createWsClient — reconnect chain', () => {
 
 // ── Network recovery tests ───────────────────────────────────────────────────
 
-describe('createWsClient — network recovery', () => {
+describe('createWsClient - network recovery', () => {
   let MockWs;
   /** @type {Map<string, Function>} Captured window event handlers */
   let windowListeners;
@@ -344,7 +344,7 @@ describe('createWsClient — network recovery', () => {
     // Simulate onclose so socket becomes null
     ws.onclose();
 
-    // Now fire online event — should not error and should still handle gracefully
+    // Now fire online event - should not error and should still handle gracefully
     const onlineHandler = windowListeners.get('online');
     expect(onlineHandler).toBeDefined();
     // scheduleReconnect was already called by onclose, so reconnecting is true
@@ -384,7 +384,7 @@ describe('createWsClient — network recovery', () => {
     vi.advanceTimersByTime(10_000);
     // Send pong response
     ws.onmessage({ data: JSON.stringify({ type: 'pong' }) });
-    // Second ping fires — missedPongs was reset, so now it's 1 again
+    // Second ping fires - missedPongs was reset, so now it's 1 again
     vi.advanceTimersByTime(10_000);
 
     // Socket should NOT be closed (only 1 missed after reset)

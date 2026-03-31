@@ -91,7 +91,7 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
 
   const handleKeyDown = useCallback((e, index) => {
     if (suggestions.length === 0) {
-      // Space: treat as word separator — auto-advance
+      // Space: treat as word separator - auto-advance
       if (e.key === ' ' && words[index].trim().length > 0) {
         e.preventDefault();
         const next = index + 1;
@@ -204,7 +204,7 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
           role="status"
           aria-live="polite"
         >
-          {isValid ? 'Valid phrase' : 'Invalid phrase — check all 12 words'}
+          {isValid ? 'Valid phrase' : 'Invalid phrase - check all 12 words'}
         </div>
       )}
 

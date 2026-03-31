@@ -1,5 +1,5 @@
 /**
- * useBootController — single source of truth for the app startup sequence.
+ * useBootController - single source of truth for the app startup sequence.
  *
  * Derives one atomic bootState from useAuth (vault/session/PIN-setup state)
  * and useInstances (guild loading). Every rendering decision in the app flows
@@ -8,12 +8,12 @@
  *
  * Boot states (sequential, deterministic):
  *
- *   'loading'     — auth is rehydrating (IDB/JWT check in progress)
- *   'needs_login' — no session, no vault — show login/register
- *   'needs_pin'   — vault exists but locked — show PIN screen
- *   'pin_setup'   — just registered/recovered, PIN setup prompt before proceeding
- *   'ready'       — authenticated, identity key available, instances booting
- *   'booted'      — authenticated, instances connected, guilds loaded
+ *   'loading'     - auth is rehydrating (IDB/JWT check in progress)
+ *   'needs_login' - no session, no vault - show login/register
+ *   'needs_pin'   - vault exists but locked - show PIN screen
+ *   'pin_setup'   - just registered/recovered, PIN setup prompt before proceeding
+ *   'ready'       - authenticated, identity key available, instances booting
+ *   'booted'      - authenticated, instances connected, guilds loaded
  *
  * The BootController is exposed via context so AppContent can consume a single
  * boot-state value without duplicating auth/loading checks.
@@ -48,13 +48,13 @@ export function BootProvider({ children }) {
   } = useInstanceContext();
 
   const bootState = useMemo(() => {
-    // Step 1: auth still rehydrating — block everything.
+    // Step 1: auth still rehydrating - block everything.
     if (authLoading) return 'loading';
 
-    // Step 1b/2: vault locked — need PIN before anything else.
+    // Step 1b/2: vault locked - need PIN before anything else.
     if (vaultState === 'locked') return 'needs_pin';
 
-    // No vault and not authenticated — need login/register.
+    // No vault and not authenticated - need login/register.
     if (!isAuthenticated) return 'needs_login';
 
     // Authenticated. Check if post-registration PIN setup is pending.

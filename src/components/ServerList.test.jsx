@@ -3,7 +3,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import ServerList from './ServerList';
 import { InstanceContext } from '../contexts/InstanceContext.jsx';
 
-// GuildCreateModal calls createGuild — mock it so the modal renders without real API calls
+// GuildCreateModal calls createGuild - mock it so the modal renders without real API calls
 vi.mock('../lib/api', () => ({
   createGuild: vi.fn(() => Promise.resolve({ id: 'g-new', name: 'New Guild' })),
   createGuildInvite: vi.fn(() => Promise.resolve({ code: 'invite-123' })),
@@ -11,7 +11,7 @@ vi.mock('../lib/api', () => ({
   createOrFindDM: vi.fn(),
 }));
 
-// UserSettingsModal requires matchMedia — mock the whole component
+// UserSettingsModal requires matchMedia - mock the whole component
 vi.mock('./UserSettingsModal', () => ({
   default: function MockUserSettingsModal({ onClose }) {
     return <div data-testid="user-settings"><button onClick={onClose}>Close</button></div>;
@@ -20,7 +20,7 @@ vi.mock('./UserSettingsModal', () => ({
   getStoredThemeMode: vi.fn(() => 'dark'),
 }));
 
-// GuildCreateModal references createGuild — mock it
+// GuildCreateModal references createGuild - mock it
 vi.mock('./GuildCreateModal', () => ({
   default: function MockGuildCreateModal({ onClose, onCreated }) {
     return (
@@ -38,7 +38,7 @@ vi.mock('../contexts/AuthContext', () => ({
   AuthProvider: ({ children }) => children,
 }));
 
-// guildMetadata — no real crypto in tests
+// guildMetadata - no real crypto in tests
 vi.mock('../lib/guildMetadata', () => ({
   decryptGuildMetadata: vi.fn(() => Promise.resolve({ name: 'Decrypted Name', icon: null })),
   fromBase64: vi.fn((v) => v),
@@ -75,7 +75,7 @@ function renderWithInstanceCtx(ctxValue, props = {}) {
   );
 }
 
-describe('ServerList — legacy prop-based mode', () => {
+describe('ServerList - legacy prop-based mode', () => {
   beforeEach(() => {
     cleanup();
     Object.defineProperty(navigator, 'clipboard', {
@@ -189,7 +189,7 @@ describe('ServerList — legacy prop-based mode', () => {
   });
 });
 
-describe('ServerList — multi-instance mode via InstanceContext', () => {
+describe('ServerList - multi-instance mode via InstanceContext', () => {
   beforeEach(() => {
     cleanup();
     Object.defineProperty(navigator, 'clipboard', {
@@ -310,14 +310,14 @@ describe('ServerList — multi-instance mode via InstanceContext', () => {
       setGuildOrder: vi.fn(),
     };
 
-    // Member — no settings visible
+    // Member - no settings visible
     const { unmount } = renderWithInstanceCtx(ctxValue, { userPermissionLevel: 0 });
     const guildBtn = screen.getByLabelText('Alpha Guild');
     fireEvent.contextMenu(guildBtn, { clientX: 100, clientY: 200 });
     expect(screen.queryByText('Server settings')).not.toBeInTheDocument();
     unmount();
 
-    // Admin — settings visible
+    // Admin - settings visible
     cleanup();
     renderWithInstanceCtx(ctxValue, { userPermissionLevel: 2 });
     const guildBtn2 = screen.getByLabelText('Alpha Guild');
@@ -325,7 +325,7 @@ describe('ServerList — multi-instance mode via InstanceContext', () => {
     expect(screen.getByText('Server settings')).toBeInTheDocument();
   });
 
-  it('respects guildOrder from context — reorders displayed guilds', () => {
+  it('respects guildOrder from context - reorders displayed guilds', () => {
     const ctxValue = {
       mergedGuilds: multiInstanceGuilds,
       instanceStates: new Map(),
@@ -373,7 +373,7 @@ describe('ServerList — multi-instance mode via InstanceContext', () => {
   });
 });
 
-describe('ServerList — DM button', () => {
+describe('ServerList - DM button', () => {
   beforeEach(() => {
     cleanup();
   });

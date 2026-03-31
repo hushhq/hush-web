@@ -9,7 +9,7 @@ vi.mock('../lib/mlsStore', () => ({
   openStore: vi.fn(() => Promise.resolve(null)),
 }));
 vi.mock('../components/Chat', () => ({
-  // MLS: Chat no longer accepts recipientUserIds — single-ciphertext group encryption.
+  // MLS: Chat no longer accepts recipientUserIds - single-ciphertext group encryption.
   default: function MockChat({ channelId }) {
     return (
       <div data-testid="chat-panel">

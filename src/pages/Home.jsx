@@ -309,7 +309,7 @@ export default function Home() {
   // ── Vault state -> authView sync ────────────────────────────────────────────
   //
   // Sets the correct UI view based on vault state. Routing decisions (navigate
-  // to guild, /home, invite) are handled by the BootController in App.jsx —
+  // to guild, /home, invite) are handled by the BootController in App.jsx -
   // Home.jsx only manages which form/screen to display.
 
   useEffect(() => {
@@ -325,14 +325,14 @@ export default function Home() {
       return;
     }
 
-    // vaultState === 'none' — ensure we show login/register, not a stale PIN view.
+    // vaultState === 'none' - ensure we show login/register, not a stale PIN view.
     if (vaultState === 'none') {
       if (authView === AUTH_VIEW.PIN_UNLOCK || authView === AUTH_VIEW.PIN_SETUP) {
         setAuthView(AUTH_VIEW.CHOOSE);
       }
     }
 
-    // vaultState === 'unlocked' — no action. BootController transitions the app
+    // vaultState === 'unlocked' - no action. BootController transitions the app
   // away from Home when auth is ready. If PIN_SETUP is in progress (post-register),
   // we stay here until the user completes or skips it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -437,7 +437,7 @@ export default function Home() {
   }, [unlockVault]);
 
   const handleSwitchAccount = useCallback(() => {
-    // Don't wipe the vault yet — user might press Back.
+    // Don't wipe the vault yet - user might press Back.
     // Vault is only wiped if the recovery phrase login succeeds
     // (performRecovery will overwrite the vault with the new identity).
     setAuthView(AUTH_VIEW.RECOVERY);
@@ -526,7 +526,7 @@ export default function Home() {
             onCancel={() => {
               clearError?.();
               // If vault still exists (user came from PIN screen via "Not you?"),
-              // go back to PIN — don't wipe anything.
+              // go back to PIN - don't wipe anything.
               setAuthView(vaultState === 'locked' ? AUTH_VIEW.PIN_UNLOCK : AUTH_VIEW.CHOOSE);
             }}
             isRecoveryMode={true}

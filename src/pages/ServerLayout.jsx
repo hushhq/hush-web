@@ -76,17 +76,17 @@ const LAYOUT_SCROLL_LOCK_STYLE = {
   overflow: 'hidden',
 };
 
-// ── Layout styles removed — see lay-* classes in global.css ──────────────────
+// ── Layout styles removed - see lay-* classes in global.css ──────────────────
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
- * ServerLayout — instance-aware guild layout.
+ * ServerLayout - instance-aware guild layout.
  *
  * Supports two URL patterns:
- *   - /:instance/:guildSlug/:channelSlug? — new multi-instance routes
- *   - /servers/:serverId/*               — legacy single-instance routes
- *   - /home                              — no-guild empty state
+ *   - /:instance/:guildSlug/:channelSlug? - new multi-instance routes
+ *   - /servers/:serverId/*               - legacy single-instance routes
+ *   - /home                              - no-guild empty state
  *
  * All API calls and WS subscriptions are routed through the active guild's
  * instanceUrl. When the active guild changes instance, the WS subscription
@@ -97,7 +97,7 @@ export default function ServerLayout() {
 
   const params = useParams();
   const navigate = useNavigate();
-  // Stable ref for navigate — useNavigate() returns a new identity on every
+  // Stable ref for navigate - useNavigate() returns a new identity on every
   // navigation in React Router v6, which would cause useEffects that list it
   // as a dependency to re-fire on every route change.
   const navigateRef = useRef(navigate);
@@ -165,7 +165,7 @@ export default function ServerLayout() {
   /** The instance URL for routing API and WS calls. */
   const instanceUrl = activeGuild?.instanceUrl ?? null;
 
-  /** Per-instance JWT — falls back to local sessionStorage token for legacy paths. */
+  /** Per-instance JWT - falls back to local sessionStorage token for legacy paths. */
   const token = instanceUrl
     ? (getTokenForInstance(instanceUrl) ?? getLocalToken())
     : getLocalToken();
@@ -213,7 +213,7 @@ export default function ServerLayout() {
   const showChatPanel = openPanel === 'chat';
   const showParticipantsPanel = openPanel === 'participants';
 
-  // Persistent voice session — survives channel navigation until Leave is clicked.
+  // Persistent voice session - survives channel navigation until Leave is clicked.
   const [activeVoiceChannel, setActiveVoiceChannel] = useState(null);
   const [pendingVoiceSwitch, setPendingVoiceSwitch] = useState(null);
   const activeVoiceMemberIdsRef = useRef([]);
@@ -345,7 +345,7 @@ export default function ServerLayout() {
         setActiveGuildName(parsed.n || parsed.name);
         return;
       }
-    } catch { /* Not plaintext JSON — try MLS decryption below */ }
+    } catch { /* Not plaintext JSON - try MLS decryption below */ }
 
     getMetadataKey(activeGuild.id).then(async (keyBytes) => {
       if (!keyBytes) { setActiveGuildName(nameFallback); return; }
@@ -723,7 +723,7 @@ export default function ServerLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsClient, serverId, currentUserId, mergedGuilds, channels]);
 
-  // ── MLS group lifecycle — mls.commit and mls.add_request WS events ───────
+  // ── MLS group lifecycle - mls.commit and mls.add_request WS events ───────
 
   useEffect(() => {
     if (!wsClient || !currentUserId) return;
@@ -785,7 +785,7 @@ export default function ServerLayout() {
 
   // ── MLS group joins when entering a guild ─────────────────────────────
 
-  // Track groups that failed to join — prevents infinite retry loops.
+  // Track groups that failed to join - prevents infinite retry loops.
   // Map<groupKey, failCount>. Reset when serverId changes.
   const mlsJoinFailuresRef = useRef(new Map());
   const mlsJoinRunningRef = useRef(false);
@@ -795,7 +795,7 @@ export default function ServerLayout() {
     if (!channels.length || !currentUserId || !authToken || !serverId) return;
     if (!token) return;
 
-    // Track guild switch — no failure map reset. Failures persist across
+    // Track guild switch - no failure map reset. Failures persist across
     // guild switches so a 404'd group doesn't get re-polled endlessly.
     prevMlsServerIdRef.current = serverId;
 
@@ -832,7 +832,7 @@ export default function ServerLayout() {
           }
         }
 
-        // Text channel groups (includes voice channels — they have built-in chat)
+        // Text channel groups (includes voice channels - they have built-in chat)
         for (const chId of chatChannelIds) {
           if ((failures.get(chId) ?? 0) >= MAX_JOIN_RETRIES) continue;
           const epoch = await mlsStoreLib.getGroupEpoch(db, chId);
@@ -845,7 +845,7 @@ export default function ServerLayout() {
                 `(attempt ${failures.get(chId)}/${MAX_JOIN_RETRIES})`, err);
             }
           } else {
-            // Epoch exists — catch up on any commits missed while page was killed (iOS).
+            // Epoch exists - catch up on any commits missed while page was killed (iOS).
             try {
               await mlsGroup.catchupCommits(deps, chId);
             } catch (err) {
@@ -937,7 +937,7 @@ export default function ServerLayout() {
    * point for server-side key manipulation.
    *
    * HARD FAIL: sets transparencyError which blocks the app UI.
-   * Network errors are non-fatal — transparency is optional infrastructure.
+   * Network errors are non-fatal - transparency is optional infrastructure.
    */
   useEffect(() => {
     if (!handshakeData?.transparency_url || !handshakeData?.log_public_key) return;
@@ -962,7 +962,7 @@ export default function ServerLayout() {
       .catch(err => {
         console.warn('[transparency] login verification failed:', err);
       });
-  // Run once per handshakeData load — intentionally not re-running on token change.
+  // Run once per handshakeData load - intentionally not re-running on token change.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handshakeData]);
 
@@ -992,7 +992,7 @@ export default function ServerLayout() {
       }
     };
 
-    // Don't run immediately — login verification already ran in the effect above.
+    // Don't run immediately - login verification already ran in the effect above.
     const id = setInterval(check, 24 * 60 * 60 * 1000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1035,7 +1035,7 @@ export default function ServerLayout() {
     if (!token) return;
 
     // Clear stale state immediately to prevent channel lookup across guilds.
-    // Voice connection is NEVER torn down by navigation — only by explicit Leave
+    // Voice connection is NEVER torn down by navigation - only by explicit Leave
     // or voice channel switch (Discord model).
     setChannels([]);
     setMembers([]);
@@ -1059,7 +1059,7 @@ export default function ServerLayout() {
             const parsed = JSON.parse(decoded);
             return { ...ch, name: parsed.n || parsed.name || '' };
           } catch {
-            return ch; // Encrypted blob — needs MLS key
+            return ch; // Encrypted blob - needs MLS key
           }
         });
         setChannels(processed);
@@ -1103,7 +1103,7 @@ export default function ServerLayout() {
     navigateToGuild(dmGuild.id);
   }, [navigateToGuild]);
 
-  /** Called by GuildCreateModal on success — refresh guilds and navigate to new guild. */
+  /** Called by GuildCreateModal on success - refresh guilds and navigate to new guild. */
   const handleGuildCreated = useCallback(async (newGuild) => {
     // Await refreshGuilds so mergedGuilds includes the new guild BEFORE navigating.
     // Without this, activeGuild=null during the transition → wsClient=null → voice drops.
@@ -1129,7 +1129,7 @@ export default function ServerLayout() {
   }, [handleGuildCreated]);
 
   /**
-   * Handles "Send Message" from MemberProfileCard — creates or finds a DM guild
+   * Handles "Send Message" from MemberProfileCard - creates or finds a DM guild
    * with the clicked member, then navigates to it.
    *
    * @param {object} member - Member object from MemberList
@@ -1251,7 +1251,7 @@ export default function ServerLayout() {
 
   // ── Render ────────────────────────────────────────────────────────────
 
-  // Transparency hard-fail: key mismatch detected — block the app.
+  // Transparency hard-fail: key mismatch detected - block the app.
   if (transparencyError) {
     return (
       <div style={{
@@ -1288,7 +1288,7 @@ export default function ServerLayout() {
           <button
             type="button"
             onClick={() => {
-              // Sign out — leave local vault intact for recovery.
+              // Sign out - leave local vault intact for recovery.
               import('../contexts/AuthContext').then(({ useAuth: _ }) => {
                 sessionStorage.clear();
                 window.location.href = '/';
@@ -1312,7 +1312,7 @@ export default function ServerLayout() {
     );
   }
 
-  // No guild selected — show empty state with guild strip and welcome message.
+  // No guild selected - show empty state with guild strip and welcome message.
   if (!serverId) {
     return (
       <div className="lay-container" style={LAYOUT_SCROLL_LOCK_STYLE}>
@@ -1344,7 +1344,7 @@ export default function ServerLayout() {
         )}
         {hasNoTransparencyLog && authToken && (
           <div
-            title="Transparency log not configured — key operations cannot be independently verified"
+            title="Transparency log not configured - key operations cannot be independently verified"
             aria-label="Transparency log not configured"
             style={{
               position: 'fixed',
@@ -1390,7 +1390,7 @@ export default function ServerLayout() {
     />
   );
 
-  // DM list element — shown in sidebar when dmMode is active or viewing a DM guild
+  // DM list element - shown in sidebar when dmMode is active or viewing a DM guild
   const dmListEl = (
     <DmListView
       dmGuilds={dmGuilds}
@@ -1458,7 +1458,7 @@ export default function ServerLayout() {
       {/* ── Offline banner ── */}
       {isInstanceOffline && (
         <div className="lay-offline-banner" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }}>
-          {instanceUrl ? new URL(instanceUrl).host : 'Instance'} is offline — read-only mode
+          {instanceUrl ? new URL(instanceUrl).host : 'Instance'} is offline - read-only mode
         </div>
       )}
 
@@ -1501,7 +1501,7 @@ export default function ServerLayout() {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M12 3a4 4 0 0 1 4 4v5a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4zm7 9a1 1 0 0 1 2 0 9 9 0 0 1-18 0 1 1 0 0 1 2 0 7 7 0 0 0 14 0z"/>
                 </svg>
-                In Voice: {activeVoiceChannel._displayName ?? activeVoiceChannel.name} — Tap to return
+                In Voice: {activeVoiceChannel._displayName ?? activeVoiceChannel.name} - Tap to return
               </button>
             )}
 
@@ -1772,11 +1772,11 @@ export default function ServerLayout() {
       )}
       {/* ── Transparency log warning badge ── */}
       {/* Shown when the instance has no transparency log configured.
-          Non-blocking — informational only. Positioned in the bottom-left
+          Non-blocking - informational only. Positioned in the bottom-left
           corner overlapping the server list footer area. */}
       {hasNoTransparencyLog && authToken && (
         <div
-          title="Transparency log not configured — key operations cannot be independently verified"
+          title="Transparency log not configured - key operations cannot be independently verified"
           aria-label="Transparency log not configured"
           style={{
             position: 'fixed',

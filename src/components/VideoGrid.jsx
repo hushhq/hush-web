@@ -153,7 +153,7 @@ function buildStreams(localTracks, remoteTracks, availableScreens, watchedScreen
  * Video grid: renders StreamView tiles, ScreenShareCards, and orphan audio elements.
  * Extracted from VoiceChannel to keep components under 300 lines.
  */
-/** Extracts initials from a display name — first letter of each word. */
+/** Extracts initials from a display name - first letter of each word. */
 function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);

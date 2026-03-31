@@ -27,7 +27,7 @@ function toHex(uint8Array) {
  * stores private keys in IndexedDB, and uploads public material to the server.
  *
  * On first call: generates credential + 50 KeyPackages + 1 last-resort.
- * On subsequent calls: credential already exists — generates and uploads KeyPackages only.
+ * On subsequent calls: credential already exists - generates and uploads KeyPackages only.
  *
  * @param {string} token - JWT
  * @param {string} userId - User UUID

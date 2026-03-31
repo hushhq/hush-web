@@ -1,5 +1,5 @@
 /**
- * DeviceLinkModal — shows a new device linking flow to the user.
+ * DeviceLinkModal - shows a new device linking flow to the user.
  *
  * The new device generates a fresh Ed25519 keypair and displays either:
  *   - A QR code containing the encoded public key payload (QR tab).
@@ -9,10 +9,10 @@
  * and calls certifyNewDevice. This component polls for successful linking.
  *
  * Props:
- *   onClose        — called when the modal is dismissed
- *   onLinked       — called with no args when the new device has been certified
- *   token          — JWT of the currently authenticated session (for polling)
- *   currentDeviceId — the device ID of the current (new) device
+ *   onClose        - called when the modal is dismissed
+ *   onLinked       - called with no args when the new device has been certified
+ *   token          - JWT of the currently authenticated session (for polling)
+ *   currentDeviceId - the device ID of the current (new) device
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -45,7 +45,7 @@ export default function DeviceLinkModal({ onClose, onLinked, token, currentDevic
   // Code state: 8-char linking code.
   const [linkCode, setLinkCode] = useState(null);
 
-  // Polling ref — cleared on linked/expired.
+  // Polling ref - cleared on linked/expired.
   const pollRef = useRef(null);
   const linkedDeviceCountRef = useRef(null);
 
@@ -200,7 +200,7 @@ export default function DeviceLinkModal({ onClose, onLinked, token, currentDevic
               )}
             </div>
             <div className={expired ? 'dl-timer--expired' : 'dl-timer'}>
-              {expired ? 'Expired — close and try again' : `Expires in ${formatTimer(secondsLeft)}`}
+              {expired ? 'Expired - close and try again' : `Expires in ${formatTimer(secondsLeft)}`}
             </div>
             <div className="dl-instructions">
               Scan this QR code from the new device you want to link.
@@ -214,7 +214,7 @@ export default function DeviceLinkModal({ onClose, onLinked, token, currentDevic
               {linkCode || '--------'}
             </div>
             <div className={expired ? 'dl-timer--expired' : 'dl-timer'}>
-              {expired ? 'Expired — close and try again' : `Expires in ${formatTimer(secondsLeft)}`}
+              {expired ? 'Expired - close and try again' : `Expires in ${formatTimer(secondsLeft)}`}
             </div>
             <div className="dl-copy-row">
               <button type="button" className="btn btn-secondary" onClick={handleCopy} disabled={!linkCode || expired}>

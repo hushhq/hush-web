@@ -305,20 +305,20 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const micPublishedRef = useRef(false);
   const handleMic = async () => {
     if (isMicOn) {
-      // Mic is on — mute it (keep track published)
+      // Mic is on - mute it (keep track published)
       await muteMic();
       setIsMicOn(false);
     } else if (!micPublishedRef.current && !hasSavedMic) {
-      // Never published — need device selection first
+      // Never published - need device selection first
       await requestPermission('audio');
       setShowMicPicker(true);
     } else if (!micPublishedRef.current) {
-      // Never published — publish with saved device
+      // Never published - publish with saved device
       await publishMic(selectedMicId);
       micPublishedRef.current = true;
       setIsMicOn(true);
     } else {
-      // Already published — unmute
+      // Already published - unmute
       await unmuteMic();
       setIsMicOn(true);
     }

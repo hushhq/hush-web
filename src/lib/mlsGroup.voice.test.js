@@ -191,7 +191,7 @@ describe('mlsGroup voice lifecycle', () => {
       deps.credential.signingPublicKey,
       deps.credential.credentialBytes,
     );
-    // Export is read-only — flush must NOT be called.
+    // Export is read-only - flush must NOT be called.
     expect(deps.mlsStore.flushStorageCache).not.toHaveBeenCalled();
     expect(result.frameKeyBytes).toBeInstanceOf(Uint8Array);
     expect(result.frameKeyBytes.length).toBe(32);
@@ -206,7 +206,7 @@ describe('mlsGroup voice lifecycle', () => {
     await destroyVoiceGroup(deps, 'ch-1');
 
     expect(deps.mlsStore.deleteGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1');
-    // No server call — server handles cleanup via LiveKit webhook.
+    // No server call - server handles cleanup via LiveKit webhook.
     expect(deps.api.putMLSVoiceGroupInfo).not.toHaveBeenCalled();
     expect(deps.api.postMLSVoiceCommit).not.toHaveBeenCalled();
   });

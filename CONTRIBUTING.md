@@ -25,7 +25,7 @@ npm ci
 
 ```bash
 cp .env.example .env.local
-# Edit .env.local — at minimum set VITE_API_BASE_URL and VITE_WS_URL
+# Edit .env.local - at minimum set VITE_API_BASE_URL and VITE_WS_URL
 ```
 
 **4. Start the dev server:**
@@ -81,9 +81,9 @@ npm run lint
 
 Before making changes to these files, read the relevant documentation:
 
-- `src/lib/hushCrypto.js`, `src/hooks/useMLS.js` — MLS group operations; read `signal-theory-context.md` and the OpenMLS book first
-- `src/lib/bip39Identity.js`, `src/lib/vault.js` — BIP39 identity and vault PIN; read `SECURITY.md` first
-- `src/lib/wsClient.js` — WebSocket reconnect logic; changes affect all real-time features
+- `src/lib/hushCrypto.js`, `src/hooks/useMLS.js` - MLS group operations; read `signal-theory-context.md` and the OpenMLS book first
+- `src/lib/bip39Identity.js`, `src/lib/vault.js` - BIP39 identity and vault PIN; read `SECURITY.md` first
+- `src/lib/wsClient.js` - WebSocket reconnect logic; changes affect all real-time features
 
 ---
 

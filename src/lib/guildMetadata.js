@@ -5,20 +5,20 @@
  * metadata group export_secret (via exportMetadataKey in hushCrypto.js).
  *
  * Blob format (all functions):
- *   [0x01]            — 1 byte version
- *   [nonce]           — 12 bytes (random, unique per encryption)
- *   [ciphertext+tag]  — variable (AES-GCM output includes 16-byte auth tag)
+ *   [0x01]            - 1 byte version
+ *   [nonce]           - 12 bytes (random, unique per encryption)
+ *   [ciphertext+tag]  - variable (AES-GCM output includes 16-byte auth tag)
  *
  * Plaintext layout:
  *   guild:   JSON { n: string, d: string, i: string|null }
  *   channel: JSON { n: string, d: string }
  *
- * The server receives and stores only the opaque base64 blob — it never sees
+ * The server receives and stores only the opaque base64 blob - it never sees
  * plaintext guild or channel names.
  */
 
 const METADATA_BLOB_VERSION = 0x01;
-const NONCE_LENGTH = 12; // bytes — standard AES-GCM nonce
+const NONCE_LENGTH = 12; // bytes - standard AES-GCM nonce
 
 // ---------------------------------------------------------------------------
 // Internal helpers

@@ -127,7 +127,7 @@ export function createWsClient(opts) {
 
       if (isReconnect) {
         // Run the application-registered recovery hook (message catch-up +
-        // MLS group state recovery). Errors are non-fatal — the connection is
+        // MLS group state recovery). Errors are non-fatal - the connection is
         // usable even if recovery partially fails.
         if (onReconnected) {
           try {
@@ -228,7 +228,7 @@ export function createWsClient(opts) {
       if (!isConnected()) return;
       missedPongs += 1;
       if (missedPongs >= MISSED_PONG_LIMIT) {
-        console.warn('[ws] missed', missedPongs, 'pongs — forcing reconnect');
+        console.warn('[ws] missed', missedPongs, 'pongs - forcing reconnect');
         socket.close();
         return;
       }
@@ -241,7 +241,7 @@ export function createWsClient(opts) {
 
   function handleOnline() {
     if (intentionalClose) return;
-    console.log('[ws] network online — forcing reconnect');
+    console.log('[ws] network online - forcing reconnect');
     if (socket && (socket.readyState === 1 || socket.readyState === 0)) {
       socket.close();
       return; // onclose will call scheduleReconnect
@@ -255,7 +255,7 @@ export function createWsClient(opts) {
     if (typeof document === 'undefined') return;
     if (document.visibilityState !== 'visible' || intentionalClose) return;
     if (Date.now() - lastPongTime > STALE_THRESHOLD_MS) {
-      console.log('[ws] tab visible with stale connection — forcing reconnect');
+      console.log('[ws] tab visible with stale connection - forcing reconnect');
       if (socket && (socket.readyState === 1 || socket.readyState === 0)) {
         socket.close();
       } else if (!socket && !reconnecting) {

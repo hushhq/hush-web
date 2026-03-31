@@ -9,9 +9,9 @@
  *   4. Submit signature via api.verifyChallenge → receive JWT
  *
  * Vault states:
- *   'none'     — no vault exists, show login/register UI
- *   'locked'   — vault exists but PIN not entered
- *   'unlocked' — private key in memory, JWT valid
+ *   'none'     - no vault exists, show login/register UI
+ *   'locked'   - vault exists but PIN not entered
+ *   'unlocked' - private key in memory, JWT valid
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -56,7 +56,7 @@ import { getActiveAuthInstanceUrlSync } from '../lib/authInstanceStore';
 /**
  * Decodes a JWT payload without verifying the signature.
  * Used client-side only to read claims (expiry, is_guest) that were already
- * signed by the trusted server — signature verification is the server's job.
+ * signed by the trusted server - signature verification is the server's job.
  *
  * @param {string} token - JWT string
  * @returns {object | null} Parsed payload claims, or null on error
@@ -182,7 +182,7 @@ export function getDeviceId() {
 /**
  * Clears all JWT keys (namespaced and legacy) from sessionStorage along with
  * the vault session flag.
- * Does NOT wipe vault IDB or localStorage — use performLogout for full wipe.
+ * Does NOT wipe vault IDB or localStorage - use performLogout for full wipe.
  */
 export function clearSession() {
   // Remove all per-instance JWT keys (hush_jwt and hush_jwt_*).
@@ -321,7 +321,7 @@ export function useAuth() {
 
   /**
    * Set when transparency log verification detects a key mismatch.
-   * Non-null value blocks the app UI — see transparencyError in the return value.
+   * Non-null value blocks the app UI - see transparencyError in the return value.
    *
    * Owned here so any component in the tree can read the error via useAuth().
    * Set externally by ServerLayout after fetching handshakeData and running
@@ -337,7 +337,7 @@ export function useAuth() {
    */
   const [guestExpiresAt, setGuestExpiresAt] = useState(null);
 
-  // In-memory identity key — never persisted to any storage as plaintext.
+  // In-memory identity key - never persisted to any storage as plaintext.
   const identityKeyRef = useRef(null);
 
   // Inactivity timer handle.
@@ -412,7 +412,7 @@ export function useAuth() {
         }));
       }, warningMs);
     } else {
-      // Less than 5 minutes remaining — show warning immediately.
+      // Less than 5 minutes remaining - show warning immediately.
       window.dispatchEvent(new CustomEvent('hush_guest_expiry_warning', {
         detail: { expiresAt: new Date(expiresAtMs).toISOString() },
       }));
@@ -424,10 +424,10 @@ export function useAuth() {
         try { voiceDisconnectRef.current(); } catch { /* ignore */ }
       }
 
-      // 2. Show expiry toast (via CustomEvent — decoupled from any toast lib).
+      // 2. Show expiry toast (via CustomEvent - decoupled from any toast lib).
       window.dispatchEvent(new CustomEvent('hush_guest_session_expired'));
 
-      // 3. Clear auth state (silent — no BroadcastChannel; guest has no other tabs).
+      // 3. Clear auth state (silent - no BroadcastChannel; guest has no other tabs).
       clearSession();
       setToken(null);
       setUser(null);
@@ -436,7 +436,7 @@ export function useAuth() {
       setGuestExpiresAt(null);
       clearGuestTimers();
 
-      // 4. Redirect to BIP39 registration (not login — guests have no account).
+      // 4. Redirect to BIP39 registration (not login - guests have no account).
       if (typeof window !== 'undefined') {
         window.location.href = '/register';
       }
@@ -624,7 +624,7 @@ export function useAuth() {
 
     if (timeout === 'never') {
       // Derived key stays in sessionStorage indefinitely (until tab closes
-      // or explicit logout). No session flag needed — auto-unlock always.
+      // or explicit logout). No session flag needed - auto-unlock always.
       sessionStorage.setItem(VAULT_SESSION_FLAG, '1');
       return;
     }
@@ -924,7 +924,7 @@ export function useAuth() {
 
   /**
    * Starts an ephemeral guest session: calls POST /api/auth/guest and sets
-   * in-memory auth state. No vault, no BIP39 identity — guests have a
+   * in-memory auth state. No vault, no BIP39 identity - guests have a
    * short-lived JWT and are redirected to registration on expiry.
    *
    * @returns {Promise<{ user: object }>}
@@ -1041,7 +1041,7 @@ export function useAuth() {
 
   /**
    * Locks the vault by clearing the in-memory private key.
-   * Does NOT delete vault IDB data — use performLogout for full wipe.
+   * Does NOT delete vault IDB data - use performLogout for full wipe.
    */
   const lockVault = useCallback(() => {
     identityKeyRef.current = null;
@@ -1058,7 +1058,7 @@ export function useAuth() {
    */
   const setPIN = useCallback(async (pin) => {
     if (!identityKeyRef.current?.privateKey) {
-      throw new Error('no identity key in memory — must be unlocked first');
+      throw new Error('no identity key in memory - must be unlocked first');
     }
     if (!user?.id) throw new Error('no authenticated user');
 
@@ -1133,7 +1133,7 @@ export function useAuth() {
       try {
         await fetchWithAuth(jwt, '/api/auth/logout', { method: 'POST' });
       } catch {
-        // Ignore — local wipe proceeds regardless.
+        // Ignore - local wipe proceeds regardless.
       }
     }
 
@@ -1209,7 +1209,7 @@ export function useAuth() {
     if (!stored) {
       clearPinSetup();
 
-      // No JWT — but vault may still exist (tab closed, sessionStorage wiped).
+      // No JWT - but vault may still exist (tab closed, sessionStorage wiped).
       // Check localStorage for vault marker. If found, show PIN unlock;
       // after unlock, challenge-response auth gets a fresh JWT.
       const vaultUserId = Object.keys(localStorage)
@@ -1230,7 +1230,7 @@ export function useAuth() {
             if (result.exists) {
               setVaultState('locked');
             } else {
-              // Vault marker set during registration but PIN never set — clear stale marker.
+              // Vault marker set during registration but PIN never set - clear stale marker.
               localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
               setVaultState('none');
             }
@@ -1242,7 +1242,7 @@ export function useAuth() {
         return () => { idbCheckCancelled = true; };
       }
 
-      // localStorage marker missing — iOS non-Safari browsers may have evicted
+      // localStorage marker missing - iOS non-Safari browsers may have evicted
       // localStorage while IndexedDB survives. Check IDB for vault existence.
       // Also try to find userId from the last_user hint in localStorage.
       const lastUser = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
@@ -1252,7 +1252,7 @@ export function useAuth() {
           // Try known userId first, then scan IDB databases for vault pattern.
           const candidates = lastUser ? [lastUser] : [];
 
-          // indexedDB.databases() returns all IDB databases — scan for vault DBs.
+          // indexedDB.databases() returns all IDB databases - scan for vault DBs.
           if (!candidates.length && typeof indexedDB.databases === 'function') {
             const dbs = await indexedDB.databases();
             for (const db of dbs) {
@@ -1267,7 +1267,7 @@ export function useAuth() {
             const result = await checkVaultExistsInIDB(userId);
             if (idbCancelled) return;
             if (result.exists) {
-              // Vault found in IDB — restore localStorage markers from IDB backup.
+              // Vault found in IDB - restore localStorage markers from IDB backup.
               if (result.publicKeyHex) {
                 localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, result.publicKeyHex);
               }
@@ -1278,11 +1278,11 @@ export function useAuth() {
             }
           }
         } catch {
-          // IDB check failed — fall through to no-vault state.
+          // IDB check failed - fall through to no-vault state.
         }
 
         if (!idbCancelled) {
-          // No vault at all — show login/register.
+          // No vault at all - show login/register.
           setLoading(false);
           setVaultState('none');
         }
@@ -1308,7 +1308,7 @@ export function useAuth() {
         }
 
         if (!res.ok) {
-          // Transient error — keep session alive, fall through to state check.
+          // Transient error - keep session alive, fall through to state check.
           setToken(stored);
           // State determined below.
         } else {
@@ -1327,7 +1327,7 @@ export function useAuth() {
 
             if (sessionAlive && storedDerivedKey) {
               // Session is alive (not a browser restart) and we have the
-              // derived key — attempt auto-unlock.
+              // derived key - attempt auto-unlock.
               try {
                 const db = await openVaultStore(u.id);
                 const blob = await loadEncryptedKey(db);
@@ -1342,13 +1342,13 @@ export function useAuth() {
                   setVaultState('unlocked');
                   applyVaultTimeout(u.id);
                 } else if (!cancelled) {
-                  // Vault blob missing — PIN was never set. Clear stale marker.
+                  // Vault blob missing - PIN was never set. Clear stale marker.
                   sessionStorage.removeItem(VAULT_DERIVED_KEY);
                   localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
                   setVaultState('unlocked');
                 }
               } catch {
-                // Derived key invalid or vault corrupt — fall back to PIN.
+                // Derived key invalid or vault corrupt - fall back to PIN.
                 if (!cancelled) {
                   sessionStorage.removeItem(VAULT_DERIVED_KEY);
                   clearPinSetup();
@@ -1356,7 +1356,7 @@ export function useAuth() {
                 }
               }
             } else {
-              // No derived key or session flag absent — verify the vault blob
+              // No derived key or session flag absent - verify the vault blob
               // actually exists before showing PIN screen. The vault marker
               // (public key hex) is written during registration, but the
               // encrypted blob is only created when the user sets a PIN. If
@@ -1370,7 +1370,7 @@ export function useAuth() {
                   clearPinSetup();
                   setVaultState('locked');
                 } else {
-                  // Stale marker — PIN was never set. Clear it.
+                  // Stale marker - PIN was never set. Clear it.
                   localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
                   setVaultState('unlocked');
                 }
@@ -1387,7 +1387,7 @@ export function useAuth() {
           }
         }
       } catch {
-        // Network error — keep token, keep as locked if vault exists.
+        // Network error - keep token, keep as locked if vault exists.
         setToken(stored);
         setVaultState('locked');
       } finally {
@@ -1425,7 +1425,7 @@ export function useAuth() {
           window.location.href = '/';
         }
       } catch {
-        // Network error — don't log out, user may be offline.
+        // Network error - don't log out, user may be offline.
       }
     };
 

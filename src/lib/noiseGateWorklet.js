@@ -46,7 +46,7 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
         if (enabled !== undefined) {
           this.enabled = enabled;
           if (!enabled) {
-            // Gate disabled — open immediately
+            // Gate disabled - open immediately
             this.gateOpen = true;
             this.currentGain = 1.0;
             this.holdTimeRemaining = 0;
@@ -93,18 +93,18 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     // Gate logic
     if (this.enabled) {
       if (rmsDb > this.thresholdDb) {
-        // Signal above threshold — open gate
+        // Signal above threshold - open gate
         this.gateOpen = true;
         this.holdTimeRemaining = this.holdTimeSamples;
       } else if (this.gateOpen) {
-        // Signal below threshold — check hold time
+        // Signal below threshold - check hold time
         this.holdTimeRemaining -= blockSize;
         if (this.holdTimeRemaining <= 0) {
           this.gateOpen = false;
         }
       }
     } else {
-      // Gate disabled — always open
+      // Gate disabled - always open
       this.gateOpen = true;
     }
 

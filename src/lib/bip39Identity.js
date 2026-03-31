@@ -92,7 +92,7 @@ export function getEnglishWordlist() {
  * The payload is CBOR-encoded using integer map keys (1-4) matching the
  * server's fxamacker/cbor CoreDetEncOptions with keyasint struct tags.
  * Both sides use RFC 8949 Core Deterministic Encoding, which sorts integer
- * keys numerically — this cross-platform consistency ensures leaf hashes match.
+ * keys numerically - this cross-platform consistency ensures leaf hashes match.
  *
  * Field mapping:
  *   1 → operationType (text string)

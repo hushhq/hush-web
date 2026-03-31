@@ -24,7 +24,7 @@ function uint8ArrayToBase64(u8) {
   return btoa(bin);
 }
 
-// Module-level pending send cache — survives component unmount/remount so plaintext
+// Module-level pending send cache - survives component unmount/remount so plaintext
 // can be recovered when the user navigates back to a channel before the self-echo
 // has been processed (or in fan-out mode where no self-echo arrives).
 const _pendingSends = new Map();
@@ -79,7 +79,7 @@ async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCach
       }
       return { id: m.id, sender: m.senderId, content: pendingContent, timestamp: ts, decryptionFailed: false };
     }
-    // Own message — local plaintext cache lost (logout/session change).
+    // Own message - local plaintext cache lost (logout/session change).
     // MLS ciphertext can't be self-decrypted; keys may no longer exist.
     return {
       id: m.id,
@@ -112,7 +112,7 @@ async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCach
 
 /**
  * Encrypt and send a single-ciphertext MLS message for the channel group.
- * No fan-out — MLS produces one ciphertext for all group members.
+ * No fan-out - MLS produces one ciphertext for all group members.
  *
  * @param {object} wsClient
  * @param {string} channelId
@@ -506,7 +506,7 @@ export default function Chat({
                     <div className="chat-body">
                       {msg.decryptionFailed ? (
                         <span className="chat-decryption-failed">
-                          Message encrypted — decryption key no longer available
+                          Message encrypted - decryption key no longer available
                         </span>
                       ) : (
                         msg.content

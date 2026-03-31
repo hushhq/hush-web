@@ -1,5 +1,5 @@
 /**
- * Tests for bip39Identity.js — BIP39 mnemonic generation, Ed25519 keypair derivation,
+ * Tests for bip39Identity.js - BIP39 mnemonic generation, Ed25519 keypair derivation,
  * mnemonic validation, challenge signing, and wordlist access.
  */
 import { describe, it, expect } from 'vitest';

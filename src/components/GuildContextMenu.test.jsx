@@ -31,7 +31,7 @@ function renderMenu(props = {}) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('GuildContextMenu — positioning and structure', () => {
+describe('GuildContextMenu - positioning and structure', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -68,7 +68,7 @@ describe('GuildContextMenu — positioning and structure', () => {
   });
 });
 
-describe('GuildContextMenu — actions', () => {
+describe('GuildContextMenu - actions', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -149,7 +149,7 @@ describe('GuildContextMenu — actions', () => {
   });
 });
 
-describe('GuildContextMenu — Settings visibility', () => {
+describe('GuildContextMenu - Settings visibility', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -181,7 +181,7 @@ describe('GuildContextMenu — Settings visibility', () => {
   });
 });
 
-describe('GuildContextMenu — Mute submenu', () => {
+describe('GuildContextMenu - Mute submenu', () => {
   beforeEach(() => {
     cleanup();
   });
@@ -232,7 +232,7 @@ describe('GuildContextMenu — Mute submenu', () => {
   });
 });
 
-describe('GuildContextMenu — dismiss behaviors', () => {
+describe('GuildContextMenu - dismiss behaviors', () => {
   beforeEach(() => {
     cleanup();
   });

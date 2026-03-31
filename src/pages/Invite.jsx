@@ -16,10 +16,10 @@ function inviteErrorMessage(err) {
 }
 
 /**
- * Invite page — handles two URL patterns:
+ * Invite page - handles two URL patterns:
  *
- * 1. /invite/:code                   — same-instance invite (legacy)
- * 2. /join/:instance/:code           — cross-instance invite (new)
+ * 1. /invite/:code                   - same-instance invite (legacy)
+ * 2. /join/:instance/:code           - cross-instance invite (new)
  *
  * Cross-instance flow:
  *   - Show confirm modal with guild name + instance host
@@ -52,7 +52,7 @@ export default function Invite() {
   const [joining, setJoining] = useState(false);
   const [booting, setBooting] = useState(false);
 
-  // Guild name from URL fragment (#name=...) — server never receives it.
+  // Guild name from URL fragment (#name=...) - server never receives it.
   const guildNameFromFragment = useMemo(() => {
     const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);

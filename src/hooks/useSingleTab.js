@@ -7,7 +7,7 @@ const TAB_ID_KEY = 'hush_tab_id';
 /**
  * Returns the stable tab ID for this browser tab.
  *
- * sessionStorage is scoped per tab — each tab gets its own storage partition.
+ * sessionStorage is scoped per tab - each tab gets its own storage partition.
  * Within a tab, refreshes share the same sessionStorage, so the ID persists
  * across within-tab navigations. A truly separate tab (Cmd+T, duplicate tab)
  * gets a fresh sessionStorage with no ID, so it generates a new one.
@@ -30,14 +30,14 @@ function getTabId() {
  *  1. On mount, generate (or reuse) a per-tab UUID stored in sessionStorage.
  *  2. Post `session_ping` with our tabId and wait up to 500ms for a reply.
  *  3. If `session_active` arrives with a DIFFERENT tabId: this is a genuine
- *     second tab — set isBlockedTab = true.
+ *     second tab - set isBlockedTab = true.
  *  4. If `session_active` arrives with the SAME tabId: this is the pre-refresh
- *     page responding to us — ignore it (same tab refreshing).
+ *     page responding to us - ignore it (same tab refreshing).
  *  5. If nothing arrives within 500ms: this tab becomes primary.
  *  6. If `session_ping` is received (we are the existing tab): reply with
  *     `session_active` including our tabId.
  *  7. If `session_takeover` is received: another tab has claimed the session
- *     — set isBlockedTab = true so this tab yields.
+ *     - set isBlockedTab = true so this tab yields.
  *
  * Uses sessionStorage tab scoping to distinguish refresh from a real second
  * tab. sessionStorage is per-tab: a refresh reuses the same partition, but a
@@ -59,7 +59,7 @@ export function useSingleTab() {
     try {
       channel = new BroadcastChannel(CHANNEL_NAME);
     } catch {
-      // BroadcastChannel unavailable — degrade gracefully, allow this tab
+      // BroadcastChannel unavailable - degrade gracefully, allow this tab
       return;
     }
     channelRef.current = channel;
@@ -83,17 +83,17 @@ export function useSingleTab() {
 
       if (type === 'session_active') {
         // If the responder has the same tabId, it's the pre-refresh version
-        // of this same tab — ignore it, this is a refresh not a second tab.
+        // of this same tab - ignore it, this is a refresh not a second tab.
         if (senderTabId === tabId) return;
 
-        // Different tabId — genuine second tab detected
+        // Different tabId - genuine second tab detected
         clearTimeout(timeoutId);
         setIsBlockedTab(true);
         return;
       }
 
       if (type === 'session_takeover') {
-        // Another tab is claiming the session — yield
+        // Another tab is claiming the session - yield
         isPrimaryRef.current = false;
         setIsBlockedTab(true);
       }

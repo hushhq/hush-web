@@ -12,7 +12,7 @@
  * Salt: 16 bytes, generated once and dual-stored in localStorage + IDB.
  */
 
-/** PBKDF2 iteration count — OWASP minimum for PBKDF2-SHA256 (2023). */
+/** PBKDF2 iteration count - OWASP minimum for PBKDF2-SHA256 (2023). */
 const PBKDF2_ITERATIONS = 200_000;
 
 /** localStorage key for the PBKDF2 salt. */
@@ -111,7 +111,7 @@ async function deriveKeyFromPin(pin) {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — Encryption / Decryption
+// Public API - Encryption / Decryption
 // ---------------------------------------------------------------------------
 
 /**
@@ -246,7 +246,7 @@ export async function decryptVaultWithRawKey(blob, rawKeyHex) {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — IndexedDB persistence
+// Public API - IndexedDB persistence
 // ---------------------------------------------------------------------------
 
 /**
@@ -381,7 +381,7 @@ export async function checkVaultExistsInIDB(userId) {
       db.close();
       return { exists: false, publicKeyHex: null };
     }
-    // Vault has encrypted data — try to load the marker too.
+    // Vault has encrypted data - try to load the marker too.
     const marker = await loadVaultMarkerFromIDB(db);
 
     // If localStorage lost the salt, try to restore it from IDB.
@@ -446,7 +446,7 @@ export function deleteVaultDatabase(userId) {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — Vault configuration
+// Public API - Vault configuration
 // ---------------------------------------------------------------------------
 
 /**

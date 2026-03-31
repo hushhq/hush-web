@@ -18,8 +18,8 @@ describe('MemberList', () => {
         currentUserId=""
       />
     );
-    expect(screen.getByText('ADMIN — 1')).toBeInTheDocument();
-    expect(screen.getByText('MEMBERS — 1')).toBeInTheDocument();
+    expect(screen.getByText('ADMIN - 1')).toBeInTheDocument();
+    expect(screen.getByText('MEMBERS - 1')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Caller')).toBeInTheDocument();
   });
@@ -44,7 +44,7 @@ describe('MemberList', () => {
         currentUserId=""
       />
     );
-    expect(screen.getByText('MEMBERS — 1')).toBeInTheDocument();
+    expect(screen.getByText('MEMBERS - 1')).toBeInTheDocument();
     const callers = screen.getAllByText(/^Caller$/);
     expect(callers.length).toBeGreaterThanOrEqual(1);
   });
@@ -57,7 +57,7 @@ describe('MemberList', () => {
         currentUserId=""
       />
     );
-    expect(screen.getByText('MEMBERS — 2')).toBeInTheDocument();
+    expect(screen.getByText('MEMBERS - 2')).toBeInTheDocument();
     const rows = container.querySelectorAll('.member-list-row');
     const names = Array.from(rows).map((r) => r.textContent?.trim() ?? '');
     const danaIdx = names.findIndex((n) => n.includes('Dana'));

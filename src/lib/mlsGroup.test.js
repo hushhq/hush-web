@@ -1,5 +1,5 @@
 /**
- * Tests for mlsGroup.js — chat channel MLS group lifecycle operations.
+ * Tests for mlsGroup.js - chat channel MLS group lifecycle operations.
  *
  * Covers:
  *   - createChannelGroup: creates group, flushes state, stores epoch
@@ -23,7 +23,7 @@ import {
 } from './mlsGroup.js';
 
 // ---------------------------------------------------------------------------
-// Mock factories — mirrors mlsGroup.voice.test.js pattern
+// Mock factories - mirrors mlsGroup.voice.test.js pattern
 // ---------------------------------------------------------------------------
 
 function makeDb() {

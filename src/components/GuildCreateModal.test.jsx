@@ -41,7 +41,7 @@ vi.mock('../contexts/InstanceContext', () => ({
   useInstanceContext: vi.fn(),
 }));
 
-// GuildCreateModal uses createPortal — render into document.body by default in jsdom
+// GuildCreateModal uses createPortal - render into document.body by default in jsdom
 // No special stub needed; JSDOM supports document.body as portal target.
 
 // ── Imports after mocks ───────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ function renderModal(props = {}) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('GuildCreateModal — instance picker', () => {
+describe('GuildCreateModal - instance picker', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -130,7 +130,7 @@ describe('GuildCreateModal — instance picker', () => {
   });
 });
 
-describe('GuildCreateModal — policy annotations', () => {
+describe('GuildCreateModal - policy annotations', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -148,7 +148,7 @@ describe('GuildCreateModal — policy annotations', () => {
     expect(screen.queryByText(/managed by the instance admin/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/will be reviewed/i)).not.toBeInTheDocument();
 
-    // Name must be non-empty — the button has a !name.trim() guard in addition to policy.
+    // Name must be non-empty - the button has a !name.trim() guard in addition to policy.
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'My Server' } });
 
     const createBtn = screen.getByRole('button', { name: /^create$/i });
@@ -206,7 +206,7 @@ describe('GuildCreateModal — policy annotations', () => {
   });
 });
 
-describe('GuildCreateModal — template loading', () => {
+describe('GuildCreateModal - template loading', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -240,7 +240,7 @@ describe('GuildCreateModal — template loading', () => {
   });
 });
 
-describe('GuildCreateModal — submission', () => {
+describe('GuildCreateModal - submission', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();

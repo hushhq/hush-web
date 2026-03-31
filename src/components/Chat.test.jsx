@@ -1,5 +1,5 @@
 /**
- * Tests for Chat.jsx — byte-based message length enforcement (LNCH-05).
+ * Tests for Chat.jsx - byte-based message length enforcement (LNCH-05).
  *
  * Focuses on the MAX_PLAINTEXT_BYTES constant (4000 bytes) which enforces
  * the effective plaintext limit before MLS encryption. The server limit is
@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import Chat from './Chat.jsx';
 
-// Minimal mock for useMLS — we only test UI behavior, not crypto.
+// Minimal mock for useMLS - we only test UI behavior, not crypto.
 vi.mock('../hooks/useMLS', () => ({
   useMLS: () => ({
     encryptForChannel: vi.fn().mockResolvedValue({ ciphertext: new Uint8Array(32) }),
@@ -85,7 +85,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
     });
 
     const input = screen.getByPlaceholderText('send a message...');
-    // Exactly 4000 ASCII bytes — should be allowed
+    // Exactly 4000 ASCII bytes - should be allowed
     const exactText = 'a'.repeat(4000);
 
     await act(async () => {

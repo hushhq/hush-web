@@ -42,7 +42,7 @@ function PostLoginRedirect() {
   const joinParam = searchParams.get('join');
 
   useEffect(() => {
-    // Handle invite join param — redirect immediately, don't wait for guilds.
+    // Handle invite join param - redirect immediately, don't wait for guilds.
     if (joinParam) {
       navigate(`/invite/${encodeURIComponent(joinParam)}`, { replace: true });
       return;
@@ -97,7 +97,7 @@ function AppContent() {
     return (
       <Suspense fallback={fallback}>
         <Routes>
-          {/* Public routes — accessible without auth */}
+          {/* Public routes - accessible without auth */}
           <Route path="/join/:instance/:code" element={<Invite />} />
           <Route path="/invite/:code" element={<Invite />} />
           <Route path="/link-device" element={<LinkDevice />} />

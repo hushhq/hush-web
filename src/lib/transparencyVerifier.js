@@ -114,7 +114,7 @@ export async function verifyInclusion(leafData, leafIndex, treeSize, auditPath, 
           current = await nodeHash(current, sibling);
           pathIdx++;
         }
-        // Else: promoted — no sibling, no hash.
+        // Else: promoted - no sibling, no hash.
       } else {
         if (pathIdx >= auditPath.length) return false;
         const sibling = hexToBytes(auditPath[pathIdx]);
@@ -212,7 +212,7 @@ export class TransparencyVerifier {
 
     // Verify each entry's Merkle inclusion proof.
     // Server may omit proofs for entries it can't currently prove (tree recovery).
-    // Skip those — not evidence of tampering.
+    // Skip those - not evidence of tampering.
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       const proof = proofs[i];
@@ -308,7 +308,7 @@ export class TransparencyVerifier {
 
       return { ok: true };
     } catch (err) {
-      // Network or API error — propagate so the caller can decide to warn vs block.
+      // Network or API error - propagate so the caller can decide to warn vs block.
       throw err;
     }
   }
@@ -336,7 +336,7 @@ export class TransparencyVerifier {
 
       return { ok: true };
     } catch (err) {
-      // Network error — soft fail with a warning.
+      // Network error - soft fail with a warning.
       return {
         ok: false,
         warning: `Key verification could not be completed: ${err.message}`,

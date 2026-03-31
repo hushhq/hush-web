@@ -100,7 +100,7 @@ describe('ChannelList', () => {
       />
     );
     expect(screen.queryByText('0')).not.toBeInTheDocument();
-    expect(screen.queryByText('—')).not.toBeInTheDocument();
+    expect(screen.queryByText('-')).not.toBeInTheDocument();
   });
 
   it('shows voice participant avatars when participants are present', () => {
@@ -180,7 +180,7 @@ describe('ChannelList', () => {
     );
     const deleteBtn = screen.getByTitle('Delete category');
     deleteBtn.click();
-    // Confirmation modal appears — click the "Delete" button to confirm.
+    // Confirmation modal appears - click the "Delete" button to confirm.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     });

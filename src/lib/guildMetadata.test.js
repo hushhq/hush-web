@@ -2,7 +2,7 @@
  * Unit tests for guildMetadata.js
  * Tests encrypt/decrypt round-trips using Web Crypto API (AES-GCM).
  *
- * Node 18+ provides globalThis.crypto — no polyfill required.
+ * Node 18+ provides globalThis.crypto - no polyfill required.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

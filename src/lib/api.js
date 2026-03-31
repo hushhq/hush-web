@@ -336,7 +336,7 @@ export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, d
 
 /**
  * Authenticate on a foreign instance as a federated user.
- * Uses the same nonce from /challenge — the server verifies the Ed25519 signature
+ * Uses the same nonce from /challenge - the server verifies the Ed25519 signature
  * and upserts a federated_identity record instead of a local user.
  *
  * @param {string} publicKeyBase64 - Base64-encoded Ed25519 public key.
@@ -951,8 +951,8 @@ export async function createGuildInvite(token, serverId, opts = {}, baseUrl = ''
 }
 
 /**
- * Resolve an invite code to guild info (public — no auth required).
- * NOTE: Response does NOT include guildName — the guild name is read from the URL fragment.
+ * Resolve an invite code to guild info (public - no auth required).
+ * NOTE: Response does NOT include guildName - the guild name is read from the URL fragment.
  * @param {string} code - Invite code
  * @returns {Promise<{ code: string, serverId: string, memberCount: number, expiresAt: string }>}
  */
@@ -967,7 +967,7 @@ export async function getInviteInfo(code, baseUrl = '') {
 
 /**
  * Claim an invite code (adds the authenticated user to the guild).
- * NOTE: Response does NOT include guildName — navigation uses serverId only.
+ * NOTE: Response does NOT include guildName - navigation uses serverId only.
  * @param {string} token - JWT
  * @param {string} code - Invite code
  * @returns {Promise<{ serverId: string }>}

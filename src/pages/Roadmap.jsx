@@ -471,7 +471,7 @@ const styles = `
     .release-chevron { margin-left: auto; }
   }
 
-  /* ── HOVER (pointer devices only — fix sticky hover on touch) ── */
+  /* ── HOVER (pointer devices only - fix sticky hover on touch) ── */
   @media (hover: hover) {
     .roadmap-back:hover { color: var(--hush-amber); }
     .whats-next-toggle:hover { background: var(--hush-elevated); }

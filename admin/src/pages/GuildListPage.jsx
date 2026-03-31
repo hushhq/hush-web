@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { listGuilds } from '../lib/adminApi.js';
 
 /**
- * GuildListPage — shows guild infrastructure metrics.
+ * GuildListPage - shows guild infrastructure metrics.
  * Displays UUIDs and counts only. No guild names (blind relay boundary).
  */
 
@@ -109,7 +109,7 @@ const COLUMNS = [
 ];
 
 function formatBytes(bytes) {
-  if (bytes == null) return '—';
+  if (bytes == null) return '-';
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
@@ -117,7 +117,7 @@ function formatBytes(bytes) {
 }
 
 function formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -226,26 +226,26 @@ export default function GuildListPage({ apiKey }) {
             {sorted.map((g) => (
               <tr key={g.id}>
                 <td style={PAGE_STYLES.tdMono}>
-                  {g.id ? `${g.id.slice(0, 8)}...` : '—'}
+                  {g.id ? `${g.id.slice(0, 8)}...` : '-'}
                   {g.id && <CopyButton text={g.id} />}
                 </td>
-                <td style={PAGE_STYLES.td}>{g.memberCount ?? '—'}</td>
-                <td style={PAGE_STYLES.td}>{g.messageCount ?? '—'}</td>
-                <td style={PAGE_STYLES.td}>{g.activeMembers30d ?? '—'}</td>
+                <td style={PAGE_STYLES.td}>{g.memberCount ?? '-'}</td>
+                <td style={PAGE_STYLES.td}>{g.messageCount ?? '-'}</td>
+                <td style={PAGE_STYLES.td}>{g.activeMembers30d ?? '-'}</td>
                 <td style={PAGE_STYLES.td}>{formatBytes(g.storageBytes)}</td>
                 <td style={PAGE_STYLES.td}>
                   {g.accessPolicy ? (
                     <span style={PAGE_STYLES.badge(g.accessPolicy === 'public' ? 'green' : 'neutral')}>
                       {g.accessPolicy}
                     </span>
-                  ) : '—'}
+                  ) : '-'}
                 </td>
                 <td style={PAGE_STYLES.td}>
                   {g.discoverable != null ? (
                     <span style={PAGE_STYLES.badge(g.discoverable ? 'green' : 'neutral')}>
                       {g.discoverable ? 'yes' : 'no'}
                     </span>
-                  ) : '—'}
+                  ) : '-'}
                 </td>
                 <td style={PAGE_STYLES.td}>{formatDate(g.createdAt)}</td>
               </tr>

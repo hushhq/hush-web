@@ -62,7 +62,7 @@ function makeInstanceContext(overrides = {}) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('Invite — same-instance flow', () => {
+describe('Invite - same-instance flow', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -206,7 +206,7 @@ describe('Invite — same-instance flow', () => {
   });
 });
 
-describe('Invite — cross-instance flow (/join/:instance/:code)', () => {
+describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
