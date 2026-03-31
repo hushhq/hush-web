@@ -4,32 +4,21 @@
 
 # hush-web
 
-React web client for [Hush](https://gethush.live) — an end-to-end encrypted communication platform. The client runs OpenMLS compiled to WASM (`@hushhq/hush-crypto`) directly in the browser. All encryption happens here, before any data reaches the server.
+React web client for [Hush](https://gethush.live) — an end-to-end encrypted communication platform. The client runs OpenMLS compiled to WASM (`@gethush/hush-crypto`) directly in the browser. All encryption happens here, before any data reaches the server.
 
 ---
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22 or later
-- A GitHub Personal Access Token (PAT) with `read:packages` scope
 
-The `@hushhq/hush-crypto` WASM package is hosted on GitHub Packages and always requires authentication, even for public packages. You must configure npm before running `npm ci`.
+The `@gethush/hush-crypto` WASM package is published on [npmjs.com](https://www.npmjs.com/package/@gethush/hush-crypto). No extra authentication is needed.
 
 ---
 
 ## Setup
 
-**1. Configure npm to authenticate with GitHub Packages:**
-
-```bash
-# Add to your ~/.npmrc (create if it doesn't exist)
-echo "@hushhq:registry=https://npm.pkg.github.com" >> ~/.npmrc
-echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT" >> ~/.npmrc
-```
-
-Replace `YOUR_GITHUB_PAT` with a PAT that has `read:packages` scope. Generate one at [github.com/settings/tokens](https://github.com/settings/tokens).
-
-**2. Clone and install:**
+**1. Clone and install:**
 
 ```bash
 git clone https://github.com/hushhq/hush-web
@@ -60,7 +49,7 @@ You need a running `hush-server` instance for the client to function. See the [h
 
 ### Rebuilding the WASM crate
 
-The WASM binary is shipped as part of the `@hushhq/hush-crypto` npm package. You do not need to rebuild it for normal development. If you are working on `hush-crypto` locally:
+The WASM binary is shipped as part of the `@gethush/hush-crypto` npm package. You do not need to rebuild it for normal development. If you are working on `hush-crypto` locally:
 
 ```bash
 # Force rebuild from local source
@@ -94,10 +83,10 @@ npm run build
 
 Output is in `dist/`. The build includes the WASM binary bundled via Vite's WASM plugin. Serve `dist/` as a static site behind the Go API / Caddy reverse proxy.
 
-To build the Docker image (requires `NPM_TOKEN` for GitHub Packages auth):
+To build the Docker image:
 
 ```bash
-docker build --build-arg NPM_TOKEN=YOUR_GITHUB_PAT -t hush-web .
+docker build -t hush-web .
 ```
 
 ---

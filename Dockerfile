@@ -1,15 +1,11 @@
 # Multi-stage build for Hush Web Client
-# Requires NPM_TOKEN build arg for GitHub Packages auth
-# WASM crypto is installed from @gethush/hush-crypto on GitHub Packages.
+# WASM crypto is installed from @gethush/hush-crypto on npmjs.com (public).
 
 # --- Stage 1: Vite build (main client) ---
 FROM node:22-alpine AS client-builder
 WORKDIR /app
-ARG NPM_TOKEN
 COPY .npmrc package.json package-lock.json ./
-RUN echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" >> .npmrc && \
-    npm ci && \
-    sed -i '/_authToken/d' .npmrc
+RUN npm ci
 COPY . .
 ARG VITE_DEBUG_TOOLBAR=false
 ENV VITE_DEBUG_TOOLBAR=$VITE_DEBUG_TOOLBAR

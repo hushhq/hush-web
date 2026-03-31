@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the WASM module before importing hushCrypto so the module-level
 // `module` variable is never populated with the real WASM binary.
-vi.mock('@hushhq/hush-crypto', () => {
+vi.mock('@gethush/hush-crypto', () => {
   return {
     default: vi.fn().mockResolvedValue(undefined),
     init: vi.fn(),
@@ -117,7 +117,7 @@ describe('hushCrypto WASM bridge', () => {
       // The module singleton is already populated by earlier tests in this file.
       // vi.clearAllMocks() in beforeEach reset all call counts to 0.
       // Calling init() on an already-initialized module must NOT call default() again.
-      const wasmMod = await import('@hushhq/hush-crypto');
+      const wasmMod = await import('@gethush/hush-crypto');
 
       await init();
       await init();

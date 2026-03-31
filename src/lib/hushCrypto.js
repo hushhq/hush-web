@@ -24,7 +24,7 @@ export async function init() {
   if (module) return;
   if (!initPromise) {
     initPromise = (async () => {
-      const m = await import('@hushhq/hush-crypto');
+      const m = await import('@gethush/hush-crypto');
       await m.default();
       m.init();
       module = m;
