@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-admin/
+
+# WASM artifacts (built locally by hush-crypto; do not commit)
+src/wasm/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Coverage
+coverage/
