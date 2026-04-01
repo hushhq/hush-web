@@ -219,6 +219,118 @@ describe('LinkDevice', () => {
     expect(screen.getByText(/could not reach https:\/\/chat\.example\.com\/api\/auth\/link-request/i)).toBeInTheDocument();
   });
 
+  it('shows connection lost banner when poll fetch fails with a network error', async () => {
+    mockCreateDeviceIdentity.mockResolvedValue({
+      publicKeyBase64: 'device-public-key',
+    });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-1',
+      secret: 'secret-1',
+      code: 'ABCD1234',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    // Simulate persistent network failures
+    mockConsumeDeviceLinkResult.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    renderLinkDevice('/link-device?mode=new');
+
+    expect(await screen.findByAltText(/device link qr code/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/connection lost\. retrying/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows friendly error when ApproveLinkView resolveRequest fails with expired/claimed message', async () => {
+    const user = userEvent.setup();
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array([1, 2, 3]),
+          publicKey: new Uint8Array([4, 5, 6]),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockRejectedValue(
+      new Error('link request expired or already claimed'),
+    );
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'ABCD1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/code expired or already used/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows generic linking failed error when ApproveLinkView handleApprove fails with cert error', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array([1, 2, 3]),
+          publicKey: new Uint8Array([4, 5, 6]),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockRejectedValue(
+      new Error('Linking failed. Please try again.'),
+    );
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/linking failed\. please try again\./i)).toBeInTheDocument();
+    });
+  });
+
   it('resolves a fallback code and approves the requested device', async () => {
     const user = userEvent.setup();
     const historyDb = { close: vi.fn() };

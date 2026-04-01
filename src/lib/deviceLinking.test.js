@@ -64,6 +64,17 @@ describe('QR payload helpers', () => {
 
     expect(url).toContain('https://app.gethush.live/link-device?payload=');
   });
+
+  it('throws a descriptive error for truncated base64 QR payloads', () => {
+    // Truncate valid base64 to produce malformed JSON after decode
+    const valid = encodeQRPayload({ requestId: 'r', secret: 's', expiresAt: '2026-01-01T00:00:00Z' });
+    const truncated = valid.slice(0, Math.floor(valid.length / 2));
+    expect(() => decodeQRPayload(truncated)).toThrow();
+  });
+
+  it('throws for an empty QR payload string', () => {
+    expect(() => decodeQRPayload('')).toThrow();
+  });
 });
 
 describe('blind relay encryption', () => {
