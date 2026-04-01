@@ -29,6 +29,20 @@ function formatRelativeTime(dateStr) {
   return new Date(dateStr).toLocaleDateString();
 }
 
+/**
+ * Returns a staleness tier based on days since lastSeen.
+ *
+ * @param {string|null} lastSeenStr - ISO timestamp string or null.
+ * @returns {'warning' | 'critical' | null}
+ */
+function getDeviceStaleness(lastSeenStr) {
+  if (!lastSeenStr) return null;
+  const days = Math.floor((Date.now() - new Date(lastSeenStr).getTime()) / 86400000);
+  if (days >= 90) return 'critical';
+  if (days >= 30) return 'warning';
+  return null;
+}
+
 function RevokeConfirm({ deviceLabel, onConfirm, onCancel, loading }) {
   return (
     <div className="dm-confirm-overlay">
@@ -165,6 +179,8 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
             {devices.map((device) => {
               const isCurrent = device.deviceId === currentDeviceId;
               const displayLabel = getDeviceDisplayLabel(device, currentDeviceId);
+              const staleness = getDeviceStaleness(device.lastSeen);
+              const isCriticallyStale = staleness === 'critical';
               return (
                 <tr key={device.deviceId}>
                   <td className="dm-td">
@@ -174,7 +190,17 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
                     </div>
                   </td>
                   <td className="dm-td">
-                    {formatRelativeTime(device.lastSeen)}
+                    <div>{formatRelativeTime(device.lastSeen)}</div>
+                    {staleness === 'critical' && (
+                      <div className="dm-stale-warning dm-stale-warning--critical">
+                        Inactive 90+ days &mdash; consider revoking
+                      </div>
+                    )}
+                    {staleness === 'warning' && (
+                      <div className="dm-stale-warning dm-stale-warning--warning">
+                        Inactive 30+ days
+                      </div>
+                    )}
                   </td>
                   <td className="dm-td">
                     {device.certifiedAt
@@ -185,7 +211,7 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
                     {!isCurrent && (
                       <button
                         type="button"
-                        className="dm-revoke-btn"
+                        className={`dm-revoke-btn${isCriticallyStale ? ' dm-revoke-btn--stale' : ''}`}
                         onClick={() => setConfirmRevoke({ deviceId: device.deviceId, label: displayLabel })}
                         title={`Revoke ${displayLabel}`}
                       >
