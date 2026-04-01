@@ -6373,6 +6373,95 @@ a[href]:active {
   gap: 8px;
 }
 
+/* Explicit revoke-decision step (Yes/No buttons replacing old checkbox) */
+.rpi-revoke-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rpi-revoke-heading {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--hush-text);
+  margin: 0;
+}
+
+.rpi-revoke-desc {
+  font-size: 0.85rem;
+  color: var(--hush-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rpi-revoke-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── PostRecoveryWizard ──────────────────────── */
+.post-recovery-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.post-recovery-card {
+  background: var(--hush-surface);
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 28px;
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: modal-enter var(--duration-slow) var(--ease-spring);
+}
+
+.post-recovery-heading {
+  font-size: 1.1rem;
+  font-weight: 300;
+  color: var(--hush-text);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.post-recovery-body {
+  font-size: 0.9rem;
+  color: var(--hush-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.post-recovery-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── home-lost-device-link ──────────────────── */
+/* Subtle text-link button on login CHOOSE view  */
+.home-lost-device-link {
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--hush-text-muted);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.home-lost-device-link:hover {
+  color: var(--hush-amber);
+}
+
 /* ── MnemonicGrid ─────────────────────────── */
 .mg-wrapper {
   /* Layout container; no styles needed */
