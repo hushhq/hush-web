@@ -7,12 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 
 const mockRegistrationWizardProps = vi.hoisted(() => ({ current: null }));
 
-vi.mock('../utils/constants', () => ({
-  APP_VERSION: 'test-version',
-}));
-
-vi.mock('../contexts/AuthContext', () => ({
-  useAuth: vi.fn(() => ({
+function makeAuthState(overrides = {}) {
+  return {
     vaultState: 'none',
     user: null,
     performRegister: vi.fn(),
@@ -20,12 +16,25 @@ vi.mock('../contexts/AuthContext', () => ({
     unlockVault: vi.fn(),
     setPIN: vi.fn(),
     isAuthenticated: false,
+    hasVault: false,
+    hasSession: false,
+    isVaultUnlocked: false,
+    needsUnlock: false,
     loading: false,
     error: null,
     clearError: vi.fn(),
     needsPinSetup: false,
     skipPinSetup: vi.fn(),
-  })),
+    ...overrides,
+  };
+}
+
+vi.mock('../utils/constants', () => ({
+  APP_VERSION: 'test-version',
+}));
+
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => makeAuthState()),
 }));
 
 vi.mock('../components/auth/RegistrationWizard', () => ({
@@ -44,14 +53,28 @@ vi.mock('../components/auth/RegistrationWizard', () => ({
 }));
 
 vi.mock('../components/auth/RecoveryPhraseInput', () => ({
-  RecoveryPhraseInput: function MockRecoveryPhraseInput() {
-    return <div>Recovery Phrase Input</div>;
+  RecoveryPhraseInput: function MockRecoveryPhraseInput(props) {
+    return (
+      <div>
+        <div>Recovery Phrase Input</div>
+        <button type="button" onClick={() => props.onCancel?.()}>
+          Cancel Recovery
+        </button>
+      </div>
+    );
   },
 }));
 
 vi.mock('../components/auth/PinUnlockScreen', () => ({
-  PinUnlockScreen: function MockPinUnlockScreen() {
-    return <div>PIN Unlock</div>;
+  PinUnlockScreen: function MockPinUnlockScreen(props) {
+    return (
+      <div>
+        <div>PIN Unlock</div>
+        <button type="button" onClick={() => props.onSwitchAccount?.()}>
+          Switch Account
+        </button>
+      </div>
+    );
   },
 }));
 
@@ -137,20 +160,7 @@ describe('Home', () => {
   afterEach(() => {
     cleanup();
     // Restore the default useAuth factory so error-state tests don't bleed over.
-    vi.mocked(useAuth).mockImplementation(() => ({
-      vaultState: 'none',
-      user: null,
-      performRegister: vi.fn(),
-      performRecovery: vi.fn(),
-      unlockVault: vi.fn(),
-      setPIN: vi.fn(),
-      isAuthenticated: false,
-      loading: false,
-      error: null,
-      clearError: vi.fn(),
-      needsPinSetup: false,
-      skipPinSetup: vi.fn(),
-    }));
+    vi.mocked(useAuth).mockImplementation(() => makeAuthState());
     global.fetch = originalFetch;
     window.matchMedia = originalMatchMedia;
     document.createRange = originalCreateRange;
@@ -252,22 +262,41 @@ describe('Home', () => {
     expect(screen.getByText('Recovery Phrase Input')).toBeInTheDocument();
   });
 
+  it('shows PIN unlock for a known browser profile that needs unlock', () => {
+    vi.mocked(useAuth).mockImplementation(() => makeAuthState({
+      vaultState: 'locked',
+      hasVault: true,
+      needsUnlock: true,
+    }));
+
+    renderHome();
+
+    expect(screen.getByText('PIN Unlock')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /connection instance:/i })).not.toBeInTheDocument();
+  });
+
+  it('returns to PIN unlock when recovery is cancelled on a locked known browser profile', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuth).mockImplementation(() => makeAuthState({
+      hasVault: true,
+      needsUnlock: true,
+    }));
+
+    renderHome();
+
+    await user.click(screen.getByRole('button', { name: /switch account/i }));
+    expect(screen.getByText('Recovery Phrase Input')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /cancel recovery/i }));
+    expect(screen.getByText('PIN Unlock')).toBeInTheDocument();
+  });
+
   // ── J.1-03: getFriendlyError session-not-found mapping ───────────────────
 
   it('shows "Your session has ended." when auth error message is "session not found"', async () => {
     vi.mocked(useAuth).mockImplementation(() => ({
-      vaultState: 'none',
-      user: null,
-      performRegister: vi.fn(),
-      performRecovery: vi.fn(),
-      unlockVault: vi.fn(),
-      setPIN: vi.fn(),
-      isAuthenticated: false,
-      loading: false,
+      ...makeAuthState(),
       error: new Error('session not found or expired'),
-      clearError: vi.fn(),
-      needsPinSetup: false,
-      skipPinSetup: vi.fn(),
     }));
 
     renderHome();
@@ -279,18 +308,8 @@ describe('Home', () => {
 
   it('shows "Invalid credentials." for a generic 401 error (session-not-found must NOT match)', async () => {
     vi.mocked(useAuth).mockImplementation(() => ({
-      vaultState: 'none',
-      user: null,
-      performRegister: vi.fn(),
-      performRecovery: vi.fn(),
-      unlockVault: vi.fn(),
-      setPIN: vi.fn(),
-      isAuthenticated: false,
-      loading: false,
+      ...makeAuthState(),
       error: new Error('unauthorized'),
-      clearError: vi.fn(),
-      needsPinSetup: false,
-      skipPinSetup: vi.fn(),
     }));
 
     renderHome();

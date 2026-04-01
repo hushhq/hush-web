@@ -235,7 +235,9 @@ export default function Home() {
     performRecovery,
     unlockVault,
     setPIN,
-    isAuthenticated,
+    hasVault,
+    hasSession,
+    needsUnlock,
     loading: authLoading,
     error: authError,
     clearError,
@@ -307,11 +309,11 @@ export default function Home() {
 
   // ── Resume interrupted registration (iOS page discard recovery) ────────────
   useEffect(() => {
-    if (authLoading || vaultState === 'locked' || vaultState === 'unlocked') return;
+    if (authLoading || hasVault || hasSession) return;
     hasInterruptedRegistration().then((has) => {
       if (has) setAuthView(AUTH_VIEW.REGISTER_WIZARD);
     });
-  }, [authLoading, vaultState]);
+  }, [authLoading, hasSession, hasVault]);
 
   // ── Vault state -> authView sync ────────────────────────────────────────────
   //
@@ -322,28 +324,28 @@ export default function Home() {
   useEffect(() => {
     if (authLoading) return;
 
-    if (needsPinSetup && isAuthenticated) {
+    if (needsPinSetup && hasSession) {
       setAuthView(AUTH_VIEW.PIN_SETUP);
       return;
     }
 
-    if (vaultState === 'locked') {
+    if (needsUnlock) {
       setAuthView(AUTH_VIEW.PIN_UNLOCK);
       return;
     }
 
-    // vaultState === 'none' - ensure we show login/register, not a stale PIN view.
-    if (vaultState === 'none') {
+    if (!hasVault && !hasSession) {
       if (authView === AUTH_VIEW.PIN_UNLOCK || authView === AUTH_VIEW.PIN_SETUP) {
         setAuthView(AUTH_VIEW.CHOOSE);
       }
     }
 
-    // vaultState === 'unlocked' - no action. BootController transitions the app
-  // away from Home when auth is ready. If PIN_SETUP is in progress (post-register),
-  // we stay here until the user completes or skips it.
+    // An unlocked or session-ready state does not require local view changes here.
+    // BootController handles the route transition away from Home when auth is ready.
+  // If PIN setup is still pending post-register, we remain here until the user
+  // completes or skips it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vaultState, authLoading, needsPinSetup, isAuthenticated]);
+  }, [authLoading, hasSession, hasVault, needsPinSetup, needsUnlock]);
 
   // ── Error toast ─────────────────────────────────────────────────────────────
 
@@ -532,9 +534,8 @@ export default function Home() {
             onSubmit={handleRecoverySubmit}
             onCancel={() => {
               clearError?.();
-              // If vault still exists (user came from PIN screen via "Not you?"),
-              // go back to PIN - don't wipe anything.
-              setAuthView(vaultState === 'locked' ? AUTH_VIEW.PIN_UNLOCK : AUTH_VIEW.CHOOSE);
+              // If this browser profile already has a local vault, return to unlock.
+              setAuthView(needsUnlock ? AUTH_VIEW.PIN_UNLOCK : AUTH_VIEW.CHOOSE);
             }}
             isRecoveryMode={true}
             isLoading={authLoading}
@@ -719,7 +720,7 @@ export default function Home() {
         >
           {renderFormContent()}
 
-          {authView !== AUTH_VIEW.PIN_SETUP && vaultState !== 'locked' && (
+          {authView !== AUTH_VIEW.PIN_SETUP && !needsUnlock && (
             <>
               <AuthInstanceSelector
                 value={selectedInstanceUrl}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Track } from 'livekit-client';
 import { useAuth } from '../contexts/AuthContext';
 import { getDeviceId } from '../hooks/useAuth';
@@ -110,8 +110,14 @@ function getFriendlyRoomError(errorMessage) {
   return 'Something went wrong. Please try again.';
 }
 
+function getRoomUnlockResumePath(routeLocation) {
+  const currentPath = `${routeLocation.pathname}${routeLocation.search}${routeLocation.hash}`;
+  return `/?returnTo=${encodeURIComponent(currentPath)}`;
+}
+
 export default function Room() {
   const navigate = useNavigate();
+  const routeLocation = useLocation();
   const { roomName } = useParams();
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'mobile';
@@ -171,7 +177,12 @@ export default function Room() {
     };
   }, []);
 
-  const { user } = useAuth();
+  const {
+    user,
+    hasSession,
+    needsUnlock,
+    rehydrationAttempted,
+  } = useAuth();
 
   const {
     isReady,
@@ -200,7 +211,7 @@ export default function Room() {
     getStore: () => mlsStore.openStore(user?.id ?? '', getDeviceId()),
   });
 
-  const { isAuthenticated, rehydrationAttempted, logout } = useAuth();
+  const unlockResumePath = getRoomUnlockResumePath(routeLocation);
 
   const {
     audioDevices,
@@ -217,15 +228,19 @@ export default function Room() {
   // Require auth (and optional room session data)
   useEffect(() => {
     if (!rehydrationAttempted) return;
-    // Only redirect to /?join= if user opened a direct link (never had a session).
-    // If they had a session (left room, expired, etc.) go to / instead.
+    if (needsUnlock) {
+      navigate(unlockResumePath, { replace: true });
+      return;
+    }
+
     const joinRedirect = !hadSessionRef.current
       ? '/?join=' + encodeURIComponent(roomName)
       : '/';
-    if (!isAuthenticated) {
+    if (!hasSession) {
       navigate(joinRedirect, { replace: true });
       return;
     }
+
     const channelId = sessionStorage.getItem('hush_channelId');
     const roomNameStored = sessionStorage.getItem('hush_roomName');
     if (!channelId || !roomNameStored) {
@@ -233,10 +248,10 @@ export default function Room() {
       return;
     }
     hadSessionRef.current = true;
-  }, [rehydrationAttempted, isAuthenticated, navigate, logout, roomName]);
+  }, [hasSession, navigate, needsUnlock, rehydrationAttempted, roomName, unlockResumePath]);
 
   useEffect(() => {
-    if (!rehydrationAttempted || !isAuthenticated) return;
+    if (!rehydrationAttempted || !hasSession || needsUnlock) return;
 
     const channelId = sessionStorage.getItem('hush_channelId');
     const roomNameStored = sessionStorage.getItem('hush_roomName');
@@ -274,7 +289,7 @@ export default function Room() {
     return () => {
       disconnectRoom();
     };
-  }, [rehydrationAttempted, isAuthenticated, navigate, connectRoom, disconnectRoom, roomName]);
+  }, [connectRoom, disconnectRoom, hasSession, navigate, needsUnlock, rehydrationAttempted, roomName]);
 
 
   // Live upload bitrate: poll outbound video stats when streaming (screen or webcam)
@@ -366,7 +381,7 @@ export default function Room() {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [roomEndTimeMs, navigate, logout]);
+  }, [roomEndTimeMs, navigate]);
 
 
   const handleScreenShare = async () => {
@@ -622,8 +637,8 @@ export default function Room() {
     );
   }
 
-  if (rehydrationAttempted && !isAuthenticated) {
-    return null; // useEffect will redirect to /?join=<roomName>
+  if (needsUnlock || !hasSession) {
+    return null;
   }
 
   if (error) {
