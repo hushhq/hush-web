@@ -9,6 +9,7 @@ import * as mlsGroupLib from '../lib/mlsGroup';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
+import { getDeviceId } from './useAuth';
 import { applyMicFilterSettingsToNode } from '../lib/micProcessing';
 
 import {
@@ -445,7 +446,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         const handleVoiceCommit = async (data) => {
           if (data.group_type !== 'voice' || data.channel_id !== channelIdRef.current) return;
           // Own commits are already applied locally when we sent them
-          if (data.sender_id === currentUserId) return;
+          if (data.sender_id === currentUserId && data.sender_device_id === getDeviceId()) return;
           try {
             const db = await getStore();
             const credential = await mlsStoreLib.getCredential(db);

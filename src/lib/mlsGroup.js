@@ -78,6 +78,27 @@ function getCredFields(deps) {
   };
 }
 
+/**
+ * Finalise an External Commit locally so the joining device has usable group
+ * state at the committed epoch.
+ *
+ * @param {object} deps
+ * @param {Uint8Array} groupIdBytes
+ * @param {Uint8Array} sigPriv
+ * @param {Uint8Array} sigPub
+ * @param {Uint8Array} credBytes
+ * @returns {Promise<{ groupInfoBytes: Uint8Array, epoch: number }>}
+ */
+async function mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credBytes) {
+  const { db, mlsStore, hushCrypto } = deps;
+
+  await mlsStore.preloadGroupState(db);
+  const mergeResult = await hushCrypto.mergePendingCommit(groupIdBytes, sigPriv, sigPub, credBytes);
+  await mlsStore.flushStorageCache(db);
+
+  return mergeResult;
+}
+
 // ---------------------------------------------------------------------------
 // Group creation / join
 // ---------------------------------------------------------------------------
@@ -136,7 +157,8 @@ export async function joinChannelGroup(deps, channelId) {
   const joinResult = await hushCrypto.joinGroupExternal(groupInfoBytes, sigPriv, sigPub, credBytes);
   await mlsStore.flushStorageCache(db);
 
-  // Export updated GroupInfo after External Commit so new joiners see the latest state.
+  // Export GroupInfo for distribution before finalising the local pending
+  // commit. Existing members need the commit on the server first.
   const infoResult = await hushCrypto.exportGroupInfoBytes(channelIdBytes, sigPriv, sigPub, credBytes);
   await mlsStore.flushStorageCache(db);
 
@@ -147,7 +169,10 @@ export async function joinChannelGroup(deps, channelId) {
     toBase64(infoResult.groupInfoBytes),
     joinResult.epoch
   );
-  await mlsStore.setGroupEpoch(db, channelId, joinResult.epoch);
+
+  // Finalise the join locally so this device can decrypt subsequent traffic.
+  const mergeResult = await mergeExternalCommit(deps, channelIdBytes, sigPriv, sigPub, credBytes);
+  await mlsStore.setGroupEpoch(db, channelId, mergeResult.epoch);
 }
 
 /**
@@ -574,13 +599,15 @@ export async function joinGuildMetadataGroup(deps, guildId) {
   const joinResult = await hushCrypto.joinGroupExternal(groupInfoBytes, sigPriv, sigPub, credBytes);
   await mlsStore.flushStorageCache(db);
 
-  // Export updated GroupInfo after External Commit.
+  // Export the externally-committed state for the server, then finalise the
+  // join locally so this device can derive the metadata key immediately.
   const infoResult = await hushCrypto.exportGroupInfoBytes(groupIdBytes, sigPriv, sigPub, credBytes);
   await mlsStore.flushStorageCache(db);
-
-  // Upload the commit and updated GroupInfo so subsequent joiners see the latest epoch.
   await api.putGuildMetadataGroupInfo(token, guildId, toBase64(infoResult.groupInfoBytes), joinResult.epoch);
-  await mlsStore.setGroupEpoch(db, `guild-meta:${guildId}`, joinResult.epoch);
+
+  const mergeResult = await mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credBytes);
+  await api.putGuildMetadataGroupInfo(token, guildId, toBase64(mergeResult.groupInfoBytes), mergeResult.epoch);
+  await mlsStore.setGroupEpoch(db, `guild-meta:${guildId}`, mergeResult.epoch);
 }
 
 /**
@@ -689,9 +716,7 @@ export async function joinVoiceGroup(deps, channelId) {
   );
 
   // Merge the pending commit to obtain the updated GroupInfo.
-  await mlsStore.preloadGroupState(db);
-  const mergeResult = await hushCrypto.mergePendingCommit(groupIdBytes, sigPriv, sigPub, credBytes);
-  await mlsStore.flushStorageCache(db);
+  const mergeResult = await mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credBytes);
 
   // Update GroupInfo on server so the next joiner sees the latest state.
   await api.putMLSVoiceGroupInfo(

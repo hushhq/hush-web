@@ -327,6 +327,10 @@ export default function ServerLayout() {
   }, [currentUserId, token]);
 
   const [activeGuildName, setActiveGuildName] = useState(null);
+  const [metadataRefreshTick, setMetadataRefreshTick] = useState(0);
+  const bumpMetadataRefresh = useCallback(() => {
+    setMetadataRefreshTick((tick) => tick + 1);
+  }, []);
 
   useEffect(() => {
     if (!activeGuild) { setActiveGuildName(null); return; }
@@ -358,7 +362,40 @@ export default function ServerLayout() {
         setActiveGuildName(nameFallback);
       }
     }).catch(() => setActiveGuildName(nameFallback));
-  }, [activeGuild, getMetadataKey]);
+  }, [activeGuild, getMetadataKey, metadataRefreshTick]);
+
+  useEffect(() => {
+    if (!activeGuild?.id || channels.length === 0) return;
+
+    let cancelled = false;
+    const refreshChannelNames = async () => {
+      const keyBytes = await getMetadataKey(activeGuild.id);
+      if (!keyBytes || cancelled) return;
+
+      const cryptoKey = await importMetadataKey(keyBytes);
+      const nextChannels = await Promise.all(channels.map(async (channel) => {
+        if (channel.name || !channel.encryptedMetadata) return channel;
+        try {
+          const { name } = await decryptGuildMetadata(cryptoKey, fromBase64(channel.encryptedMetadata));
+          if (!name) return channel;
+          return { ...channel, name };
+        } catch {
+          return channel;
+        }
+      }));
+
+      if (cancelled) return;
+      const changed = nextChannels.some((channel, index) => channel !== channels[index]);
+      if (changed) {
+        setChannels(nextChannels);
+      }
+    };
+
+    refreshChannelNames().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGuild?.id, channels, getMetadataKey, metadataRefreshTick]);
 
   // ── MLS KeyPackage maintenance ─────────────────────────────────────────
 
@@ -696,6 +733,7 @@ export default function ServerLayout() {
           if (!credential) return;
           const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
           await mlsGroup.joinGuildMetadataGroup(deps, data.server_id);
+          bumpMetadataRefresh();
         } catch (err) {
           console.warn('[mls] Failed to join guild metadata group on member_joined:', err);
         }
@@ -704,7 +742,7 @@ export default function ServerLayout() {
     wsClient.on('member_joined', handler);
     return () => wsClient.off('member_joined', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wsClient, serverId, currentUserId, token]);
+  }, [wsClient, serverId, currentUserId, token, bumpMetadataRefresh]);
 
   // member_left: remove from list; navigate self if voluntarily left (guild-scoped)
   useEffect(() => {
@@ -745,7 +783,7 @@ export default function ServerLayout() {
     if (!wsClient || !currentUserId) return;
 
     const handler = async (data) => {
-      if (data.sender_id === currentUserId) return;
+      if (data.sender_id === currentUserId && data.sender_device_id === getDeviceId()) return;
       if (!data.channel_id || !data.commit_bytes) return;
 
       if (!token) return;
@@ -840,6 +878,7 @@ export default function ServerLayout() {
             const metaEpoch = await mlsStoreLib.getGroupEpoch(db, metaKey);
             if (metaEpoch == null) {
               await mlsGroup.joinGuildMetadataGroup(deps, serverId);
+              bumpMetadataRefresh();
             }
           } catch (err) {
             failures.set(metaKey, (failures.get(metaKey) ?? 0) + 1);
@@ -878,7 +917,7 @@ export default function ServerLayout() {
 
     joinMissingGroups();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channels, currentUserId, authToken, serverId, token]);
+  }, [channels, currentUserId, authToken, serverId, token, bumpMetadataRefresh]);
 
   // ── MLS self-update timer: rotate leaf node key material every 24h ────
 

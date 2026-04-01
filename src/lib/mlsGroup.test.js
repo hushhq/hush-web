@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createChannelGroup,
   joinChannelGroup,
+  joinGuildMetadataGroup,
   addMemberToChannel,
   removeMemberFromChannel,
   encryptMessage,
@@ -55,6 +56,10 @@ function makeHushCrypto() {
     exportGroupInfoBytes: vi.fn().mockResolvedValue({
       groupInfoBytes: new Uint8Array([7, 8, 9]),
     }),
+    mergePendingCommit: vi.fn().mockResolvedValue({
+      groupInfoBytes: new Uint8Array([28, 29, 30]),
+      epoch: 2,
+    }),
     addMembers: vi.fn().mockResolvedValue({
       commitBytes: new Uint8Array([10, 11, 12]),
       groupInfoBytes: new Uint8Array([13, 14, 15]),
@@ -87,6 +92,11 @@ function makeApi() {
     }),
     postMLSCommit: vi.fn().mockResolvedValue(undefined),
     getMLSCommitsSinceEpoch: vi.fn().mockResolvedValue({ commits: [] }),
+    getGuildMetadataGroupInfo: vi.fn().mockResolvedValue({
+      groupInfo: btoa(String.fromCharCode(4, 5, 6)),
+      epoch: 0,
+    }),
+    putGuildMetadataGroupInfo: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -202,9 +212,19 @@ describe('joinChannelGroup', () => {
     );
   });
 
-  it('sets local group epoch after joining', async () => {
+  it('merges the pending External Commit locally after posting it', async () => {
     await joinChannelGroup(deps, 'ch-2');
-    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'ch-2', 1);
+    expect(deps.hushCrypto.mergePendingCommit).toHaveBeenCalledWith(
+      new TextEncoder().encode('ch-2'),
+      deps.credential.signingPrivateKey,
+      deps.credential.signingPublicKey,
+      deps.credential.credentialBytes,
+    );
+  });
+
+  it('sets local group epoch from the merged External Commit', async () => {
+    await joinChannelGroup(deps, 'ch-2');
+    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'ch-2', 2);
   });
 
   it('returns without joining when server has no GroupInfo', async () => {
@@ -227,6 +247,46 @@ describe('joinChannelGroup', () => {
 
     expect(deps.mlsStore.preloadGroupState).toHaveBeenCalledWith(deps.db);
     expect(deps.mlsStore.flushStorageCache).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// joinGuildMetadataGroup
+// ---------------------------------------------------------------------------
+
+describe('joinGuildMetadataGroup', () => {
+  let deps;
+
+  beforeEach(() => {
+    deps = makeDeps();
+  });
+
+  it('finalises the metadata group join locally and updates server group info', async () => {
+    await joinGuildMetadataGroup(deps, 'guild-1');
+
+    expect(deps.hushCrypto.joinGroupExternal).toHaveBeenCalled();
+    expect(deps.hushCrypto.mergePendingCommit).toHaveBeenCalledWith(
+      new TextEncoder().encode('guild-1'),
+      deps.credential.signingPrivateKey,
+      deps.credential.signingPublicKey,
+      deps.credential.credentialBytes,
+    );
+    expect(deps.api.putGuildMetadataGroupInfo).toHaveBeenLastCalledWith(
+      'test-token',
+      'guild-1',
+      expect.any(String),
+      2,
+    );
+    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'guild-meta:guild-1', 2);
+  });
+
+  it('returns without joining when the server has no guild metadata group info', async () => {
+    deps.api.getGuildMetadataGroupInfo.mockResolvedValueOnce(null);
+
+    await joinGuildMetadataGroup(deps, 'guild-1');
+
+    expect(deps.hushCrypto.joinGroupExternal).not.toHaveBeenCalled();
+    expect(deps.hushCrypto.mergePendingCommit).not.toHaveBeenCalled();
   });
 });
 

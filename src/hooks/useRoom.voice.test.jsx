@@ -73,6 +73,10 @@ vi.mock('../lib/api', () => ({
   getMLSVoiceGroupInfo: mockGetMLSVoiceGroupInfo,
 }));
 
+vi.mock('./useAuth', () => ({
+  getDeviceId: () => 'device-1',
+}));
+
 // Mock livekit-client ExternalE2EEKeyProvider and Room
 vi.mock('livekit-client', () => {
   const RoomEvent = {
@@ -300,7 +304,7 @@ describe('useRoom MLS voice E2EE', () => {
     expect(result.current.voiceEpoch).toBe(7);
   });
 
-  it('mls.commit WS event skips own commits (sender_id === currentUserId)', async () => {
+  it('mls.commit WS event skips only same-user commits from the same device', async () => {
     mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
@@ -316,14 +320,41 @@ describe('useRoom MLS voice E2EE', () => {
       wsClient._emit('mls.commit', {
         group_type: 'voice',
         channel_id: CHANNEL_ID,
-        sender_id: 'u1', // own commit
+        sender_id: 'u1',
+        sender_device_id: 'device-1',
         commit_bytes: btoa('abc'),
         epoch: 2,
       });
     });
 
-    // Own commits must not trigger processVoiceCommit
+    // Commits from the current device must not trigger processVoiceCommit
     expect(mockProcessVoiceCommit).toHaveBeenCalledTimes(initialCallCount);
+  });
+
+  it('mls.commit WS event processes same-user commits from a different device', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    const initialCallCount = mockProcessVoiceCommit.mock.calls.length;
+
+    await act(async () => {
+      wsClient._emit('mls.commit', {
+        group_type: 'voice',
+        channel_id: CHANNEL_ID,
+        sender_id: 'u1',
+        sender_device_id: 'device-2',
+        commit_bytes: btoa('abc'),
+        epoch: 2,
+      });
+    });
+
+    expect(mockProcessVoiceCommit).toHaveBeenCalledTimes(initialCallCount + 1);
   });
 
   it('disconnectRoom destroys local voice group state', async () => {
