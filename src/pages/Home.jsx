@@ -211,6 +211,12 @@ function getFriendlyError(err, instanceUrl = '') {
   if (/not found|404/i.test(msg)) return 'Not found. Please try again.';
   if (/forbidden|403/i.test(msg)) return 'Access denied.';
   if (/conflict|409|already/i.test(msg)) return 'Username already taken. Please choose another.';
+  // Session-not-found must be caught before the generic 401 catch-all.
+  // This fires when a revoked device's deleted session hits RequireAuth --
+  // the credentials are valid but the session was deliberately removed.
+  if (/session not found|session.*expired/i.test(msg)) {
+    return 'Your session has ended. Please sign in again to continue.';
+  }
   if (/unauthorized|401/i.test(msg)) return 'Invalid credentials.';
   if (/no account found|key not found|unknown key/i.test(msg)) {
     return 'No account found for this recovery phrase. If you have lost all your devices, you will need to create a new account.';
@@ -564,6 +570,16 @@ export default function Home() {
             </button>
           </p>
         )}
+
+        <p className="home-register-hint" style={{ marginTop: '4px' }}>
+          <button
+            type="button"
+            className="home-lost-device-link"
+            onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
+          >
+            Lost a device?
+          </button>
+        </p>
       </>
     );
   };

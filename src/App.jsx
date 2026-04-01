@@ -7,6 +7,7 @@ import AppBackground from './components/AppBackground';
 import { applyThemeMode, getStoredThemeMode } from './components/UserSettingsModal';
 import { useSingleTab } from './hooks/useSingleTab';
 import { slugify } from './lib/slugify';
+import { PostRecoveryWizard } from './components/PostRecoveryWizard';
 
 // Apply stored theme before first paint to avoid FOUC.
 applyThemeMode(getStoredThemeMode());
@@ -114,42 +115,46 @@ function AppContent() {
   // ── Authenticated (ready or booted): full route tree ─────────────────────
 
   return (
-    <Suspense fallback={fallback}>
-      <Routes>
-        {/* Post-login redirect: "/" → first guild or /home */}
-        <Route path="/" element={<PostLoginRedirect />} />
+    <>
+      {/* Post-recovery wizard: shown once as overlay when recovery completes */}
+      <PostRecoveryWizard />
+      <Suspense fallback={fallback}>
+        <Routes>
+          {/* Post-login redirect: "/" → first guild or /home */}
+          <Route path="/" element={<PostLoginRedirect />} />
 
-        {/* DM landing / no-guild empty state */}
-        <Route path="/home" element={<ServerLayout />} />
+          {/* DM landing / no-guild empty state */}
+          <Route path="/home" element={<ServerLayout />} />
 
-        {/* Guild discovery */}
-        <Route path="/explore" element={<ExplorePage />} />
+          {/* Guild discovery */}
+          <Route path="/explore" element={<ExplorePage />} />
 
-        {/* Cross-instance invite */}
-        <Route path="/join/:instance/:code" element={<Invite />} />
+          {/* Cross-instance invite */}
+          <Route path="/join/:instance/:code" element={<Invite />} />
 
-        {/* Same-instance invite (legacy path kept) */}
-        <Route path="/invite/:code" element={<Invite />} />
+          {/* Same-instance invite (legacy path kept) */}
+          <Route path="/invite/:code" element={<Invite />} />
 
-        {/* Device-link approval/new-device handoff */}
-        <Route path="/link-device" element={<LinkDevice />} />
+          {/* Device-link approval/new-device handoff */}
+          <Route path="/link-device" element={<LinkDevice />} />
 
-        {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
-        <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
+          {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
+          <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
 
-        {/* Legacy: /servers/:serverId/* */}
-        <Route path="/servers/:serverId/*" element={<ServerLayout />} />
+          {/* Legacy: /servers/:serverId/* */}
+          <Route path="/servers/:serverId/*" element={<ServerLayout />} />
 
-        {/* Legacy redirects */}
-        <Route path="/guilds" element={<Navigate to="/home" replace />} />
-        <Route path="/channels" element={<Navigate to="/home" replace />} />
-        <Route path="/channels/:channelId" element={<Navigate to="/home" replace />} />
+          {/* Legacy redirects */}
+          <Route path="/guilds" element={<Navigate to="/home" replace />} />
+          <Route path="/channels" element={<Navigate to="/home" replace />} />
+          <Route path="/channels/:channelId" element={<Navigate to="/home" replace />} />
 
-        {/* Utility pages */}
-        <Route path="/room/:roomName" element={<Room />} />
-        <Route path="/roadmap" element={<Roadmap />} />
-      </Routes>
-    </Suspense>
+          {/* Utility pages */}
+          <Route path="/room/:roomName" element={<Room />} />
+          <Route path="/roadmap" element={<Roadmap />} />
+        </Routes>
+      </Suspense>
+    </>
   );
 }
 

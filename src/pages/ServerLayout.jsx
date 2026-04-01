@@ -643,6 +643,22 @@ export default function ServerLayout() {
     return () => wsClient.off('instance_banned', handler);
   }, [wsClient, showToast]);
 
+  // device_revoked_reconnect_attempt: a previously revoked device tried to reconnect.
+  // The event is emitted by the server when device_id binding is added to JWT (future phase).
+  // The listener is wired now so the UI is ready when the server-side detection ships.
+  useEffect(() => {
+    if (!wsClient) return;
+    const handler = (data) => {
+      showToast({
+        message: data.message || 'A previously revoked device attempted to reconnect to your account.',
+        variant: 'warning',
+        duration: 10000,
+      });
+    };
+    wsClient.on('device_revoked_reconnect_attempt', handler);
+    return () => wsClient.off('device_revoked_reconnect_attempt', handler);
+  }, [wsClient, showToast]);
+
   // member_muted: disconnect from voice if in a call; show toast to muted user (guild-scoped)
   useEffect(() => {
     if (!wsClient) return;

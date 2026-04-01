@@ -857,6 +857,8 @@ export function useAuth() {
       }
       requirePinSetup();
       localStorage.setItem(HOME_INSTANCE_KEY, baseUrl || window.location.origin);
+      // Signal post-recovery wizard to appear once the authenticated route tree mounts.
+      localStorage.setItem('hush_post_recovery_wizard', '1');
       return authResult;
     } catch (err) {
       setError(err);

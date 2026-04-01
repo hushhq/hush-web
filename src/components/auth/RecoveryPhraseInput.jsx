@@ -9,6 +9,11 @@ const AUTOCOMPLETE_MIN_CHARS = 2;
  * Supports per-field autocomplete with dropdown suggestions,
  * auto-advance on word selection, and paste-split from field 1.
  *
+ * After all 12 words are entered and the phrase is valid, clicking "Sign in"
+ * transitions to an explicit revoke-decision step when isRecoveryMode is true.
+ * The user chooses "Revoke other devices" or "Keep other devices" — this choice
+ * is passed as the revokeOtherDevices argument to onSubmit.
+ *
  * @param {{
  *   onSubmit: (mnemonic: string, revokeOtherDevices: boolean) => void,
  *   onCancel: () => void,
@@ -21,7 +26,7 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
   const [activeIndex, setActiveIndex] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
-  const [revokeOtherDevices, setRevokeOtherDevices] = useState(false);
+  const [revokeStep, setRevokeStep] = useState(false);
   const inputRefs = useRef(Array(12).fill(null));
   const dropdownRef = useRef(null);
 
@@ -140,8 +145,58 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
 
   const handleSubmit = useCallback(() => {
     if (!isValid) return;
-    onSubmit(mnemonicString, revokeOtherDevices);
-  }, [isValid, mnemonicString, revokeOtherDevices, onSubmit]);
+    if (isRecoveryMode) {
+      // Transition to revoke decision step rather than immediately submitting.
+      setRevokeStep(true);
+    } else {
+      onSubmit(mnemonicString, false);
+    }
+  }, [isValid, isRecoveryMode, mnemonicString, onSubmit]);
+
+  // ── Revoke decision step ─────────────────────────────────────────────────────
+
+  if (revokeStep) {
+    return (
+      <div className="rpi-container">
+        <div className="rpi-revoke-step">
+          <h3 className="rpi-revoke-heading">Revoke other devices?</h3>
+          <p className="rpi-revoke-desc">
+            This will sign out all other devices. They will need to re-link to access your account.
+          </p>
+          <div className="rpi-revoke-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={isLoading}
+              onClick={() => onSubmit(mnemonicString, true)}
+              style={{ flex: 1, padding: '10px' }}
+            >
+              {isLoading ? 'Signing in...' : 'Revoke other devices'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={isLoading}
+              onClick={() => onSubmit(mnemonicString, false)}
+              style={{ flex: 1, padding: '10px' }}
+            >
+              Keep other devices
+            </button>
+          </div>
+          <button
+            type="button"
+            className="back-link"
+            onClick={() => setRevokeStep(false)}
+            style={{ marginTop: '8px' }}
+          >
+            ← Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phrase entry step ─────────────────────────────────────────────────────────
 
   return (
     <div className="rpi-container">
@@ -205,24 +260,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
           aria-live="polite"
         >
           {isValid ? 'Valid phrase' : 'Invalid phrase - check all 12 words'}
-        </div>
-      )}
-
-      {isRecoveryMode && (
-        <div className="rpi-revocation-section">
-          <label className="rpi-revocation-label">
-            <input
-              type="checkbox"
-              checked={revokeOtherDevices}
-              onChange={(e) => setRevokeOtherDevices(e.target.checked)}
-            />
-            <div>
-              <div className="rpi-revocation-text">Sign out all other devices</div>
-              <div className="rpi-revocation-desc">
-                Revokes all other linked device keys. Use this if a device is lost or compromised.
-              </div>
-            </div>
-          </label>
         </div>
       )}
 
