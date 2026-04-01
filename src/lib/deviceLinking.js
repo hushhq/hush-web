@@ -211,12 +211,32 @@ export function encodeQRPayload({ requestId, secret, expiresAt }) {
 /**
  * Decodes a QR payload back into its request handle fields.
  *
+ * Throws a descriptive error if the input is not a valid QR payload.
+ *
  * @param {string} encoded
  * @returns {{ requestId: string, secret: string, expiresAt: string }}
+ * @throws {Error} When the input is empty, not valid base64, or not a valid QR payload JSON.
  */
 export function decodeQRPayload(encoded) {
-  const json = atob(encoded);
-  const { r, s, e } = JSON.parse(json);
+  if (!encoded) {
+    throw new Error('Invalid QR payload: input is empty.');
+  }
+  let json;
+  try {
+    json = atob(encoded);
+  } catch {
+    throw new Error('Invalid QR payload: not valid base64.');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error('Invalid QR payload: could not parse JSON after base64 decode.');
+  }
+  const { r, s, e } = parsed;
+  if (!r || !s || !e) {
+    throw new Error('Invalid QR payload: missing required fields (r, s, e).');
+  }
   return {
     requestId: r,
     secret: s,

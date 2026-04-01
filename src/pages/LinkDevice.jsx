@@ -27,7 +27,9 @@ import {
   base64ToBytes,
 } from '../lib/deviceLinking';
 
-const POLL_INTERVAL_MS = 3000;
+const POLL_INITIAL_MS = 2000;
+const POLL_BACKOFF_MULTIPLIER = 1.5;
+const POLL_MAX_MS = 15000;
 
 function formatCountdown(expiresAt, now = Date.now()) {
   const remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
@@ -43,6 +45,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
   const [status, setStatus] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [connectionLost, setConnectionLost] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -105,6 +108,13 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
 
     let cancelled = false;
     const expiresAtMs = new Date(requestState.expiresAt).getTime();
+    let currentInterval = POLL_INITIAL_MS;
+    let timerId = null;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      timerId = setTimeout(poll, currentInterval);
+    };
 
     const poll = async () => {
       if (cancelled || Date.now() >= expiresAtMs) return;
@@ -113,7 +123,17 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           requestId: requestState.requestId,
           secret: requestState.secret,
         }, requestState.instanceUrl);
-        if (cancelled || result?.status === 'pending') return;
+
+        if (cancelled) return;
+
+        // Successful HTTP response — clear connection-lost state and apply backoff.
+        setConnectionLost(false);
+        currentInterval = Math.min(currentInterval * POLL_BACKOFF_MULTIPLIER, POLL_MAX_MS);
+
+        if (result?.status === 'pending') {
+          scheduleNext();
+          return;
+        }
 
         setStatus('Finalizing linked device…');
         const relayBytes = await decryptRelayPayload(result, requestState.sessionPrivateKey);
@@ -121,17 +141,22 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         await completeDeviceLink(bundle);
         onLinked();
       } catch (err) {
-        if (!cancelled) {
-          setError(err.message || 'Failed to finalize the device link.');
+        if (cancelled) return;
+        // Network-level errors (fetch rejected) trigger connection-loss banner.
+        // Keep the same interval and retry.
+        if (err instanceof TypeError || (err.name && err.name === 'AbortError')) {
+          setConnectionLost(true);
+          scheduleNext();
+          return;
         }
+        setError(err.message || 'Failed to finalize the device link.');
       }
     };
 
     poll();
-    const timer = setInterval(poll, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (timerId !== null) clearTimeout(timerId);
     };
   }, [completeDeviceLink, onLinked, requestState]);
 
@@ -154,6 +179,10 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         compact
       />
 
+      {connectionLost && (
+        <div className="ld-connection-lost">Connection lost. Retrying...</div>
+      )}
+
       {requestState && !isExpired ? (
         <>
           {requestState.qrDataUrl ? (
@@ -164,6 +193,9 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           <div className="ld-code-label">Desktop fallback code</div>
           <div className="ld-code-value">{requestState.code}</div>
           <div className="ld-timer">Expires in {formatCountdown(requestState.expiresAt, now)}</div>
+          <div className="ld-waiting">
+            <span className="ld-pulse">Waiting for approval<span className="ld-dots" /></span>
+          </div>
         </>
       ) : (
         <div className="ld-empty-box">
@@ -226,7 +258,12 @@ function ApproveLinkView({ initialPayload }) {
       const resolved = await resolveDeviceLinkRequest(token, body);
       setClaim(resolved);
     } catch (err) {
-      setError(err.message || 'Failed to resolve the link request.');
+      const rawMessage = err.message || '';
+      if (rawMessage.includes('expired or already claimed')) {
+        setError('Code expired or already used. Please generate a new link on the other device.');
+      } else {
+        setError(rawMessage || 'Failed to resolve the link request.');
+      }
     } finally {
       setIsResolving(false);
     }
@@ -285,7 +322,12 @@ function ApproveLinkView({ initialPayload }) {
 
       setStatus('Device linked. Return to the new device to finish setup.');
     } catch (err) {
-      setError(err.message || 'Failed to approve the device link.');
+      const rawMessage = err.message || '';
+      if (rawMessage.includes('Linking failed')) {
+        setError('Linking failed. Please try again.');
+      } else {
+        setError(rawMessage || 'Failed to approve the device link.');
+      }
     } finally {
       try {
         historyDb?.close();
