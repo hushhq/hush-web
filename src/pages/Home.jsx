@@ -208,15 +208,16 @@ function getFriendlyError(err, instanceUrl = '') {
   if (isReachabilityError(err)) {
     return getInstanceUnreachableMessage(instanceUrl);
   }
-  if (/not found|404/i.test(msg)) return 'Not found. Please try again.';
-  if (/forbidden|403/i.test(msg)) return 'Access denied.';
-  if (/conflict|409|already/i.test(msg)) return 'Username already taken. Please choose another.';
-  // Session-not-found must be caught before the generic 401 catch-all.
+  // Session-not-found must be caught before /not found/ and the generic 401
+  // catch-all. "session not found" contains "not found" so ordering matters.
   // This fires when a revoked device's deleted session hits RequireAuth --
   // the credentials are valid but the session was deliberately removed.
   if (/session not found|session.*expired/i.test(msg)) {
     return 'Your session has ended. Please sign in again to continue.';
   }
+  if (/not found|404/i.test(msg)) return 'Not found. Please try again.';
+  if (/forbidden|403/i.test(msg)) return 'Access denied.';
+  if (/conflict|409|already/i.test(msg)) return 'Username already taken. Please choose another.';
   if (/unauthorized|401/i.test(msg)) return 'Invalid credentials.';
   if (/no account found|key not found|unknown key/i.test(msg)) {
     return 'No account found for this recovery phrase. If you have lost all your devices, you will need to create a new account.';

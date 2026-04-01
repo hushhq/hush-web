@@ -345,6 +345,103 @@ describe('ServerLayout', () => {
     expect(getGuildChannels).not.toHaveBeenCalled();
   });
 
+  // ── J.1-03: device_revoked_reconnect_attempt WS listener ────────────────
+
+  it('shows an amber warning toast when device_revoked_reconnect_attempt WS event fires', async () => {
+    // Build a controlled WS client that lets tests fire events.
+    const handlers = {};
+    const controlledWsClient = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      send: vi.fn(),
+      on: vi.fn((event, handler) => { handlers[event] = handler; }),
+      off: vi.fn(),
+    };
+
+    // Guild must have instanceUrl so wsClient is non-null
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map([
+        ['https://a.example.com', { connectionState: 'connected' }],
+      ]),
+      mergedGuilds: [{ id: 's1', name: 'Test Guild', ownerId: 'u1', instanceUrl: 'https://a.example.com' }],
+      getWsClient: vi.fn(() => controlledWsClient),
+      getTokenForInstance: vi.fn(() => 'test-token'),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    mockShow.mockClear();
+    renderAtRoute('/servers/s1/channels');
+
+    // Wait for effects to run and register the handler
+    await waitFor(() => {
+      expect(handlers['device_revoked_reconnect_attempt']).toBeDefined();
+    });
+
+    // Fire the WS event
+    handlers['device_revoked_reconnect_attempt']({
+      message: 'A previously revoked device attempted to reconnect to your account.',
+    });
+
+    expect(mockShow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        variant: 'warning',
+        duration: 10000,
+      }),
+    );
+
+    // Restore the default mock after test
+    vi.mocked(useInstanceContext).mockReset();
+  });
+
+  it('uses the fallback message when device_revoked_reconnect_attempt data has no message field', async () => {
+    const handlers = {};
+    const controlledWsClient = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      send: vi.fn(),
+      on: vi.fn((event, handler) => { handlers[event] = handler; }),
+      off: vi.fn(),
+    };
+
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map([
+        ['https://a.example.com', { connectionState: 'connected' }],
+      ]),
+      mergedGuilds: [{ id: 's1', name: 'Test Guild', ownerId: 'u1', instanceUrl: 'https://a.example.com' }],
+      getWsClient: vi.fn(() => controlledWsClient),
+      getTokenForInstance: vi.fn(() => 'test-token'),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    mockShow.mockClear();
+    renderAtRoute('/servers/s1/channels');
+
+    await waitFor(() => {
+      expect(handlers['device_revoked_reconnect_attempt']).toBeDefined();
+    });
+
+    // Fire event with no message field — should use fallback text
+    handlers['device_revoked_reconnect_attempt']({});
+
+    expect(mockShow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'A previously revoked device attempted to reconnect to your account.',
+        variant: 'warning',
+      }),
+    );
+
+    // Restore the default mock after test
+    vi.mocked(useInstanceContext).mockReset();
+  });
+
   it('skips own-key transparency verification on remote guild instances', async () => {
     localStorage.setItem('hush_home_instance', 'https://home.example.com');
     vi.mocked(useInstanceContext).mockReturnValueOnce({

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Home from './Home';
+import { useAuth } from '../contexts/AuthContext';
 
 const mockRegistrationWizardProps = vi.hoisted(() => ({ current: null }));
 
@@ -135,6 +136,21 @@ describe('Home', () => {
 
   afterEach(() => {
     cleanup();
+    // Restore the default useAuth factory so error-state tests don't bleed over.
+    vi.mocked(useAuth).mockImplementation(() => ({
+      vaultState: 'none',
+      user: null,
+      performRegister: vi.fn(),
+      performRecovery: vi.fn(),
+      unlockVault: vi.fn(),
+      setPIN: vi.fn(),
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+      clearError: vi.fn(),
+      needsPinSetup: false,
+      skipPinSetup: vi.fn(),
+    }));
     global.fetch = originalFetch;
     window.matchMedia = originalMatchMedia;
     document.createRange = originalCreateRange;
@@ -217,5 +233,70 @@ describe('Home', () => {
     renderHome();
 
     expect(screen.getByText(/^end-to-end encrypted$/i)).toBeInTheDocument();
+  });
+
+  // ── J.1-03: "Lost a device?" entry point ─────────────────────────────────
+
+  it('"Lost a device?" button is visible on the CHOOSE auth view', () => {
+    renderHome();
+    expect(screen.getByRole('button', { name: /lost a device\?/i })).toBeInTheDocument();
+  });
+
+  it('"Lost a device?" button navigates to the recovery phrase view', async () => {
+    const user = userEvent.setup();
+    renderHome();
+
+    await user.click(screen.getByRole('button', { name: /lost a device\?/i }));
+
+    // RecoveryPhraseInput mock should now be visible
+    expect(screen.getByText('Recovery Phrase Input')).toBeInTheDocument();
+  });
+
+  // ── J.1-03: getFriendlyError session-not-found mapping ───────────────────
+
+  it('shows "Your session has ended." when auth error message is "session not found"', async () => {
+    vi.mocked(useAuth).mockImplementation(() => ({
+      vaultState: 'none',
+      user: null,
+      performRegister: vi.fn(),
+      performRecovery: vi.fn(),
+      unlockVault: vi.fn(),
+      setPIN: vi.fn(),
+      isAuthenticated: false,
+      loading: false,
+      error: new Error('session not found or expired'),
+      clearError: vi.fn(),
+      needsPinSetup: false,
+      skipPinSetup: vi.fn(),
+    }));
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText(/your session has ended\. please sign in again/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows "Invalid credentials." for a generic 401 error (session-not-found must NOT match)', async () => {
+    vi.mocked(useAuth).mockImplementation(() => ({
+      vaultState: 'none',
+      user: null,
+      performRegister: vi.fn(),
+      performRecovery: vi.fn(),
+      unlockVault: vi.fn(),
+      setPIN: vi.fn(),
+      isAuthenticated: false,
+      loading: false,
+      error: new Error('unauthorized'),
+      clearError: vi.fn(),
+      needsPinSetup: false,
+      skipPinSetup: vi.fn(),
+    }));
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.getByText(/invalid credentials\./i)).toBeInTheDocument();
+    });
   });
 });

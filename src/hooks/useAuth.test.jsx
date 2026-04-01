@@ -1004,3 +1004,50 @@ describe('useAuth - per-instance JWT storage', () => {
     expect(getInstanceToken('https://instance-a.com')).not.toBe(getInstanceToken('https://instance-b.com'));
   });
 });
+
+// ── J.1-03: performRecovery sets post-recovery wizard flag ─────────────────────
+
+describe('useAuth - performRecovery', () => {
+  it('sets hush_post_recovery_wizard localStorage flag after successful recovery', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Ensure flag is absent before recovery
+    expect(localStorage.getItem('hush_post_recovery_wizard')).toBeNull();
+
+    await act(async () => {
+      await result.current.performRecovery('word '.repeat(12).trim(), false);
+    });
+
+    expect(localStorage.getItem('hush_post_recovery_wizard')).toBe('1');
+  });
+
+  it('sets hush_post_recovery_wizard flag even when revokeOtherDevices=true', async () => {
+    // listDeviceKeys and revokeDeviceKey are already mocked in the top-level module mocks.
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performRecovery('word '.repeat(12).trim(), true);
+    });
+
+    expect(localStorage.getItem('hush_post_recovery_wizard')).toBe('1');
+  });
+
+  it('does NOT set hush_post_recovery_wizard flag when recovery fails', async () => {
+    vi.mocked(apiMod.verifyChallenge).mockRejectedValueOnce(new Error('unauthorized'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      try {
+        await result.current.performRecovery('word '.repeat(12).trim(), false);
+      } catch {
+        // expected to throw
+      }
+    });
+
+    expect(localStorage.getItem('hush_post_recovery_wizard')).toBeNull();
+  });
+});
