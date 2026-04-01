@@ -34,6 +34,7 @@ function renderInvite(path, routes = []) {
   const allRoutes = [
     <Route key="invite" path="/invite/:code" element={<Invite />} />,
     <Route key="join" path="/join/:instance/:code" element={<Invite />} />,
+    <Route key="home" path="/" element={<div>Home</div>} />,
     <Route key="server" path="/servers/:serverId/channels" element={<div>Server channel</div>} />,
     ...routes,
   ];
@@ -42,6 +43,15 @@ function renderInvite(path, routes = []) {
       <Routes>{allRoutes}</Routes>
     </MemoryRouter>,
   );
+}
+
+function makeAuthState(overrides = {}) {
+  return {
+    isAuthenticated: false,
+    hasSession: false,
+    needsUnlock: false,
+    ...overrides,
+  };
 }
 
 function makeInstanceContext(overrides = {}) {
@@ -75,7 +85,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('fetches invite info and shows guild preview for authenticated user', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext({
       instanceStates: new Map([
         ['https://local.example.com', { connectionState: 'connected', jwt: 'local-jwt' }],
@@ -99,7 +109,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('auto-claims invite for authenticated same-instance user', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext({
       instanceStates: new Map([
         [window.location.origin, { connectionState: 'connected', jwt: 'local-jwt' }],
@@ -116,7 +126,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('uses the current origin token instead of the first connected instance', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     const ctx = makeInstanceContext({
       instanceStates: new Map([
         ['https://remote.example.com', { connectionState: 'connected', jwt: 'wrong-first-jwt' }],
@@ -139,7 +149,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('shows error panel when invite code is invalid', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: false });
+    useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext({ instanceStates: new Map() }));
     apiModule.getInviteInfo.mockRejectedValue(new Error('not found'));
 
@@ -151,7 +161,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('shows error panel on network failure', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: false });
+    useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext({ instanceStates: new Map() }));
     apiModule.getInviteInfo.mockRejectedValue(new Error('fetch failed'));
 
@@ -164,7 +174,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('stores pending invite in sessionStorage for unauthenticated user', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: false });
+    useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext({ instanceStates: new Map() }));
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-1' });
 
@@ -175,8 +185,19 @@ describe('Invite - same-instance flow', () => {
     });
   });
 
+  it('redirects locked known-browser users through returnTo instead of queuing the invite', async () => {
+    useAuth.mockReturnValue(makeAuthState({ needsUnlock: true }));
+    useInstanceContext.mockReturnValue(makeInstanceContext({ instanceStates: new Map() }));
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-1' });
+
+    renderInvite('/invite/abc123');
+
+    expect(await screen.findByText('Home')).toBeInTheDocument();
+    expect(sessionStorage.getItem('hush_pending_invite')).toBeNull();
+  });
+
   it('unauthenticated user sees Sign in to join button', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: false });
+    useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext({ instanceStates: new Map() }));
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-1' });
 
@@ -188,7 +209,7 @@ describe('Invite - same-instance flow', () => {
   });
 
   it('shows already-a-member error when claimInvite returns 409', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext({
       instanceStates: new Map([
         [window.location.origin, { connectionState: 'connected', jwt: 'local-jwt' }],
@@ -215,7 +236,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
   });
 
   it('fetches invite info via the remote instance baseUrl', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x', memberCount: 7 });
     apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
@@ -228,7 +249,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
   });
 
   it('shows guild name and hosted-on line in confirm modal', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
     window.location.hash = '#name=Secret%20Guild';
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x', memberCount: 3 });
@@ -242,7 +263,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
   });
 
   it('shows member count in cross-instance confirm modal', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
     apiModule.getInviteInfo.mockResolvedValue({ memberCount: 5 });
 
@@ -255,7 +276,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
 
   it('calls bootInstance then claimInvite on confirm click', async () => {
     const ctx = makeInstanceContext();
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(ctx);
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
     apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
@@ -282,7 +303,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
     const ctx = makeInstanceContext({
       bootInstance: vi.fn(() => new Promise(() => {})), // never resolves
     });
-    useAuth.mockReturnValue({ isAuthenticated: true });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(ctx);
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
 
@@ -300,7 +321,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
   });
 
   it('stores pending invite in sessionStorage for unauthenticated cross-instance user', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: false });
+    useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext());
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
 
@@ -311,8 +332,19 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
     });
   });
 
+  it('redirects locked known-browser cross-instance users through returnTo', async () => {
+    useAuth.mockReturnValue(makeAuthState({ needsUnlock: true }));
+    useInstanceContext.mockReturnValue(makeInstanceContext());
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
+
+    renderInvite('/join/remote.example.com/xyz789');
+
+    expect(await screen.findByText('Home')).toBeInTheDocument();
+    expect(sessionStorage.getItem('hush_pending_invite')).toBeNull();
+  });
+
   it('unauthenticated cross-instance user sees Sign in to join button', async () => {
-    useAuth.mockReturnValue({ isAuthenticated: false });
+    useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext());
     apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
 

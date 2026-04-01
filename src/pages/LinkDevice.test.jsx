@@ -121,6 +121,10 @@ describe('LinkDevice', () => {
       completeDeviceLink: vi.fn(),
       loading: false,
       isAuthenticated: false,
+      hasSession: false,
+      hasVault: false,
+      isVaultUnlocked: false,
+      needsUnlock: false,
       vaultState: 'none',
       token: null,
       user: null,
@@ -252,6 +256,10 @@ describe('LinkDevice', () => {
       completeDeviceLink: vi.fn(),
       loading: false,
       isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
       vaultState: 'unlocked',
       token: 'jwt-token',
       user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
@@ -277,6 +285,39 @@ describe('LinkDevice', () => {
     });
   });
 
+  it('prompts to unlock and resume when the browser vault is locked', async () => {
+    const user = userEvent.setup();
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: false,
+      hasSession: false,
+      hasVault: true,
+      isVaultUnlocked: false,
+      needsUnlock: true,
+      vaultState: 'locked',
+      token: null,
+      user: null,
+      identityKeyRef: { current: null },
+    };
+
+    renderLinkDevice('/link-device?payload=valid-payload');
+
+    expect(screen.getByText(/browser is recognized for your hush account/i)).toBeInTheDocument();
+    expect(screen.getByText(/unlock this browser to resume approval automatically/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /unlock to approve/i }));
+
+    await screen.findByText('Home');
+  });
+
+  it('shows the no-vault message when the browser has no unlockable vault', () => {
+    renderLinkDevice('/link-device?payload=valid-payload');
+
+    expect(screen.getByText(/already signed in to the account you want to link/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not have a local hush vault/i)).toBeInTheDocument();
+  });
+
   it('shows generic linking failed error when ApproveLinkView handleApprove fails with cert error', async () => {
     const user = userEvent.setup();
     const historyDb = { close: vi.fn() };
@@ -285,6 +326,10 @@ describe('LinkDevice', () => {
       completeDeviceLink: vi.fn(),
       loading: false,
       isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
       vaultState: 'unlocked',
       token: 'jwt-token',
       user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
@@ -339,6 +384,10 @@ describe('LinkDevice', () => {
       completeDeviceLink: vi.fn(),
       loading: false,
       isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
       vaultState: 'unlocked',
       token: 'jwt-token',
       user: { id: 'user-1', username: 'alice', displayName: 'Alice' },

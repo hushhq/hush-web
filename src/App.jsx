@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { InstanceProvider, useInstanceContext } from './contexts/InstanceContext';
 import { BootProvider, useBootController } from './hooks/useBootController.jsx';
@@ -41,8 +41,20 @@ function PostLoginRedirect() {
   const [searchParams] = useSearchParams();
   const { mergedGuilds, guildsLoaded } = useInstanceContext();
   const joinParam = searchParams.get('join');
+  const returnTo = searchParams.get('returnTo');
 
   useEffect(() => {
+    if (
+      returnTo
+      && returnTo.startsWith('/')
+      && !returnTo.startsWith('//')
+      && !returnTo.startsWith('/?')
+      && returnTo !== '/'
+    ) {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+
     // Handle invite join param - redirect immediately, don't wait for guilds.
     if (joinParam) {
       navigate(`/invite/${encodeURIComponent(joinParam)}`, { replace: true });
@@ -66,7 +78,7 @@ function PostLoginRedirect() {
     }
 
     navigate('/home', { replace: true });
-  }, [guildsLoaded, mergedGuilds, navigate, joinParam]);
+  }, [guildsLoaded, mergedGuilds, navigate, joinParam, returnTo]);
 
   return fallback;
 }
@@ -192,7 +204,7 @@ function FaviconThemeSync() {
  * Full-screen overlay shown when the app detects it is open in a duplicate
  * browser tab. Prevents two tabs from sharing the same MLS/vault state.
  */
-function BlockedTabOverlay({ takeOver }) {
+function BlockedTabOverlay({ blockedFlow, takeOver }) {
   return (
     <div
       style={{
@@ -213,7 +225,11 @@ function BlockedTabOverlay({ takeOver }) {
         Hush is already open in another tab.
       </p>
       <p style={{ fontSize: '0.9rem', color: 'var(--hush-text-muted)', marginBottom: '24px' }}>
-        Close the other tab or click below to use this one instead.
+        {blockedFlow === 'device-link'
+          ? 'To approve this device here, take over this tab, then unlock Hush if required.'
+          : blockedFlow === 'invite'
+          ? 'To continue this invite here, take over this tab, then unlock Hush if required.'
+          : 'Close the other tab or click below to use this one instead.'}
       </p>
       <button
         type="button"
@@ -230,10 +246,16 @@ function BlockedTabOverlay({ takeOver }) {
 // ── App root ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const location = useLocation();
   const { isBlockedTab, takeOver } = useSingleTab();
+  const blockedFlow = location.pathname === '/link-device'
+    ? 'device-link'
+    : location.pathname.startsWith('/invite/') || location.pathname.startsWith('/join/')
+    ? 'invite'
+    : 'generic';
 
   if (isBlockedTab) {
-    return <BlockedTabOverlay takeOver={takeOver} />;
+    return <BlockedTabOverlay blockedFlow={blockedFlow} takeOver={takeOver} />;
   }
 
   return (

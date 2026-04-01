@@ -279,6 +279,30 @@ describe('App - blocked-tab overlay', () => {
     expect(screen.getByRole('button', { name: /use this one instead/i })).toBeInTheDocument();
   });
 
+  it('shows device-link specific blocked-tab copy on the approval route', () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: true, takeOver: vi.fn() });
+
+    render(
+      <MemoryRouter initialEntries={['/link-device?payload=abc']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/approve this device here, take over this tab/i)).toBeInTheDocument();
+  });
+
+  it('shows invite-specific blocked-tab copy on invite routes', () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: true, takeOver: vi.fn() });
+
+    render(
+      <MemoryRouter initialEntries={['/invite/abc123']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/continue this invite here, take over this tab/i)).toBeInTheDocument();
+  });
+
   it('renders Home when bootState is needs_login', async () => {
     useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
     useBootController.mockReturnValue({ bootState: 'needs_login', user: null, mergedGuilds: [], guildsLoaded: true });
@@ -296,6 +320,32 @@ describe('App - blocked-tab overlay', () => {
     render(<MemoryRouter><App /></MemoryRouter>);
 
     expect(await screen.findByText('Home')).toBeInTheDocument();
+  });
+
+  it('redirects to the requested returnTo route after unlock/login recovery', async () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({ bootState: 'ready', user: null, mergedGuilds: [], guildsLoaded: true });
+
+    render(
+      <MemoryRouter initialEntries={['/?returnTo=%2Flink-device%3Fpayload%3Dabc']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('LinkDevice')).toBeInTheDocument();
+  });
+
+  it('ignores invalid returnTo values and falls back to the normal post-login route', async () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({ bootState: 'ready', user: null, mergedGuilds: [], guildsLoaded: true });
+
+    render(
+      <MemoryRouter initialEntries={['/?returnTo=%2F%2Fevil.example']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('ServerLayout')).toBeInTheDocument();
   });
 
   it('keeps the device-link route public while login is required', async () => {

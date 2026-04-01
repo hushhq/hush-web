@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.jsx';
@@ -36,6 +36,11 @@ function formatCountdown(expiresAt, now = Date.now()) {
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function buildUnlockResumePath(location) {
+  const current = `${location.pathname}${location.search}`;
+  return `/?returnTo=${encodeURIComponent(current)}`;
 }
 
 function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSelectInstance }) {
@@ -224,14 +229,16 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
   );
 }
 
-function ApproveLinkView({ initialPayload }) {
+function ApproveLinkView({ initialPayload, unlockResumePath }) {
   const navigate = useNavigate();
   const {
     user,
     token,
     loading,
-    isAuthenticated,
-    vaultState,
+    hasSession,
+    hasVault,
+    isVaultUnlocked,
+    needsUnlock,
     identityKeyRef,
   } = useAuth();
   const [code, setCode] = useState('');
@@ -242,7 +249,12 @@ function ApproveLinkView({ initialPayload }) {
   const [isApproving, setIsApproving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  const canApprove = isAuthenticated && vaultState === 'unlocked' && !!identityKeyRef.current?.privateKey && !!token;
+  const hasUnlockedIdentity = hasSession
+    && isVaultUnlocked
+    && !!identityKeyRef.current?.privateKey
+    && !!identityKeyRef.current?.publicKey
+    && !!token;
+  const needsVaultUnlock = needsUnlock;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -270,12 +282,12 @@ function ApproveLinkView({ initialPayload }) {
   }, [token]);
 
   useEffect(() => {
-    if (!initialPayload?.requestId || !initialPayload?.secret || !canApprove) return;
+    if (!initialPayload?.requestId || !initialPayload?.secret || !hasUnlockedIdentity) return;
     resolveRequest({
       requestId: initialPayload.requestId,
       secret: initialPayload.secret,
     });
-  }, [canApprove, initialPayload, resolveRequest]);
+  }, [hasUnlockedIdentity, initialPayload, resolveRequest]);
 
   const handleResolveCode = useCallback(async (event) => {
     event.preventDefault();
@@ -346,16 +358,41 @@ function ApproveLinkView({ initialPayload }) {
     );
   }
 
-  if (!canApprove) {
+  if (needsVaultUnlock) {
     return (
       <div className="glass home-form-card ld-card">
         <div className="home-section-title">Approve device link</div>
         <p className="ld-subtitle">
-          Open this page on a device that is already signed in and unlocked for the account you want to link.
+          This browser is recognized for your Hush account, but the vault is locked in this tab.
+          Unlock Hush, then return to approve the new device.
         </p>
         {initialPayload && (
           <div className="ld-status">
-            QR request detected. Unlock this device, then reopen or rescan the QR code.
+            QR request detected. Unlock this browser to resume approval automatically.
+          </div>
+        )}
+        <div className="ld-actions">
+          <button type="button" className="btn btn-primary" onClick={() => navigate(unlockResumePath)}>
+            Unlock to approve
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasUnlockedIdentity) {
+    return (
+      <div className="glass home-form-card ld-card">
+        <div className="home-section-title">Approve device link</div>
+        <p className="ld-subtitle">
+          Open this page in a browser profile that is already signed in to the account you want to link.
+        </p>
+        {initialPayload && !hasVault && (
+          <div className="ld-status">
+            QR request detected. This browser does not have a local Hush vault for that account.
           </div>
         )}
         <div className="ld-actions">
@@ -431,6 +468,7 @@ export default function LinkDevice() {
   useBodyScrollMode(BODY_SCROLL_MODE.SCROLL);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const {
     selectedInstanceUrl,
@@ -448,6 +486,7 @@ export default function LinkDevice() {
       return null;
     }
   }, [searchParams]);
+  const unlockResumePath = useMemo(() => buildUnlockResumePath(location), [location]);
 
   return (
     <div className="home-page ld-page">
@@ -460,7 +499,7 @@ export default function LinkDevice() {
             onSelectInstance={chooseInstance}
           />
         ) : (
-          <ApproveLinkView initialPayload={qrPayload} />
+          <ApproveLinkView initialPayload={qrPayload} unlockResumePath={unlockResumePath} />
         )}
 
         <div className="ld-footer-link">

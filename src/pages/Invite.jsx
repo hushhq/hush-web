@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { getInviteInfo, claimInvite } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
@@ -13,6 +13,11 @@ function inviteErrorMessage(err) {
   if (/banned/i.test(msg)) return 'You are banned from this guild.';
   if (/invalid|expired|400/i.test(msg)) return 'Invite is invalid or expired.';
   return msg || 'Something went wrong.';
+}
+
+function buildUnlockResumePath(location) {
+  const current = `${location.pathname}${location.search}${location.hash}`;
+  return `/?returnTo=${encodeURIComponent(current)}`;
 }
 
 /**
@@ -29,12 +34,16 @@ function inviteErrorMessage(err) {
  *   - Authenticated: auto-claim invite -> navigate to guild
  *   - Unauthenticated: show auth prompt (redirect to home)
  *
- * Vault locked: invite URL is queued in sessionStorage and processed after unlock.
+ * Locked known-browser flow:
+ *   - Redirect to /?returnTo=<invite path>
+ *   - Unlock/re-auth happens via Home/Auth boot flow
+ *   - Router resumes the invite after unlock
  */
 export default function Invite() {
   const { code, instance: instanceParam } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const { hasSession, needsUnlock } = useAuth();
   const { bootInstance, getTokenForInstance } = useInstanceContext();
 
   /** Whether this is a cross-instance invite. */
@@ -51,6 +60,7 @@ export default function Invite() {
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
   const [booting, setBooting] = useState(false);
+  const unlockResumePath = useMemo(() => buildUnlockResumePath(location), [location]);
 
   // Guild name from URL fragment (#name=...) - server never receives it.
   const guildNameFromFragment = useMemo(() => {
@@ -91,20 +101,27 @@ export default function Invite() {
     return () => { cancelled = true; };
   }, [code, instanceUrl]);
 
-  // ── Queue invite URL when vault is locked ─────────────────────────────
+  // ── Locked known-browser flow: redirect to canonical unlock/resume ───────
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!needsUnlock) return;
+    navigate(unlockResumePath, { replace: true });
+  }, [navigate, needsUnlock, unlockResumePath]);
+
+  // ── Queue invite URL only for true no-session/no-vault auth flows ─────
+
+  useEffect(() => {
+    if (!hasSession && !needsUnlock) {
       // Store invite URL so Home.jsx can redirect back after authentication.
       sessionStorage.setItem('hush_pending_invite', window.location.href);
     }
-  }, [isAuthenticated]);
+  }, [hasSession, needsUnlock]);
 
   // ── Same-instance authenticated flow: auto-claim ──────────────────────
 
   useEffect(() => {
     if (isCrossInstance) return; // handled separately
-    if (!isAuthenticated || !invite || !code) return;
+    if (!hasSession || needsUnlock || !invite || !code) return;
     let cancelled = false;
 
     async function claimSameInstanceInvite() {
@@ -145,7 +162,7 @@ export default function Invite() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, invite, code, isCrossInstance, bootInstance, getTokenForInstance, navigate]);
+  }, [hasSession, needsUnlock, invite, code, isCrossInstance, bootInstance, getTokenForInstance, navigate]);
 
   // ── Cross-instance: user pressed "Join" ──────────────────────────────
 
@@ -229,7 +246,7 @@ export default function Invite() {
             <p className="invite-member-count">{memberCount} member{memberCount !== 1 ? 's' : ''}</p>
           )}
           {error && <p className="invite-error">{error}</p>}
-          {!isAuthenticated ? (
+          {!hasSession || needsUnlock ? (
             <div className="invite-actions">
               <button
                 type="button"
@@ -262,7 +279,7 @@ export default function Invite() {
 
   // ── Same-instance invite UI ───────────────────────────────────────────
 
-  if (isAuthenticated) {
+  if (hasSession && !needsUnlock) {
     return (
       <div className="invite-page">
         <div className="glass invite-card">
