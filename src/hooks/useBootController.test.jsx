@@ -24,17 +24,17 @@ import { BootProvider, useBootController } from './useBootController.jsx';
 
 function mockState({
   authLoading = false,
-  vaultState = 'none',
-  isAuthenticated = false,
+  needsUnlock = false,
+  hasSession = false,
   needsPinSetup = false,
   guildsLoaded = false,
 } = {}) {
   useAuth.mockReturnValue({
     loading: authLoading,
-    vaultState,
-    isAuthenticated,
+    needsUnlock,
+    hasSession,
     needsPinSetup,
-    user: isAuthenticated ? { id: 'u1' } : null,
+    user: hasSession ? { id: 'u1' } : null,
   });
   useInstanceContext.mockReturnValue({ guildsLoaded, mergedGuilds: guildsLoaded ? [{ id: 'g1' }] : [] });
 }
@@ -53,49 +53,49 @@ describe('useBootController', () => {
   });
 
   it('returns needs_pin when vault is locked', () => {
-    mockState({ vaultState: 'locked' });
+    mockState({ needsUnlock: true });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('needs_pin');
   });
 
   it('returns needs_login when not authenticated and no vault', () => {
-    mockState({ vaultState: 'none', isAuthenticated: false });
+    mockState({ needsUnlock: false, hasSession: false });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('needs_login');
   });
 
   it('returns ready when authenticated but guilds not loaded yet', () => {
-    mockState({ vaultState: 'unlocked', isAuthenticated: true, guildsLoaded: false });
+    mockState({ hasSession: true, guildsLoaded: false });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('ready');
   });
 
   it('returns booted when authenticated and guilds loaded', () => {
-    mockState({ vaultState: 'unlocked', isAuthenticated: true, guildsLoaded: true });
+    mockState({ hasSession: true, guildsLoaded: true });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('booted');
   });
 
   it('returns ready when vaultState=none but isAuthenticated (no PIN configured)', () => {
-    mockState({ vaultState: 'none', isAuthenticated: true, guildsLoaded: false });
+    mockState({ hasSession: true, guildsLoaded: false });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('ready');
   });
 
   it('needs_pin takes priority over isAuthenticated=true', () => {
-    mockState({ vaultState: 'locked', isAuthenticated: true });
+    mockState({ needsUnlock: true, hasSession: true });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('needs_pin');
   });
 
   it('returns pin_setup when auth reports pending pin setup', () => {
-    mockState({ vaultState: 'unlocked', isAuthenticated: true, needsPinSetup: true, guildsLoaded: true });
+    mockState({ hasSession: true, needsPinSetup: true, guildsLoaded: true });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('pin_setup');
   });
 
   it('needs_pin takes priority over pending pin setup', () => {
-    mockState({ vaultState: 'locked', isAuthenticated: true, needsPinSetup: true, guildsLoaded: true });
+    mockState({ needsUnlock: true, hasSession: true, needsPinSetup: true, guildsLoaded: true });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('needs_pin');
   });

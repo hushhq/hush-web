@@ -186,6 +186,11 @@ describe('useAuth - performChallengeResponse', () => {
     expect(result.current.token).toBe('jwt-test');
     expect(result.current.user?.id).toBe('user-1');
     expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.hasSession).toBe(true);
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.isVaultUnlocked).toBe(true);
+    expect(result.current.needsUnlock).toBe(false);
+    expect(result.current.isKnownBrowserProfile).toBe(true);
     expect(result.current.vaultState).toBe('unlocked');
     expect(sessionStorage.getItem(JWT_KEY)).toBe('jwt-test');
   });
@@ -577,6 +582,10 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('locked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.hasSession).toBe(true);
+    expect(result.current.isVaultUnlocked).toBe(false);
+    expect(result.current.needsUnlock).toBe(true);
   });
 
   it('sets vaultState=unlocked when vault marker exists but no blob (PIN never set)', async () => {
@@ -592,6 +601,10 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('unlocked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.hasSession).toBe(true);
+    expect(result.current.isVaultUnlocked).toBe(false);
+    expect(result.current.needsUnlock).toBe(true);
     // Stale marker should be cleared.
     expect(localStorage.getItem('hush_vault_user_user-42')).toBeNull();
   });
@@ -633,6 +646,9 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('unlocked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.isVaultUnlocked).toBe(true);
+    expect(result.current.needsUnlock).toBe(false);
     expect(vaultMod.decryptVaultWithRawKey).toHaveBeenCalledWith(fakeBlob, 'aabbccdd');
   });
 
@@ -683,6 +699,8 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('locked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.needsUnlock).toBe(true);
   });
 
   it('falls back to locked if stored derived key fails to decrypt', async () => {
@@ -704,6 +722,8 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('locked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.needsUnlock).toBe(true);
     // Bad key should be cleared from sessionStorage.
     expect(sessionStorage.getItem('hush_vault_derived_key')).toBeNull();
   });
@@ -716,6 +736,9 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('none');
+    expect(result.current.hasVault).toBe(false);
+    expect(result.current.hasSession).toBe(false);
+    expect(result.current.needsUnlock).toBe(false);
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
   });
 
@@ -724,7 +747,24 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.vaultState).toBe('none');
+    expect(result.current.hasVault).toBe(false);
+    expect(result.current.hasSession).toBe(false);
+    expect(result.current.needsUnlock).toBe(false);
     expect(result.current.isAuthenticated).toBe(false);
+  });
+
+  it('reports hasVault and needsUnlock when no JWT is present but a local vault exists', async () => {
+    localStorage.setItem('hush_vault_user_user-77', 'aabb');
+    vi.mocked(vaultMod.checkVaultExistsInIDB).mockResolvedValueOnce({ exists: true, publicKeyHex: 'aabb' });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.vaultState).toBe('locked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.hasSession).toBe(false);
+    expect(result.current.isVaultUnlocked).toBe(false);
+    expect(result.current.needsUnlock).toBe(true);
   });
 });
 
@@ -881,6 +921,9 @@ describe('useAuth - guest session', () => {
     expect(result.current.isGuest).toBe(true);
     expect(result.current.guestExpiresAt).toBe(expiresAt);
     expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.hasSession).toBe(true);
+    expect(result.current.hasVault).toBe(false);
+    expect(result.current.needsUnlock).toBe(false);
     expect(result.current.vaultState).toBe('unlocked');
   });
 

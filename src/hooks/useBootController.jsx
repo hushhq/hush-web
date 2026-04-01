@@ -36,8 +36,8 @@ const BootContext = createContext(null);
 export function BootProvider({ children }) {
   const {
     loading: authLoading,
-    vaultState,
-    isAuthenticated,
+    needsUnlock,
+    hasSession,
     needsPinSetup,
     user,
   } = useAuth();
@@ -52,10 +52,10 @@ export function BootProvider({ children }) {
     if (authLoading) return 'loading';
 
     // Step 1b/2: vault locked - need PIN before anything else.
-    if (vaultState === 'locked') return 'needs_pin';
+    if (needsUnlock) return 'needs_pin';
 
     // No vault and not authenticated - need login/register.
-    if (!isAuthenticated) return 'needs_login';
+    if (!hasSession) return 'needs_login';
 
     // Authenticated. Check if post-registration PIN setup is pending.
     if (needsPinSetup) return 'pin_setup';
@@ -64,7 +64,7 @@ export function BootProvider({ children }) {
     if (!guildsLoaded) return 'ready';
 
     return 'booted';
-  }, [authLoading, vaultState, isAuthenticated, needsPinSetup, guildsLoaded]);
+  }, [authLoading, needsUnlock, hasSession, needsPinSetup, guildsLoaded]);
 
   const value = useMemo(() => ({
     bootState,

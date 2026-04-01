@@ -279,6 +279,27 @@ function clearPinAttempts(userId) {
   localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
 }
 
+/**
+ * Returns the first local vault marker userId, if any.
+ *
+ * The marker is non-secret metadata stored in localStorage. It indicates that
+ * this browser profile has seen a Hush identity for that user, but startup
+ * still needs to verify whether an encrypted vault blob actually exists.
+ *
+ * @returns {string|null}
+ */
+function findVaultMarkerUserId() {
+  const key = Object.keys(localStorage)
+    .find((candidate) =>
+      candidate.startsWith(VAULT_USER_KEY_PREFIX)
+      && !candidate.endsWith('_last_user')
+      && localStorage.getItem(candidate),
+    );
+
+  if (!key) return null;
+  return key.slice(VAULT_USER_KEY_PREFIX.length);
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 /**
@@ -289,6 +310,11 @@ function clearPinAttempts(userId) {
  *   user: object|null,
  *   token: string|null,
  *   vaultState: 'none'|'locked'|'unlocked',
+ *   hasVault: boolean,
+ *   hasSession: boolean,
+ *   isVaultUnlocked: boolean,
+ *   needsUnlock: boolean,
+ *   isKnownBrowserProfile: boolean,
  *   isAuthenticated: boolean,
  *   loading: boolean,
  *   error: Error|null,
@@ -313,6 +339,7 @@ export function useAuth() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [vaultState, setVaultState] = useState('none');
+  const [hasLocalVault, setHasLocalVault] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [needsPinSetup, setNeedsPinSetupState] = useState(
@@ -356,7 +383,12 @@ export function useAuth() {
    */
   const voiceDisconnectRef = useRef(null);
 
-  const isAuthenticated = Boolean(token && user);
+  const hasSession = Boolean(token && user);
+  const isAuthenticated = hasSession;
+  const isVaultUnlocked = vaultState === 'unlocked' && Boolean(identityKeyRef.current?.privateKey);
+  const hasVault = hasLocalVault || vaultState === 'locked' || (vaultState === 'unlocked' && !isGuest);
+  const needsUnlock = hasVault && !isVaultUnlocked;
+  const isKnownBrowserProfile = hasVault;
 
   const clearError = useCallback(() => setError(null), []);
   const setPinSetupPendingState = useCallback((pending) => {
@@ -432,6 +464,7 @@ export function useAuth() {
       setToken(null);
       setUser(null);
       setVaultState('none');
+      setHasLocalVault(false);
       setIsGuest(false);
       setGuestExpiresAt(null);
       clearGuestTimers();
@@ -750,6 +783,7 @@ export function useAuth() {
 
     // Mark vault key presence using public key hex (no secret material).
     localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${u.id}`, bytesToHex(publicKey));
+    setHasLocalVault(true);
     setVaultState('unlocked');
     applyVaultTimeout(u.id);
     return { user: u };
@@ -809,6 +843,7 @@ export function useAuth() {
       const { user: u } = await finishAuth(data, baseUrl);
 
       localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${u.id}`, bytesToHex(publicKey));
+      setHasLocalVault(true);
       requirePinSetup();
       setVaultState('unlocked');
       localStorage.setItem(HOME_INSTANCE_KEY, baseUrl || window.location.origin);
@@ -820,6 +855,7 @@ export function useAuth() {
       setToken(null);
       setUser(null);
       setVaultState('none');
+      setHasLocalVault(false);
       throw err;
     } finally {
       setLoading(false);
@@ -866,6 +902,7 @@ export function useAuth() {
       setToken(null);
       setUser(null);
       setVaultState('none');
+      setHasLocalVault(false);
       throw err;
     } finally {
       setLoading(false);
@@ -902,6 +939,7 @@ export function useAuth() {
         await importHistorySnapshot(historyDb, bundle.historySnapshot);
       }
 
+      setHasLocalVault(true);
       requirePinSetup();
       return authResult;
     } catch (err) {
@@ -910,6 +948,7 @@ export function useAuth() {
       setToken(null);
       setUser(null);
       setVaultState('none');
+      setHasLocalVault(false);
       identityKeyRef.current = null;
       throw err;
     } finally {
@@ -999,6 +1038,7 @@ export function useAuth() {
       const publicKey = storedHex ? hexToBytes(storedHex) : null;
 
       identityKeyRef.current = { privateKey, publicKey };
+      setHasLocalVault(true);
       clearPinAttempts(userId);
 
       // If no JWT (tab was closed, sessionStorage wiped), re-authenticate
@@ -1026,6 +1066,7 @@ export function useAuth() {
         setToken(null);
         setUser(null);
         setVaultState('none');
+        setHasLocalVault(false);
         identityKeyRef.current = null;
 
         const wipeError = new Error('vault wiped after too many failed PIN attempts');
@@ -1080,6 +1121,7 @@ export function useAuth() {
     }
 
     db.close();
+    setHasLocalVault(true);
     clearPinSetup();
   }, [user, clearPinSetup]);
 
@@ -1195,6 +1237,7 @@ export function useAuth() {
     setToken(null);
     setUser(null);
     setVaultState('none');
+    setHasLocalVault(false);
     setNeedsPinSetupState(false);
     setIsGuest(false);
     setGuestExpiresAt(null);
@@ -1214,11 +1257,9 @@ export function useAuth() {
       // No JWT - but vault may still exist (tab closed, sessionStorage wiped).
       // Check localStorage for vault marker. If found, show PIN unlock;
       // after unlock, challenge-response auth gets a fresh JWT.
-      const vaultUserId = Object.keys(localStorage)
-        .find(k => k.startsWith(VAULT_USER_KEY_PREFIX) && !k.endsWith('_last_user') && localStorage.getItem(k));
+      const vaultUserId = findVaultMarkerUserId();
       if (vaultUserId) {
-        const userId = vaultUserId.slice(VAULT_USER_KEY_PREFIX.length);
-        localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, userId);
+        localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, vaultUserId);
 
         // Verify the vault actually has an encrypted key (PIN was set).
         // If registration completed but PIN was never set (iOS killed page
@@ -1227,17 +1268,22 @@ export function useAuth() {
         let idbCheckCancelled = false;
         (async () => {
           try {
-            const result = await checkVaultExistsInIDB(userId);
+            const result = await checkVaultExistsInIDB(vaultUserId);
             if (idbCheckCancelled) return;
             if (result.exists) {
+              setHasLocalVault(true);
               setVaultState('locked');
             } else {
               // Vault marker set during registration but PIN never set - clear stale marker.
-              localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
+              localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${vaultUserId}`);
+              setHasLocalVault(false);
               setVaultState('none');
             }
           } catch {
-            if (!idbCheckCancelled) setVaultState('locked'); // Fallback: assume vault exists.
+            if (!idbCheckCancelled) {
+              setHasLocalVault(true);
+              setVaultState('locked'); // Fallback: assume vault exists.
+            }
           }
           if (!idbCheckCancelled) setLoading(false);
         })();
@@ -1274,6 +1320,7 @@ export function useAuth() {
                 localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, result.publicKeyHex);
               }
               localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, userId);
+              setHasLocalVault(true);
               setVaultState('locked');
               setLoading(false);
               return;
@@ -1286,6 +1333,7 @@ export function useAuth() {
         if (!idbCancelled) {
           // No vault at all - show login/register.
           setLoading(false);
+          setHasLocalVault(false);
           setVaultState('none');
         }
       })();
@@ -1304,6 +1352,7 @@ export function useAuth() {
           clearSession();
           setToken(null);
           setUser(null);
+          setHasLocalVault(false);
           setVaultState('none');
           setNeedsPinSetupState(false);
           return;
@@ -1322,6 +1371,7 @@ export function useAuth() {
           const vaultPublicKeyHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
 
           if (vaultPublicKeyHex) {
+            setHasLocalVault(true);
             // Vault exists. Check if we can auto-unlock using the derived AES
             // key stored in sessionStorage from a previous PIN entry. This
             // avoids re-prompting for PIN on every page refresh.
@@ -1347,6 +1397,7 @@ export function useAuth() {
                   // Vault blob missing - PIN was never set. Clear stale marker.
                   sessionStorage.removeItem(VAULT_DERIVED_KEY);
                   localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
+                  setHasLocalVault(false);
                   setVaultState('unlocked');
                 }
               } catch {
@@ -1374,10 +1425,12 @@ export function useAuth() {
                 } else {
                   // Stale marker - PIN was never set. Clear it.
                   localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
+                  setHasLocalVault(false);
                   setVaultState('unlocked');
                 }
               } catch {
                 if (!cancelled) {
+                  setHasLocalVault(true);
                   clearPinSetup();
                   setVaultState('locked');
                 }
@@ -1385,12 +1438,14 @@ export function useAuth() {
             }
           } else {
             // Authenticated via JWT but no vault set up yet (PIN never configured).
+            setHasLocalVault(false);
             setVaultState('unlocked');
           }
         }
       } catch {
         // Network error - keep token, keep as locked if vault exists.
         setToken(stored);
+        setHasLocalVault(Boolean(findVaultMarkerUserId()));
         setVaultState('locked');
       } finally {
         if (!cancelled) setLoading(false);
@@ -1464,6 +1519,7 @@ export function useAuth() {
           setToken(null);
           setUser(null);
           setVaultState('none');
+          setHasLocalVault(false);
           clearPinSetup();
         }
       };
@@ -1477,6 +1533,11 @@ export function useAuth() {
     user,
     token,
     vaultState,
+    hasVault,
+    hasSession,
+    isVaultUnlocked,
+    needsUnlock,
+    isKnownBrowserProfile,
     isAuthenticated,
     loading,
     error,
