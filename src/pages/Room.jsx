@@ -15,6 +15,7 @@ import {
   measureLiveUploadMbps,
 } from '../lib/bandwidthEstimator';
 import StreamView from '../components/StreamView';
+import HiddenAudioOutput from '../components/HiddenAudioOutput';
 import ScreenShareCard from '../components/ScreenShareCard';
 import Controls from '../components/Controls';
 import QualityPickerModal from '../components/QualityPickerModal';
@@ -951,32 +952,5 @@ export default function Room() {
 }
 
 function OrphanAudio({ track }) {
-  const audioRef = useRef(null);
-
-  useEffect(() => {
-    if (!audioRef.current || !track) return;
-    const audio = audioRef.current;
-    audio.srcObject = new MediaStream([track]);
-
-    const tryPlay = async () => {
-      try {
-        await audio.play();
-      } catch {
-        const resume = () => {
-          audio.play().catch(() => {});
-          document.removeEventListener('touchstart', resume);
-          document.removeEventListener('click', resume);
-        };
-        document.addEventListener('touchstart', resume, { once: true });
-        document.addEventListener('click', resume, { once: true });
-      }
-    };
-    tryPlay();
-
-    return () => {
-      audio.srcObject = null;
-    };
-  }, [track]);
-
-  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
+  return <HiddenAudioOutput track={track} />;
 }

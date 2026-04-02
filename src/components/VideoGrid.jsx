@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { Track } from 'livekit-client';
 import StreamView from './StreamView';
 import ScreenShareCard from './ScreenShareCard';
+import HiddenAudioOutput from './HiddenAudioOutput';
 import { MEDIA_SOURCES, STANDBY_AFTER_MS, isScreenShareSource } from '../utils/constants';
 
 function getColumnCount(count) {
@@ -43,28 +44,7 @@ function orderWithHeroLast(streams, heroId) {
 }
 
 function OrphanAudio({ track }) {
-  const audioRef = useRef(null);
-  useEffect(() => {
-    if (!audioRef.current || !track) return;
-    const audio = audioRef.current;
-    audio.srcObject = new MediaStream([track]);
-    const tryPlay = async () => {
-      try {
-        await audio.play();
-      } catch {
-        const resume = () => {
-          audio.play().catch(() => {});
-          document.removeEventListener('touchstart', resume);
-          document.removeEventListener('click', resume);
-        };
-        document.addEventListener('touchstart', resume, { once: true });
-        document.addEventListener('click', resume, { once: true });
-      }
-    };
-    tryPlay();
-    return () => { audio.srcObject = null; };
-  }, [track]);
-  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
+  return <HiddenAudioOutput track={track} />;
 }
 
 /**
