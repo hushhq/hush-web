@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseInviteLink } from './inviteLinks.js';
+import { buildGuildInviteLink, parseInviteLink } from './inviteLinks.js';
 
 describe('parseInviteLink', () => {
   it('parses cross-instance invite: /join/{host}/{code}', () => {
@@ -22,6 +22,11 @@ describe('parseInviteLink', () => {
     expect(result).toEqual({ instanceHost: '89.167.121.15', code: 'AbC12345' });
   });
 
+  it('strips URL fragments that include both guild name and metadata key', () => {
+    const result = parseInviteLink('https://app.com/join/89.167.121.15/AbC12345#name=My%20Server&mk=encoded');
+    expect(result).toEqual({ instanceHost: '89.167.121.15', code: 'AbC12345' });
+  });
+
   it('handles bare code (no URL)', () => {
     const result = parseInviteLink('AbC12345');
     expect(result).toEqual({ instanceHost: null, code: 'AbC12345' });
@@ -36,5 +41,21 @@ describe('parseInviteLink', () => {
   it('handles IP-based instance URLs', () => {
     const result = parseInviteLink('https://10.0.0.1/join/89.167.121.15/AbC12345');
     expect(result).toEqual({ instanceHost: '89.167.121.15', code: 'AbC12345' });
+  });
+});
+
+describe('buildGuildInviteLink', () => {
+  it('includes the encrypted guild metadata key in the URL fragment when provided', () => {
+    const link = buildGuildInviteLink(
+      'https://app.gethush.live',
+      'https://remote.example.com',
+      'AbC12345',
+      'Secret Guild',
+      new Uint8Array([1, 2, 3, 4]),
+    );
+
+    expect(link).toContain('/join/remote.example.com/AbC12345');
+    expect(link).toContain('#name=');
+    expect(link).toContain('&mk=');
   });
 });

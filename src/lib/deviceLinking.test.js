@@ -105,6 +105,10 @@ describe('transfer bundle serialisation', () => {
           credential: [{ key: 'credential', signingPublicKey: [1, 2, 3] }],
         },
       },
+      guildMetadataKeySnapshot: {
+        version: 1,
+        keys: [{ guildId: 'guild-1', keyBytes: [9, 8, 7] }],
+      },
     });
 
     const decoded = decodeTransferBundle(bytes);
@@ -120,6 +124,10 @@ describe('transfer bundle serialisation', () => {
       stores: {
         credential: [{ key: 'credential', signingPublicKey: [1, 2, 3] }],
       },
+    });
+    expect(decoded.guildMetadataKeySnapshot).toEqual({
+      version: 1,
+      keys: [{ guildId: 'guild-1', keyBytes: [9, 8, 7] }],
     });
   });
 });

@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { slugify, resolveGuildSlug } from './slugify';
+import {
+  buildGuildRouteRef,
+  parseGuildRouteRef,
+  resolveGuildSlug,
+  slugify,
+} from './slugify';
 
 // ── slugify ───────────────────────────────────────────────────────────────────
 
@@ -94,5 +99,31 @@ describe('resolveGuildSlug', () => {
 
   it('handles collision on "unnamed"', () => {
     expect(resolveGuildSlug('', ['unnamed'])).toBe('unnamed-2');
+  });
+});
+
+describe('buildGuildRouteRef', () => {
+  it('appends the guild ID to the readable slug', () => {
+    expect(buildGuildRouteRef('Gaming Hub', 'guild-123')).toBe('gaming-hub--guild-123');
+  });
+
+  it('falls back to a plain slug when guildId is missing', () => {
+    expect(buildGuildRouteRef('Gaming Hub', '')).toBe('gaming-hub');
+  });
+});
+
+describe('parseGuildRouteRef', () => {
+  it('extracts the guild ID from a canonical route ref', () => {
+    expect(parseGuildRouteRef('gaming-hub--guild-123')).toEqual({
+      guildId: 'guild-123',
+      slug: 'gaming-hub',
+    });
+  });
+
+  it('keeps legacy slug-only routes compatible', () => {
+    expect(parseGuildRouteRef('gaming-hub')).toEqual({
+      guildId: null,
+      slug: 'gaming-hub',
+    });
   });
 });

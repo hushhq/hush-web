@@ -42,6 +42,10 @@ import {
   importHistorySnapshot,
 } from '../lib/mlsStore';
 import {
+  importGuildMetadataKeySnapshot,
+  openGuildMetadataKeyStore,
+} from '../lib/guildMetadataKeyStore';
+import {
   fetchWithAuth,
   uploadKeyPackagesAfterAuth,
   requestChallenge,
@@ -934,9 +938,19 @@ export function useAuth() {
 
       const authResult = await performChallengeResponse(bundle.rootPrivateKey, bundle.rootPublicKey, baseUrl);
 
-      if (bundle.historySnapshot && authResult?.user?.id) {
-        historyDb = await openHistoryStore(authResult.user.id, getDeviceId());
-        await importHistorySnapshot(historyDb, bundle.historySnapshot);
+      if (authResult?.user?.id) {
+        if (bundle.historySnapshot) {
+          historyDb = await openHistoryStore(authResult.user.id, getDeviceId());
+          await importHistorySnapshot(historyDb, bundle.historySnapshot);
+        }
+        if (bundle.guildMetadataKeySnapshot) {
+          const metadataDb = await openGuildMetadataKeyStore(authResult.user.id, getDeviceId());
+          try {
+            await importGuildMetadataKeySnapshot(metadataDb, bundle.guildMetadataKeySnapshot);
+          } finally {
+            metadataDb.close();
+          }
+        }
       }
 
       setHasLocalVault(true);

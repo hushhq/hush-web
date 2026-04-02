@@ -1,4 +1,7 @@
-import { encodeGuildNameForInvite } from './guildMetadata';
+import {
+  encodeGuildMetadataKeyForInvite,
+  encodeGuildNameForInvite,
+} from './guildMetadata';
 
 /**
  * Parses a pasted invite link into instance host and invite code.
@@ -62,7 +65,7 @@ export function getInviteInstanceHost(instanceUrl) {
  * @param {string|null|undefined} guildName
  * @returns {string}
  */
-export function buildGuildInviteLink(appOrigin, instanceUrl, code, guildName) {
+export function buildGuildInviteLink(appOrigin, instanceUrl, code, guildName, guildMetadataKeyBytes = null) {
   const url = new URL(appOrigin);
   const instanceHost = getInviteInstanceHost(instanceUrl);
 
@@ -73,6 +76,13 @@ export function buildGuildInviteLink(appOrigin, instanceUrl, code, guildName) {
   }
 
   url.search = '';
-  url.hash = guildName ? `name=${encodeGuildNameForInvite(guildName)}` : '';
+  const fragment = new URLSearchParams();
+  if (guildName) {
+    fragment.set('name', encodeGuildNameForInvite(guildName));
+  }
+  if (guildMetadataKeyBytes instanceof Uint8Array) {
+    fragment.set('mk', encodeGuildMetadataKeyForInvite(guildMetadataKeyBytes));
+  }
+  url.hash = fragment.toString();
   return url.toString();
 }

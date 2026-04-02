@@ -6,7 +6,7 @@ import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
 import { applyThemeMode, getStoredThemeMode } from './components/UserSettingsModal';
 import { useSingleTab } from './hooks/useSingleTab';
-import { slugify } from './lib/slugify';
+import { buildGuildRouteRef } from './lib/slugify';
 import { PostRecoveryWizard } from './components/PostRecoveryWizard';
 
 // Apply stored theme before first paint to avoid FOUC.
@@ -70,9 +70,12 @@ function PostLoginRedirect() {
       const instanceHost = first.instanceUrl
         ? new URL(first.instanceUrl).host
         : null;
-      const guildSlug = slugify(first._localName ?? first.name ?? first.id ?? 'guild');
+      const guildRouteRef = buildGuildRouteRef(
+        first._localName ?? first.name ?? first.id ?? 'guild',
+        first.id,
+      );
       if (instanceHost) {
-        navigate(`/${instanceHost}/${guildSlug}`, { replace: true });
+        navigate(`/${instanceHost}/${guildRouteRef}`, { replace: true });
         return;
       }
     }

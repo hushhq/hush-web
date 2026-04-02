@@ -44,6 +44,7 @@ vi.mock('./hooks/useBootController.jsx', () => ({
 
 vi.mock('./lib/slugify', () => ({
   slugify: (s) => s,
+  buildGuildRouteRef: (name, guildId) => `${name}--${guildId}`,
 }));
 
 vi.mock('./components/AppBackground', () => ({ default: () => null }));

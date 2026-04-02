@@ -280,6 +280,7 @@ export function generateLinkingCode() {
  *   rootPrivateKey: Uint8Array,
  *   rootPublicKey: Uint8Array,
  *   historySnapshot?: object,
+ *   guildMetadataKeySnapshot?: object,
  *   exportedAt?: string,
  * }} bundle
  * @returns {Uint8Array}
@@ -295,6 +296,7 @@ export function encodeTransferBundle(bundle) {
     rootPrivateKey: bytesToBase64(bundle.rootPrivateKey),
     rootPublicKey: bytesToBase64(bundle.rootPublicKey),
     historySnapshot: bundle.historySnapshot ?? null,
+    guildMetadataKeySnapshot: bundle.guildMetadataKeySnapshot ?? null,
   };
   return new TextEncoder().encode(JSON.stringify(payload));
 }
@@ -313,6 +315,7 @@ export function encodeTransferBundle(bundle) {
  *   rootPrivateKey: Uint8Array,
  *   rootPublicKey: Uint8Array,
  *   historySnapshot: object|null,
+ *   guildMetadataKeySnapshot: object|null,
  * }}
  */
 export function decodeTransferBundle(bytes) {
@@ -328,5 +331,6 @@ export function decodeTransferBundle(bytes) {
     rootPrivateKey: base64ToBytes(parsed.rootPrivateKey),
     rootPublicKey: base64ToBytes(parsed.rootPublicKey),
     historySnapshot: parsed.historySnapshot ?? null,
+    guildMetadataKeySnapshot: parsed.guildMetadataKeySnapshot ?? null,
   };
 }

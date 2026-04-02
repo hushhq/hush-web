@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 import {
   openStore,
+  openHistoryStore,
   getCredential,
   setCredential,
   getKeyPackage,
@@ -16,6 +17,7 @@ import {
   listAllKeyPackages,
   preloadGroupState,
   flushStorageCache,
+  withReadOnlyHistoryScope,
 } from './mlsStore';
 
 // Each test group uses a unique user+device pair to isolate DB instances.
@@ -36,6 +38,7 @@ describe('mlsStore', () => {
     expect(typeof getLastResort).toBe('function');
     expect(typeof setLastResort).toBe('function');
     expect(typeof listAllKeyPackages).toBe('function');
+    expect(typeof withReadOnlyHistoryScope).toBe('function');
   });
 
   it('openStore returns an IDBDatabase', async () => {
@@ -508,6 +511,86 @@ describe('mlsStore', () => {
       expect(Array.from(result)).toEqual([1, 2, 3]);
 
       db.close();
+    });
+
+    it('withReadOnlyHistoryScope reads history data even when active cache is populated', async () => {
+      // This test proves the root cause fix: when the active store has already
+      // populated the global cache, a history store read via
+      // withReadOnlyHistoryScope
+      // must see the history DB's data, not the active cache entries.
+      const activeDb = await nextDb();
+      const bridge = window.mlsStorageBridge;
+      const keyBytes = uniqueKeyBytes();
+      const hexKey = Array.from(keyBytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      // 1. Write active-store data through bridge (populates cache + active IDB)
+      const activeValue = new Uint8Array([10, 20, 30]);
+      bridge.writeBytes(STORE_NAME, keyBytes, activeValue);
+      await flushStorageCache(activeDb);
+
+      // Verify the cache has the active value
+      const beforeResult = bridge.readBytes(STORE_NAME, keyBytes);
+      expect(Array.from(beforeResult)).toEqual([10, 20, 30]);
+
+      // 2. Write different data directly to a history DB's IDB (simulating imported snapshot)
+      storeCounter++;
+      const historyDb = await openHistoryStore(`user-${storeCounter}`, `dev-${storeCounter}`);
+      const historyValue = [77, 88, 99];
+      await new Promise((resolve, reject) => {
+        const tx = historyDb.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put({ key: hexKey, value: historyValue });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+
+      // 3. Without the scoped helper: preloadGroupState skips because cache is populated
+      await preloadGroupState(historyDb);
+      const contaminatedResult = bridge.readBytes(STORE_NAME, keyBytes);
+      expect(Array.from(contaminatedResult)).toEqual([10, 20, 30]); // Still active data!
+
+      // 4. With withReadOnlyHistoryScope: history data is correctly read
+      let historyResult;
+      await withReadOnlyHistoryScope(historyDb, async () => {
+        historyResult = bridge.readBytes(STORE_NAME, keyBytes);
+      });
+      expect(Array.from(historyResult)).toEqual([77, 88, 99]); // History data!
+
+      // 5. After withReadOnlyHistoryScope returns, active cache is restored
+      const restoredResult = bridge.readBytes(STORE_NAME, keyBytes);
+      expect(Array.from(restoredResult)).toEqual([10, 20, 30]); // Active data restored
+
+      activeDb.close();
+      historyDb.close();
+    });
+
+    it('withReadOnlyHistoryScope restores active cache even when callback throws', async () => {
+      const activeDb = await nextDb();
+      const bridge = window.mlsStorageBridge;
+      const keyBytes = uniqueKeyBytes();
+
+      // Populate active cache
+      const activeValue = new Uint8Array([1, 2, 3]);
+      bridge.writeBytes(STORE_NAME, keyBytes, activeValue);
+
+      // Open a history DB (contents don't matter for this test)
+      storeCounter++;
+      const historyDb = await openHistoryStore(`user-${storeCounter}`, `dev-${storeCounter}`);
+
+      // Callback throws — cache must still be restored
+      await expect(
+        withReadOnlyHistoryScope(historyDb, async () => {
+          throw new Error('simulated failure');
+        }),
+      ).rejects.toThrow('simulated failure');
+
+      const result = bridge.readBytes(STORE_NAME, keyBytes);
+      expect(result).not.toBeNull();
+      expect(Array.from(result)).toEqual([1, 2, 3]);
+
+      activeDb.close();
+      historyDb.close();
     });
   });
 });

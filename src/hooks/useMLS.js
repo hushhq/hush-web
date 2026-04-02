@@ -22,7 +22,6 @@ import * as apiLib from '../lib/api';
  * @param {() => Promise<IDBDatabase|null>} opts.getStore - Opens IndexedDB for the current user
  * @param {() => string|null} opts.getToken - Returns the JWT for API calls
  * @param {string} [opts.channelId] - Required for encryptForChannel/decryptFromChannel
- * @param {() => Promise<IDBDatabase|null>} [opts.getHistoryStore] - Optional read-only history fallback store
  * @param {object} [opts._deps] - Optional dep injection for testing
  * @returns {{
  *   encryptForChannel: Function,
@@ -55,22 +54,6 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
     return { db, token, credential, mlsStore, hushCrypto, api };
   }
 
-  /**
-   * Builds deps for the imported history fallback store.
-   * Returns null when no history snapshot exists.
-   *
-   * @returns {Promise<object|null>}
-   */
-  async function buildHistoryDeps() {
-    if (typeof getHistoryStore !== 'function') return null;
-    const db = await getHistoryStore();
-    const token = getToken();
-    if (!db || !token) return null;
-    const credential = await mlsStore.getCredential(db);
-    if (!credential) return null;
-    return { db, token, credential, mlsStore, hushCrypto, api };
-  }
-
   // ---------------------------------------------------------------------------
   // Channel-centric API (MLS group)
   // ---------------------------------------------------------------------------
@@ -97,21 +80,27 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
    */
   async function decryptFromChannel(messageBytes) {
     if (!channelId) throw new Error('[useMLS] channelId is required for decryptFromChannel');
+    const deps = await buildDeps();
     try {
-      const deps = await buildDeps();
       const result = await mlsGroup.decryptMessage(deps, channelId, messageBytes);
       if (result.plaintext == null) {
         throw new Error(`[useMLS] decryptFromChannel: non-application message (type=${result.type})`);
       }
       return result.plaintext;
     } catch (primaryErr) {
-      const historyDeps = await buildHistoryDeps();
-      if (!historyDeps) throw primaryErr;
-      const fallbackResult = await mlsGroup.decryptMessage(historyDeps, channelId, messageBytes);
-      if (fallbackResult.plaintext == null) {
-        throw primaryErr;
+      try {
+        await mlsGroup.catchupCommits(deps, channelId);
+        const retryResult = await mlsGroup.decryptMessage(deps, channelId, messageBytes);
+        if (retryResult.plaintext != null) {
+          return retryResult.plaintext;
+        }
+      } catch {
+        // Fall through to the final failure path.
       }
-      return fallbackResult.plaintext;
+      // Intentionally do not run history-store decrypt here. decryptMessage()
+      // is stateful and uses the global StorageProvider bridge, so running it
+      // against history state would risk corrupting the active MLS store.
+      throw primaryErr;
     }
   }
 
@@ -162,32 +151,10 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Guild metadata key export
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Export the AES-256 metadata key for a guild from its MLS metadata group.
-   * Returns null if the credential or group state is not yet available.
-   *
-   * @param {string} guildId
-   * @returns {Promise<Uint8Array|null>}
-   */
-  async function getGuildMetadataKey(guildId) {
-    try {
-      const deps = await buildDeps();
-      return await mlsGroup.exportGuildMetadataKey(deps, guildId);
-    } catch {
-      // Group state not yet available - caller falls back to showing UUID
-      return null;
-    }
-  }
-
   return {
     encryptForChannel,
     decryptFromChannel,
     getCachedMessage,
     setCachedMessage,
-    getGuildMetadataKey,
   };
 }

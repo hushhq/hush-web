@@ -9,8 +9,10 @@ const { mockVerifyOwnKey } = vi.hoisted(() => ({
 
 vi.mock('../lib/mlsStore', () => ({
   openStore: vi.fn().mockReturnValue(Promise.resolve({})),
+  openHistoryStore: vi.fn().mockReturnValue(Promise.resolve({})),
   preloadGroupState: vi.fn().mockResolvedValue(undefined),
   flushStorageCache: vi.fn().mockResolvedValue(undefined),
+  withReadOnlyHistoryScope: vi.fn().mockImplementation(async (_db, fn) => fn(_db)),
   getCredential: vi.fn().mockResolvedValue({
     signingPublicKey: new Uint8Array(32),
     signingPrivateKey: new Uint8Array(64),
@@ -29,6 +31,20 @@ vi.mock('../lib/mlsStore', () => ({
   setLastResort: vi.fn().mockResolvedValue(undefined),
   getLocalPlaintext: vi.fn().mockResolvedValue(null),
   setLocalPlaintext: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../lib/guildMetadata', () => ({
+  importMetadataKey: vi.fn().mockResolvedValue({}),
+  fromBase64: vi.fn(() => new Uint8Array([1, 2, 3])),
+  decryptGuildMetadata: vi.fn().mockResolvedValue({ name: 'History Guild', icon: null }),
+}));
+
+vi.mock('../lib/guildMetadataKeyStore', () => ({
+  openGuildMetadataKeyStore: vi.fn().mockResolvedValue({ close: vi.fn() }),
+  getGuildMetadataKeyBytes: vi.fn().mockResolvedValue(null),
+  setGuildMetadataKeyBytes: vi.fn().mockResolvedValue(undefined),
+  exportGuildMetadataKeySnapshot: vi.fn().mockResolvedValue({ version: 1, keys: [] }),
+  importGuildMetadataKeySnapshot: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../lib/mlsGroup', () => ({
@@ -172,8 +188,8 @@ vi.mock('../components/GuildCreateModal', () => ({
 
 // ChannelList also imports ServerSettingsModal - mock the whole component
 vi.mock('../components/ChannelList', () => ({
-  default: function MockChannelList() {
-    return <div data-testid="channel-list" />;
+  default: function MockChannelList({ guildName }) {
+    return <div data-testid="channel-list">Guild:{guildName ?? ''}</div>;
   },
 }));
 
@@ -221,6 +237,9 @@ vi.mock('../hooks/useToast', () => ({
 }));
 
 import { getGuildChannels, getGuildMembers } from '../lib/api';
+import * as guildMetadata from '../lib/guildMetadata';
+import * as mlsStore from '../lib/mlsStore';
+import * as mlsGroup from '../lib/mlsGroup';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
 import { TransparencyVerifier } from '../lib/transparencyVerifier';
@@ -243,6 +262,17 @@ describe('ServerLayout', () => {
     cleanup();
     localStorage.clear();
     sessionStorage.setItem('hush_jwt', 'test-token');
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map(),
+      mergedGuilds: [{ id: 's1', name: 'Test Guild', ownerId: 'u1' }],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => null),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
     vi.mocked(getGuildChannels).mockResolvedValue([]);
     vi.mocked(getGuildMembers).mockResolvedValue([]);
     mockVerifyOwnKey.mockClear();
@@ -310,6 +340,62 @@ describe('ServerLayout', () => {
     });
   });
 
+  it('resolves canonical guild routes by guild ID even when the guild name is still the Server placeholder', async () => {
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map(),
+      mergedGuilds: [{
+        id: 's1',
+        name: 'Server',
+        ownerId: 'u1',
+        instanceUrl: 'https://a.example.com',
+      }],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => 'instance-token'),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    renderAtRoute('/a.example.com/test-guild--s1');
+
+    await waitFor(() => {
+      expect(getGuildChannels).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
+      expect(getGuildMembers).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
+    });
+  });
+
+  it('recovers legacy slug-only guild routes by decrypting metadata and upgrading to the canonical route', async () => {
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map(),
+      mergedGuilds: [{
+        id: 's1',
+        name: 'Server',
+        ownerId: 'u1',
+        instanceUrl: 'https://a.example.com',
+        encryptedMetadata: 'AQID',
+      }],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => 'instance-token'),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    renderAtRoute('/a.example.com/history-guild');
+
+    await waitFor(() => {
+      expect(getGuildChannels).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
+      expect(getGuildMembers).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
+    });
+  });
+
   it('renders TextChannel when a text channel is active', async () => {
     vi.mocked(getGuildChannels).mockResolvedValue([
       { id: 'ch1', name: 'general', type: 'text', position: 0, parentId: null },
@@ -319,6 +405,84 @@ describe('ServerLayout', () => {
       expect(screen.getByTestId('text-channel')).toBeInTheDocument();
     });
     expect(screen.getByTestId('text-channel')).toHaveTextContent('general');
+  });
+
+  it('falls back to the imported history store for guild metadata names', async () => {
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map(),
+      mergedGuilds: [{
+        id: 's1',
+        name: 'Server',
+        ownerId: 'u1',
+        encryptedMetadata: 'AQID',
+      }],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => null),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.mocked(mlsStore.openStore).mockResolvedValueOnce({ close: vi.fn() });
+    vi.mocked(mlsStore.openHistoryStore).mockResolvedValueOnce({ close: vi.fn() });
+    vi.mocked(mlsStore.getCredential)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        signingPublicKey: new Uint8Array(32),
+        signingPrivateKey: new Uint8Array(64),
+        credentialBytes: new Uint8Array(16),
+      });
+    vi.mocked(mlsGroup.exportGuildMetadataKey).mockResolvedValueOnce({
+      metadataKeyBytes: new Uint8Array(32),
+    });
+
+    renderAtRoute('/servers/s1/channels');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:History Guild');
+    });
+    expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
+  });
+
+  it('retries guild metadata decryption with the history key when the active key fails', async () => {
+    vi.mocked(useInstanceContext).mockReturnValueOnce({
+      instanceStates: new Map(),
+      mergedGuilds: [{
+        id: 's1',
+        name: 'Server',
+        ownerId: 'u1',
+        encryptedMetadata: 'AQID',
+      }],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => null),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.mocked(mlsStore.openStore).mockResolvedValueOnce({ close: vi.fn() });
+    vi.mocked(mlsStore.openHistoryStore).mockResolvedValueOnce({ close: vi.fn() });
+    vi.mocked(mlsStore.getCredential).mockResolvedValue({
+      signingPublicKey: new Uint8Array(32),
+      signingPrivateKey: new Uint8Array(64),
+      credentialBytes: new Uint8Array(16),
+    });
+    vi.mocked(mlsGroup.exportGuildMetadataKey)
+      .mockResolvedValueOnce({ metadataKeyBytes: new Uint8Array([1, 2, 3]) })
+      .mockResolvedValueOnce({ metadataKeyBytes: new Uint8Array([4, 5, 6]) });
+    vi.mocked(guildMetadata.decryptGuildMetadata)
+      .mockRejectedValueOnce(new Error('wrong key'))
+      .mockResolvedValueOnce({ name: 'Recovered Guild', icon: null });
+
+    renderAtRoute('/servers/s1/channels');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:Recovered Guild');
+    });
+    expect(guildMetadata.decryptGuildMetadata).toHaveBeenCalled();
+    expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
   });
 
   it('locks overflow while viewing a voice channel', async () => {

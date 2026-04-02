@@ -169,7 +169,7 @@ export function fromBase64(base64String) {
  * @returns {string} URI-encoded guild name
  */
 export function encodeGuildNameForInvite(guildName) {
-  return encodeURIComponent(guildName);
+  return guildName;
 }
 
 /**
@@ -205,4 +205,37 @@ export async function importMetadataKey(keyBytes) {
     false,
     ['encrypt', 'decrypt'],
   );
+}
+
+/**
+ * Generate raw 32-byte key material for guild metadata encryption.
+ *
+ * @returns {Uint8Array}
+ */
+export function generateMetadataKeyBytes() {
+  return globalThis.crypto.getRandomValues(new Uint8Array(32));
+}
+
+/**
+ * Encode raw guild metadata key bytes for an invite URL fragment.
+ *
+ * @param {Uint8Array} keyBytes
+ * @returns {string}
+ */
+export function encodeGuildMetadataKeyForInvite(keyBytes) {
+  return toBase64(keyBytes);
+}
+
+/**
+ * Decode raw guild metadata key bytes from an invite URL fragment.
+ *
+ * @param {string} fragment
+ * @returns {Uint8Array|null}
+ */
+export function decodeGuildMetadataKeyFromInvite(fragment) {
+  try {
+    return fromBase64(decodeURIComponent(fragment));
+  } catch {
+    return null;
+  }
 }

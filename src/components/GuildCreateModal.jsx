@@ -1,16 +1,21 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { createGuild, updateGuildMetadata, listServerTemplates } from '../lib/api';
+import { createGuild, listServerTemplates } from '../lib/api';
 import { parseInviteLink } from '../lib/inviteLinks.js';
-import * as api from '../lib/api';
-import * as mlsGroup from '../lib/mlsGroup';
-import * as mlsStoreLib from '../lib/mlsStore';
-import * as hushCryptoLib from '../lib/hushCrypto';
-import { encryptGuildMetadata, toBase64, importMetadataKey } from '../lib/guildMetadata';
+import {
+  encryptGuildMetadata,
+  generateMetadataKeyBytes,
+  importMetadataKey,
+  toBase64,
+} from '../lib/guildMetadata';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
+import {
+  openGuildMetadataKeyStore,
+  setGuildMetadataKeyBytes,
+} from '../lib/guildMetadataKeyStore';
 
 // ── Instance creation policy annotations ─────────────────────────────────────
 
@@ -177,18 +182,6 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedInstanceUrl]);
 
-  // ── MLS deps builder ──────────────────────────────────────────────────
-
-  /**
-   * Build the MLS deps object needed by mlsGroup functions.
-   * @param {IDBDatabase} db
-   * @param {string} token
-   * @returns {object}
-   */
-  const buildMlsDeps = (db, token) => {
-    return { db, token, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api };
-  };
-
   // ── Submit ────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
@@ -210,44 +203,38 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
       setError('Not authenticated.');
       return;
     }
+    if (!user?.id) {
+      setError('User context is not available.');
+      return;
+    }
 
     setLoading(true);
     try {
-      // Step 1: Create the guild. Send plaintext name as fallback - server wraps
-      // it as JSON metadata when MLS EncryptedMetadata is not provided.
-      const guild = await createGuild(effectiveToken, null, selectedTemplateId, effectiveBaseUrl, trimmed);
+      const metadataKeyBytes = generateMetadataKeyBytes();
+      const symmetricKey = await importMetadataKey(metadataKeyBytes);
+      const encryptedMetadata = toBase64(await encryptGuildMetadata(symmetricKey, {
+        name: trimmed,
+        description: '',
+        icon: null,
+      }));
 
-      // Step 2: Create the guild metadata MLS group (creator is the sole member).
-      let mlsSuccess = false;
+      const guild = await createGuild(
+        effectiveToken,
+        encryptedMetadata,
+        selectedTemplateId,
+        effectiveBaseUrl,
+      );
+
+      const metadataDb = await openGuildMetadataKeyStore(user.id, getDeviceId());
       try {
-        const db = await mlsStoreLib.openStore(user?.id, getDeviceId());
-        if (db) {
-          const credential = await mlsStoreLib.getCredential(db);
-          const deps = { ...buildMlsDeps(db, effectiveToken), credential };
-          await mlsGroup.createGuildMetadataGroup(deps, guild.id);
-
-          const { metadataKeyBytes } = await mlsGroup.exportGuildMetadataKey(deps, guild.id);
-          const symmetricKey = await importMetadataKey(metadataKeyBytes);
-          const encBlob = await encryptGuildMetadata(symmetricKey, {
-            name: trimmed,
-            description: '',
-            icon: null,
-          });
-          const encryptedMetadata = toBase64(encBlob);
-
-          await updateGuildMetadata(effectiveToken, guild.id, encryptedMetadata, effectiveBaseUrl);
-          guild.encryptedMetadata = encryptedMetadata;
-          mlsSuccess = true;
-        }
-      } catch (mlsErr) {
-        console.warn('[GuildCreateModal] MLS metadata group setup failed:', mlsErr);
+        await setGuildMetadataKeyBytes(metadataDb, guild.id, metadataKeyBytes);
+      } finally {
+        metadataDb.close();
       }
 
-      if (!mlsSuccess) {
-        guild._localName = trimmed;
-      }
+      guild.encryptedMetadata = encryptedMetadata;
+      guild._localName = trimmed;
 
-      // Step 3: Refresh guild list for the selected instance.
       if (selectedInstanceUrl) {
         refreshGuilds(selectedInstanceUrl).catch(() => {});
       }

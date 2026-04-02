@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import ChannelList from './ChannelList';
+import { buildGuildInviteLink } from '../lib/inviteLinks';
 
 vi.mock('../lib/api', () => ({
   getGuildChannels: vi.fn(() => Promise.resolve([])),
@@ -308,7 +309,12 @@ describe('ChannelList', () => {
     fireEvent.click(screen.getByTitle('Server menu'));
     fireEvent.click(screen.getByRole('button', { name: /invite people/i }));
 
-    const expectedLink = `${window.location.origin}/join/remote.example.com/abc123#name=My%20Server`;
+    const expectedLink = buildGuildInviteLink(
+      window.location.origin,
+      'https://remote.example.com',
+      'abc123',
+      'My Server',
+    );
 
     await waitFor(() => {
       expect(createGuildInvite).toHaveBeenCalledWith('test-token', 's1', {}, 'https://remote.example.com');

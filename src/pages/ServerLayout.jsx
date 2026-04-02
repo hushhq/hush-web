@@ -9,6 +9,11 @@ import VoiceChannel from './VoiceChannel';
 import { getInstance, getGuildChannels, getGuildMembers, getHandshake } from '../lib/api';
 import * as api from '../lib/api';
 import { importMetadataKey, fromBase64, decryptGuildMetadata } from '../lib/guildMetadata';
+import {
+  getGuildMetadataKeyBytes,
+  openGuildMetadataKeyStore,
+  setGuildMetadataKeyBytes,
+} from '../lib/guildMetadataKeyStore';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
 import { HOME_INSTANCE_KEY, JWT_KEY, getDeviceId } from '../hooks/useAuth';
@@ -21,7 +26,7 @@ import { useSidebarResize } from '../hooks/useSidebarResize';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as mlsGroup from '../lib/mlsGroup';
-import { slugify } from '../lib/slugify';
+import { buildGuildRouteRef, parseGuildRouteRef, slugify } from '../lib/slugify';
 import ConfirmModal from '../components/ConfirmModal';
 import DmListView from '../components/DmListView';
 import EmptyState from '../components/EmptyState';
@@ -56,6 +61,79 @@ function getLocalToken() {
   return typeof window !== 'undefined'
     ? (sessionStorage.getItem(JWT_KEY) ?? sessionStorage.getItem('hush_token'))
     : null;
+}
+
+/**
+ * Build the canonical instance-aware path for a guild.
+ *
+ * Guild IDs are embedded in the route reference so refreshes do not depend on
+ * metadata decryption having already restored the human-readable name.
+ *
+ * @param {object} guild
+ * @param {string|null} [channelId]
+ * @returns {string|null}
+ */
+function buildGuildPath(guild, channelId = null) {
+  if (!guild?.instanceUrl || !guild?.id) {
+    return null;
+  }
+
+  try {
+    const host = new URL(guild.instanceUrl).host;
+    const routeRef = buildGuildRouteRef(guild._localName ?? guild.name ?? guild.id, guild.id);
+    return channelId ? `/${host}/${routeRef}/${channelId}` : `/${host}/${routeRef}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Attempt a one-time legacy migration from the old guild-metadata MLS group.
+ *
+ * This is compatibility-only. New guild metadata must come from the dedicated
+ * guild metadata key store, not from a separate MLS metadata group.
+ *
+ * @param {IDBDatabase|null} db
+ * @param {string} guildId
+ * @returns {Promise<Uint8Array|null>}
+ */
+async function exportLegacyMetadataKeyFromStore(db, guildId) {
+  if (!db) return null;
+  try {
+    const credential = await mlsStoreLib.getCredential(db);
+    if (!credential) return null;
+    const deps = {
+      db,
+      credential,
+      mlsStore: mlsStoreLib,
+      hushCrypto: hushCryptoLib,
+    };
+    const { metadataKeyBytes } = await mlsGroup.exportGuildMetadataKey(deps, guildId);
+    return metadataKeyBytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Try decrypting guild metadata with multiple candidate keys.
+ *
+ * @param {Uint8Array[]} keyCandidates
+ * @param {string} encryptedMetadata
+ * @returns {Promise<{ decrypted: { name?: string, icon?: string|null }, keyBytes: Uint8Array }|null>}
+ */
+async function decryptGuildMetadataWithCandidates(keyCandidates, encryptedMetadata) {
+  const blob = fromBase64(encryptedMetadata);
+  for (const keyBytes of keyCandidates) {
+    try {
+      const cryptoKey = await importMetadataKey(keyBytes);
+      const decrypted = await decryptGuildMetadata(cryptoKey, blob);
+      return { decrypted, keyBytes };
+    } catch {
+      // Try the next candidate key.
+    }
+  }
+  return null;
 }
 
 /**
@@ -144,6 +222,7 @@ export default function ServerLayout() {
       return mergedGuilds.find((g) => g.id === legacyServerId) ?? null;
     }
     if (instanceParam && guildSlug) {
+      const { guildId: guildIdFromRoute, slug: legacySlug } = parseGuildRouteRef(guildSlug);
       return mergedGuilds.find((g) => {
         if (!g.instanceUrl) return false;
         try {
@@ -152,8 +231,11 @@ export default function ServerLayout() {
         } catch {
           return false;
         }
+        if (guildIdFromRoute) {
+          return g.id === guildIdFromRoute;
+        }
         const slug = slugify(g._localName ?? g.name ?? g.id ?? '');
-        return slug === guildSlug;
+        return slug === legacySlug;
       }) ?? null;
     }
     return null;
@@ -177,6 +259,20 @@ export default function ServerLayout() {
    */
   const channelId = channelSlug ?? legacyChannelId;
   const homeInstanceUrl = getHomeInstanceUrl();
+
+  useEffect(() => {
+    if (!activeGuild || !instanceParam || !guildSlug) {
+      return;
+    }
+    if (parseGuildRouteRef(guildSlug).guildId) {
+      return;
+    }
+    const canonicalPath = buildGuildPath(activeGuild, channelId ?? null);
+    if (!canonicalPath) {
+      return;
+    }
+    navigateRef.current(canonicalPath, { replace: true });
+  }, [activeGuild, channelId, guildSlug, instanceParam]);
 
   /** Per-instance WS client, or null if not connected / no instance. */
   const wsClient = instanceUrl ? getWsClient(instanceUrl) : null;
@@ -303,39 +399,150 @@ export default function ServerLayout() {
   // ── Resolved guild name ────────────────────────────────────────────────
 
   /**
-   * Returns the raw AES-256-GCM key bytes for a guild's metadata MLS group.
-   * Returns null if the guild has no metadata group state locally.
+   * @param {string} guildId
+   * @param {Uint8Array} keyBytes
+   * @returns {Promise<void>}
+   */
+  const rememberMetadataKey = useCallback(async (guildId, keyBytes) => {
+    if (!currentUserId || !guildId || !(keyBytes instanceof Uint8Array)) {
+      return;
+    }
+    const db = await openGuildMetadataKeyStore(currentUserId, getDeviceId());
+    try {
+      await setGuildMetadataKeyBytes(db, guildId, keyBytes);
+    } finally {
+      db.close();
+    }
+  }, [currentUserId]);
+
+  /**
+   * Returns candidate guild metadata keys, preferring the dedicated key store
+   * and falling back to a one-time legacy MLS migration path when needed.
    *
    * @param {string} guildId
-   * @returns {Promise<Uint8Array|null>}
+   * @returns {Promise<Uint8Array[]|null>}
    */
-  const getMetadataKey = useCallback(async (guildId) => {
+  const getMetadataKeys = useCallback(async (guildId) => {
     if (!currentUserId || !guildId) return null;
+    const keyDb = await openGuildMetadataKeyStore(currentUserId, getDeviceId());
     try {
-      const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
-      if (!db) return null;
-      const credential = await mlsStoreLib.getCredential(db);
-      if (!credential) return null;
-      if (!instanceApi) return null;
-      const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
-      const { metadataKeyBytes } = await mlsGroup.exportGuildMetadataKey(deps, guildId);
-      return metadataKeyBytes;
-    } catch {
-      return null;
+      const storedKey = await getGuildMetadataKeyBytes(keyDb, guildId);
+      if (storedKey) {
+        return [storedKey];
+      }
+    } finally {
+      keyDb.close();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUserId, token]);
+
+    const candidates = [];
+    const activeKey = await exportLegacyMetadataKeyFromStore(
+      await mlsStoreLib.openStore(currentUserId, getDeviceId()),
+      guildId,
+    );
+    if (activeKey) {
+      candidates.push(activeKey);
+    }
+
+    // History key must be exported in an isolated cache scope. Without this,
+    // preloadGroupState(historyDb) skips keys already present from the active
+    // store, so the WASM export reads active-store state instead of history.
+    const historyDb = await mlsStoreLib.openHistoryStore(currentUserId, getDeviceId());
+    let historyKey = null;
+    try {
+      historyKey = await mlsStoreLib.withReadOnlyHistoryScope(historyDb, (db) => {
+        return exportLegacyMetadataKeyFromStore(db, guildId);
+      });
+    } finally {
+      historyDb.close();
+    }
+    if (historyKey) {
+      const historyHex = bytesToHex(historyKey);
+      if (!candidates.some((candidate) => bytesToHex(candidate) === historyHex)) {
+        candidates.push(historyKey);
+      }
+    }
+    return candidates;
+  }, [currentUserId]);
+
+  const getMetadataKey = useCallback(async (guildId) => {
+    const candidates = await getMetadataKeys(guildId);
+    return candidates?.[0] ?? null;
+  }, [getMetadataKeys]);
 
   const [activeGuildName, setActiveGuildName] = useState(null);
-  const [metadataRefreshTick, setMetadataRefreshTick] = useState(0);
-  const bumpMetadataRefresh = useCallback(() => {
-    setMetadataRefreshTick((tick) => tick + 1);
-  }, []);
+  const [activeGuildKeyBytes, setActiveGuildKeyBytes] = useState(null);
+
+  const getActiveGuildMetadataKey = useCallback(async () => {
+    if (activeGuildKeyBytes instanceof Uint8Array) {
+      return activeGuildKeyBytes;
+    }
+    if (!activeGuild?.id) {
+      return null;
+    }
+    return getMetadataKey(activeGuild.id);
+  }, [activeGuild?.id, activeGuildKeyBytes, getMetadataKey]);
 
   useEffect(() => {
-    if (!activeGuild) { setActiveGuildName(null); return; }
+    const { guildId: guildIdFromRoute, slug: legacySlug } = parseGuildRouteRef(guildSlug ?? '');
+    if (activeGuild || !instanceParam || !guildSlug || guildIdFromRoute) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveLegacyGuildRoute = async () => {
+      const instanceGuilds = mergedGuilds.filter((guild) => {
+        try {
+          return guild.instanceUrl && new URL(guild.instanceUrl).host === instanceParam;
+        } catch {
+          return false;
+        }
+      });
+
+      for (const guild of instanceGuilds) {
+        const localSlug = slugify(guild._localName ?? guild.name ?? guild.id ?? '');
+        if (localSlug === legacySlug) {
+          const canonicalPath = buildGuildPath(guild, channelId ?? null);
+          if (!cancelled && canonicalPath) {
+            navigateRef.current(canonicalPath, { replace: true });
+          }
+          return;
+        }
+        if (!guild.encryptedMetadata) {
+          continue;
+        }
+        const keyCandidates = await getMetadataKeys(guild.id);
+        const decrypted = keyCandidates?.length
+          ? await decryptGuildMetadataWithCandidates(keyCandidates, guild.encryptedMetadata)
+          : null;
+        if (slugify(decrypted?.decrypted?.name ?? '') !== legacySlug) {
+          continue;
+        }
+        await rememberMetadataKey(guild.id, decrypted.keyBytes);
+        guild._localName = decrypted.decrypted.name;
+        const canonicalPath = buildGuildPath(guild, channelId ?? null);
+        if (!cancelled && canonicalPath) {
+          navigateRef.current(canonicalPath, { replace: true });
+        }
+        return;
+      }
+    };
+
+    resolveLegacyGuildRoute().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeGuild, channelId, getMetadataKeys, guildSlug, instanceParam, mergedGuilds, rememberMetadataKey]);
+
+  useEffect(() => {
+    if (!activeGuild) {
+      setActiveGuildName(null);
+      setActiveGuildKeyBytes(null);
+      return;
+    }
     if (!activeGuild.encryptedMetadata) {
       setActiveGuildName(activeGuild._localName ?? activeGuild.name ?? null);
+      setActiveGuildKeyBytes(null);
       return;
     }
     // Try plaintext JSON decode first (fallback when MLS not bootstrapped).
@@ -347,37 +554,48 @@ export default function ServerLayout() {
       const parsed = JSON.parse(decoded);
       if (parsed.n || parsed.name) {
         setActiveGuildName(parsed.n || parsed.name);
+        setActiveGuildKeyBytes(null);
         return;
       }
     } catch { /* Not plaintext JSON - try MLS decryption below */ }
 
-    getMetadataKey(activeGuild.id).then(async (keyBytes) => {
-      if (!keyBytes) { setActiveGuildName(nameFallback); return; }
-      try {
-        const cryptoKey = await importMetadataKey(keyBytes);
-        const blob = fromBase64(activeGuild.encryptedMetadata);
-        const { name } = await decryptGuildMetadata(cryptoKey, blob);
-        setActiveGuildName(name || nameFallback);
-      } catch {
+    getMetadataKeys(activeGuild.id).then(async (keyCandidates) => {
+      if (!keyCandidates?.length) {
         setActiveGuildName(nameFallback);
+        setActiveGuildKeyBytes(null);
+        return;
       }
-    }).catch(() => setActiveGuildName(nameFallback));
-  }, [activeGuild, getMetadataKey, metadataRefreshTick]);
+      const decrypted = await decryptGuildMetadataWithCandidates(keyCandidates, activeGuild.encryptedMetadata);
+      if (decrypted?.decrypted?.name) {
+        await rememberMetadataKey(activeGuild.id, decrypted.keyBytes);
+        activeGuild._localName = decrypted.decrypted.name;
+        setActiveGuildName(decrypted.decrypted.name);
+        setActiveGuildKeyBytes(decrypted.keyBytes);
+        return;
+      }
+      setActiveGuildName(nameFallback);
+      setActiveGuildKeyBytes(null);
+    }).catch(() => {
+      setActiveGuildName(nameFallback);
+      setActiveGuildKeyBytes(null);
+    });
+  }, [activeGuild, getMetadataKeys, rememberMetadataKey]);
 
   useEffect(() => {
     if (!activeGuild?.id || channels.length === 0) return;
 
     let cancelled = false;
     const refreshChannelNames = async () => {
-      const keyBytes = await getMetadataKey(activeGuild.id);
-      if (!keyBytes || cancelled) return;
+      const keyCandidates = await getMetadataKeys(activeGuild.id);
+      if (!keyCandidates?.length || cancelled) return;
 
-      const cryptoKey = await importMetadataKey(keyBytes);
       const nextChannels = await Promise.all(channels.map(async (channel) => {
         if (channel.name || !channel.encryptedMetadata) return channel;
         try {
-          const { name } = await decryptGuildMetadata(cryptoKey, fromBase64(channel.encryptedMetadata));
+          const decrypted = await decryptGuildMetadataWithCandidates(keyCandidates, channel.encryptedMetadata);
+          const name = decrypted?.decrypted?.name;
           if (!name) return channel;
+          await rememberMetadataKey(activeGuild.id, decrypted.keyBytes);
           return { ...channel, name };
         } catch {
           return channel;
@@ -395,7 +613,7 @@ export default function ServerLayout() {
     return () => {
       cancelled = true;
     };
-  }, [activeGuild?.id, channels, getMetadataKey, metadataRefreshTick]);
+  }, [activeGuild?.id, channels, getMetadataKeys, rememberMetadataKey]);
 
   // ── MLS KeyPackage maintenance ─────────────────────────────────────────
 
@@ -562,22 +780,16 @@ export default function ServerLayout() {
       return;
     }
     const guild = mergedGuilds.find((g) => g.id === guildId);
-    if (guild?.instanceUrl) {
-      const host = (() => {
-        try { return new URL(guild.instanceUrl).host; } catch { return null; }
-      })();
-      if (host) {
-        const slug = slugify(guild._localName ?? guild.name ?? guildId);
-        const path = chId ? `/${host}/${slug}/${chId}` : `/${host}/${slug}`;
-        navigateRef.current(path, { replace: true });
-        return;
-      }
+    const path = buildGuildPath(guild, chId ?? null);
+    if (path) {
+      navigateRef.current(path, { replace: true });
+      return;
     }
     // Legacy fallback.
-    const path = chId
+    const legacyPath = chId
       ? `/servers/${guildId}/channels/${chId}`
       : `/servers/${guildId}/channels`;
-    navigateRef.current(path, { replace: true });
+    navigateRef.current(legacyPath, { replace: true });
   }, [mergedGuilds]);
 
   const handleVoiceLeave = useCallback(() => {
@@ -607,7 +819,6 @@ export default function ServerLayout() {
           const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
           const deps = { db, mlsStore: mlsStoreLib };
           if (textChannelIds.length) await mlsGroup.leaveAllChannelGroups(deps, textChannelIds);
-          if (serverId) await mlsGroup.leaveGuildMetadataGroup(deps, serverId);
         } catch (err) {
           console.warn('[mls] Failed to clean up MLS groups on kick:', err);
         }
@@ -642,7 +853,6 @@ export default function ServerLayout() {
           const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
           const deps = { db, mlsStore: mlsStoreLib };
           if (textChannelIds.length) await mlsGroup.leaveAllChannelGroups(deps, textChannelIds);
-          if (serverId) await mlsGroup.leaveGuildMetadataGroup(deps, serverId);
         } catch (err) {
           console.warn('[mls] Failed to clean up MLS groups on ban:', err);
         }
@@ -712,10 +922,10 @@ export default function ServerLayout() {
     return () => wsClient.off('member_muted', handler);
   }, [wsClient, serverId, currentUserId, activeVoiceChannel, handleVoiceLeave, showToast]);
 
-  // member_joined: append new member to the list; join guild metadata group if self (guild-scoped)
+  // member_joined: append new member to the list.
   useEffect(() => {
     if (!wsClient) return;
-    const handler = async (data) => {
+    const handler = (data) => {
       if (!data.member) return;
       if (data.server_id && data.server_id !== serverId) return;
       const joinedId = data.member.id ?? data.member.userId;
@@ -723,26 +933,10 @@ export default function ServerLayout() {
         if (prev.some((m) => (m.id ?? m.userId) === joinedId)) return prev;
         return [...prev, data.member];
       });
-
-      if (joinedId === currentUserId && data.server_id) {
-        if (!token || !currentUserId) return;
-        if (!instanceApi) return;
-        try {
-          const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
-          const credential = await mlsStoreLib.getCredential(db);
-          if (!credential) return;
-          const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
-          await mlsGroup.joinGuildMetadataGroup(deps, data.server_id);
-          bumpMetadataRefresh();
-        } catch (err) {
-          console.warn('[mls] Failed to join guild metadata group on member_joined:', err);
-        }
-      }
     };
     wsClient.on('member_joined', handler);
     return () => wsClient.off('member_joined', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wsClient, serverId, currentUserId, token, bumpMetadataRefresh]);
+  }, [wsClient, serverId]);
 
   // member_left: remove from list; navigate self if voluntarily left (guild-scoped)
   useEffect(() => {
@@ -757,7 +951,6 @@ export default function ServerLayout() {
             const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
             const deps = { db, mlsStore: mlsStoreLib };
             if (textChannelIds.length) await mlsGroup.leaveAllChannelGroups(deps, textChannelIds);
-            if (serverId) await mlsGroup.leaveGuildMetadataGroup(deps, serverId);
           }
         } catch (err) {
           console.warn('[mls] Failed to clean up MLS groups on leave:', err);
@@ -791,17 +984,41 @@ export default function ServerLayout() {
 
       try {
         const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
+        const localEpochBefore = await mlsStoreLib.getGroupEpoch(db, data.channel_id);
+        console.info('[mls] commit event', {
+          channelId: data.channel_id,
+          senderId: data.sender_id,
+          senderDeviceId: data.sender_device_id ?? null,
+          incomingEpoch: data.epoch ?? null,
+          localEpochBefore: localEpochBefore ?? null,
+        });
         const credential = await mlsStoreLib.getCredential(db);
         const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
         const commitBytes = base64ToUint8ArraySL(data.commit_bytes);
         await mlsGroup.processCommit(deps, data.channel_id, commitBytes);
+        const localEpochAfter = await mlsStoreLib.getGroupEpoch(db, data.channel_id);
+        console.info('[mls] commit applied', {
+          channelId: data.channel_id,
+          incomingEpoch: data.epoch ?? null,
+          localEpochAfter: localEpochAfter ?? null,
+        });
       } catch (err) {
         console.warn('[mls] Failed to process commit for channel', data.channel_id, err);
         try {
           const db2 = await mlsStoreLib.openStore(currentUserId, getDeviceId());
+          const localEpochBeforeCatchup = await mlsStoreLib.getGroupEpoch(db2, data.channel_id);
+          console.info('[mls] starting catchup', {
+            channelId: data.channel_id,
+            localEpochBeforeCatchup: localEpochBeforeCatchup ?? null,
+          });
           const credential2 = await mlsStoreLib.getCredential(db2);
           const deps2 = { db: db2, token, credential: credential2, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
           await mlsGroup.catchupCommits(deps2, data.channel_id);
+          const localEpochAfterCatchup = await mlsStoreLib.getGroupEpoch(db2, data.channel_id);
+          console.info('[mls] catchup finished', {
+            channelId: data.channel_id,
+            localEpochAfterCatchup: localEpochAfterCatchup ?? null,
+          });
         } catch (catchupErr) {
           console.warn('[mls] Catchup also failed for channel', data.channel_id, catchupErr);
         }
@@ -871,22 +1088,6 @@ export default function ServerLayout() {
         const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
         const failures = mlsJoinFailuresRef.current;
 
-        // Guild metadata group
-        const metaKey = `guild-meta:${serverId}`;
-        if ((failures.get(metaKey) ?? 0) < MAX_JOIN_RETRIES) {
-          try {
-            const metaEpoch = await mlsStoreLib.getGroupEpoch(db, metaKey);
-            if (metaEpoch == null) {
-              await mlsGroup.joinGuildMetadataGroup(deps, serverId);
-              bumpMetadataRefresh();
-            }
-          } catch (err) {
-            failures.set(metaKey, (failures.get(metaKey) ?? 0) + 1);
-            console.warn('[mls] Failed to join guild metadata group for', serverId,
-              `(attempt ${failures.get(metaKey)}/${MAX_JOIN_RETRIES})`, err);
-          }
-        }
-
         // Text channel groups (includes voice channels - they have built-in chat)
         for (const chId of chatChannelIds) {
           if ((failures.get(chId) ?? 0) >= MAX_JOIN_RETRIES) continue;
@@ -917,7 +1118,7 @@ export default function ServerLayout() {
 
     joinMissingGroups();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channels, currentUserId, authToken, serverId, token, bumpMetadataRefresh]);
+  }, [channels, currentUserId, authToken, serverId, token]);
 
   // ── MLS self-update timer: rotate leaf node key material every 24h ────
 
@@ -1235,19 +1436,8 @@ export default function ServerLayout() {
       setMemberDrawerOpen(false);
     }
     // Navigate to the channel using instance-aware URL pattern.
-    if (activeGuild?.instanceUrl && instanceParam) {
-      const host = (() => {
-        try { return new URL(activeGuild.instanceUrl).host; } catch { return null; }
-      })();
-      const slug = slugify(activeGuild._localName ?? activeGuild.name ?? activeGuild.id ?? '');
-      if (host) {
-        navigateRef.current(`/${host}/${slug}/${channel.id}`);
-      } else {
-        navigateRef.current(`/servers/${serverId}/channels/${channel.id}`);
-      }
-    } else {
-      navigateRef.current(`/servers/${serverId}/channels/${channel.id}`);
-    }
+    const path = buildGuildPath(activeGuild, channel.id);
+    navigateRef.current(path ?? `/servers/${serverId}/channels/${channel.id}`);
     if (channel.type === 'voice') {
       activeVoiceMemberIdsRef.current = memberIds;
       setActiveVoiceChannel(channel);
@@ -1258,22 +1448,11 @@ export default function ServerLayout() {
     const channel = pendingVoiceSwitch;
     setPendingVoiceSwitch(null);
     if (!channel) return;
-    if (activeGuild?.instanceUrl && instanceParam) {
-      const host = (() => {
-        try { return new URL(activeGuild.instanceUrl).host; } catch { return null; }
-      })();
-      const slug = slugify(activeGuild._localName ?? activeGuild.name ?? activeGuild.id ?? '');
-      if (host) {
-        navigateRef.current(`/${host}/${slug}/${channel.id}`);
-      } else {
-        navigateRef.current(`/servers/${serverId}/channels/${channel.id}`);
-      }
-    } else {
-      navigateRef.current(`/servers/${serverId}/channels/${channel.id}`);
-    }
+    const path = buildGuildPath(activeGuild, channel.id);
+    navigateRef.current(path ?? `/servers/${serverId}/channels/${channel.id}`);
     activeVoiceMemberIdsRef.current = memberIds;
     setActiveVoiceChannel(channel);
-  }, [pendingVoiceSwitch, memberIds, serverId, activeGuild, instanceParam]);
+  }, [pendingVoiceSwitch, memberIds, serverId, activeGuild]);
 
   /** Parse channel names from base64 metadata before setting state. */
   const parseChannelNames = useCallback((chans) =>
@@ -1378,6 +1557,8 @@ export default function ServerLayout() {
           onGuildSelect={handleGuildSelect}
           onGuildCreated={handleGuildCreated}
           getMetadataKey={getMetadataKey}
+          getMetadataKeys={getMetadataKeys}
+          rememberMetadataKey={rememberMetadataKey}
           instanceData={instanceData}
           userRole={myRole}
           userPermissionLevel={myPermissionLevel}
@@ -1438,6 +1619,8 @@ export default function ServerLayout() {
       onDmOpen={handleDmOpen}
       isDmActive={dmMode || activeGuild?.isDm}
       getMetadataKey={getMetadataKey}
+      getMetadataKeys={getMetadataKeys}
+      rememberMetadataKey={rememberMetadataKey}
       instanceData={instanceData}
       userRole={myRole}
       userPermissionLevel={myPermissionLevel}
@@ -1462,6 +1645,7 @@ export default function ServerLayout() {
       serverId={serverId}
       guildName={activeGuildName ?? activeGuild?.name}
       instanceUrl={activeGuild?.instanceUrl ?? null}
+      getGuildMetadataKey={getActiveGuildMetadataKey}
       instanceData={instanceData}
       channels={channels}
       myRole={myRole}

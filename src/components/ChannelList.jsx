@@ -320,7 +320,7 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
   );
 }
 
-function InviteModal({ getToken, serverId, guildName, instanceUrl, onClose }) {
+function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetadataKey, onClose }) {
   const [isOpen, setIsOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
@@ -357,9 +357,37 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, onClose }) {
 
   // Embed guild name in URL fragment so the invite page can display it without
   // the server knowing which guild the link is for (backend opacity model).
-  const inviteLink = inviteCode
-    ? buildGuildInviteLink(window.location.origin, instanceUrl, inviteCode, guildName)
-    : '';
+  const [inviteLink, setInviteLink] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    async function buildInviteLinkValue() {
+      if (!inviteCode) {
+        setInviteLink('');
+        return;
+      }
+      try {
+        const keyBytes = typeof getGuildMetadataKey === 'function'
+          ? await getGuildMetadataKey()
+          : null;
+        if (!cancelled) {
+          setInviteLink(
+            buildGuildInviteLink(window.location.origin, instanceUrl, inviteCode, guildName, keyBytes),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setInviteLink(
+            buildGuildInviteLink(window.location.origin, instanceUrl, inviteCode, guildName),
+          );
+        }
+      }
+    }
+    buildInviteLinkValue();
+    return () => {
+      cancelled = true;
+    };
+  }, [getGuildMetadataKey, guildName, instanceUrl, inviteCode]);
 
   const handleCopy = async () => {
     try {
@@ -760,6 +788,7 @@ export default function ChannelList({
   serverId,
   guildName,
   instanceUrl = null,
+  getGuildMetadataKey = null,
   instanceData,
   channels,
   myRole,
@@ -1172,6 +1201,7 @@ export default function ChannelList({
           serverId={serverId}
           guildName={guildName}
           instanceUrl={instanceUrl}
+          getGuildMetadataKey={getGuildMetadataKey}
           onClose={() => setShowInviteModal(false)}
         />
       )}

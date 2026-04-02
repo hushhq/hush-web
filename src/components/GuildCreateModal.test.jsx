@@ -1,32 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('../lib/api', () => ({
   createGuild: vi.fn(),
-  updateGuildMetadata: vi.fn(),
   listServerTemplates: vi.fn(),
 }));
 
-vi.mock('../lib/mlsGroup', () => ({
-  createGuildMetadataGroup: vi.fn().mockResolvedValue(undefined),
-  exportGuildMetadataKey: vi.fn().mockResolvedValue({ metadataKeyBytes: new Uint8Array(32) }),
-}));
-
-vi.mock('../lib/mlsStore', () => ({
-  openStore: vi.fn().mockResolvedValue(null), // null db → skips MLS path
-  getCredential: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock('../lib/hushCrypto', () => ({
-  init: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('../lib/guildMetadata', () => ({
+  generateMetadataKeyBytes: vi.fn(() => new Uint8Array(32).fill(7)),
   encryptGuildMetadata: vi.fn().mockResolvedValue(new Uint8Array(0)),
   toBase64: vi.fn(() => 'base64blob'),
   importMetadataKey: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('../lib/guildMetadataKeyStore', () => ({
+  openGuildMetadataKeyStore: vi.fn().mockResolvedValue({ close: vi.fn() }),
+  setGuildMetadataKeyBytes: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../hooks/useAuth', () => ({
@@ -47,6 +39,7 @@ vi.mock('../contexts/InstanceContext', () => ({
 // ── Imports after mocks ───────────────────────────────────────────────────────
 
 import * as apiModule from '../lib/api';
+import * as guildMetadataKeyStore from '../lib/guildMetadataKeyStore';
 import { useInstanceContext } from '../contexts/InstanceContext';
 import GuildCreateModal from './GuildCreateModal';
 
@@ -71,7 +64,19 @@ function renderModal(props = {}) {
     onCreated: vi.fn(),
     activeInstanceUrl: null,
   };
-  return render(<GuildCreateModal {...defaults} {...props} />);
+  return render(
+    <MemoryRouter>
+      <GuildCreateModal {...defaults} {...props} />
+    </MemoryRouter>,
+  );
+}
+
+function getSubmitButton() {
+  const button = document.querySelector('form button[type="submit"]');
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error('submit button not found');
+  }
+  return button;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -81,6 +86,7 @@ describe('GuildCreateModal - instance picker', () => {
     cleanup();
     vi.clearAllMocks();
     apiModule.listServerTemplates.mockResolvedValue([]);
+    guildMetadataKeyStore.openGuildMetadataKeyStore.mockResolvedValue({ close: vi.fn() });
   });
 
   it('renders instance picker dropdown with all connected instances', () => {
@@ -151,7 +157,7 @@ describe('GuildCreateModal - policy annotations', () => {
     // Name must be non-empty - the button has a !name.trim() guard in addition to policy.
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'My Server' } });
 
-    const createBtn = screen.getByRole('button', { name: /^create$/i });
+    const createBtn = getSubmitButton();
     expect(createBtn).not.toBeDisabled();
   });
 
@@ -166,7 +172,7 @@ describe('GuildCreateModal - policy annotations', () => {
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'My Server' } });
 
-    const createBtn = screen.getByRole('button', { name: /^create$/i });
+    const createBtn = getSubmitButton();
     expect(createBtn).not.toBeDisabled();
   });
 
@@ -178,7 +184,7 @@ describe('GuildCreateModal - policy annotations', () => {
     renderModal({ activeInstanceUrl: 'https://a.example.com' });
 
     expect(screen.getByText(/subscription required/i)).toBeInTheDocument();
-    const createBtn = screen.getByRole('button', { name: /^create$/i });
+    const createBtn = getSubmitButton();
     expect(createBtn).toBeDisabled();
   });
 
@@ -190,7 +196,7 @@ describe('GuildCreateModal - policy annotations', () => {
     renderModal({ activeInstanceUrl: 'https://a.example.com' });
 
     expect(screen.getByText(/managed by the instance admin/i)).toBeInTheDocument();
-    const createBtn = screen.getByRole('button', { name: /^create$/i });
+    const createBtn = getSubmitButton();
     expect(createBtn).toBeDisabled();
   });
 
@@ -253,13 +259,12 @@ describe('GuildCreateModal - submission', () => {
     ]);
     useInstanceContext.mockReturnValue(ctx);
     apiModule.createGuild.mockResolvedValue({ id: 'new-guild' });
-    apiModule.updateGuildMetadata.mockResolvedValue(undefined);
 
     const onCreated = vi.fn();
     renderModal({ activeInstanceUrl: 'https://a.example.com', onCreated });
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'My New Server' } });
-    fireEvent.submit(screen.getByRole('button', { name: /^create$/i }).closest('form'));
+    fireEvent.submit(getSubmitButton().closest('form'));
 
     await waitFor(() => {
       expect(apiModule.createGuild).toHaveBeenCalled();
@@ -268,7 +273,7 @@ describe('GuildCreateModal - submission', () => {
     });
   });
 
-  it('passes selectedInstanceUrl as baseUrl to createGuild', async () => {
+  it('encrypts metadata and passes selectedInstanceUrl as baseUrl to createGuild', async () => {
     useInstanceContext.mockReturnValue(makeCtx([
       ['https://a.example.com', { connectionState: 'connected', handshakeData: { server_creation_policy: 'open' }, jwt: 'jwt-a' }],
     ]));
@@ -277,17 +282,19 @@ describe('GuildCreateModal - submission', () => {
     renderModal({ activeInstanceUrl: 'https://a.example.com', onCreated: vi.fn() });
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Server Name' } });
-    fireEvent.submit(screen.getByRole('button', { name: /^create$/i }).closest('form'));
+    fireEvent.submit(getSubmitButton().closest('form'));
 
     await waitFor(() => {
-      // createGuild is called with (token, encryptedMetadata, templateId, baseUrl, name)
-      // templateId is null when no templates are loaded (listServerTemplates returns [])
       expect(apiModule.createGuild).toHaveBeenCalledWith(
         'jwt-a',
-        null,
+        'base64blob',
         null,
         'https://a.example.com',
-        'Server Name',
+      );
+      expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).toHaveBeenCalledWith(
+        expect.any(Object),
+        'new-guild',
+        expect.any(Uint8Array),
       );
     });
   });
@@ -299,7 +306,7 @@ describe('GuildCreateModal - submission', () => {
 
     renderModal({ activeInstanceUrl: 'https://a.example.com' });
 
-    fireEvent.submit(screen.getByRole('button', { name: /^create$/i }).closest('form'));
+    fireEvent.submit(getSubmitButton().closest('form'));
 
     await waitFor(() => {
       expect(screen.getByText(/server name is required/i)).toBeInTheDocument();

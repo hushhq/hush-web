@@ -19,11 +19,22 @@ vi.mock('../contexts/InstanceContext', () => ({
 
 vi.mock('../lib/guildMetadata', () => ({
   decodeGuildNameFromInvite: vi.fn((encoded) => decodeURIComponent(encoded)),
+  decodeGuildMetadataKeyFromInvite: vi.fn(() => new Uint8Array([1, 2, 3, 4])),
+}));
+
+vi.mock('../lib/guildMetadataKeyStore', () => ({
+  openGuildMetadataKeyStore: vi.fn().mockResolvedValue({ close: vi.fn() }),
+  setGuildMetadataKeyBytes: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../hooks/useAuth', () => ({
+  getDeviceId: vi.fn(() => 'device-1'),
 }));
 
 // ── Imports after mocks ───────────────────────────────────────────────────────
 
 import * as apiModule from '../lib/api';
+import * as guildMetadataKeyStore from '../lib/guildMetadataKeyStore';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
 import Invite from './Invite';
@@ -50,6 +61,7 @@ function makeAuthState(overrides = {}) {
     isAuthenticated: false,
     hasSession: false,
     needsUnlock: false,
+    user: { id: 'u1' },
     ...overrides,
   };
 }
@@ -78,6 +90,7 @@ describe('Invite - same-instance flow', () => {
     vi.clearAllMocks();
     window.location.hash = '';
     sessionStorage.clear();
+    guildMetadataKeyStore.openGuildMetadataKeyStore.mockResolvedValue({ close: vi.fn() });
   });
 
   afterEach(() => {
@@ -122,6 +135,28 @@ describe('Invite - same-instance flow', () => {
 
     await waitFor(() => {
       expect(apiModule.claimInvite).toHaveBeenCalledWith('local-jwt', 'abc123', window.location.origin);
+    });
+  });
+
+  it('stores guild metadata key from the invite fragment after a successful claim', async () => {
+    useAuth.mockReturnValue(makeAuthState({ hasSession: true }));
+    useInstanceContext.mockReturnValue(makeInstanceContext({
+      instanceStates: new Map([
+        [window.location.origin, { connectionState: 'connected', jwt: 'local-jwt' }],
+      ]),
+    }));
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-1' });
+    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-1' });
+    window.location.hash = '#name=Secret%20Guild&mk=encoded-key';
+
+    renderInvite('/invite/abc123');
+
+    await waitFor(() => {
+      expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).toHaveBeenCalledWith(
+        expect.any(Object),
+        'srv-1',
+        new Uint8Array([1, 2, 3, 4]),
+      );
     });
   });
 

@@ -12,6 +12,7 @@ const MAX_SLUG_LENGTH = 64;
 
 /** Fallback slug returned for empty or pure-symbol names. */
 const FALLBACK_SLUG = 'unnamed';
+const GUILD_ROUTE_SEPARATOR = '--';
 
 // ---------------------------------------------------------------------------
 // slugify
@@ -84,4 +85,51 @@ export function resolveGuildSlug(name, existingSlugs) {
     const candidate = `${base}-${counter}`;
     if (!taken.has(candidate)) return candidate;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Guild route refs
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a stable guild route reference.
+ *
+ * The readable slug remains first for human-friendly URLs, but the guild ID is
+ * appended as a stable suffix so route resolution does not depend on decrypted
+ * metadata being available during boot.
+ *
+ * @param {string} name - Best available display name for the guild.
+ * @param {string} guildId - Stable guild UUID.
+ * @returns {string} Route-safe guild reference.
+ */
+export function buildGuildRouteRef(name, guildId) {
+  const slug = slugify(name ?? guildId);
+  if (!guildId) {
+    return slug;
+  }
+  return `${slug}${GUILD_ROUTE_SEPARATOR}${guildId}`;
+}
+
+/**
+ * Parse a guild route reference produced by buildGuildRouteRef().
+ *
+ * Legacy slug-only routes remain supported and return a null guildId.
+ *
+ * @param {string} routeRef
+ * @returns {{ guildId: string|null, slug: string }}
+ */
+export function parseGuildRouteRef(routeRef) {
+  if (typeof routeRef !== 'string' || routeRef.length === 0) {
+    return { guildId: null, slug: FALLBACK_SLUG };
+  }
+
+  const separatorIndex = routeRef.lastIndexOf(GUILD_ROUTE_SEPARATOR);
+  if (separatorIndex <= 0) {
+    return { guildId: null, slug: routeRef };
+  }
+
+  return {
+    guildId: routeRef.slice(separatorIndex + GUILD_ROUTE_SEPARATOR.length) || null,
+    slug: routeRef.slice(0, separatorIndex) || FALLBACK_SLUG,
+  };
 }

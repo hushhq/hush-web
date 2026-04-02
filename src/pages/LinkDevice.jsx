@@ -8,6 +8,10 @@ import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
 import * as mlsStore from '../lib/mlsStore';
 import {
+  exportGuildMetadataKeySnapshot,
+  openGuildMetadataKeyStore,
+} from '../lib/guildMetadataKeyStore';
+import {
   consumeDeviceLinkResult,
   createDeviceLinkRequest,
   resolveDeviceLinkRequest,
@@ -307,9 +311,12 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
     setStatus('');
     setIsApproving(true);
     let historyDb = null;
+    let metadataDb = null;
     try {
       historyDb = await mlsStore.openStore(user.id, getDeviceId());
       const historySnapshot = await mlsStore.exportHistorySnapshot(historyDb);
+      metadataDb = await openGuildMetadataKeyStore(user.id, getDeviceId());
+      const guildMetadataKeySnapshot = await exportGuildMetadataKeySnapshot(metadataDb);
       const transferBundle = encodeTransferBundle({
         userId: user.id,
         username: user.username,
@@ -318,6 +325,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
         rootPrivateKey: identityKeyRef.current.privateKey,
         rootPublicKey: identityKeyRef.current.publicKey,
         historySnapshot,
+        guildMetadataKeySnapshot,
       });
       const certificate = await certifyDevice(
         base64ToBytes(claim.devicePublicKey),
@@ -343,6 +351,11 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
     } finally {
       try {
         historyDb?.close();
+      } catch {
+        // Ignore close errors.
+      }
+      try {
+        metadataDb?.close();
       } catch {
         // Ignore close errors.
       }

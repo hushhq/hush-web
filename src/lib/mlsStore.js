@@ -217,16 +217,20 @@ function initStorageBridge(db) {
  *
  * @param {string} userId - Local user ID (UUID)
  * @param {string} deviceId - Local device ID
+ * @param {{ initBridge?: boolean }} [options]
  * @returns {Promise<IDBDatabase>}
  */
-function openStoreWithPrefix(dbNamePrefix, userId, deviceId) {
+function openStoreWithPrefix(dbNamePrefix, userId, deviceId, options = {}) {
+  const { initBridge = true } = options;
   const dbName = `${dbNamePrefix}${userId}-${deviceId}`;
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, DB_VERSION);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       const db = req.result;
-      initStorageBridge(db);
+      if (initBridge) {
+        initStorageBridge(db);
+      }
       // Request persistent storage so iOS WKWebView doesn't evict MLS state.
       navigator.storage?.persist?.().catch(() => {});
       resolve(db);
@@ -272,12 +276,16 @@ export function openStore(userId, deviceId) {
  * new device can decrypt pre-link history while its own MLS identity handles
  * future traffic.
  *
+ * It intentionally does not rebind the global MLS StorageProvider bridge.
+ * History reads use preloadGroupState() against this DB, while active group
+ * operations must continue using the primary store's bridge.
+ *
  * @param {string} userId
  * @param {string} deviceId
  * @returns {Promise<IDBDatabase>}
  */
 export function openHistoryStore(userId, deviceId) {
-  return openStoreWithPrefix(HISTORY_DB_NAME_PREFIX, userId, deviceId);
+  return openStoreWithPrefix(HISTORY_DB_NAME_PREFIX, userId, deviceId, { initBridge: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +442,44 @@ export async function preloadGroupState(db) {
         storageCache.set(cacheKey, new Uint8Array(row.value));
       }
     }
+  }
+}
+
+/**
+ * Runs a read-only callback with the storage cache temporarily scoped to a
+ * history DB.
+ *
+ * The active cache is saved, cleared, the history DB's group state is preloaded,
+ * the callback runs, and then the active cache is restored. This ensures WASM
+ * MLS reads inside the callback see only data from the history DB, not stale
+ * entries left by the active store's preloadGroupState().
+ *
+ * This helper is ONLY safe for read-only MLS export/derivation operations.
+ * Without it, preloadGroupState(historyDb) silently skips keys that are already
+ * present in the shared cache from the active store, causing history operations
+ * to read active-store state instead.
+ *
+ * NOTE: The global window.mlsStorageBridge is still bound to the active DB's
+ * IDB handle. Any fire-and-forget writes the WASM StorageProvider makes during
+ * the callback will land in the active DB. Because of that, this helper MUST
+ * NOT be used for stateful operations like message processing or commit
+ * application. The primary goal is cache-read correctness for history-backed
+ * export/derivation operations.
+ *
+ * @param {IDBDatabase} historyDb - Opened history store DB
+ * @param {(db: IDBDatabase) => Promise<T>} fn - Read-only callback
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withReadOnlyHistoryScope(historyDb, fn) {
+  const saved = new Map(storageCache);
+  storageCache.clear();
+  try {
+    await preloadGroupState(historyDb);
+    return await fn(historyDb);
+  } finally {
+    storageCache.clear();
+    for (const [k, v] of saved) storageCache.set(k, v);
   }
 }
 

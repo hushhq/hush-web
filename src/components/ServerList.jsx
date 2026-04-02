@@ -303,6 +303,8 @@ function GroupSection({
  *   onGuildSelect: (guild: object) => void,
  *   onGuildCreated: (guild: object) => void,
  *   getMetadataKey?: (guildId: string) => Promise<Uint8Array|null>,
+ *   getMetadataKeys?: (guildId: string) => Promise<Uint8Array[]|null>,
+ *   rememberMetadataKey?: (guildId: string, keyBytes: Uint8Array) => Promise<void>,
  *   instanceData?: object|null,
  *   userRole?: string,
  *   userPermissionLevel?: number,
@@ -318,6 +320,8 @@ export default function ServerList({
   onDmOpen,
   isDmActive = false,
   getMetadataKey = null,
+  getMetadataKeys = null,
+  rememberMetadataKey = null,
   instanceData,
   userRole = 'member',
   userPermissionLevel = 0,
@@ -371,7 +375,7 @@ export default function ServerList({
   // ── Metadata decryption ───────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!getMetadataKey || guilds.length === 0) return;
+    if ((!getMetadataKey && !getMetadataKeys) || guilds.length === 0) return;
 
     for (const guild of guilds) {
       const guildId = guild.id;
@@ -395,10 +399,29 @@ export default function ServerList({
             });
             return;
           }
-          const keyBytes = await getMetadataKey(guildId);
-          if (!keyBytes) return;
-          const cryptoKey = await importMetadataKey(keyBytes);
-          const { name, icon } = await decryptGuildMetadata(cryptoKey, raw);
+          const keyCandidates = getMetadataKeys
+            ? (await getMetadataKeys(guildId))
+            : [await getMetadataKey(guildId)].filter(Boolean);
+          if (!keyCandidates?.length) return;
+
+          let decrypted = null;
+          for (const keyBytes of keyCandidates) {
+            try {
+              const cryptoKey = await importMetadataKey(keyBytes);
+              decrypted = await decryptGuildMetadata(cryptoKey, raw);
+              if (typeof rememberMetadataKey === 'function') {
+                await rememberMetadataKey(guildId, keyBytes);
+              }
+              break;
+            } catch {
+              // Try the next candidate key.
+            }
+          }
+          if (!decrypted) return;
+          const { name, icon } = decrypted;
+          if (name) {
+            guild._localName = name;
+          }
           setMetadataCache((prev) => {
             const next = new Map(prev);
             next.set(guildId, { name, icon });
@@ -411,7 +434,7 @@ export default function ServerList({
         }
       })();
     }
-  }, [guilds, getMetadataKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [guilds, getMetadataKey, getMetadataKeys, rememberMetadataKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Display name resolution ───────────────────────────────────────────────
 
@@ -487,12 +510,21 @@ export default function ServerList({
 
       const invite = await createGuildInvite(token, guild.id, {}, baseUrl);
       const guildName = metadataCache.get(guild.id)?.name ?? guild.name ?? guild.id;
-      const inviteLink = buildGuildInviteLink(window.location.origin, guild.instanceUrl, invite.code, guildName);
+      const metadataKeyBytes = typeof getMetadataKey === 'function'
+        ? await getMetadataKey(guild.id)
+        : null;
+      const inviteLink = buildGuildInviteLink(
+        window.location.origin,
+        guild.instanceUrl,
+        invite.code,
+        guildName,
+        metadataKeyBytes,
+      );
       await navigator.clipboard.writeText(inviteLink);
     } catch {
       // Clipboard API not available in this environment - silently skip.
     }
-  }, [getToken, getTokenForInstance, metadataCache]);
+  }, [getMetadataKey, getToken, getTokenForInstance, metadataCache]);
 
   const handleMarkRead = useCallback((_guild) => {
     // Phase U scaffolding - unread tracking wired in a later plan.

@@ -29,6 +29,7 @@ function makeMockDeps() {
         messageBytes: new Uint8Array([1, 2, 3]),
         localId: 'mock-local-id',
       }),
+      catchupCommits: vi.fn().mockResolvedValue(undefined),
       decryptMessage: vi.fn().mockResolvedValue({
         plaintext: 'decrypted-hello',
         type: 'application',
@@ -159,6 +160,55 @@ describe('useMLS', () => {
       expect(passedChannelId).toBe('channel-decrypt');
       expect(passedBytes).toBe(messageBytes);
       expect(result).toBe('decrypted-hello');
+    });
+
+    it('retries decrypt after catchup before failing', async () => {
+      mockDeps.mlsGroup.decryptMessage
+        .mockRejectedValueOnce(new Error('group.process_message failed: ValidationError(UnableToDecrypt(AeadError))'))
+        .mockResolvedValueOnce({
+          plaintext: 'after-catchup',
+          type: 'application',
+          epoch: 2,
+          senderIdentity: 'sender-123',
+        });
+
+      const { decryptFromChannel } = useMLS({
+        getStore,
+        getToken,
+        channelId: 'channel-decrypt',
+        _deps: mockDeps,
+      });
+
+      const result = await decryptFromChannel(new Uint8Array([10, 20, 30]));
+
+      expect(mockDeps.mlsGroup.catchupCommits).toHaveBeenCalledTimes(1);
+      expect(mockDeps.mlsGroup.catchupCommits).toHaveBeenCalledWith(
+        expect.objectContaining({ db: mockDb, token: 'mock-jwt-token' }),
+        'channel-decrypt',
+      );
+      expect(mockDeps.mlsGroup.decryptMessage).toHaveBeenCalledTimes(2);
+      expect(result).toBe('after-catchup');
+    });
+
+    it('rethrows the primary decrypt error when catchup and retry do not recover', async () => {
+      const primaryError = new Error('group.process_message failed: ValidationError(UnableToDecrypt(AeadError))');
+      mockDeps.mlsGroup.decryptMessage
+        .mockRejectedValueOnce(primaryError)
+        .mockRejectedValueOnce(new Error('retry failed'));
+      mockDeps.mlsGroup.catchupCommits.mockRejectedValueOnce(new Error('catchup failed'));
+
+      const getHistoryStore = vi.fn().mockResolvedValue(makeMockDb());
+
+      const { decryptFromChannel } = useMLS({
+        getStore,
+        getHistoryStore,
+        getToken,
+        channelId: 'channel-decrypt',
+        _deps: mockDeps,
+      });
+
+      await expect(decryptFromChannel(new Uint8Array([10, 20, 30]))).rejects.toThrow(primaryError.message);
+      expect(getHistoryStore).not.toHaveBeenCalled();
     });
 
     it('throws on non-application messages (plaintext is null)', async () => {

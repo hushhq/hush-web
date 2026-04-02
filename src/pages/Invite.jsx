@@ -3,7 +3,15 @@ import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { getInviteInfo, claimInvite } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
-import { decodeGuildNameFromInvite } from '../lib/guildMetadata';
+import {
+  decodeGuildMetadataKeyFromInvite,
+  decodeGuildNameFromInvite,
+} from '../lib/guildMetadata';
+import {
+  openGuildMetadataKeyStore,
+  setGuildMetadataKeyBytes,
+} from '../lib/guildMetadataKeyStore';
+import { getDeviceId } from '../hooks/useAuth';
 
 
 function inviteErrorMessage(err) {
@@ -43,7 +51,7 @@ export default function Invite() {
   const { code, instance: instanceParam } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { hasSession, needsUnlock } = useAuth();
+  const { hasSession, needsUnlock, user } = useAuth();
   const { bootInstance, getTokenForInstance } = useInstanceContext();
 
   /** Whether this is a cross-instance invite. */
@@ -70,7 +78,26 @@ export default function Invite() {
     return encoded ? decodeGuildNameFromInvite(encoded) : null;
   }, []);
 
+  const guildMetadataKeyFromFragment = useMemo(() => {
+    const hash = window.location.hash.slice(1);
+    const params = new URLSearchParams(hash);
+    const encoded = params.get('mk');
+    return encoded ? decodeGuildMetadataKeyFromInvite(encoded) : null;
+  }, []);
+
   const guildName = guildNameFromFragment ?? 'a server';
+
+  const storeInviteMetadataKey = useCallback(async (serverId) => {
+    if (!serverId || !user?.id || !(guildMetadataKeyFromFragment instanceof Uint8Array)) {
+      return;
+    }
+    const db = await openGuildMetadataKeyStore(user.id, getDeviceId());
+    try {
+      await setGuildMetadataKeyBytes(db, serverId, guildMetadataKeyFromFragment);
+    } finally {
+      db.close();
+    }
+  }, [guildMetadataKeyFromFragment, user?.id]);
 
   // ── Invite info fetch ──────────────────────────────────────────────────
 
@@ -144,6 +171,7 @@ export default function Invite() {
         if (cancelled) return;
 
         const serverId = result?.serverId ?? invite?.serverId;
+        await storeInviteMetadataKey(serverId);
         if (serverId) {
           navigate(`/servers/${serverId}/channels`, { replace: true });
         } else {
@@ -183,6 +211,7 @@ export default function Invite() {
       setJoining(true);
       const result = await claimInvite(jwt, code, instanceUrl);
       const serverId = result?.serverId ?? invite?.serverId;
+      await storeInviteMetadataKey(serverId);
 
       // Step 4: Navigate to the guild using instance-aware URL.
       if (serverId) {
@@ -196,7 +225,7 @@ export default function Invite() {
       setBooting(false);
       setJoining(false);
     }
-  }, [instanceUrl, code, bootInstance, getTokenForInstance, invite, instanceParam, navigate]);
+  }, [instanceUrl, code, bootInstance, getTokenForInstance, invite, instanceParam, navigate, storeInviteMetadataKey]);
 
   // ── Unauthenticated flow: redirect to / with pending invite queued ────
 
