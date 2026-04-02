@@ -32,11 +32,11 @@ vi.mock('../hooks/useDevices', () => ({
   useDevices: vi.fn(() => ({
     audioDevices: [],
     videoDevices: [],
-    selectedMicId: null,
+    selectedMicId: 'mic-1',
     selectedWebcamId: null,
     selectMic: vi.fn(),
     selectWebcam: vi.fn(),
-    hasSavedMic: false,
+    hasSavedMic: true,
     hasSavedWebcam: false,
     requestPermission: vi.fn(),
   })),
@@ -56,6 +56,7 @@ vi.mock('../components/Controls', () => ({
 import { useAuth } from '../contexts/AuthContext';
 import { useRoom } from '../hooks/useRoom';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useDevices } from '../hooks/useDevices';
 
 function renderVoiceChannel(channel, serverId = 's1') {
   return render(
@@ -72,9 +73,24 @@ function renderVoiceChannel(channel, serverId = 's1') {
 
 describe('VoiceChannel', () => {
   beforeEach(() => {
+    const publishMic = vi.fn();
+    const muteMic = vi.fn();
+    const unmuteMic = vi.fn();
+
     vi.mocked(useBreakpoint).mockReturnValue('desktop');
     vi.mocked(useAuth).mockReturnValue({
       user: { id: 'user-1', displayName: 'Test User' },
+    });
+    vi.mocked(useDevices).mockReturnValue({
+      audioDevices: [],
+      videoDevices: [],
+      selectedMicId: 'mic-1',
+      selectedWebcamId: null,
+      selectMic: vi.fn(),
+      selectWebcam: vi.fn(),
+      hasSavedMic: true,
+      hasSavedWebcam: false,
+      requestPermission: vi.fn(),
     });
     vi.mocked(useRoom).mockReturnValue({
       isReady: true,
@@ -89,8 +105,10 @@ describe('VoiceChannel', () => {
       changeQuality: vi.fn(),
       publishWebcam: vi.fn(),
       unpublishWebcam: vi.fn(),
-      publishMic: vi.fn(),
+      publishMic,
       unpublishMic: vi.fn(),
+      muteMic,
+      unmuteMic,
       availableScreens: new Map(),
       watchedScreens: new Set(),
       loadingScreens: new Set(),
@@ -153,5 +171,70 @@ describe('VoiceChannel', () => {
     expect(ControlsProps.showScreenShare).toBe(true);
     expect(ControlsProps.showWebcam).toBe(true);
     expect(ControlsProps.showQualityPicker).toBe(true);
+  });
+
+  it('deafens by muting the active mic and restores it on undeafen', async () => {
+    vi.mocked(useBreakpoint).mockReturnValue('mobile');
+
+    const publishMic = vi.fn();
+    const muteMic = vi.fn(() => Promise.resolve());
+    const unmuteMic = vi.fn(() => Promise.resolve());
+
+    vi.mocked(useRoom).mockReturnValue({
+      isReady: true,
+      error: null,
+      localTracks: new Map(),
+      remoteTracks: new Map(),
+      participants: [],
+      connectRoom: mockConnectRoom,
+      disconnectRoom: mockDisconnectRoom,
+      publishScreen: vi.fn(),
+      unpublishScreen: vi.fn(),
+      changeQuality: vi.fn(),
+      publishWebcam: vi.fn(),
+      unpublishWebcam: vi.fn(),
+      publishMic,
+      unpublishMic: vi.fn(),
+      muteMic,
+      unmuteMic,
+      availableScreens: new Map(),
+      watchedScreens: new Set(),
+      loadingScreens: new Set(),
+      watchScreen: vi.fn(),
+      unwatchScreen: vi.fn(),
+      isE2EEEnabled: false,
+      voiceEpoch: null,
+      isVoiceReconnecting: false,
+    });
+
+    const channel = {
+      id: 'ch1',
+      name: 'voice-1',
+      serverId: 's1',
+      type: 'voice',
+      voiceMode: 'quality',
+    };
+
+    renderVoiceChannel(channel);
+
+    await waitFor(() => {
+      expect(ControlsProps).not.toBeNull();
+    });
+
+    await ControlsProps.onMic();
+
+    expect(publishMic).toHaveBeenCalledWith('mic-1');
+
+    await ControlsProps.onDeafen();
+
+    await waitFor(() => {
+      expect(muteMic).toHaveBeenCalledTimes(1);
+    });
+
+    await ControlsProps.onDeafen();
+
+    await waitFor(() => {
+      expect(unmuteMic).toHaveBeenCalledTimes(1);
+    });
   });
 });
