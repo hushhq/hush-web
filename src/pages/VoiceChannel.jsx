@@ -79,6 +79,8 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const showChatPanelRef = useRef(false);
   const showParticipantsPanelRef = useRef(false);
   const seenParticipantIdsRef = useRef(null);
+  const isMicOnRef = useRef(false);
+  const isDeafenedRef = useRef(false);
 
   const roomName = `channel-${channel.id}`;
   const isLowLatency = channel.voiceMode === 'low-latency';
@@ -252,6 +254,12 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     if (!isScreenSharing) setLocalScreenWatched(false);
   }, [isScreenSharing]);
   useEffect(() => {
+    isMicOnRef.current = isMicOn;
+  }, [isMicOn]);
+  useEffect(() => {
+    isDeafenedRef.current = isDeafened;
+  }, [isDeafened]);
+  useEffect(() => {
     if (!qualityChangeError) return;
     const t = setTimeout(() => setQualityChangeError(null), 4000);
     return () => clearTimeout(t);
@@ -371,28 +379,39 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   /** Tracks whether mic was on before deafen, so undeafen can restore it. */
   const micBeforeDeafenRef = useRef(false);
 
-  const handleDeafen = useCallback(() => {
-    setIsDeafened((prev) => {
-      const next = !prev;
-      // Remote playback can be attached to hidden audio tags or video tiles.
-      document.querySelectorAll('audio[autoplay], video[autoplay]').forEach((el) => {
-        el.muted = next;
-      });
-      if (next) {
-        // Deafening: save mic state and mute if on
-        micBeforeDeafenRef.current = isMicOn;
-        if (isMicOn) {
-          muteMic().then(() => setIsMicOn(false));
-        }
-      } else {
-        // Undeafening: restore mic if it was on before
-        if (micBeforeDeafenRef.current && micPublishedRef.current) {
-          unmuteMic().then(() => setIsMicOn(true));
-        }
-      }
-      return next;
+  const setVoicePlaybackMuted = useCallback((next) => {
+    document.querySelectorAll('audio[autoplay], video[autoplay]').forEach((el) => {
+      el.muted = next;
     });
-  }, [isMicOn, muteMic, unmuteMic]);
+  }, []);
+
+  const setVoiceDeafened = useCallback(async (next) => {
+    if (next === isDeafenedRef.current) {
+      return;
+    }
+
+    setVoicePlaybackMuted(next);
+
+    if (next) {
+      micBeforeDeafenRef.current = isMicOnRef.current;
+      if (isMicOnRef.current) {
+        await muteMic();
+        isMicOnRef.current = false;
+        setIsMicOn(false);
+      }
+    } else if (micBeforeDeafenRef.current && micPublishedRef.current) {
+      await unmuteMic();
+      isMicOnRef.current = true;
+      setIsMicOn(true);
+    }
+
+    isDeafenedRef.current = next;
+    setIsDeafened(next);
+  }, [muteMic, setVoicePlaybackMuted, unmuteMic]);
+
+  const handleDeafen = useCallback(() => {
+    return setVoiceDeafened(!isDeafenedRef.current);
+  }, [setVoiceDeafened]);
 
   // Expose controls to parent via ref (for VoiceConnectedPanel + UserPanel)
   const handleMicRef = useRef(handleMic);

@@ -197,6 +197,44 @@ describe('UserSettingsModal', () => {
     expect(mockRefreshDevices).toHaveBeenCalled();
   });
 
+  it('waits for voice isolation to finish before starting the mic test', async () => {
+    let resolveDeafen;
+    const deafenPromise = new Promise((resolve) => {
+      resolveDeafen = resolve;
+    });
+    const voiceRuntime = {
+      isInVoice: true,
+      isMuted: false,
+      isDeafened: false,
+      onMute: vi.fn(),
+      onDeafen: vi.fn(() => deafenPromise),
+      onMicFilterSettingsChange: vi.fn(),
+    };
+
+    render(<UserSettingsModal onClose={vi.fn()} voiceRuntime={voiceRuntime} />);
+
+    await openAudioVideoTab();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start test/i }));
+    });
+
+    expect(voiceRuntime.onDeafen).toHaveBeenCalledTimes(1);
+    expect(mockMicMonitorStart).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveDeafen();
+      await deafenPromise;
+    });
+
+    expect(mockMicMonitorStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deviceId: 'mic-1',
+        settings: expect.objectContaining({ noiseGateEnabled: true, noiseGateThresholdDb: -50 }),
+      }),
+    );
+  });
+
   it('restarts mic monitoring when the selected microphone changes during a test', async () => {
     micMonitorState.isTesting = true;
 

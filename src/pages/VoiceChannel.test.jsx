@@ -233,16 +233,18 @@ describe('VoiceChannel', () => {
 
     expect(publishMic).toHaveBeenCalledWith('mic-1');
 
+    const muteCallsBeforeDeafen = muteMic.mock.calls.length;
     await ControlsProps.onDeafen();
 
     await waitFor(() => {
-      expect(muteMic).toHaveBeenCalledTimes(1);
+      expect(muteMic.mock.calls.length).toBe(muteCallsBeforeDeafen + 1);
     });
 
+    const unmuteCallsBeforeUndeafen = unmuteMic.mock.calls.length;
     await ControlsProps.onDeafen();
 
     await waitFor(() => {
-      expect(unmuteMic).toHaveBeenCalledTimes(1);
+      expect(unmuteMic.mock.calls.length).toBe(unmuteCallsBeforeUndeafen + 1);
     });
   });
 });
