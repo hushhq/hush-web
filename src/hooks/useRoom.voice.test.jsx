@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { MEDIA_SOURCES } from '../utils/constants';
 
 // ---------------------------------------------------------------------------
 // Stable hoisted mocks - must be created with vi.hoisted() so they exist
@@ -23,6 +24,9 @@ const {
   mockGetMLSVoiceGroupInfo,
   mockSetKey,
   mockE2EEKeyProvider,
+  mockPublishMic,
+  mockTrackMute,
+  mockTrackUnmute,
 } = vi.hoisted(() => {
   const mockSetKey = vi.fn().mockResolvedValue(undefined);
   // Must use a regular function (not arrow) so `new ExternalE2EEKeyProvider()` works
@@ -30,6 +34,17 @@ const {
     this.setKey = mockSetKey;
   }
   const mockE2EEKeyProvider = vi.fn(MockExternalE2EEKeyProvider);
+  const mockTrackMute = vi.fn().mockResolvedValue(undefined);
+  const mockTrackUnmute = vi.fn().mockResolvedValue(undefined);
+  const mockPublishMic = vi.fn().mockImplementation(async (_room, refs) => {
+    refs.localTracksRef.current.set('mic-track', {
+      source: MEDIA_SOURCES.MIC,
+      track: {
+        mute: mockTrackMute,
+        unmute: mockTrackUnmute,
+      },
+    });
+  });
 
   return {
     mockCreateVoiceGroup: vi.fn().mockResolvedValue({ epoch: 0 }),
@@ -49,6 +64,9 @@ const {
     mockGetMLSVoiceGroupInfo: vi.fn().mockRejectedValue(new Error('404')),
     mockSetKey,
     mockE2EEKeyProvider,
+    mockPublishMic,
+    mockTrackMute,
+    mockTrackUnmute,
   };
 });
 
@@ -134,7 +152,7 @@ vi.mock('../lib/trackManager', () => ({
   changeQuality: vi.fn(),
   publishWebcam: vi.fn(),
   unpublishWebcam: vi.fn(),
-  publishMic: vi.fn(),
+  publishMic: mockPublishMic,
   unpublishMic: vi.fn(),
   watchScreen: vi.fn(),
   unwatchScreen: vi.fn(),
@@ -209,6 +227,9 @@ describe('useRoom MLS voice E2EE', () => {
       signingPublicKey: new Uint8Array([2]),
       credentialBytes: new Uint8Array([3]),
     });
+    mockPublishMic.mockClear();
+    mockTrackMute.mockClear();
+    mockTrackUnmute.mockClear();
     mockSetKey.mockResolvedValue(undefined);
   });
 
@@ -378,6 +399,32 @@ describe('useRoom MLS voice E2EE', () => {
     expect(result.current.voiceEpoch).toBeNull();
     expect(result.current.isE2EEEnabled).toBe(false);
     expect(result.current.isVoiceReconnecting).toBe(false);
+  });
+
+  it('muteMic and unmuteMic target the published local microphone track', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      await result.current.publishMic();
+    });
+
+    expect(mockPublishMic).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.muteMic();
+    });
+
+    expect(mockTrackMute).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.unmuteMic();
+    });
+
+    expect(mockTrackUnmute).toHaveBeenCalledTimes(1);
   });
 
   it('MLS failure blocks voice entirely - no unencrypted fallback', async () => {

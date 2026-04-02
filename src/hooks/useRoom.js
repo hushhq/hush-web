@@ -26,7 +26,7 @@ import {
   watchScreen as trackWatchScreen,
   unwatchScreen as trackUnwatchScreen,
 } from '../lib/trackManager';
-import { DEFAULT_QUALITY } from '../utils/constants';
+import { DEFAULT_QUALITY, MEDIA_SOURCES } from '../utils/constants';
 
 /**
  * Decode a base64 string to a Uint8Array.
@@ -778,20 +778,18 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
   // ─── Mute/Unmute Microphone (keeps track published) ──
   const muteMic = useCallback(async () => {
-    const room = roomRef.current;
-    if (!room) return;
+    if (!roomRef.current) return;
     for (const [, info] of localTracksRef.current.entries()) {
-      if (info.source === 'microphone' && info.track) {
+      if (info.source === MEDIA_SOURCES.MIC && info.track) {
         await info.track.mute();
       }
     }
   }, []);
 
   const unmuteMic = useCallback(async () => {
-    const room = roomRef.current;
-    if (!room) return;
+    if (!roomRef.current) return;
     for (const [, info] of localTracksRef.current.entries()) {
-      if (info.source === 'microphone' && info.track) {
+      if (info.source === MEDIA_SOURCES.MIC && info.track) {
         await info.track.unmute();
       }
     }
