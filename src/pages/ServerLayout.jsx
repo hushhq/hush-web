@@ -1690,6 +1690,7 @@ export default function ServerLayout() {
         isInVoice={!!activeVoiceChannel}
         onMute={() => voiceControlsRef.current?.toggleMic()}
         onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
+        onMicDeviceSwitch={() => voiceControlsRef.current?.openMicPicker?.()}
         onAudioOutputSwitch={() => voiceControlsRef.current?.openAudioOutputPicker?.()}
         onMicFilterSettingsChange={(settings) => voiceControlsRef.current?.updateMicFilterSettings?.(settings)}
       />

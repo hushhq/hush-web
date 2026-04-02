@@ -413,6 +413,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         toggleScreenShare: () => handleScreenShareRef.current(),
         switchScreenSource: () => handleSwitchScreenRef.current(),
         toggleWebcam: () => handleWebcamRef.current(),
+        openMicPicker: handleMicDeviceSwitch,
         openAudioOutputPicker: handleAudioOutputSwitch,
         updateMicFilterSettings: (settings) => updateMicFilterSettingsRef.current(settings),
         isScreenSharing,
@@ -432,7 +433,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         is_deafened: isDeafened,
       });
     }
-  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, handleAudioOutputSwitch, handleDeafen, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
+  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, handleAudioOutputSwitch, handleDeafen, handleMicDeviceSwitch, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
 
   const handleWebcamDeviceSwitch = async () => {
     await requestPermission('video');
