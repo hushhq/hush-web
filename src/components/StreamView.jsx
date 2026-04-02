@@ -1,22 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
+import HiddenAudioOutput from './HiddenAudioOutput';
+import {
+  applyAudioOutputSelection,
+  shouldAttachAudioToVideoElement,
+} from '../lib/mediaOutputRouting';
 
-export default function StreamView({ track, audioTrack, label, source, isLocal, onUnwatch, objectFit, standByAfterMs }) {
+export default function StreamView({
+  track,
+  audioTrack,
+  label,
+  source,
+  isLocal,
+  onUnwatch,
+  objectFit,
+  standByAfterMs,
+  selectedAudioOutputId = '',
+  audioOutputOptions = [],
+}) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const standbyTimerRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const attachAudioToVideo = !isLocal && audioTrack
+    ? shouldAttachAudioToVideoElement({ selectedAudioOutputId })
+    : false;
 
   useEffect(() => {
     if (!videoRef.current || !track) return;
 
     const video = videoRef.current;
-    const streamTracks = !isLocal && audioTrack ? [track, audioTrack] : [track];
+    const streamTracks = !isLocal && audioTrack && attachAudioToVideo ? [track, audioTrack] : [track];
     const stream = new MediaStream(streamTracks);
     video.srcObject = stream;
 
     const tryPlay = async () => {
       try {
+        if (!isLocal && attachAudioToVideo) {
+          await applyAudioOutputSelection(video, selectedAudioOutputId, audioOutputOptions);
+        }
         await video.play();
       } catch {
         video.muted = true;
@@ -33,7 +55,7 @@ export default function StreamView({ track, audioTrack, label, source, isLocal, 
     return () => {
       video.srcObject = null;
     };
-  }, [track, audioTrack, isLocal]);
+  }, [track, audioTrack, isLocal, attachAudioToVideo, selectedAudioOutputId, audioOutputOptions]);
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -127,6 +149,15 @@ export default function StreamView({ track, audioTrack, label, source, isLocal, 
           style={{ objectFit: isFullscreen ? 'contain' : (objectFit ?? 'contain') }}
         />
       </div>
+
+      {!isLocal && audioTrack && !attachAudioToVideo && (
+        <HiddenAudioOutput
+          track={audioTrack}
+          selectedAudioOutputId={selectedAudioOutputId}
+          audioOutputOptions={audioOutputOptions}
+        />
+      )}
+
       <button
         className={`sv-overlay-btn sv-fullscreen-btn`}
         style={{ opacity: (isHovered || isFullscreen) ? 1 : 0.4 }}

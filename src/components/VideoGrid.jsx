@@ -43,8 +43,14 @@ function orderWithHeroLast(streams, heroId) {
   return [...streams.filter((s) => s.id !== heroId), hero];
 }
 
-function OrphanAudio({ track }) {
-  return <HiddenAudioOutput track={track} />;
+function OrphanAudio({ track, selectedAudioOutputId, audioOutputOptions }) {
+  return (
+    <HiddenAudioOutput
+      track={track}
+      selectedAudioOutputId={selectedAudioOutputId}
+      audioOutputOptions={audioOutputOptions}
+    />
+  );
 }
 
 /**
@@ -185,6 +191,8 @@ export default function VideoGrid({
   isMicOn = true,
   isDeafened = false,
   voiceMuteStates,
+  selectedAudioOutputId = '',
+  audioOutputOptions = [],
 }) {
   const { allStreams, orphanAudioConsumers, unwatchedScreens } = buildStreams(
     localTracks, remoteTracks, availableScreens, watchedScreens, localScreenWatched,
@@ -254,6 +262,8 @@ export default function VideoGrid({
                     label={stream.label}
                     source={stream.source}
                     isLocal={stream.type === 'local'}
+                    selectedAudioOutputId={selectedAudioOutputId}
+                    audioOutputOptions={audioOutputOptions}
                     objectFit={isMobile ? 'cover' : 'contain'}
                     isSpeaking={isSpeaking}
                     onUnwatch={
@@ -309,7 +319,12 @@ export default function VideoGrid({
         )}
       </div>
       {orphanAudioConsumers.map((oa) => (
-        <OrphanAudio key={oa.id} track={oa.track} />
+        <OrphanAudio
+          key={oa.id}
+          track={oa.track}
+          selectedAudioOutputId={selectedAudioOutputId}
+          audioOutputOptions={audioOutputOptions}
+        />
       ))}
     </>
   );

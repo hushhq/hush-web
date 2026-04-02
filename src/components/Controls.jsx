@@ -155,6 +155,7 @@ export default function Controls({
   onOpenQualityOrWindow,
   onMic,
   onDeafen,
+  onAudioOutputSwitch,
   onWebcam,
   onMicDeviceSwitch,
   onWebcamDeviceSwitch,
@@ -293,7 +294,51 @@ export default function Controls({
       )}
 
       {/* Deafen (mute audio output) */}
-      {onDeafen && (
+      {onDeafen && onAudioOutputSwitch ? (
+        <div
+          className="ctrl-device-group"
+          style={{
+            height: btnSize,
+            background: isDeafened ? 'var(--hush-danger-ghost)' : 'var(--hush-surface)',
+            color: isDeafened ? 'var(--hush-danger)' : 'var(--hush-text-secondary)',
+          }}
+        >
+          <button
+            type="button"
+            className="ctrl-device-group-main"
+            style={{ width: btnSize, height: btnSize }}
+            onClick={onDeafen}
+            title={isDeafened ? 'Undeafen' : 'Deafen'}
+          >
+            {isDeafened ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            className="ctrl-device-group-chevron"
+            style={{ height: btnSize }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAudioOutputSwitch();
+            }}
+            title="Change audio output"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </div>
+      ) : onDeafen ? (
         <button
           className={`ctrl-icon-btn${isDeafened ? ' ctrl-icon-btn--danger' : ''}`}
           style={{ width: btnSize, height: btnSize }}
@@ -313,7 +358,7 @@ export default function Controls({
             </svg>
           )}
         </button>
-      )}
+      ) : null}
 
       {showWebcam && <div className="ctrl-divider" />}
       {/* Webcam + device switch (hidden when showWebcam false, e.g. low-latency voice) */}
@@ -393,11 +438,17 @@ export default function Controls({
 
       {/* Leave */}
       <button
-        className="ctrl-btn ctrl-btn--danger"
-        style={{ height: btnSize }}
+        className={isMobile ? 'ctrl-icon-btn ctrl-icon-btn--danger' : 'ctrl-btn ctrl-btn--danger'}
+        style={isMobile ? { width: btnSize, height: btnSize } : { height: btnSize }}
         onClick={onLeave}
+        title="Leave"
       >
-        Leave
+        {isMobile ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.19 6.7 12.77A19.79 19.79 0 0 1 3.63 4.14 2 2 0 0 1 5.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.58 9.91" />
+            <line x1="23" y1="1" x2="1" y2="23" />
+          </svg>
+        ) : 'Leave'}
       </button>
     </div>
   );

@@ -57,10 +57,13 @@ vi.mock('../hooks/useDevices', () => ({
   useDevices: vi.fn(() => ({
     audioDevices: [],
     videoDevices: [],
+    audioOutputOptions: [{ deviceId: '', label: 'System default' }],
     selectedMicId: null,
     selectedWebcamId: null,
+    selectedAudioOutputId: '',
     selectMic: vi.fn(),
     selectWebcam: vi.fn(),
+    selectAudioOutput: vi.fn(),
     hasSavedMic: false,
     hasSavedWebcam: false,
     requestPermission: vi.fn(),

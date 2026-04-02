@@ -32,10 +32,13 @@ vi.mock('../hooks/useDevices', () => ({
   useDevices: vi.fn(() => ({
     audioDevices: [],
     videoDevices: [],
+    audioOutputOptions: [{ deviceId: '', label: 'System default' }],
     selectedMicId: 'mic-1',
     selectedWebcamId: null,
+    selectedAudioOutputId: '',
     selectMic: vi.fn(),
     selectWebcam: vi.fn(),
+    selectAudioOutput: vi.fn(),
     hasSavedMic: true,
     hasSavedWebcam: false,
     requestPermission: vi.fn(),
@@ -84,10 +87,13 @@ describe('VoiceChannel', () => {
     vi.mocked(useDevices).mockReturnValue({
       audioDevices: [],
       videoDevices: [],
+      audioOutputOptions: [{ deviceId: '', label: 'System default' }],
       selectedMicId: 'mic-1',
       selectedWebcamId: null,
+      selectedAudioOutputId: '',
       selectMic: vi.fn(),
       selectWebcam: vi.fn(),
+      selectAudioOutput: vi.fn(),
       hasSavedMic: true,
       hasSavedWebcam: false,
       requestPermission: vi.fn(),
@@ -155,6 +161,7 @@ describe('VoiceChannel', () => {
     expect(ControlsProps.showScreenShare).toBe(false);
     expect(ControlsProps.showWebcam).toBe(false);
     expect(ControlsProps.showQualityPicker).toBe(false);
+    expect(typeof ControlsProps.onAudioOutputSwitch).toBe('function');
   });
 
   it('shows video controls in quality mode', () => {
@@ -171,6 +178,7 @@ describe('VoiceChannel', () => {
     expect(ControlsProps.showScreenShare).toBe(true);
     expect(ControlsProps.showWebcam).toBe(true);
     expect(ControlsProps.showQualityPicker).toBe(true);
+    expect(typeof ControlsProps.onAudioOutputSwitch).toBe('function');
   });
 
   it('deafens by muting the active mic and restores it on undeafen', async () => {

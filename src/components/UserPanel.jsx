@@ -15,6 +15,7 @@ import UserSettingsModal from './UserSettingsModal';
  * @param {boolean} props.isInVoice - Whether user is currently in a voice channel.
  * @param {function} props.onMute - Toggle mic mute.
  * @param {function} props.onDeafen - Toggle deafen.
+ * @param {function} [props.onAudioOutputSwitch] - Opens audio output selection.
  * @param {(settings: Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>) => void} [props.onMicFilterSettingsChange]
  */
 export default function UserPanel({
@@ -24,6 +25,7 @@ export default function UserPanel({
   isInVoice,
   onMute,
   onDeafen,
+  onAudioOutputSwitch,
   onMicFilterSettingsChange,
 }) {
   const [showSettings, setShowSettings] = useState(false);
@@ -71,26 +73,62 @@ export default function UserPanel({
           </button>
 
           {/* Deafen toggle */}
-          <button
-            type="button"
-            className={`user-panel-btn${isDeafened ? ' user-panel-btn--danger' : ''}`}
-            onClick={onDeafen}
-            title={isDeafened ? 'Undeafen' : 'Deafen'}
-            disabled={!isInVoice}
-          >
-            {isDeafened ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-                <line x1="1" y1="1" x2="23" y2="23" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-              </svg>
-            )}
-          </button>
+          {onAudioOutputSwitch ? (
+            <div className={`user-panel-btn-group${isDeafened ? ' user-panel-btn-group--danger' : ''}`}>
+              <button
+                type="button"
+                className="user-panel-btn-group-main"
+                onClick={onDeafen}
+                title={isDeafened ? 'Undeafen' : 'Deafen'}
+                disabled={!isInVoice}
+              >
+                {isDeafened ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                    <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                    <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                className="user-panel-btn-group-chevron"
+                onClick={onAudioOutputSwitch}
+                title="Change audio output"
+                disabled={!isInVoice}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={`user-panel-btn${isDeafened ? ' user-panel-btn--danger' : ''}`}
+              onClick={onDeafen}
+              title={isDeafened ? 'Undeafen' : 'Deafen'}
+              disabled={!isInVoice}
+            >
+              {isDeafened ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                </svg>
+              )}
+            </button>
+          )}
 
           {/* Settings */}
           <button

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { shouldUseVideoElementForAudioOutput } from '../lib/mediaOutputRouting';
+import {
+  applyAudioOutputSelection,
+  shouldAttachAudioToVideoElement,
+} from '../lib/mediaOutputRouting';
 
 const OFFSCREEN_MEDIA_STYLE = {
   position: 'fixed',
@@ -11,9 +14,16 @@ const OFFSCREEN_MEDIA_STYLE = {
   top: '0',
 };
 
-export default function HiddenAudioOutput({ track }) {
+export default function HiddenAudioOutput({
+  track,
+  selectedAudioOutputId = '',
+  audioOutputOptions = [],
+}) {
   const mediaRef = useRef(null);
-  const useVideoElement = useMemo(() => shouldUseVideoElementForAudioOutput(), []);
+  const useVideoElement = useMemo(
+    () => shouldAttachAudioToVideoElement({ selectedAudioOutputId }),
+    [selectedAudioOutputId],
+  );
 
   useEffect(() => {
     if (!mediaRef.current || !track) return;
@@ -23,9 +33,11 @@ export default function HiddenAudioOutput({ track }) {
 
     const tryPlay = async () => {
       try {
+        await applyAudioOutputSelection(media, selectedAudioOutputId, audioOutputOptions);
         await media.play();
       } catch {
         const resume = () => {
+          void applyAudioOutputSelection(media, selectedAudioOutputId, audioOutputOptions);
           media.play().catch(() => {});
           document.removeEventListener('touchstart', resume);
           document.removeEventListener('click', resume);
@@ -40,7 +52,7 @@ export default function HiddenAudioOutput({ track }) {
     return () => {
       media.srcObject = null;
     };
-  }, [track]);
+  }, [track, selectedAudioOutputId, audioOutputOptions]);
 
   if (useVideoElement) {
     return <video ref={mediaRef} autoPlay playsInline style={OFFSCREEN_MEDIA_STYLE} />;

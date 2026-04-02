@@ -1583,6 +1583,57 @@ a[href]:active {
   background: rgba(239, 68, 68, 0.18);
 }
 
+.user-panel-btn-group {
+  display: inline-flex;
+  align-items: stretch;
+  width: 48px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: transparent;
+  color: var(--hush-text-secondary);
+}
+
+.user-panel-btn-group--danger {
+  background: var(--hush-danger-ghost);
+  color: var(--hush-danger);
+}
+
+.user-panel-btn-group-main,
+.user-panel-btn-group-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.user-panel-btn-group-main {
+  width: 32px;
+}
+
+.user-panel-btn-group-chevron {
+  width: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.user-panel-btn-group:hover {
+  background: var(--hush-hover);
+  color: var(--hush-text);
+}
+
+.user-panel-btn-group--danger:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--hush-danger);
+}
+
+.user-panel-btn-group button:disabled {
+  cursor: default;
+}
+
 .cl-channel-delete-btn {
   background: none;
   border: none;

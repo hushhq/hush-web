@@ -143,6 +143,7 @@ export default function Room() {
   const [localScreenWatched, setLocalScreenWatched] = useState(false);
   const [showMicPicker, setShowMicPicker] = useState(false);
   const [showWebcamPicker, setShowWebcamPicker] = useState(false);
+  const [showOutputPicker, setShowOutputPicker] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [roomEndTimeMs, setRoomEndTimeMs] = useState(null);
@@ -217,10 +218,13 @@ export default function Room() {
   const {
     audioDevices,
     videoDevices,
+    audioOutputOptions,
     selectedMicId,
     selectedWebcamId,
+    selectedAudioOutputId,
     selectMic,
     selectWebcam,
+    selectAudioOutput,
     hasSavedMic,
     hasSavedWebcam,
     requestPermission,
@@ -477,6 +481,10 @@ export default function Room() {
     await requestPermission('video');
     setShowWebcamPicker(true);
   };
+
+  const handleAudioOutputSwitch = useCallback(() => {
+    setShowOutputPicker(true);
+  }, []);
 
   const handleQualityChange = async (newQuality) => {
     const previousQuality = quality;
@@ -756,6 +764,8 @@ export default function Room() {
                     label={stream.label}
                     source={stream.source}
                     isLocal={stream.type === 'local'}
+                    selectedAudioOutputId={selectedAudioOutputId ?? ''}
+                    audioOutputOptions={audioOutputOptions}
                     objectFit={isMobile ? 'cover' : 'contain'}
                     onUnwatch={
                       stream.type === 'remote' && stream.source === MEDIA_SOURCES.SCREEN
@@ -894,7 +904,12 @@ export default function Room() {
       </div>
 
       {orphanAudioConsumers.map((oa) => (
-        <OrphanAudio key={oa.id} track={oa.track} />
+        <OrphanAudio
+          key={oa.id}
+          track={oa.track}
+          selectedAudioOutputId={selectedAudioOutputId ?? ''}
+          audioOutputOptions={audioOutputOptions}
+        />
       ))}
 
       {showQualityPicker && (
@@ -926,6 +941,19 @@ export default function Room() {
         />
       )}
 
+      {showOutputPicker && (
+        <DevicePickerModal
+          title="choose audio output"
+          devices={audioOutputOptions}
+          selectedDeviceId={selectedAudioOutputId ?? ''}
+          onSelect={(deviceId) => {
+            selectAudioOutput(deviceId);
+            setShowOutputPicker(false);
+          }}
+          onCancel={() => setShowOutputPicker(false)}
+        />
+      )}
+
       <Controls
         isReady={isReady}
         isScreenSharing={isScreenSharing}
@@ -936,6 +964,7 @@ export default function Room() {
         onScreenShare={handleScreenShare}
         onOpenQualityOrWindow={() => setShowQualityPicker(true)}
         onMic={handleMic}
+        onAudioOutputSwitch={handleAudioOutputSwitch}
         onWebcam={handleWebcam}
         onMicDeviceSwitch={handleMicDeviceSwitch}
         onWebcamDeviceSwitch={handleWebcamDeviceSwitch}
@@ -951,6 +980,12 @@ export default function Room() {
   );
 }
 
-function OrphanAudio({ track }) {
-  return <HiddenAudioOutput track={track} />;
+function OrphanAudio({ track, selectedAudioOutputId, audioOutputOptions }) {
+  return (
+    <HiddenAudioOutput
+      track={track}
+      selectedAudioOutputId={selectedAudioOutputId}
+      audioOutputOptions={audioOutputOptions}
+    />
+  );
 }

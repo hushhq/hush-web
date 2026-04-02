@@ -73,6 +73,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const [localScreenWatched, setLocalScreenWatched] = useState(false);
   const [showMicPicker, setShowMicPicker] = useState(false);
   const [showWebcamPicker, setShowWebcamPicker] = useState(false);
+  const [showOutputPicker, setShowOutputPicker] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [participantsBadge, setParticipantsBadge] = useState(false);
   const showChatPanelRef = useRef(false);
@@ -136,10 +137,13 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const {
     audioDevices,
     videoDevices,
+    audioOutputOptions,
     selectedMicId,
     selectedWebcamId,
+    selectedAudioOutputId,
     selectMic,
     selectWebcam,
+    selectAudioOutput,
     hasSavedMic,
     hasSavedWebcam,
     requestPermission,
@@ -360,14 +364,18 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     setShowMicPicker(true);
   };
 
+  const handleAudioOutputSwitch = useCallback(() => {
+    setShowOutputPicker(true);
+  }, []);
+
   /** Tracks whether mic was on before deafen, so undeafen can restore it. */
   const micBeforeDeafenRef = useRef(false);
 
   const handleDeafen = useCallback(() => {
     setIsDeafened((prev) => {
       const next = !prev;
-      // Mute/unmute all remote audio elements
-      document.querySelectorAll('audio[autoplay]').forEach((el) => {
+      // Remote playback can be attached to hidden audio tags or video tiles.
+      document.querySelectorAll('audio[autoplay], video[autoplay]').forEach((el) => {
         el.muted = next;
       });
       if (next) {
@@ -405,6 +413,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         toggleScreenShare: () => handleScreenShareRef.current(),
         switchScreenSource: () => handleSwitchScreenRef.current(),
         toggleWebcam: () => handleWebcamRef.current(),
+        openAudioOutputPicker: handleAudioOutputSwitch,
         updateMicFilterSettings: (settings) => updateMicFilterSettingsRef.current(settings),
         isScreenSharing,
         isWebcamOn,
@@ -423,7 +432,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         is_deafened: isDeafened,
       });
     }
-  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, handleDeafen, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
+  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, handleAudioOutputSwitch, handleDeafen, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
 
   const handleWebcamDeviceSwitch = async () => {
     await requestPermission('video');
@@ -591,6 +600,8 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
             isMicOn={isMicOn}
             isDeafened={isDeafened}
             voiceMuteStates={voiceMuteStates}
+            selectedAudioOutputId={selectedAudioOutputId ?? ''}
+            audioOutputOptions={audioOutputOptions}
           />
           {isMobile && (
             <Controls
@@ -608,6 +619,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
               onOpenQualityOrWindow={() => setShowQualityPicker(true)}
               onMic={handleMic}
               onDeafen={handleDeafen}
+              onAudioOutputSwitch={handleAudioOutputSwitch}
               onWebcam={handleWebcam}
               onMicDeviceSwitch={handleMicDeviceSwitch}
               onWebcamDeviceSwitch={handleWebcamDeviceSwitch}
@@ -768,6 +780,19 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
           selectedDeviceId={selectedWebcamId}
           onSelect={handleWebcamDevicePick}
           onCancel={() => setShowWebcamPicker(false)}
+        />
+      )}
+
+      {showOutputPicker && (
+        <DevicePickerModal
+          title="choose audio output"
+          devices={audioOutputOptions}
+          selectedDeviceId={selectedAudioOutputId ?? ''}
+          onSelect={(deviceId) => {
+            selectAudioOutput(deviceId);
+            setShowOutputPicker(false);
+          }}
+          onCancel={() => setShowOutputPicker(false)}
         />
       )}
 
