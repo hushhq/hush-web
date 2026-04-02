@@ -13,9 +13,41 @@ import { getDeviceId } from '../hooks/useAuth';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
 import {
+  createPendingGuildMetadataKey,
+  deleteGuildMetadataKeyBytes,
   openGuildMetadataKeyStore,
-  setGuildMetadataKeyBytes,
+  promotePendingGuildMetadataKey,
 } from '../lib/guildMetadataKeyStore';
+
+const GUILD_METADATA_SETUP_ERROR =
+  'Server was created, but local metadata setup failed on this device. Refresh the server list and relink this device if the name stays unavailable.';
+
+async function storePendingMetadataKey(userId, keyBytes) {
+  const db = await openGuildMetadataKeyStore(userId, getDeviceId());
+  try {
+    return await createPendingGuildMetadataKey(db, keyBytes);
+  } finally {
+    db.close();
+  }
+}
+
+async function promoteMetadataKey(userId, pendingGuildId, guildId) {
+  const db = await openGuildMetadataKeyStore(userId, getDeviceId());
+  try {
+    await promotePendingGuildMetadataKey(db, pendingGuildId, guildId);
+  } finally {
+    db.close();
+  }
+}
+
+async function deleteMetadataKey(userId, guildId) {
+  const db = await openGuildMetadataKeyStore(userId, getDeviceId());
+  try {
+    await deleteGuildMetadataKeyBytes(db, guildId);
+  } finally {
+    db.close();
+  }
+}
 
 // ── Instance creation policy annotations ─────────────────────────────────────
 
@@ -209,27 +241,29 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
     }
 
     setLoading(true);
+    let pendingGuildId = null;
     try {
       const metadataKeyBytes = generateMetadataKeyBytes();
+      pendingGuildId = await storePendingMetadataKey(user.id, metadataKeyBytes);
       const symmetricKey = await importMetadataKey(metadataKeyBytes);
       const encryptedMetadata = toBase64(await encryptGuildMetadata(symmetricKey, {
         name: trimmed,
         description: '',
         icon: null,
       }));
-
       const guild = await createGuild(
         effectiveToken,
         encryptedMetadata,
         selectedTemplateId,
         effectiveBaseUrl,
       );
-
-      const metadataDb = await openGuildMetadataKeyStore(user.id, getDeviceId());
       try {
-        await setGuildMetadataKeyBytes(metadataDb, guild.id, metadataKeyBytes);
-      } finally {
-        metadataDb.close();
+        await promoteMetadataKey(user.id, pendingGuildId, guild.id);
+      } catch {
+        if (selectedInstanceUrl) {
+          refreshGuilds(selectedInstanceUrl).catch(() => {});
+        }
+        throw new Error(GUILD_METADATA_SETUP_ERROR);
       }
 
       guild.encryptedMetadata = encryptedMetadata;
@@ -241,6 +275,9 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
 
       onCreated(guild);
     } catch (err) {
+      if (pendingGuildId) {
+        await deleteMetadataKey(user.id, pendingGuildId).catch(() => {});
+      }
       setError(err.message || 'Failed to create server.');
     } finally {
       setLoading(false);

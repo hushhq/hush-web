@@ -435,10 +435,13 @@ export default function ServerLayout() {
     }
 
     const candidates = [];
-    const activeKey = await exportLegacyMetadataKeyFromStore(
-      await mlsStoreLib.openStore(currentUserId, getDeviceId()),
-      guildId,
-    );
+    const activeDb = await mlsStoreLib.openStore(currentUserId, getDeviceId());
+    let activeKey = null;
+    try {
+      activeKey = await exportLegacyMetadataKeyFromStore(activeDb, guildId);
+    } finally {
+      activeDb.close();
+    }
     if (activeKey) {
       candidates.push(activeKey);
     }

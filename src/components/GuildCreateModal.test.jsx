@@ -18,6 +18,9 @@ vi.mock('../lib/guildMetadata', () => ({
 
 vi.mock('../lib/guildMetadataKeyStore', () => ({
   openGuildMetadataKeyStore: vi.fn().mockResolvedValue({ close: vi.fn() }),
+  createPendingGuildMetadataKey: vi.fn().mockResolvedValue('pending-guild-1'),
+  deleteGuildMetadataKeyBytes: vi.fn().mockResolvedValue(undefined),
+  promotePendingGuildMetadataKey: vi.fn().mockResolvedValue(undefined),
   setGuildMetadataKeyBytes: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -291,11 +294,53 @@ describe('GuildCreateModal - submission', () => {
         null,
         'https://a.example.com',
       );
-      expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).toHaveBeenCalledWith(
+      expect(guildMetadataKeyStore.createPendingGuildMetadataKey).toHaveBeenCalledWith(
         expect.any(Object),
-        'new-guild',
         expect.any(Uint8Array),
       );
+      expect(guildMetadataKeyStore.promotePendingGuildMetadataKey).toHaveBeenCalledWith(
+        expect.any(Object),
+        'pending-guild-1',
+        'new-guild',
+      );
+    });
+  });
+
+  it('does not create the guild when the local pending key write fails', async () => {
+    useInstanceContext.mockReturnValue(makeCtx([
+      ['https://a.example.com', { connectionState: 'connected', handshakeData: { server_creation_policy: 'open' }, jwt: 'jwt-a' }],
+    ]));
+    guildMetadataKeyStore.createPendingGuildMetadataKey.mockRejectedValueOnce(new Error('local key store unavailable'));
+
+    renderModal({ activeInstanceUrl: 'https://a.example.com', onCreated: vi.fn() });
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Server Name' } });
+    fireEvent.submit(getSubmitButton().closest('form'));
+
+    await waitFor(() => {
+      expect(apiModule.createGuild).not.toHaveBeenCalled();
+      expect(screen.getByText(/local key store unavailable/i)).toBeInTheDocument();
+    });
+  });
+
+  it('surfaces a recovery error when the server is created but local metadata finalization fails', async () => {
+    const ctx = makeCtx([
+      ['https://a.example.com', { connectionState: 'connected', handshakeData: { server_creation_policy: 'open' }, jwt: 'jwt-a' }],
+    ]);
+    useInstanceContext.mockReturnValue(ctx);
+    apiModule.createGuild.mockResolvedValue({ id: 'new-guild' });
+    guildMetadataKeyStore.promotePendingGuildMetadataKey.mockRejectedValueOnce(new Error('promote failed'));
+    const onCreated = vi.fn();
+
+    renderModal({ activeInstanceUrl: 'https://a.example.com', onCreated });
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Server Name' } });
+    fireEvent.submit(getSubmitButton().closest('form'));
+
+    await waitFor(() => {
+      expect(onCreated).not.toHaveBeenCalled();
+      expect(ctx.refreshGuilds).toHaveBeenCalledWith('https://a.example.com');
+      expect(screen.getByText(/server was created, but local metadata setup failed/i)).toBeInTheDocument();
     });
   });
 

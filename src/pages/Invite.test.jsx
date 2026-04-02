@@ -19,7 +19,7 @@ vi.mock('../contexts/InstanceContext', () => ({
 
 vi.mock('../lib/guildMetadata', () => ({
   decodeGuildNameFromInvite: vi.fn((encoded) => decodeURIComponent(encoded)),
-  decodeGuildMetadataKeyFromInvite: vi.fn(() => new Uint8Array([1, 2, 3, 4])),
+  decodeGuildMetadataKeyFromInvite: vi.fn(() => new Uint8Array(32).fill(1)),
 }));
 
 vi.mock('../lib/guildMetadataKeyStore', () => ({
@@ -73,6 +73,7 @@ function makeInstanceContext(overrides = {}) {
       if (instanceUrl === window.location.origin) return 'local-jwt';
       return 'instance-jwt';
     }),
+    refreshGuilds: vi.fn().mockResolvedValue(undefined),
     instanceStates: new Map([
       ['https://remote.example.com', { connectionState: 'connected', jwt: 'instance-jwt' }],
       [window.location.origin, { connectionState: 'connected', jwt: 'local-jwt' }],
@@ -138,6 +139,25 @@ describe('Invite - same-instance flow', () => {
     });
   });
 
+  it('refreshes guilds before navigating after a same-instance claim', async () => {
+    const ctx = makeInstanceContext({
+      instanceStates: new Map([
+        [window.location.origin, { connectionState: 'connected', jwt: 'local-jwt' }],
+      ]),
+    });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    useInstanceContext.mockReturnValue(ctx);
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-1' });
+    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-1' });
+
+    renderInvite('/invite/abc123');
+
+    await waitFor(() => {
+      expect(ctx.refreshGuilds).toHaveBeenCalledWith(window.location.origin);
+      expect(screen.getByText('Server channel')).toBeInTheDocument();
+    });
+  });
+
   it('stores guild metadata key from the invite fragment after a successful claim', async () => {
     useAuth.mockReturnValue(makeAuthState({ hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext({
@@ -155,7 +175,7 @@ describe('Invite - same-instance flow', () => {
       expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).toHaveBeenCalledWith(
         expect.any(Object),
         'srv-1',
-        new Uint8Array([1, 2, 3, 4]),
+        new Uint8Array(32).fill(1),
       );
     });
   });
@@ -331,6 +351,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
         'xyz789',
         'https://remote.example.com',
       );
+      expect(ctx.refreshGuilds).toHaveBeenCalledWith('https://remote.example.com');
     });
   });
 
@@ -352,6 +373,85 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/connecting to instance/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows a retry setup action when local post-claim setup fails', async () => {
+    const ctx = makeInstanceContext();
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    useInstanceContext.mockReturnValue(ctx);
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
+    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
+    window.location.hash = '#name=Secret%20Guild&mk=encoded-key';
+    guildMetadataKeyStore.setGuildMetadataKeyBytes
+      .mockRejectedValueOnce(new Error('idb failed'))
+      .mockResolvedValueOnce(undefined);
+
+    renderInvite('/join/remote.example.com/xyz789');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/membership is active, but local setup failed/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /retry setup/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /retry setup/i }));
+
+    await waitFor(() => {
+      expect(apiModule.claimInvite).toHaveBeenCalledTimes(1);
+      expect(ctx.refreshGuilds).toHaveBeenCalledWith('https://remote.example.com');
+      expect(screen.getByText('Server channel')).toBeInTheDocument();
+    });
+  });
+
+  it('blocks navigation when the post-claim guild refresh fails', async () => {
+    const ctx = makeInstanceContext({
+      refreshGuilds: vi.fn().mockRejectedValue(new Error('refresh failed')),
+    });
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    useInstanceContext.mockReturnValue(ctx);
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
+    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
+
+    renderInvite('/join/remote.example.com/xyz789');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/membership is active, but local setup failed/i)).toBeInTheDocument();
+      expect(screen.queryByText('Server channel')).not.toBeInTheDocument();
+    });
+  });
+
+  it('ignores an invalid metadata key fragment instead of persisting it', async () => {
+    const guildMetadata = await import('../lib/guildMetadata');
+    vi.mocked(guildMetadata.decodeGuildMetadataKeyFromInvite).mockReturnValueOnce(null);
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    useInstanceContext.mockReturnValue(makeInstanceContext());
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
+    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
+    window.location.hash = '#name=Secret%20Guild&mk=bad-key';
+
+    renderInvite('/join/remote.example.com/xyz789');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+
+    await waitFor(() => {
+      expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).not.toHaveBeenCalled();
+      expect(screen.getByText('Server channel')).toBeInTheDocument();
     });
   });
 

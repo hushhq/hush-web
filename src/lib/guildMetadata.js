@@ -19,6 +19,7 @@
 
 const METADATA_BLOB_VERSION = 0x01;
 const NONCE_LENGTH = 12; // bytes - standard AES-GCM nonce
+export const METADATA_KEY_LENGTH = 32;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -198,6 +199,9 @@ export function decodeGuildNameFromInvite(fragment) {
  * @returns {Promise<CryptoKey>}
  */
 export async function importMetadataKey(keyBytes) {
+  if (!isValidMetadataKeyBytes(keyBytes)) {
+    throw new Error('invalid guild metadata key');
+  }
   return globalThis.crypto.subtle.importKey(
     'raw',
     keyBytes,
@@ -213,7 +217,17 @@ export async function importMetadataKey(keyBytes) {
  * @returns {Uint8Array}
  */
 export function generateMetadataKeyBytes() {
-  return globalThis.crypto.getRandomValues(new Uint8Array(32));
+  return globalThis.crypto.getRandomValues(new Uint8Array(METADATA_KEY_LENGTH));
+}
+
+/**
+ * Validate raw guild metadata key bytes.
+ *
+ * @param {unknown} keyBytes
+ * @returns {keyBytes is Uint8Array}
+ */
+export function isValidMetadataKeyBytes(keyBytes) {
+  return keyBytes instanceof Uint8Array && keyBytes.length === METADATA_KEY_LENGTH;
 }
 
 /**
@@ -223,6 +237,9 @@ export function generateMetadataKeyBytes() {
  * @returns {string}
  */
 export function encodeGuildMetadataKeyForInvite(keyBytes) {
+  if (!isValidMetadataKeyBytes(keyBytes)) {
+    throw new Error('invalid guild metadata key');
+  }
   return toBase64(keyBytes);
 }
 
@@ -234,7 +251,8 @@ export function encodeGuildMetadataKeyForInvite(keyBytes) {
  */
 export function decodeGuildMetadataKeyFromInvite(fragment) {
   try {
-    return fromBase64(decodeURIComponent(fragment));
+    const keyBytes = fromBase64(decodeURIComponent(fragment));
+    return isValidMetadataKeyBytes(keyBytes) ? keyBytes : null;
   } catch {
     return null;
   }

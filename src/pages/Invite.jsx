@@ -13,6 +13,8 @@ import {
 } from '../lib/guildMetadataKeyStore';
 import { getDeviceId } from '../hooks/useAuth';
 
+const POST_CLAIM_SETUP_ERROR =
+  'Membership is active, but local setup failed on this device. Retry to finish opening the server.';
 
 function inviteErrorMessage(err) {
   const msg = err?.message || '';
@@ -52,7 +54,7 @@ export default function Invite() {
   const navigate = useNavigate();
   const location = useLocation();
   const { hasSession, needsUnlock, user } = useAuth();
-  const { bootInstance, getTokenForInstance } = useInstanceContext();
+  const { bootInstance, getTokenForInstance, refreshGuilds } = useInstanceContext();
 
   /** Whether this is a cross-instance invite. */
   const isCrossInstance = Boolean(instanceParam);
@@ -68,6 +70,7 @@ export default function Invite() {
   const [error, setError] = useState(null);
   const [joining, setJoining] = useState(false);
   const [booting, setBooting] = useState(false);
+  const [claimRecovery, setClaimRecovery] = useState(null);
   const unlockResumePath = useMemo(() => buildUnlockResumePath(location), [location]);
 
   // Guild name from URL fragment (#name=...) - server never receives it.
@@ -98,6 +101,37 @@ export default function Invite() {
       db.close();
     }
   }, [guildMetadataKeyFromFragment, user?.id]);
+
+  const completeJoinedMembership = useCallback(async (serverId, targetInstanceUrl) => {
+    await storeInviteMetadataKey(serverId);
+    await refreshGuilds(targetInstanceUrl);
+    if (!serverId) {
+      navigate('/home', { replace: true });
+      return;
+    }
+    navigate(`/servers/${serverId}/channels`, { replace: true });
+  }, [navigate, refreshGuilds, storeInviteMetadataKey]);
+
+  const startClaimRecovery = useCallback((serverId, targetInstanceUrl) => {
+    setClaimRecovery({ serverId, instanceUrl: targetInstanceUrl });
+    setError(POST_CLAIM_SETUP_ERROR);
+  }, []);
+
+  const retryClaimRecovery = useCallback(async () => {
+    if (!claimRecovery) {
+      return;
+    }
+    setError(null);
+    setJoining(true);
+    try {
+      await completeJoinedMembership(claimRecovery.serverId, claimRecovery.instanceUrl);
+      setClaimRecovery(null);
+    } catch {
+      setError(POST_CLAIM_SETUP_ERROR);
+    } finally {
+      setJoining(false);
+    }
+  }, [claimRecovery, completeJoinedMembership]);
 
   // ── Invite info fetch ──────────────────────────────────────────────────
 
@@ -155,6 +189,7 @@ export default function Invite() {
       const sameInstanceUrl = window.location.origin;
       setJoining(true);
       setError(null);
+      setClaimRecovery(null);
 
       try {
         let token = getTokenForInstance(sameInstanceUrl);
@@ -171,11 +206,13 @@ export default function Invite() {
         if (cancelled) return;
 
         const serverId = result?.serverId ?? invite?.serverId;
-        await storeInviteMetadataKey(serverId);
-        if (serverId) {
-          navigate(`/servers/${serverId}/channels`, { replace: true });
-        } else {
-          navigate('/home', { replace: true });
+        try {
+          await completeJoinedMembership(serverId, sameInstanceUrl);
+        } catch {
+          if (!cancelled) {
+            startClaimRecovery(serverId, sameInstanceUrl);
+            setJoining(false);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -190,13 +227,14 @@ export default function Invite() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession, needsUnlock, invite, code, isCrossInstance, bootInstance, getTokenForInstance, navigate]);
+  }, [hasSession, needsUnlock, invite, code, isCrossInstance, bootInstance, getTokenForInstance, completeJoinedMembership, startClaimRecovery]);
 
   // ── Cross-instance: user pressed "Join" ──────────────────────────────
 
   const handleCrossInstanceJoin = useCallback(async () => {
     if (!instanceUrl || !code) return;
     setError(null);
+    setClaimRecovery(null);
     setBooting(true);
 
     try {
@@ -211,13 +249,10 @@ export default function Invite() {
       setJoining(true);
       const result = await claimInvite(jwt, code, instanceUrl);
       const serverId = result?.serverId ?? invite?.serverId;
-      await storeInviteMetadataKey(serverId);
-
-      // Step 4: Navigate to the guild using instance-aware URL.
-      if (serverId) {
-        navigate(`/servers/${serverId}/channels`, { replace: true });
-      } else {
-        navigate(`/${instanceParam}`, { replace: true });
+      try {
+        await completeJoinedMembership(serverId, instanceUrl);
+      } catch {
+        startClaimRecovery(serverId, instanceUrl);
       }
     } catch (err) {
       setError(inviteErrorMessage(err));
@@ -225,7 +260,7 @@ export default function Invite() {
       setBooting(false);
       setJoining(false);
     }
-  }, [instanceUrl, code, bootInstance, getTokenForInstance, invite, instanceParam, navigate, storeInviteMetadataKey]);
+  }, [instanceUrl, code, bootInstance, getTokenForInstance, invite, completeJoinedMembership, startClaimRecovery]);
 
   // ── Unauthenticated flow: redirect to / with pending invite queued ────
 
@@ -292,11 +327,11 @@ export default function Invite() {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={handleCrossInstanceJoin}
+                onClick={claimRecovery ? retryClaimRecovery : handleCrossInstanceJoin}
                 disabled={isConnecting}
                 style={{ padding: '12px' }}
               >
-                {booting ? 'Connecting to instance…' : joining ? 'Joining…' : 'Join'}
+                {booting ? 'Connecting to instance…' : joining ? 'Joining…' : claimRecovery ? 'Retry setup' : 'Join'}
               </button>
               <a href="/" className="invite-link">Return to home</a>
             </div>
@@ -320,6 +355,17 @@ export default function Invite() {
           )}
           {error && (
             <div className="invite-actions">
+              {claimRecovery && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={retryClaimRecovery}
+                  disabled={joining}
+                  style={{ padding: '12px' }}
+                >
+                  {joining ? 'Retrying…' : 'Retry setup'}
+                </button>
+              )}
               <a href="/" className="invite-link">Return to home</a>
             </div>
           )}

@@ -51,7 +51,7 @@ describe('buildGuildInviteLink', () => {
       'https://remote.example.com',
       'AbC12345',
       'Secret Guild',
-      new Uint8Array([1, 2, 3, 4]),
+      new Uint8Array(32).fill(1),
     );
 
     expect(link).toContain('/join/remote.example.com/AbC12345');

@@ -8,8 +8,8 @@ const { mockVerifyOwnKey } = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/mlsStore', () => ({
-  openStore: vi.fn().mockReturnValue(Promise.resolve({})),
-  openHistoryStore: vi.fn().mockReturnValue(Promise.resolve({})),
+  openStore: vi.fn().mockReturnValue(Promise.resolve({ close: vi.fn() })),
+  openHistoryStore: vi.fn().mockReturnValue(Promise.resolve({ close: vi.fn() })),
   preloadGroupState: vi.fn().mockResolvedValue(undefined),
   flushStorageCache: vi.fn().mockResolvedValue(undefined),
   withReadOnlyHistoryScope: vi.fn().mockImplementation(async (_db, fn) => fn(_db)),
@@ -408,6 +408,7 @@ describe('ServerLayout', () => {
   });
 
   it('falls back to the imported history store for guild metadata names', async () => {
+    const activeDb = { close: vi.fn() };
     vi.mocked(useInstanceContext).mockReturnValue({
       instanceStates: new Map(),
       mergedGuilds: [{
@@ -424,7 +425,7 @@ describe('ServerLayout', () => {
       guildOrder: [],
       setGuildOrder: vi.fn().mockResolvedValue(undefined),
     });
-    vi.mocked(mlsStore.openStore).mockResolvedValueOnce({ close: vi.fn() });
+    vi.mocked(mlsStore.openStore).mockResolvedValueOnce(activeDb);
     vi.mocked(mlsStore.openHistoryStore).mockResolvedValueOnce({ close: vi.fn() });
     vi.mocked(mlsStore.getCredential)
       .mockResolvedValueOnce(null)
@@ -443,6 +444,7 @@ describe('ServerLayout', () => {
       expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:History Guild');
     });
     expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
+    expect(activeDb.close).toHaveBeenCalled();
   });
 
   it('retries guild metadata decryption with the history key when the active key fails', async () => {
