@@ -290,14 +290,23 @@ export async function unpublishWebcam(room, refs) {
  * @param {{ localTracksRef: import('react').MutableRefObject<Map>, audioContextRef: import('react').MutableRefObject<AudioContext|null>, noiseGateNodeRef: import('react').MutableRefObject<AudioWorkletNode|null>, rawMicStreamRef: import('react').MutableRefObject<MediaStream|null>, cleanupMicPipeline: () => void }} refs
  * @param {string|null} deviceId
  */
-export async function publishMic(room, refs, deviceId = null) {
-  const audioConstraints = {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
+export function buildPublishedMicAudioConstraints(deviceId = null) {
+  const constraints = {
+    // Hush owns the microphone processing pipeline. Keep browser DSP off so
+    // the published path stays predictable before a future denoiser lands.
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
     channelCount: 1,
   };
-  if (deviceId) audioConstraints.deviceId = { exact: deviceId };
+  if (deviceId) {
+    constraints.deviceId = { exact: deviceId };
+  }
+  return constraints;
+}
+
+export async function publishMic(room, refs, deviceId = null) {
+  const audioConstraints = buildPublishedMicAudioConstraints(deviceId);
   const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
   const pipeline = await createMicProcessingPipeline(stream);
   refs.rawMicStreamRef.current = pipeline.rawStream;
