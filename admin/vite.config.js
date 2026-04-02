@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 // No WASM plugins, no cross-imports from the main client.
 // Build output: dist-admin/ (relative to client/)
 export default defineConfig({
+  base: '/admin/',
   plugins: [react()],
   server: {
     port: 5174,
