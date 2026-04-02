@@ -6,7 +6,7 @@
  *   - Wizard renders when localStorage flag is present
  *   - localStorage flag is removed immediately on mount (not on dismiss)
  *   - "Skip" dismisses the wizard without navigating
- *   - "Link a Device" dismisses the wizard and navigates to /link-device?mode=new
+ *   - "Link a Device" dismisses the wizard and navigates to /link-device
  *   - Wizard does not reappear after it has been dismissed (flag is already gone)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -57,7 +57,7 @@ describe('PostRecoveryWizard', () => {
     renderWizard();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Account Secured')).toBeInTheDocument();
-    expect(screen.getByText(/would you like to link another device/i)).toBeInTheDocument();
+    expect(screen.getByText(/if you want to add another device now/i)).toBeInTheDocument();
   });
 
   it('removes the localStorage flag immediately on mount before any user action', () => {
@@ -79,7 +79,7 @@ describe('PostRecoveryWizard', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('navigates to /link-device?mode=new and hides overlay when "Link a Device" is clicked', async () => {
+  it('navigates to /link-device and hides overlay when "Link a Device" is clicked', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, '1');
     renderWizard();
@@ -87,7 +87,7 @@ describe('PostRecoveryWizard', () => {
 
     await user.click(screen.getByRole('button', { name: /link a device/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith('/link-device?mode=new');
+    expect(mockNavigate).toHaveBeenCalledWith('/link-device');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

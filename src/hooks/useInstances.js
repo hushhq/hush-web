@@ -166,6 +166,30 @@ export function useInstances() {
       return stamped;
     });
 
+  /**
+   * Preserve locally-derived presentation fields across guild list refreshes.
+   * Server responses can legitimately fall back to generic placeholders like
+   * "Server" until MLS metadata is decrypted client-side again.
+   *
+   * @param {Array<object>} existingGuilds
+   * @param {Array<object>} nextGuilds
+   * @param {string} instanceUrl
+   * @returns {Array<object>}
+   */
+  const mergeStampedGuilds = (existingGuilds, nextGuilds, instanceUrl) => {
+    const existingById = new Map((existingGuilds ?? []).map((guild) => [guild.id, guild]));
+    return stampGuilds(nextGuilds, instanceUrl).map((guild) => {
+      const existing = existingById.get(guild.id);
+      if (!existing?._localName) {
+        return guild;
+      }
+      return {
+        ...guild,
+        _localName: existing._localName,
+      };
+    });
+  };
+
   // ── State snapshot helper ────────────────────────────────────────────────
 
   /**
@@ -308,7 +332,7 @@ export function useInstances() {
       if (!entry?.jwt) return;
       try {
         const guilds = await getMyGuilds(entry.jwt, instanceUrl);
-        entry.guilds = guilds.map(g => ({ ...g, instanceUrl }));
+        entry.guilds = mergeStampedGuilds(entry.guilds, guilds, instanceUrl);
         flushState();
       } catch (err) {
         console.error(`[useInstances] guild refresh failed for ${instanceUrl}:`, err);
@@ -533,7 +557,7 @@ export function useInstances() {
 
     try {
       const guilds = await getMyGuilds(entry.jwt, instanceUrl);
-      entry.guilds = stampGuilds(guilds, instanceUrl);
+      entry.guilds = mergeStampedGuilds(entry.guilds, guilds, instanceUrl);
       flushState();
     } catch (err) {
       console.error(`[useInstances] refreshGuilds failed for ${instanceUrl}:`, err);

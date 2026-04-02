@@ -208,7 +208,7 @@ describe('joinChannelGroup', () => {
       'ch-2',
       expect.any(String), // base64 commit
       expect.any(String), // base64 groupInfo
-      1,                  // epoch from joinGroupExternal mock
+      1,                  // server epoch 0 -> commit advances to epoch 1
     );
   });
 
@@ -225,6 +225,17 @@ describe('joinChannelGroup', () => {
   it('sets local group epoch from the merged External Commit', async () => {
     await joinChannelGroup(deps, 'ch-2');
     expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'ch-2', 2);
+  });
+
+  it('updates server group info with the merged External Commit state', async () => {
+    await joinChannelGroup(deps, 'ch-2');
+
+    expect(deps.api.putMLSGroupInfo).toHaveBeenLastCalledWith(
+      'test-token',
+      'ch-2',
+      expect.any(String),
+      2,
+    );
   });
 
   it('returns without joining when server has no GroupInfo', async () => {
@@ -447,6 +458,29 @@ describe('encryptMessage', () => {
     const r1 = await encryptMessage(deps, 'ch-5', 'msg-1');
     const r2 = await encryptMessage(deps, 'ch-5', 'msg-2');
     expect(r1.localId).not.toBe(r2.localId);
+  });
+
+  it('rejoins and retries once when createMessage fails after local eviction', async () => {
+    deps.mlsStore.getGroupEpoch
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(null);
+    deps.hushCrypto.createMessage
+      .mockRejectedValueOnce(new Error('GroupStateError(UseAfterEviction)'))
+      .mockResolvedValueOnce({ messageBytes: new Uint8Array([90, 91, 92]) });
+
+    const result = await encryptMessage(deps, 'ch-5', 'hello again');
+
+    expect(deps.mlsStore.deleteGroupEpoch).toHaveBeenCalledWith(deps.db, 'ch-5');
+    expect(deps.api.getMLSGroupInfo).toHaveBeenCalledWith('test-token', 'ch-5');
+    expect(deps.api.putMLSGroupInfo).toHaveBeenLastCalledWith(
+      'test-token',
+      'ch-5',
+      expect.any(String),
+      2,
+    );
+    expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(2);
+    expect(Array.from(result.messageBytes)).toEqual([90, 91, 92]);
   });
 });
 

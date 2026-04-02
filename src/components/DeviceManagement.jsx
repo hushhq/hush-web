@@ -155,8 +155,9 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
         fontSize: '0.82rem',
         lineHeight: 1.5,
       }}>
-        On the new device, open <strong>Link to existing device</strong> from the sign-in screen.
-        Use this page on your current signed-in device to approve its QR code or fallback code.
+        On the new device, open <strong>Link to existing device</strong> from the sign-in screen to
+        show its QR code or fallback code.
+        Use this page on your current signed-in device to scan that QR code or enter that fallback code and approve the link.
       </div>
 
       {error && <div className="dm-error">{error}</div>}

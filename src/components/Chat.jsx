@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { getDeviceId } from '../hooks/useAuth';
 
 /** Maximum plaintext byte length before encryption (UTF-8 encoded).
  * Conservative: 4000 bytes < (8192 MLS budget - 16 GCM tag - 80 MLS framing).
@@ -69,8 +70,6 @@ async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCach
       };
     }
   }
-  // MLS: own sent messages are encrypted for other group members, not for self.
-  // Recover from the module-level pending sends cache (populated at send time).
   if (m.senderId === currentUserId) {
     const pendingContent = consumePendingSend(m.channelId, m.senderId, ts);
     if (pendingContent !== null) {
@@ -79,15 +78,6 @@ async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCach
       }
       return { id: m.id, sender: m.senderId, content: pendingContent, timestamp: ts, decryptionFailed: false };
     }
-    // Own message - local plaintext cache lost (logout/session change).
-    // MLS ciphertext can't be self-decrypted; keys may no longer exist.
-    return {
-      id: m.id,
-      sender: m.senderId,
-      content: null,
-      timestamp: ts,
-      decryptionFailed: true,
-    };
   }
   let content = null;
   let decryptionFailed = false;
@@ -293,11 +283,8 @@ export default function Chat({
       const senderId = data.sender_id;
       const ts = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
 
-      // Self-echo: server confirmed our message was persisted.
-      // The ciphertext was encrypted for the recipient, so we can't decrypt it.
-      // Read plaintext from the synchronous _pendingSends map (not React state)
-      // so the cache write doesn't depend on React 18's deferred updater execution.
-      if (senderId === currentUserId) {
+      const isOwnLocalEcho = senderId === currentUserId && data.sender_device_id === getDeviceId();
+      if (isOwnLocalEcho) {
         const pendingContent = consumePendingSend(data.channel_id, currentUserId, ts);
         setMessages((prev) => {
           const idx = prev.findIndex((m) => m.pending && m.sender === currentUserId);
@@ -321,7 +308,13 @@ export default function Chat({
           if (setCachedMessageRef.current) {
             setCachedMessageRef.current(id, { content, senderId, timestamp: ts });
           }
-        } catch (_) {
+        } catch (err) {
+          console.warn('[chat] realtime decrypt failed', {
+            channelId: data.channel_id,
+            messageId: id,
+            senderId,
+            err: err?.message ?? String(err),
+          });
           decryptionFailed = true;
         }
       }

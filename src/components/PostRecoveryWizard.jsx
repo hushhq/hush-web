@@ -12,7 +12,7 @@ const STORAGE_KEY = 'hush_post_recovery_wizard';
  * the flag immediately so it never reappears.
  *
  * The wizard offers two actions:
- *   - "Link a Device"  → navigates to /link-device?mode=new
+ *   - "Link a Device"  → navigates to /link-device for the approval flow
  *   - "Skip"           → dismisses the overlay
  */
 export function PostRecoveryWizard() {
@@ -31,7 +31,7 @@ export function PostRecoveryWizard() {
 
   const handleLinkDevice = () => {
     setShow(false);
-    navigate('/link-device?mode=new');
+    navigate('/link-device');
   };
 
   const handleSkip = () => {
@@ -52,7 +52,8 @@ export function PostRecoveryWizard() {
           Account Secured
         </h2>
         <p className="post-recovery-body">
-          Your account has been recovered. Would you like to link another device?
+          Your account has been recovered. If you want to add another device now,
+          open the approval flow on this trusted device.
         </p>
         <div className="post-recovery-actions">
           <button

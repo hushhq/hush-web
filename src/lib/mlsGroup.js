@@ -99,6 +99,42 @@ async function mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credByte
   return mergeResult;
 }
 
+/**
+ * Returns true when a send failure can be recovered by re-joining the channel.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function canRecoverMessageSend(err) {
+  const message = String(err?.message ?? err);
+  return message.includes('UseAfterEviction') || message.includes('Group not found');
+}
+
+/**
+ * Create an MLS application message for an already-joined channel group.
+ *
+ * @param {object} deps
+ * @param {Uint8Array} channelIdBytes
+ * @param {Uint8Array} sigPriv
+ * @param {Uint8Array} sigPub
+ * @param {Uint8Array} credBytes
+ * @param {string} plaintext
+ * @returns {Promise<{ messageBytes: Uint8Array }>}
+ */
+async function createChannelMessage(deps, channelIdBytes, sigPriv, sigPub, credBytes, plaintext) {
+  const { db, mlsStore, hushCrypto } = deps;
+  await mlsStore.preloadGroupState(db);
+  const result = await hushCrypto.createMessage(
+    channelIdBytes,
+    sigPriv,
+    sigPub,
+    credBytes,
+    new TextEncoder().encode(plaintext)
+  );
+  await mlsStore.flushStorageCache(db);
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Group creation / join
 // ---------------------------------------------------------------------------
@@ -150,6 +186,7 @@ export async function joinChannelGroup(deps, channelId) {
 
   const serverInfo = await api.getMLSGroupInfo(token, channelId);
   if (!serverInfo?.groupInfo) return; // No group yet - channel was just created.
+  const commitEpoch = Number(serverInfo.epoch ?? 0) + 1;
 
   const groupInfoBytes = fromBase64(serverInfo.groupInfo);
 
@@ -167,11 +204,12 @@ export async function joinChannelGroup(deps, channelId) {
     channelId,
     toBase64(joinResult.commitBytes),
     toBase64(infoResult.groupInfoBytes),
-    joinResult.epoch
+    commitEpoch
   );
 
   // Finalise the join locally so this device can decrypt subsequent traffic.
   const mergeResult = await mergeExternalCommit(deps, channelIdBytes, sigPriv, sigPub, credBytes);
+  await api.putMLSGroupInfo(token, channelId, toBase64(mergeResult.groupInfoBytes), mergeResult.epoch);
   await mlsStore.setGroupEpoch(db, channelId, mergeResult.epoch);
 }
 
@@ -320,19 +358,27 @@ export async function encryptMessage(deps, channelId, plaintext) {
   const epoch = await mlsStore.getGroupEpoch(db, channelId);
   if (epoch == null) {
     await joinOrCreateChannelGroup(deps, channelId);
+  } else {
+    await catchupCommits(deps, channelId);
   }
 
-  await mlsStore.preloadGroupState(db);
-  const result = await hushCrypto.createMessage(
-    channelIdBytes,
-    sigPriv,
-    sigPub,
-    credBytes,
-    new TextEncoder().encode(plaintext)
-  );
-  await mlsStore.flushStorageCache(db);
+  try {
+    const result = await createChannelMessage(deps, channelIdBytes, sigPriv, sigPub, credBytes, plaintext);
+    return { messageBytes: result.messageBytes, localId };
+  } catch (err) {
+    if (!canRecoverMessageSend(err)) {
+      throw err;
+    }
 
-  return { messageBytes: result.messageBytes, localId };
+    console.warn('[mlsGroup] createMessage failed, re-joining channel group', {
+      channelId,
+      reason: String(err?.message ?? err),
+    });
+    await mlsStore.deleteGroupEpoch(db, channelId);
+    await joinOrCreateChannelGroup(deps, channelId);
+    const result = await createChannelMessage(deps, channelIdBytes, sigPriv, sigPub, credBytes, plaintext);
+    return { messageBytes: result.messageBytes, localId };
+  }
 }
 
 /**
@@ -592,6 +638,7 @@ export async function joinGuildMetadataGroup(deps, guildId) {
 
   const serverInfo = await api.getGuildMetadataGroupInfo(token, guildId);
   if (!serverInfo?.groupInfo) return; // No metadata group yet - skip silently.
+  const commitEpoch = Number(serverInfo.epoch ?? 0) + 1;
 
   const groupInfoBytes = fromBase64(serverInfo.groupInfo);
 
@@ -603,7 +650,7 @@ export async function joinGuildMetadataGroup(deps, guildId) {
   // join locally so this device can derive the metadata key immediately.
   const infoResult = await hushCrypto.exportGroupInfoBytes(groupIdBytes, sigPriv, sigPub, credBytes);
   await mlsStore.flushStorageCache(db);
-  await api.putGuildMetadataGroupInfo(token, guildId, toBase64(infoResult.groupInfoBytes), joinResult.epoch);
+  await api.putGuildMetadataGroupInfo(token, guildId, toBase64(infoResult.groupInfoBytes), commitEpoch);
 
   const mergeResult = await mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credBytes);
   await api.putGuildMetadataGroupInfo(token, guildId, toBase64(mergeResult.groupInfoBytes), mergeResult.epoch);
@@ -700,6 +747,7 @@ export async function joinVoiceGroup(deps, channelId) {
     // No voice group yet - become the first participant.
     return createVoiceGroup(deps, channelId);
   }
+  const commitEpoch = Number(serverInfo.epoch ?? 0) + 1;
 
   const groupInfoBytes = fromBase64(serverInfo.groupInfo);
 
@@ -712,7 +760,7 @@ export async function joinVoiceGroup(deps, channelId) {
     token,
     channelId,
     toBase64(joinResult.commitBytes),
-    joinResult.epoch,
+    commitEpoch,
   );
 
   // Merge the pending commit to obtain the updated GroupInfo.
