@@ -161,7 +161,7 @@ describe('VoiceChannel', () => {
     expect(ControlsProps.showScreenShare).toBe(false);
     expect(ControlsProps.showWebcam).toBe(false);
     expect(ControlsProps.showQualityPicker).toBe(false);
-    expect(typeof ControlsProps.onAudioOutputSwitch).toBe('function');
+    expect(ControlsProps.onAudioOutputSwitch).toBeUndefined();
   });
 
   it('shows video controls in quality mode', () => {
@@ -178,7 +178,7 @@ describe('VoiceChannel', () => {
     expect(ControlsProps.showScreenShare).toBe(true);
     expect(ControlsProps.showWebcam).toBe(true);
     expect(ControlsProps.showQualityPicker).toBe(true);
-    expect(typeof ControlsProps.onAudioOutputSwitch).toBe('function');
+    expect(ControlsProps.onAudioOutputSwitch).toBeUndefined();
   });
 
   it('deafens by muting the active mic and restores it on undeafen', async () => {

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  applyAudioOutputSelection,
   buildAudioOutputOptions,
   DEFAULT_AUDIO_OUTPUT_ID,
   getDefaultAudioOutputSelection,
@@ -24,15 +25,41 @@ describe('mediaOutputRouting', () => {
     expect(getDefaultAudioOutputSelection({ userAgentOverride: IPHONE_USER_AGENT })).toBe(DEFAULT_AUDIO_OUTPUT_ID);
   });
 
-  it('uses video-like routing as a mobile default-path workaround only for system default', () => {
+  it('does not use video routing on mobile web', () => {
     expect(shouldAttachAudioToVideoElement({
       selectedAudioOutputId: DEFAULT_AUDIO_OUTPUT_ID,
       userAgentOverride: IPHONE_USER_AGENT,
-    })).toBe(true);
+    })).toBe(false);
 
     expect(shouldAttachAudioToVideoElement({
       selectedAudioOutputId: 'bt-1',
       userAgentOverride: IPHONE_USER_AGENT,
     })).toBe(false);
+  });
+
+  it('skips sink selection on mobile web', async () => {
+    const mediaElement = { setSinkId: vi.fn() };
+
+    await applyAudioOutputSelection(
+      mediaElement,
+      DEFAULT_AUDIO_OUTPUT_ID,
+      [],
+      IPHONE_USER_AGENT,
+    );
+
+    expect(mediaElement.setSinkId).not.toHaveBeenCalled();
+  });
+
+  it('applies sink selection on desktop when supported', async () => {
+    const mediaElement = { setSinkId: vi.fn(() => Promise.resolve()) };
+
+    await applyAudioOutputSelection(
+      mediaElement,
+      'usb-1',
+      [],
+      DESKTOP_USER_AGENT,
+    );
+
+    expect(mediaElement.setSinkId).toHaveBeenCalledWith('usb-1');
   });
 });

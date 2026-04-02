@@ -26,14 +26,18 @@ export function shouldAttachAudioToVideoElement({
   selectedAudioOutputId,
   userAgentOverride = null,
 }) {
-  if (!isMobileAudioExperience(userAgentOverride)) {
-    return false;
-  }
-
-  return selectedAudioOutputId === DEFAULT_AUDIO_OUTPUT_ID;
+  return false;
 }
 
-export async function applyAudioOutputSelection(mediaElement, selectedAudioOutputId, audioOutputOptions = []) {
+export async function applyAudioOutputSelection(
+  mediaElement,
+  selectedAudioOutputId,
+  audioOutputOptions = [],
+  userAgentOverride = null,
+) {
+  if (isMobileAudioExperience(userAgentOverride)) {
+    return;
+  }
   if (!mediaElement || typeof mediaElement.setSinkId !== 'function') {
     return;
   }

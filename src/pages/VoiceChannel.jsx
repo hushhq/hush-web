@@ -48,6 +48,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const navigate = useNavigate();
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'mobile';
+  const canSelectAudioOutput = !isMobile;
   const { user } = useAuth();
   const currentUserId = user?.id ?? '';
   const displayName = user?.displayName ?? 'Anonymous';
@@ -433,7 +434,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         switchScreenSource: () => handleSwitchScreenRef.current(),
         toggleWebcam: () => handleWebcamRef.current(),
         openMicPicker: handleMicDeviceSwitch,
-        openAudioOutputPicker: handleAudioOutputSwitch,
+        openAudioOutputPicker: canSelectAudioOutput ? handleAudioOutputSwitch : null,
         updateMicFilterSettings: (settings) => updateMicFilterSettingsRef.current(settings),
         isScreenSharing,
         isWebcamOn,
@@ -452,7 +453,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         is_deafened: isDeafened,
       });
     }
-  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, handleAudioOutputSwitch, handleDeafen, handleMicDeviceSwitch, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
+  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, canSelectAudioOutput, handleAudioOutputSwitch, handleDeafen, handleMicDeviceSwitch, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
 
   const handleWebcamDeviceSwitch = async () => {
     await requestPermission('video');
@@ -639,7 +640,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
               onOpenQualityOrWindow={() => setShowQualityPicker(true)}
               onMic={handleMic}
               onDeafen={handleDeafen}
-              onAudioOutputSwitch={handleAudioOutputSwitch}
+              onAudioOutputSwitch={canSelectAudioOutput ? handleAudioOutputSwitch : undefined}
               onWebcam={handleWebcam}
               onMicDeviceSwitch={handleMicDeviceSwitch}
               onWebcamDeviceSwitch={handleWebcamDeviceSwitch}
@@ -803,7 +804,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         />
       )}
 
-      {showOutputPicker && (
+      {canSelectAudioOutput && showOutputPicker && (
         <DevicePickerModal
           title="choose audio output"
           devices={audioOutputOptions}

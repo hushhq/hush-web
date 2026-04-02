@@ -69,8 +69,22 @@ vi.mock('../hooks/useDevices', () => ({
     requestPermission: vi.fn(),
   })),
 }));
+vi.mock('../components/Chat', () => ({
+  default: function MockChat() {
+    return <div data-testid="chat">Chat</div>;
+  },
+}));
+
+let ControlsProps = null;
+vi.mock('../components/Controls', () => ({
+  default: function MockControls(props) {
+    ControlsProps = props;
+    return <div data-testid="controls">Controls</div>;
+  },
+}));
 
 import { useAuth } from '../contexts/AuthContext';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import Room from './Room';
 
 function makeAuthState(overrides = {}) {
@@ -103,6 +117,7 @@ describe('Room', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
+    ControlsProps = null;
   });
 
   it('redirects locked known-browser users through returnTo', async () => {
@@ -123,5 +138,23 @@ describe('Room', () => {
     await waitFor(() => {
       expect(screen.getByText('/?join=private-room')).toBeInTheDocument();
     });
+  });
+
+  it('does not expose audio output switching in mobile web controls', async () => {
+    useAuth.mockReturnValue(makeAuthState({
+      user: { id: 'user-1' },
+      hasSession: true,
+    }));
+    vi.mocked(useBreakpoint).mockReturnValue('mobile');
+    sessionStorage.setItem('hush_channelId', 'channel-1');
+    sessionStorage.setItem('hush_roomName', 'test-room');
+
+    renderRoom('/room/test-room');
+
+    await waitFor(() => {
+      expect(ControlsProps).not.toBeNull();
+    });
+
+    expect(ControlsProps.onAudioOutputSwitch).toBeUndefined();
   });
 });

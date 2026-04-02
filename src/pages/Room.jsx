@@ -122,6 +122,7 @@ export default function Room() {
   const { roomName } = useParams();
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'mobile';
+  const canSelectAudioOutput = !isMobile;
   const [connected, setConnected] = useState(false);
   // Track whether the user ever had a valid session in this room.
   // If false when auth guard fires, the user opened a direct link → redirect to /?join=
@@ -941,7 +942,7 @@ export default function Room() {
         />
       )}
 
-      {showOutputPicker && (
+      {canSelectAudioOutput && showOutputPicker && (
         <DevicePickerModal
           title="choose audio output"
           devices={audioOutputOptions}
@@ -964,7 +965,7 @@ export default function Room() {
         onScreenShare={handleScreenShare}
         onOpenQualityOrWindow={() => setShowQualityPicker(true)}
         onMic={handleMic}
-        onAudioOutputSwitch={handleAudioOutputSwitch}
+        onAudioOutputSwitch={canSelectAudioOutput ? handleAudioOutputSwitch : undefined}
         onWebcam={handleWebcam}
         onMicDeviceSwitch={handleMicDeviceSwitch}
         onWebcamDeviceSwitch={handleWebcamDeviceSwitch}
