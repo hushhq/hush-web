@@ -39,6 +39,7 @@ const styles = {
     display: 'flex',
     gap: '4px',
     flex: 1,
+    minWidth: 0,
   },
   navLink: {
     padding: '6px 12px',
@@ -90,6 +91,13 @@ const styles = {
     gap: '10px',
     color: 'var(--text-muted)',
     fontSize: '0.78rem',
+  },
+  controls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginLeft: 'auto',
+    flexShrink: 0,
   },
   badge: {
     display: 'inline-flex',
@@ -224,23 +232,25 @@ function AdminShell({ admin, onLogout }) {
 
   return (
     <div style={styles.shell}>
-      <header style={styles.header}>
-        <span style={styles.brand}>Hush Admin</span>
-        <nav style={styles.nav}>
+      <header className="admin-header" style={styles.header}>
+        <span className="admin-brand" style={styles.brand}>Hush Admin</span>
+        <nav className="admin-nav" style={styles.nav}>
           <NavLink to="/guilds" style={navActive}>Guilds</NavLink>
           <NavLink to="/users" style={navActive}>Users</NavLink>
           <NavLink to="/config" style={navActive}>Config</NavLink>
           <NavLink to="/health" style={navActive}>Health</NavLink>
         </nav>
-        <div style={styles.meta}>
-          <span>{admin.username}</span>
-          <span style={styles.badge}>{admin.role}</span>
+        <div className="admin-controls" style={styles.controls}>
+          <div className="admin-meta" style={styles.meta}>
+            <span className="admin-username">{admin.username}</span>
+            <span style={styles.badge}>{admin.role}</span>
+          </div>
+          <button className="admin-logout" type="button" style={styles.logoutBtn} onClick={onLogout}>
+            Logout
+          </button>
         </div>
-        <button type="button" style={styles.logoutBtn} onClick={onLogout}>
-          Logout
-        </button>
       </header>
-      <div style={styles.body}>
+      <div className="admin-body" style={styles.body}>
         <Routes>
           <Route path="/" element={<Navigate to="/guilds" replace />} />
           <Route path="/guilds" element={<GuildListPage />} />
