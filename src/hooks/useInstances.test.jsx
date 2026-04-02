@@ -48,6 +48,7 @@ vi.mock('../lib/api.js', () => ({
   getHandshake: vi.fn(),
   requestChallenge: vi.fn(),
   verifyChallenge: vi.fn(),
+  federatedVerify: vi.fn(),
   registerWithPublicKey: vi.fn(),
   getMyGuilds: vi.fn(),
   fetchWithAuth: vi.fn(),
@@ -273,16 +274,17 @@ describe('useInstances', () => {
     });
   });
 
-  it('bootInstance auto-registers when verifyChallenge returns 404', async () => {
+  it('bootInstance falls back to federated auth when verifyChallenge returns 404', async () => {
     const { useInstances } = await import('./useInstances.js');
 
     apiModule.getHandshake.mockResolvedValueOnce({ server_version: '1.0', api_version: '1' });
-    apiModule.requestChallenge.mockResolvedValueOnce({ nonce: 'deadbeef' });
+    apiModule.requestChallenge
+      .mockResolvedValueOnce({ nonce: 'deadbeef' })
+      .mockResolvedValueOnce({ nonce: 'beadfeed' });
     // Simulate unknown-key 404 response.
     const notFoundErr = Object.assign(new Error('verifyChallenge 404'), { status: 404 });
     apiModule.verifyChallenge.mockRejectedValueOnce(notFoundErr);
-    // Auto-register succeeds.
-    apiModule.registerWithPublicKey.mockResolvedValueOnce({ token: JWT_A, user: USER_A });
+    apiModule.federatedVerify.mockResolvedValueOnce({ token: JWT_A, federatedIdentity: USER_A });
     apiModule.getMyGuilds.mockResolvedValueOnce(GUILDS_A);
 
     const { result } = renderHook(() => useInstances());
@@ -293,7 +295,15 @@ describe('useInstances', () => {
     });
 
     await waitFor(() => {
-      expect(apiModule.registerWithPublicKey).toHaveBeenCalled();
+      expect(apiModule.federatedVerify).toHaveBeenCalledWith(
+        expect.any(String),
+        'beadfeed',
+        expect.any(String),
+        expect.any(String),
+        'testuser',
+        'testuser',
+        INSTANCE_A,
+      );
       expect(result.current.instanceStates.get(INSTANCE_A)?.connectionState).toBe('connected');
     });
   });
