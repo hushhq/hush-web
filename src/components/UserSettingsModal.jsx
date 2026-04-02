@@ -676,7 +676,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
           <div className="settings-mic-section-header">
             <div>
               <div className="settings-field-label">Mic Test</div>
-              <div className="settings-card-value">Listen to your processed mic</div>
+              <div className="settings-card-value">Monitor your mic locally while tuning the gate</div>
             </div>
             <button
               type="button"
@@ -689,7 +689,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
           <div className="settings-field-note">
             {voiceRuntime?.isInVoice
               ? 'While active, Hush temporarily deafens you from the room and mutes your room mic so you can tune filters safely.'
-              : 'Hear the same processed mic path Hush will publish to voice rooms.'}
+              : 'Hear your mic locally through Hush monitoring while you tune the filter.'}
           </div>
           <div
             className="settings-mic-meter"

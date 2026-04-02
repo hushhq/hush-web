@@ -1,6 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createMicProcessingPipeline } from '../lib/micProcessing';
 
+const MIC_MONITOR_STOPPED_ERROR = 'Microphone input stopped unexpectedly.';
+
+export function buildMicMonitorAudioConstraints(deviceId = null) {
+  const constraints = {
+    // Local mic monitoring is a loopback path. Browser DSP can aggressively
+    // clamp or suppress that signal, so keep the monitor profile predictable
+    // and let Hush's own gate be the only active filter here.
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+    channelCount: 1,
+  };
+  if (deviceId) {
+    constraints.deviceId = { exact: deviceId };
+  }
+  return constraints;
+}
+
 /**
  * Local microphone monitor used by the settings screen to let the user hear
  * the processed mic signal in isolation while tuning filters.
@@ -16,6 +34,10 @@ export function useMicMonitor() {
   const stop = useCallback(async () => {
     const session = sessionRef.current;
     sessionRef.current = null;
+
+    if (typeof session?.detachDiagnostics === 'function') {
+      session.detachDiagnostics();
+    }
 
     if (session?.noiseGateNode?.port) {
       session.noiseGateNode.port.onmessage = null;
@@ -36,21 +58,59 @@ export function useMicMonitor() {
     await stop();
     setError(null);
 
-    const audioConstraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-    };
-    if (deviceId) {
-      audioConstraints.deviceId = { exact: deviceId };
-    }
-
+    const audioConstraints = buildMicMonitorAudioConstraints(deviceId);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
     const session = await createMicProcessingPipeline(stream, {
       monitorOutput: true,
       settings,
     });
+    const track = stream.getAudioTracks()[0] ?? null;
+    let diagnosticsAttached = true;
+
+    const stopUnexpectedly = (message, details = null) => {
+      if (!diagnosticsAttached || !isMountedRef.current) return;
+      if (details) {
+        console.warn('[audio] Mic monitor stopped unexpectedly:', message, details);
+      } else {
+        console.warn('[audio] Mic monitor stopped unexpectedly:', message);
+      }
+      setError(new Error(message));
+      void stop();
+    };
+
+    const handleTrackEnded = () => {
+      stopUnexpectedly(MIC_MONITOR_STOPPED_ERROR);
+    };
+    const handleTrackMute = () => {
+      console.info('[audio] Mic monitor track muted by browser');
+    };
+    const handleTrackUnmute = () => {
+      console.info('[audio] Mic monitor track unmuted by browser');
+    };
+    const handleAudioContextStateChange = () => {
+      const nextState = session.audioContext?.state ?? 'unknown';
+      if (nextState === 'closed') {
+        stopUnexpectedly('Microphone test audio engine stopped unexpectedly.');
+        return;
+      }
+      if (nextState === 'suspended') {
+        console.info('[audio] Mic monitor audio context suspended');
+      }
+    };
+
+    track?.addEventListener('ended', handleTrackEnded);
+    track?.addEventListener('mute', handleTrackMute);
+    track?.addEventListener('unmute', handleTrackUnmute);
+    session.audioContext?.addEventListener?.('statechange', handleAudioContextStateChange);
+
+    const detachDiagnostics = () => {
+      if (!diagnosticsAttached) return;
+      diagnosticsAttached = false;
+      track?.removeEventListener('ended', handleTrackEnded);
+      track?.removeEventListener('mute', handleTrackMute);
+      track?.removeEventListener('unmute', handleTrackUnmute);
+      session.audioContext?.removeEventListener?.('statechange', handleAudioContextStateChange);
+    };
 
     if (session.noiseGateNode?.port) {
       session.noiseGateNode.port.onmessage = (event) => {
@@ -61,8 +121,12 @@ export function useMicMonitor() {
       };
     }
 
-    sessionRef.current = session;
+    sessionRef.current = {
+      ...session,
+      detachDiagnostics,
+    };
     if (!isMountedRef.current) {
+      detachDiagnostics();
       await session.cleanup();
       return;
     }
