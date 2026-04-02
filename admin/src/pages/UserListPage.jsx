@@ -282,7 +282,7 @@ function UnbanModal({ user, onConfirm, onCancel }) {
   );
 }
 
-export default function UserListPage({ apiKey }) {
+export default function UserListPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -294,27 +294,27 @@ export default function UserListPage({ apiKey }) {
     setLoading(true);
     setError('');
     try {
-      const data = await listUsers(apiKey);
+      const data = await listUsers();
       setUsers(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message);
     }
     setLoading(false);
-  }, [apiKey]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const handleBan = useCallback(async (userId, reason, expiresAt) => {
-    await instanceBan(apiKey, userId, reason, expiresAt);
+    await instanceBan(userId, reason, expiresAt);
     setBanTarget(null);
     await load();
-  }, [apiKey, load]);
+  }, [load]);
 
   const handleUnban = useCallback(async (userId, reason) => {
-    await instanceUnban(apiKey, userId, reason);
+    await instanceUnban(userId, reason);
     setUnbanTarget(null);
     await load();
-  }, [apiKey, load]);
+  }, [load]);
 
   const filtered = search.trim()
     ? users.filter((u) => u.id?.toLowerCase().includes(search.trim().toLowerCase()))

@@ -1,11 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import GuildListPage from './pages/GuildListPage.jsx';
 import UserListPage from './pages/UserListPage.jsx';
 import ConfigPage from './pages/ConfigPage.jsx';
 import HealthPage from './pages/HealthPage.jsx';
-
-const ADMIN_HEALTH_URL = '/api/admin/health';
+import {
+  claimBootstrap,
+  getBootstrapStatus,
+  getCurrentAdmin,
+  logoutAdmin,
+  loginAdmin,
+} from './lib/adminApi.js';
 
 const styles = {
   shell: {
@@ -59,6 +64,13 @@ const styles = {
     gap: '16px',
     padding: '40px',
   },
+  gateBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    width: '360px',
+    maxWidth: '100%',
+  },
   gateTitle: {
     fontSize: '1.1rem',
     fontWeight: 600,
@@ -68,20 +80,27 @@ const styles = {
   gateNote: {
     fontSize: '0.85rem',
     color: 'var(--text-muted)',
-    maxWidth: '380px',
+    maxWidth: '420px',
     textAlign: 'center',
     lineHeight: 1.6,
   },
-  gateInput: {
-    padding: '10px 14px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    color: 'var(--text)',
-    fontSize: '0.9rem',
-    width: '340px',
-    fontFamily: 'var(--font-mono)',
-    outline: 'none',
+  meta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    color: 'var(--text-muted)',
+    fontSize: '0.78rem',
+  },
+  badge: {
+    display: 'inline-flex',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    background: 'rgba(213, 79, 18, 0.15)',
+    color: 'var(--accent)',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    fontSize: '0.68rem',
   },
   logoutBtn: {
     background: 'none',
@@ -93,38 +112,80 @@ const styles = {
     fontSize: '0.78rem',
     transition: 'color 0.12s ease, border-color 0.12s ease',
   },
+  error: {
+    color: 'var(--danger)',
+    fontSize: '0.82rem',
+  },
 };
 
-function ApiKeyGate({ onKeySet }) {
-  const [value, setValue] = useState('');
+function BootstrapGate({ onClaim }) {
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [bootstrapSecret, setBootstrapSecret] = useState('');
   const [error, setError] = useState('');
-  const [validating, setValidating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const key = value.trim();
-    if (!key) return;
-
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
     setError('');
-    setValidating(true);
     try {
-      const res = await fetch(ADMIN_HEALTH_URL, {
-        headers: { 'X-Admin-Key': key },
+      const response = await claimBootstrap({
+        username: username.trim(),
+        email: email.trim() || undefined,
+        password,
+        bootstrapSecret: bootstrapSecret.trim(),
       });
-      if (res.status === 401 || res.status === 403) {
-        setError('Invalid API key.');
-        setValidating(false);
-        return;
-      }
-      if (!res.ok) {
-        setError(`Server error: ${res.status}`);
-        setValidating(false);
-        return;
-      }
-      onKeySet(key);
-    } catch {
-      setError('Could not reach the server.');
-      setValidating(false);
+      onClaim(response.admin);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={styles.gate}>
+      <div style={styles.gateTitle}>Bootstrap Hush Admin</div>
+      <div style={styles.gateNote}>
+        No instance admin exists yet. Create the first owner account using the one-time bootstrap secret.
+      </div>
+      <form style={styles.gateBox} onSubmit={handleSubmit}>
+        <input className="input" type="text" placeholder="Owner username" value={username} onChange={(event) => setUsername(event.target.value)} autoFocus />
+        <input className="input" type="email" placeholder="Email (optional)" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <input className="input" type="password" placeholder="Password (min 12 chars)" value={password} onChange={(event) => setPassword(event.target.value)} />
+        <input className="input" type="password" placeholder="Bootstrap secret" value={bootstrapSecret} onChange={(event) => setBootstrapSecret(event.target.value)} />
+        {error && <div style={styles.error}>{error}</div>}
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={submitting || !username.trim() || !password || !bootstrapSecret.trim()}
+        >
+          {submitting ? 'Creating owner...' : 'Create owner'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function LoginGate({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    try {
+      const response = await loginAdmin({ username: username.trim(), password });
+      onLogin(response.admin);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -132,28 +193,30 @@ function ApiKeyGate({ onKeySet }) {
     <div style={styles.gate}>
       <div style={styles.gateTitle}>Hush Instance Admin</div>
       <div style={styles.gateNote}>
-        Enter the admin API key for this instance. The key is held in memory only
-        and cleared on page refresh.
+        Sign in with a local instance-admin account. The dashboard uses a secure server-issued session cookie.
       </div>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-        <input
-          type="password"
-          placeholder="X-Admin-Key value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          style={styles.gateInput}
-          autoFocus
-        />
-        {error && <div style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</div>}
-        <button type="submit" className="btn btn-primary" disabled={!value.trim() || validating}>
-          {validating ? 'Verifying...' : 'Authenticate'}
+      <form style={styles.gateBox} onSubmit={handleSubmit}>
+        <input className="input" type="text" placeholder="Username" value={username} onChange={(event) => setUsername(event.target.value)} autoFocus />
+        <input className="input" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        {error && <div style={styles.error}>{error}</div>}
+        <button type="submit" className="btn btn-primary" disabled={submitting || !username.trim() || !password}>
+          {submitting ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
     </div>
   );
 }
 
-function AdminShell({ apiKey, onLogout }) {
+function LoadingGate({ note }) {
+  return (
+    <div style={styles.gate}>
+      <div style={styles.gateTitle}>Hush Instance Admin</div>
+      <div style={styles.gateNote}>{note}</div>
+    </div>
+  );
+}
+
+function AdminShell({ admin, onLogout }) {
   const navActive = ({ isActive }) => ({
     ...styles.navLink,
     ...(isActive ? { color: 'var(--text)', background: 'var(--elevated)', fontWeight: 500 } : {}),
@@ -169,6 +232,10 @@ function AdminShell({ apiKey, onLogout }) {
           <NavLink to="/config" style={navActive}>Config</NavLink>
           <NavLink to="/health" style={navActive}>Health</NavLink>
         </nav>
+        <div style={styles.meta}>
+          <span>{admin.username}</span>
+          <span style={styles.badge}>{admin.role}</span>
+        </div>
         <button type="button" style={styles.logoutBtn} onClick={onLogout}>
           Logout
         </button>
@@ -176,10 +243,10 @@ function AdminShell({ apiKey, onLogout }) {
       <div style={styles.body}>
         <Routes>
           <Route path="/" element={<Navigate to="/guilds" replace />} />
-          <Route path="/guilds" element={<GuildListPage apiKey={apiKey} />} />
-          <Route path="/users" element={<UserListPage apiKey={apiKey} />} />
-          <Route path="/config" element={<ConfigPage apiKey={apiKey} />} />
-          <Route path="/health" element={<HealthPage apiKey={apiKey} />} />
+          <Route path="/guilds" element={<GuildListPage />} />
+          <Route path="/users" element={<UserListPage />} />
+          <Route path="/config" element={<ConfigPage />} />
+          <Route path="/health" element={<HealthPage />} />
         </Routes>
       </div>
     </div>
@@ -187,23 +254,55 @@ function AdminShell({ apiKey, onLogout }) {
 }
 
 export default function App() {
-  const [apiKey, setApiKey] = useState('');
+  const [screen, setScreen] = useState('loading');
+  const [admin, setAdmin] = useState(null);
 
-  const handleKeySet = useCallback((key) => {
-    setApiKey(key);
+  const restoreSession = useCallback(async () => {
+    try {
+      const bootstrapStatus = await getBootstrapStatus();
+      if (bootstrapStatus.bootstrapAvailable) {
+        setScreen('bootstrap');
+        return;
+      }
+      const response = await getCurrentAdmin();
+      setAdmin(response.admin);
+      setScreen('ready');
+    } catch (cause) {
+      if (cause.status === 401) {
+        setScreen('login');
+        return;
+      }
+      setScreen('error');
+    }
   }, []);
 
-  const handleLogout = useCallback(() => {
-    setApiKey('');
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
+
+  const handleBootstrap = useCallback((currentAdmin) => {
+    setAdmin(currentAdmin);
+    setScreen('ready');
+  }, []);
+
+  const handleLogin = useCallback((currentAdmin) => {
+    setAdmin(currentAdmin);
+    setScreen('ready');
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    await logoutAdmin();
+    setAdmin(null);
+    setScreen('login');
   }, []);
 
   return (
     <BrowserRouter basename="/admin">
-      {!apiKey ? (
-        <ApiKeyGate onKeySet={handleKeySet} />
-      ) : (
-        <AdminShell apiKey={apiKey} onLogout={handleLogout} />
-      )}
+      {screen === 'loading' && <LoadingGate note="Checking bootstrap state and existing admin session..." />}
+      {screen === 'bootstrap' && <BootstrapGate onClaim={handleBootstrap} />}
+      {screen === 'login' && <LoginGate onLogin={handleLogin} />}
+      {screen === 'error' && <LoadingGate note="The admin control plane could not be loaded. Check the server and try again." />}
+      {screen === 'ready' && admin && <AdminShell admin={admin} onLogout={handleLogout} />}
     </BrowserRouter>
   );
 }

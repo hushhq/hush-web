@@ -149,7 +149,7 @@ const DEFAULT_TEMPLATE_CHANNELS = [
 
 // ─── Instance Config Section ──────────────────────────────
 
-function InstanceConfigSection({ apiKey }) {
+function InstanceConfigSection() {
   const [config, setConfig] = useState(null);
   const [regMode, setRegMode] = useState('open');
   const [guildDiscovery, setGuildDiscovery] = useState('disabled');
@@ -162,7 +162,7 @@ function InstanceConfigSection({ apiKey }) {
 
   useEffect(() => {
     let cancelled = false;
-    getConfig(apiKey).then((data) => {
+    getConfig().then((data) => {
       if (cancelled) return;
       setConfig(data);
       setRegMode(data.registrationMode || 'open');
@@ -174,14 +174,14 @@ function InstanceConfigSection({ apiKey }) {
       if (!cancelled) setError(e.message);
     });
     return () => { cancelled = true; };
-  }, [apiKey]);
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
     setError('');
     setSuccess('');
     try {
-      await updateConfig(apiKey, {
+      await updateConfig({
         name: name.trim() || undefined,
         iconUrl: iconUrl.trim() || undefined,
         registrationMode: regMode,
@@ -392,7 +392,7 @@ function ChannelEditor({ channels, onChange }) {
 
 // ─── Template Management Section ─────────────────────────
 
-function TemplateSection({ apiKey }) {
+function TemplateSection() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -405,16 +405,16 @@ function TemplateSection({ apiKey }) {
 
   const reload = useCallback(async () => {
     try {
-      const data = await listTemplates(apiKey);
+      const data = await listTemplates();
       setTemplates(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message);
     }
-  }, [apiKey]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    listTemplates(apiKey).then((data) => {
+    listTemplates().then((data) => {
       if (!cancelled) setTemplates(Array.isArray(data) ? data : []);
     }).catch((e) => {
       if (!cancelled) setError(e.message);
@@ -422,7 +422,7 @@ function TemplateSection({ apiKey }) {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [apiKey]);
+  }, []);
 
   const startEdit = (tmpl) => {
     setEditingId(tmpl.id);
@@ -455,10 +455,10 @@ function TemplateSection({ apiKey }) {
     try {
       const body = { name: editName.trim(), channels: editChannels, isDefault: editIsDefault };
       if (editingId === 'new') {
-        await createTemplate(apiKey, body);
+        await createTemplate(body);
         setSuccess('Template created');
       } else {
-        await updateTemplate(apiKey, editingId, body);
+        await updateTemplate(editingId, body);
         setSuccess('Template saved');
       }
       await reload();
@@ -474,7 +474,7 @@ function TemplateSection({ apiKey }) {
     if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
     setError('');
     try {
-      await deleteTemplate(apiKey, tmpl.id);
+      await deleteTemplate(tmpl.id);
       await reload();
       setSuccess('Template deleted');
       setTimeout(() => setSuccess(''), 3000);
@@ -606,11 +606,11 @@ function TemplateSection({ apiKey }) {
 
 // ─── ConfigPage Root ──────────────────────────────────────
 
-export default function ConfigPage({ apiKey }) {
+export default function ConfigPage() {
   return (
     <div style={PAGE_STYLES.container}>
-      <InstanceConfigSection apiKey={apiKey} />
-      <TemplateSection apiKey={apiKey} />
+      <InstanceConfigSection />
+      <TemplateSection />
     </div>
   );
 }

@@ -118,7 +118,7 @@ function formatTimestamp(iso) {
   return new Date(iso).toLocaleString();
 }
 
-export default function HealthPage({ apiKey }) {
+export default function HealthPage() {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -133,7 +133,7 @@ export default function HealthPage({ apiKey }) {
     setLoading(true);
     setError('');
     try {
-      const data = await getHealth(apiKey);
+      const data = await getHealth();
       if (cancelledRef.current) return;
       setHealth(data);
       setLastRefresh(new Date());
@@ -145,7 +145,7 @@ export default function HealthPage({ apiKey }) {
       setLoading(false);
       setCountdown(REFRESH_INTERVAL_MS / 1000);
     }
-  }, [apiKey]);
+  }, []);
 
   // Initial load and auto-refresh every 30s
   useEffect(() => {

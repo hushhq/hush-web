@@ -144,7 +144,7 @@ function CopyButton({ text }) {
   );
 }
 
-export default function GuildListPage({ apiKey }) {
+export default function GuildListPage() {
   const [guilds, setGuilds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -155,13 +155,13 @@ export default function GuildListPage({ apiKey }) {
     setLoading(true);
     setError('');
     try {
-      const data = await listGuilds(apiKey);
+      const data = await listGuilds();
       setGuilds(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e.message);
     }
     setLoading(false);
-  }, [apiKey]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

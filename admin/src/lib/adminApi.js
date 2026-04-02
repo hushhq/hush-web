@@ -1,227 +1,150 @@
-/**
- * Admin API client for Hush instance administration.
- *
- * All functions take apiKey as first argument and send it as the
- * X-Admin-Key header. No JWT or user auth is involved.
- *
- * All endpoints are at /api/admin/* and require the header.
- */
-
 const BASE = '/api/admin';
 
-/**
- * Builds standard request headers including X-Admin-Key.
- * @param {string} apiKey
- * @returns {Record<string, string>}
- */
-function headers(apiKey) {
-  return {
-    'Content-Type': 'application/json',
-    'X-Admin-Key': apiKey,
-  };
-}
-
-/**
- * Throws an Error with the response body text when status is not ok.
- * @param {Response} res
- * @returns {Promise<Response>}
- */
-async function checkResponse(res) {
-  if (!res.ok) {
-    let message;
-    try {
-      const body = await res.json();
-      message = body?.error || `HTTP ${res.status}`;
-    } catch {
-      message = `HTTP ${res.status}`;
-    }
-    throw new Error(message);
+async function parseError(response) {
+  try {
+    const body = await response.json();
+    return body?.error || `HTTP ${response.status}`;
+  } catch {
+    return `HTTP ${response.status}`;
   }
-  return res;
 }
 
-/**
- * GET /api/admin/guilds
- * Returns guild infrastructure metrics. No guild names.
- * @param {string} apiKey
- * @returns {Promise<Array>}
- */
-export async function listGuilds(apiKey) {
-  const res = await fetch(`${BASE}/guilds`, { headers: headers(apiKey) });
-  await checkResponse(res);
-  return res.json();
+async function request(path, options = {}) {
+  const response = await fetch(`${BASE}${path}`, {
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    const error = new Error(await parseError(response));
+    error.status = response.status;
+    throw error;
+  }
+  return response;
 }
 
-/**
- * GET /api/admin/users
- * Returns user UUIDs, roles, creation dates, and ban status.
- * @param {string} apiKey
- * @returns {Promise<Array>}
- */
-export async function listUsers(apiKey) {
-  const res = await fetch(`${BASE}/users`, { headers: headers(apiKey) });
-  await checkResponse(res);
-  return res.json();
+export async function getBootstrapStatus() {
+  const response = await request('/bootstrap/status', { method: 'POST' });
+  return response.json();
 }
 
-/**
- * GET /api/admin/health
- * Returns DB status, uptime, and version.
- * @param {string} apiKey
- * @returns {Promise<object>}
- */
-export async function getHealth(apiKey) {
-  const res = await fetch(`${BASE}/health`, { headers: headers(apiKey) });
-  await checkResponse(res);
-  return res.json();
+export async function claimBootstrap(payload) {
+  const response = await request('/bootstrap/claim', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return response.json();
 }
 
-/**
- * GET /api/admin/config
- * Returns current instance configuration.
- * @param {string} apiKey
- * @returns {Promise<object>}
- */
-export async function getConfig(apiKey) {
-  const res = await fetch(`${BASE}/config`, { headers: headers(apiKey) });
-  await checkResponse(res);
-  return res.json();
+export async function loginAdmin(payload) {
+  const response = await request('/session/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return response.json();
 }
 
-/**
- * PUT /api/admin/config
- * Updates instance configuration fields.
- * @param {string} apiKey
- * @param {object} updates - Partial config fields to update.
- * @returns {Promise<object>}
- */
-export async function updateConfig(apiKey, updates) {
-  const res = await fetch(`${BASE}/config`, {
+export async function logoutAdmin() {
+  await request('/session/logout', { method: 'POST' });
+}
+
+export async function getCurrentAdmin() {
+  const response = await request('/session/me');
+  return response.json();
+}
+
+export async function listGuilds() {
+  const response = await request('/guilds');
+  return response.json();
+}
+
+export async function listUsers() {
+  const response = await request('/users');
+  return response.json();
+}
+
+export async function getHealth() {
+  const response = await request('/health');
+  return response.json();
+}
+
+export async function getConfig() {
+  const response = await request('/config');
+  return response.json();
+}
+
+export async function updateConfig(updates) {
+  const response = await request('/config', {
     method: 'PUT',
-    headers: headers(apiKey),
     body: JSON.stringify(updates),
   });
-  await checkResponse(res);
-  if (res.status === 204) return {};
-  return res.json();
+  if (response.status === 204) {
+    return {};
+  }
+  return response.json();
 }
 
-/**
- * GET /api/admin/templates
- * Returns all server templates.
- * @param {string} apiKey
- * @returns {Promise<Array>}
- */
-export async function listTemplates(apiKey) {
-  const res = await fetch(`${BASE}/templates`, { headers: headers(apiKey) });
-  await checkResponse(res);
-  return res.json();
+export async function listTemplates() {
+  const response = await request('/templates');
+  return response.json();
 }
 
-/**
- * POST /api/admin/templates
- * Creates a new server template.
- * @param {string} apiKey
- * @param {{ name: string, channels: Array, isDefault: boolean }} data
- * @returns {Promise<object>}
- */
-export async function createTemplate(apiKey, data) {
-  const res = await fetch(`${BASE}/templates`, {
+export async function createTemplate(data) {
+  const response = await request('/templates', {
     method: 'POST',
-    headers: headers(apiKey),
     body: JSON.stringify(data),
   });
-  await checkResponse(res);
-  return res.json();
+  return response.json();
 }
 
-/**
- * PUT /api/admin/templates/{id}
- * Updates an existing server template.
- * @param {string} apiKey
- * @param {string} id
- * @param {{ name: string, channels: Array, isDefault: boolean }} data
- * @returns {Promise<object>}
- */
-export async function updateTemplate(apiKey, id, data) {
-  const res = await fetch(`${BASE}/templates/${encodeURIComponent(id)}`, {
+export async function updateTemplate(id, data) {
+  const response = await request(`/templates/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: headers(apiKey),
     body: JSON.stringify(data),
   });
-  await checkResponse(res);
-  return res.json();
+  if (response.status === 204) {
+    return {};
+  }
+  return response.json();
 }
 
-/**
- * DELETE /api/admin/templates/{id}
- * Deletes a server template.
- * @param {string} apiKey
- * @param {string} id
- * @returns {Promise<void>}
- */
-export async function deleteTemplate(apiKey, id) {
-  const res = await fetch(`${BASE}/templates/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: headers(apiKey),
-  });
-  await checkResponse(res);
+export async function deleteTemplate(id) {
+  await request(`/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-/**
- * POST /api/admin/bans
- * Instance-bans a user, removing them from all guilds.
- * @param {string} apiKey
- * @param {string} userId
- * @param {string} reason
- * @param {number|null} expiresAt - Unix timestamp in seconds, or null for permanent.
- * @returns {Promise<void>}
- */
-export async function instanceBan(apiKey, userId, reason, expiresAt) {
+export async function instanceBan(userId, reason, expiresAt) {
   const body = { userId, reason };
   if (expiresAt !== null && expiresAt !== undefined) {
-    body.expiresAt = new Date(expiresAt * 1000).toISOString();
+    body.expiresIn = Math.max(0, Math.floor(expiresAt - Date.now() / 1000));
   }
-  const res = await fetch(`${BASE}/bans`, {
+  await request('/bans', {
     method: 'POST',
-    headers: headers(apiKey),
     body: JSON.stringify(body),
   });
-  await checkResponse(res);
 }
 
-/**
- * DELETE /api/admin/bans/{userId}
- * Lifts an instance ban.
- * @param {string} apiKey
- * @param {string} userId
- * @param {string} reason
- * @returns {Promise<void>}
- */
-export async function instanceUnban(apiKey, userId, reason) {
-  const res = await fetch(`${BASE}/bans/${encodeURIComponent(userId)}`, {
+export async function instanceUnban(userId, reason) {
+  await request(`/bans/${encodeURIComponent(userId)}`, {
     method: 'DELETE',
-    headers: headers(apiKey),
     body: JSON.stringify({ reason }),
   });
-  await checkResponse(res);
 }
 
-/**
- * GET /api/admin/audit-log
- * Returns paginated audit log entries.
- * @param {string} apiKey
- * @param {{ limit?: number, offset?: number, action?: string, targetId?: string }} opts
- * @returns {Promise<Array>}
- */
-export async function getAuditLog(apiKey, opts = {}) {
+export async function getAuditLog(options = {}) {
   const params = new URLSearchParams();
-  if (opts.limit != null) params.set('limit', String(opts.limit));
-  if (opts.offset != null) params.set('offset', String(opts.offset));
-  if (opts.action) params.set('action', opts.action);
-  if (opts.targetId) params.set('target_id', opts.targetId);
-  const url = `${BASE}/audit-log${params.size ? `?${params}` : ''}`;
-  const res = await fetch(url, { headers: headers(apiKey) });
-  await checkResponse(res);
-  return res.json();
+  if (options.limit != null) params.set('limit', String(options.limit));
+  if (options.offset != null) params.set('offset', String(options.offset));
+  if (options.action) params.set('action', options.action);
+  if (options.targetId) params.set('targetId', options.targetId);
+  const response = await request(`/audit-log${params.toString() ? `?${params}` : ''}`);
+  return response.json();
+}
+
+export async function getServiceIdentity() {
+  const response = await request('/service-identity');
+  return response.json();
 }
