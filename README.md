@@ -93,14 +93,21 @@ docker build -t hush-web .
 
 ## Admin Dashboard
 
-The standalone admin dashboard is in `admin/`. It authenticates via API key (not as a Hush user) and has read-only access to UUIDs, member counts, and metrics - no plaintext content.
+The standalone admin dashboard is in `admin/`. It is a separate Vite app mounted under `/admin/` in production. It authenticates with local instance-admin accounts over secure session cookies, not with Hush-user credentials and not with `X-Admin-Key`.
 
 ```bash
 cd admin
 npm ci
 npm run dev    # development server on :5174
-npm run build  # production build in admin/dist/
+npm run build  # production build emitted to ../dist-admin/
 ```
+
+Control-plane flow:
+
+- `POST /api/admin/bootstrap/claim` creates the first local `owner`
+- `POST /api/admin/session/login` issues the admin session cookie
+- `GET /api/admin/session/me` restores auth after refresh
+- all admin API calls use `credentials: 'same-origin'`
 
 ---
 
@@ -115,7 +122,7 @@ Variables prefixed with `VITE_` are embedded in the client bundle at build time.
 | `VITE_LIVEKIT_URL` | Yes | LiveKit WebSocket URL (e.g., `wss://chat.example.com/livekit`) |
 | `VITE_INSTANCE_NAME` | No | Display name shown in the client title |
 
-**Never put private keys, admin API keys, or any server-side secrets in `.env.local`** - Vite embeds these values in the JavaScript bundle.
+**Never put private keys, bootstrap secrets, session secrets, or any other server-side secrets in `.env.local`** - Vite embeds these values in the JavaScript bundle.
 
 ---
 
@@ -131,7 +138,7 @@ hush-web/
 │   └── components/          # Chat, ChannelList, MemberList, ServerList, Controls
 ├── admin/                   # Standalone admin dashboard (separate Vite app)
 │   └── src/
-│       ├── lib/adminApi.js  # Admin API client (X-Admin-Key header)
+│       ├── lib/adminApi.js  # Admin API client (bootstrap + session cookie auth)
 │       └── pages/           # GuildListPage, UserListPage, HealthPage, ConfigPage
 ├── public/                  # Static assets
 ├── vite.config.js           # Vite config (WASM plugin, API proxy)
