@@ -2980,19 +2980,42 @@ a[href]:active {
   border: 1px solid var(--hush-border);
 }
 
+.settings-mic-meter-zones {
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      var(--hush-live) 0%,
+      var(--hush-live) 68%,
+      var(--hush-amber) 68%,
+      var(--hush-amber) 88%,
+      var(--hush-danger) 88%,
+      var(--hush-danger) 100%
+    );
+  opacity: 0.28;
+}
+
 .settings-mic-meter-fill {
-  height: 100%;
+  position: absolute;
+  inset: 1px auto 1px 1px;
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    var(--hush-live) 0%,
-    var(--hush-amber) 62%,
-    var(--hush-danger) 100%
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.34) 100%
   );
-  transition: width 24ms linear, box-shadow var(--duration-fast) var(--ease-out);
+  border-right: 1px solid rgba(255, 255, 255, 0.45);
+  transition: width 24ms linear, box-shadow var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
 }
 
 .settings-mic-meter-fill--open {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.24) 0%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
   box-shadow: 0 0 12px var(--hush-live-glow);
 }
 

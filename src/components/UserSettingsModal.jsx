@@ -764,6 +764,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
             aria-valuemax={100}
             aria-valuenow={micTestLevel}
           >
+            <div className="settings-mic-meter-zones" aria-hidden="true" />
             <div
               className={`settings-mic-meter-fill${isMicTesting && isMicGateOpen ? ' settings-mic-meter-fill--open' : ''}`}
               style={{ width: `${micTestLevel}%` }}
