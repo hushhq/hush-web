@@ -174,6 +174,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
           await publishMic(selectedMicId, {
             disableAudioFilters: isLowLatency,
             useRawTrack: isLowLatency || isMobileWebAudio,
+            useBrowserDsp: isMobileWebAudio && !isLowLatency,
           });
           micPublishedRef.current = true;
           setIsMicOn(true);
@@ -335,6 +336,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
       await publishMic(selectedMicId, {
         disableAudioFilters: isLowLatency,
         useRawTrack: isLowLatency || isMobileWebAudio,
+        useBrowserDsp: isMobileWebAudio && !isLowLatency,
       });
       micPublishedRef.current = true;
       setIsMicOn(true);
@@ -352,6 +354,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     await publishMic(deviceId, {
       disableAudioFilters: isLowLatency,
       useRawTrack: isLowLatency || isMobileWebAudio,
+      useBrowserDsp: isMobileWebAudio && !isLowLatency,
     });
     micPublishedRef.current = true;
     setIsMicOn(true);

@@ -139,4 +139,38 @@ describe('trackManager mic publishing', () => {
     expect(refs.audioContextRef.current).toBeNull();
     expect(refs.noiseGateNodeRef.current).toBeNull();
   });
+
+  it('uses stock browser dsp when explicitly requested for raw-track publishing', async () => {
+    const sourceTrack = { id: 'source-track' };
+    const stream = { getAudioTracks: () => [sourceTrack] };
+    const room = {
+      localParticipant: {
+        publishTrack: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    const refs = {
+      localTracksRef: { current: new Map() },
+      audioContextRef: { current: null },
+      noiseGateNodeRef: { current: null },
+      rawMicStreamRef: { current: null },
+      cleanupMicPipeline: vi.fn(),
+    };
+
+    navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
+
+    await publishMic(room, refs, 'mic-1', {
+      useRawTrack: true,
+      useBrowserDsp: true,
+    });
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        deviceId: { exact: 'mic-1' },
+      },
+    });
+  });
 });

@@ -40,13 +40,28 @@ export default function StreamView({
           await applyAudioOutputSelection(video, selectedAudioOutputId, audioOutputOptions);
         }
         await video.play();
-      } catch {
-        video.muted = true;
-        try {
-          await video.play();
-        } catch (retryErr) {
-          console.error('[StreamView] Playback failed:', retryErr);
+      } catch (playError) {
+        if (isLocal) {
+          video.muted = true;
+          try {
+            await video.play();
+          } catch (retryErr) {
+            console.error('[StreamView] Playback failed:', retryErr);
+          }
+          return;
         }
+
+        const resume = () => {
+          void applyAudioOutputSelection(video, selectedAudioOutputId, audioOutputOptions);
+          video.play().catch((resumeError) => {
+            console.error('[StreamView] Playback resume failed:', resumeError);
+          });
+          document.removeEventListener('touchstart', resume);
+          document.removeEventListener('click', resume);
+        };
+        document.addEventListener('touchstart', resume, { once: true });
+        document.addEventListener('click', resume, { once: true });
+        console.warn('[StreamView] Remote playback deferred pending user gesture:', playError);
       }
     };
 

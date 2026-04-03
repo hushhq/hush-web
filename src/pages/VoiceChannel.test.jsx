@@ -229,6 +229,7 @@ describe('VoiceChannel', () => {
       expect(publishMic).toHaveBeenCalledWith('mic-1', {
         disableAudioFilters: false,
         useRawTrack: false,
+        useBrowserDsp: false,
       });
     });
 
@@ -292,6 +293,7 @@ describe('VoiceChannel', () => {
       expect(publishMic).toHaveBeenCalledWith('mic-1', {
         disableAudioFilters: true,
         useRawTrack: true,
+        useBrowserDsp: false,
       });
     });
   });

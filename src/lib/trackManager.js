@@ -300,12 +300,13 @@ export function buildPublishedMicAudioConstraintsFromSettings(deviceId = null, s
   const echoCancellation = options.disableAudioFilters
     ? false
     : normalizedSettings.echoCancellation;
+  const useBrowserDsp = !options.disableAudioFilters && options.useBrowserDsp;
   const constraints = {
-    // Echo cancellation is a source-side browser capture feature. Hush keeps
-    // the rest of the DSP chain off and applies its own post-capture gate.
+    // Browser DSP is explicitly used on mobile-web raw-track publishing, where
+    // the platform audio stack is more reliable than a custom WebAudio path.
     echoCancellation,
-    noiseSuppression: false,
-    autoGainControl: false,
+    noiseSuppression: useBrowserDsp ? true : false,
+    autoGainControl: useBrowserDsp ? true : false,
     channelCount: 1,
   };
   if (deviceId) {
