@@ -26,7 +26,11 @@ export function shouldAttachAudioToVideoElement({
   selectedAudioOutputId,
   userAgentOverride = null,
 }) {
-  return false;
+  if (!isMobileAudioExperience(userAgentOverride)) {
+    return false;
+  }
+
+  return selectedAudioOutputId === DEFAULT_AUDIO_OUTPUT_ID;
 }
 
 export async function applyAudioOutputSelection(

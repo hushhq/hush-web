@@ -7,6 +7,7 @@ import { useRoom } from '../hooks/useRoom';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useDevices } from '../hooks/useDevices';
 import { DEFAULT_QUALITY, MEDIA_SOURCES } from '../utils/constants';
+import { isMobileAudioExperience } from '../lib/mediaOutputRouting';
 import {
   estimateUploadSpeed,
   getRecommendedQuality,
@@ -49,6 +50,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'mobile';
   const canSelectAudioOutput = !isMobile;
+  const isMobileWebAudio = isMobileAudioExperience();
   const { user } = useAuth();
   const currentUserId = user?.id ?? '';
   const displayName = user?.displayName ?? 'Anonymous';
@@ -169,7 +171,10 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     (async () => {
       try {
         if (hasSavedMic) {
-          await publishMic(selectedMicId, { disableAudioFilters: isLowLatency });
+          await publishMic(selectedMicId, {
+            disableAudioFilters: isLowLatency,
+            useRawTrack: isLowLatency || isMobileWebAudio,
+          });
           micPublishedRef.current = true;
           setIsMicOn(true);
         } else {
@@ -180,7 +185,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         console.warn('[VoiceChannel] Auto-mic failed:', err);
       }
     })();
-  }, [isReady, hasSavedMic, isLowLatency, selectedMicId, publishMic, requestPermission]);
+  }, [isReady, hasSavedMic, isLowLatency, isMobileWebAudio, selectedMicId, publishMic, requestPermission]);
 
   useEffect(() => {
     if (!wsClient || !channel?.id) return;
@@ -327,7 +332,10 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
       setShowMicPicker(true);
     } else if (!micPublishedRef.current) {
       // Never published - publish with saved device
-      await publishMic(selectedMicId, { disableAudioFilters: isLowLatency });
+      await publishMic(selectedMicId, {
+        disableAudioFilters: isLowLatency,
+        useRawTrack: isLowLatency || isMobileWebAudio,
+      });
       micPublishedRef.current = true;
       setIsMicOn(true);
     } else {
@@ -341,7 +349,10 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     setShowMicPicker(false);
     selectMic(deviceId);
     if (micPublishedRef.current) await unpublishMic();
-    await publishMic(deviceId, { disableAudioFilters: isLowLatency });
+    await publishMic(deviceId, {
+      disableAudioFilters: isLowLatency,
+      useRawTrack: isLowLatency || isMobileWebAudio,
+    });
     micPublishedRef.current = true;
     setIsMicOn(true);
   };

@@ -320,7 +320,7 @@ export async function publishMic(room, refs, deviceId = null, options = {}) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
   refs.rawMicStreamRef.current = stream;
 
-  if (options.disableAudioFilters) {
+  if (options.disableAudioFilters || options.useRawTrack) {
     refs.audioContextRef.current = null;
     refs.noiseGateNodeRef.current = null;
 

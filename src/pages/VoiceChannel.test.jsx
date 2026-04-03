@@ -226,7 +226,10 @@ describe('VoiceChannel', () => {
     renderVoiceChannel(channel);
 
     await waitFor(() => {
-      expect(publishMic).toHaveBeenCalledWith('mic-1', { disableAudioFilters: false });
+      expect(publishMic).toHaveBeenCalledWith('mic-1', {
+        disableAudioFilters: false,
+        useRawTrack: false,
+      });
     });
 
     const muteCallsBeforeDeafen = muteMic.mock.calls.length;
@@ -286,7 +289,10 @@ describe('VoiceChannel', () => {
     renderVoiceChannel(channel);
 
     await waitFor(() => {
-      expect(publishMic).toHaveBeenCalledWith('mic-1', { disableAudioFilters: true });
+      expect(publishMic).toHaveBeenCalledWith('mic-1', {
+        disableAudioFilters: true,
+        useRawTrack: true,
+      });
     });
   });
 

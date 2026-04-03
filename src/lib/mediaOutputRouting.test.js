@@ -25,11 +25,11 @@ describe('mediaOutputRouting', () => {
     expect(getDefaultAudioOutputSelection({ userAgentOverride: IPHONE_USER_AGENT })).toBe(DEFAULT_AUDIO_OUTPUT_ID);
   });
 
-  it('does not use video routing on mobile web', () => {
+  it('uses video routing on mobile web default playback only', () => {
     expect(shouldAttachAudioToVideoElement({
       selectedAudioOutputId: DEFAULT_AUDIO_OUTPUT_ID,
       userAgentOverride: IPHONE_USER_AGENT,
-    })).toBe(false);
+    })).toBe(true);
 
     expect(shouldAttachAudioToVideoElement({
       selectedAudioOutputId: 'bt-1',
