@@ -425,7 +425,18 @@ function AudioVideoTab({ voiceRuntime = null }) {
     updateSettings: updateMicMonitorSettings,
   } = useMicMonitor();
   const isolationSnapshotRef = useRef(null);
+  const voiceRuntimeRef = useRef(voiceRuntime);
+  const stopMicMonitorRef = useRef(stopMicMonitor);
+  const restoreVoiceAfterMicTestRef = useRef(async () => {});
   const [micFilterSettings, setMicFilterSettingsState] = useState(() => getMicFilterSettings());
+
+  useEffect(() => {
+    voiceRuntimeRef.current = voiceRuntime;
+  }, [voiceRuntime]);
+
+  useEffect(() => {
+    stopMicMonitorRef.current = stopMicMonitor;
+  }, [stopMicMonitor]);
 
   const hasAudioLabels = audioDevices.some((d) => d.label);
   const hasVideoLabels = videoDevices.some((d) => d.label);
@@ -439,12 +450,13 @@ function AudioVideoTab({ voiceRuntime = null }) {
   }, [voiceRuntime, updateMicMonitorSettings]);
 
   const isolateVoiceForMicTest = useCallback(async () => {
-    if (!voiceRuntime?.isInVoice) return;
+    const runtime = voiceRuntimeRef.current;
+    if (!runtime?.isInVoice) return;
 
     const snapshot = {
       isInVoice: true,
-      isMuted: Boolean(voiceRuntime.isMuted),
-      isDeafened: Boolean(voiceRuntime.isDeafened),
+      isMuted: Boolean(runtime.isMuted),
+      isDeafened: Boolean(runtime.isDeafened),
       appliedDeafen: false,
       appliedMute: false,
     };
@@ -452,40 +464,36 @@ function AudioVideoTab({ voiceRuntime = null }) {
 
     if (!snapshot.isDeafened) {
       snapshot.appliedDeafen = true;
-      await Promise.resolve(voiceRuntime?.onDeafen?.());
+      await Promise.resolve(runtime.onDeafen?.());
       return;
     }
 
     if (!snapshot.isMuted) {
       snapshot.appliedMute = true;
-      await Promise.resolve(voiceRuntime?.onMute?.());
+      await Promise.resolve(runtime.onMute?.());
     }
-  }, [
-    voiceRuntime?.isInVoice,
-    voiceRuntime?.isMuted,
-    voiceRuntime?.isDeafened,
-    voiceRuntime?.onMute,
-    voiceRuntime?.onDeafen,
-  ]);
+  }, []);
 
   const restoreVoiceAfterMicTest = useCallback(async () => {
     const snapshot = isolationSnapshotRef.current;
     isolationSnapshotRef.current = null;
 
     if (!snapshot?.isInVoice) return;
+    const runtime = voiceRuntimeRef.current;
 
     if (snapshot.appliedDeafen) {
-      await Promise.resolve(voiceRuntime?.onDeafen?.());
+      await Promise.resolve(runtime?.onDeafen?.());
       return;
     }
 
     if (snapshot.appliedMute) {
-      await Promise.resolve(voiceRuntime?.onMute?.());
+      await Promise.resolve(runtime?.onMute?.());
     }
-  }, [
-    voiceRuntime?.onMute,
-    voiceRuntime?.onDeafen,
-  ]);
+  }, []);
+
+  useEffect(() => {
+    restoreVoiceAfterMicTestRef.current = restoreVoiceAfterMicTest;
+  }, [restoreVoiceAfterMicTest]);
 
   const startMicTest = useCallback(async (deviceId = selectedMicId) => {
     setMicTestError(null);
@@ -516,11 +524,6 @@ function AudioVideoTab({ voiceRuntime = null }) {
     await restoreVoiceAfterMicTest();
     setMicTestError(null);
   }, [restoreVoiceAfterMicTest, setMicTestError, stopMicMonitor]);
-
-  const cleanupMicTest = useCallback(async () => {
-    await stopMicMonitor();
-    await restoreVoiceAfterMicTest();
-  }, [restoreVoiceAfterMicTest, stopMicMonitor]);
 
   const handleMicSelectionChange = useCallback(async (event) => {
     const nextDeviceId = event.target.value;
@@ -559,9 +562,12 @@ function AudioVideoTab({ voiceRuntime = null }) {
 
   useEffect(() => {
     return () => {
-      void cleanupMicTest();
+      void (async () => {
+        await stopMicMonitorRef.current();
+        await restoreVoiceAfterMicTestRef.current();
+      })();
     };
-  }, [cleanupMicTest]);
+  }, []);
 
   return (
     <>

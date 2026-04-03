@@ -235,6 +235,47 @@ describe('UserSettingsModal', () => {
     );
   });
 
+  it('does not stop mic testing when voice runtime props rerender after deafen', async () => {
+    const onClose = vi.fn();
+    const voiceRuntime = {
+      isInVoice: true,
+      isMuted: false,
+      isDeafened: false,
+      onMute: vi.fn(),
+      onDeafen: vi.fn(),
+      onMicFilterSettingsChange: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <UserSettingsModal onClose={onClose} voiceRuntime={voiceRuntime} />,
+    );
+
+    await openAudioVideoTab();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start test/i }));
+    });
+
+    expect(mockMicMonitorStart).toHaveBeenCalledTimes(1);
+    expect(mockMicMonitorStop).not.toHaveBeenCalled();
+
+    rerender(
+      <UserSettingsModal
+        onClose={onClose}
+        voiceRuntime={{
+          isInVoice: true,
+          isMuted: false,
+          isDeafened: true,
+          onMute: vi.fn(),
+          onDeafen: vi.fn(),
+          onMicFilterSettingsChange: vi.fn(),
+        }}
+      />,
+    );
+
+    expect(mockMicMonitorStop).not.toHaveBeenCalled();
+  });
+
   it('restarts mic monitoring when the selected microphone changes during a test', async () => {
     micMonitorState.isTesting = true;
 
