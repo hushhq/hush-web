@@ -9,6 +9,7 @@ import * as mlsGroupLib from '../lib/mlsGroup';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
+import { createAudioLevelMonitor } from '../lib/audioLevelMonitor';
 import { getDeviceId } from './useAuth';
 import {
   applyMicFilterSettingsToNode,
@@ -65,6 +66,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const [isVoiceReconnecting, setIsVoiceReconnecting] = useState(false);
   const [voiceReconnectFailed, setVoiceReconnectFailed] = useState(false);
   const [activeSpeakerIds, setActiveSpeakerIds] = useState([]);
+  const [isLocalSpeaking, setIsLocalSpeaking] = useState(false);
 
   // ─── Click-to-Watch Screen Shares ─────────────────────
   const [availableScreens, setAvailableScreens] = useState(new Map());
@@ -94,6 +96,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const micDeviceIdRef = useRef(null);
   const micFilterSettingsRef = useRef(getMicFilterSettings());
   const micFiltersActiveRef = useRef(true);
+  const localSpeakingMonitorRef = useRef(null);
 
   // ─── Debounced State Updates ──────────────────────────
   const pendingLocalTracksUpdateRef = useRef(false);
@@ -129,6 +132,31 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     });
   }, []);
 
+  const cleanupLocalSpeakingMonitor = useCallback(async () => {
+    const monitor = localSpeakingMonitorRef.current;
+    localSpeakingMonitorRef.current = null;
+    setIsLocalSpeaking(false);
+    if (monitor) {
+      await monitor.cleanup();
+    }
+  }, []);
+
+  const startLocalSpeakingMonitor = useCallback(async (stream) => {
+    await cleanupLocalSpeakingMonitor();
+    if (!stream) {
+      return;
+    }
+    try {
+      localSpeakingMonitorRef.current = await createAudioLevelMonitor(stream, {
+        onActiveChange: (nextActive) => {
+          setIsLocalSpeaking(nextActive);
+        },
+      });
+    } catch (monitorError) {
+      console.warn('[audio] Failed to start local speaking monitor:', monitorError);
+    }
+  }, [cleanupLocalSpeakingMonitor]);
+
   // ─── Cleanup Mic Audio Pipeline ───────────────────────
   const cleanupMicPipeline = useCallback(() => {
     if (audioContextRef.current) {
@@ -143,7 +171,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       rawMicStreamRef.current.getTracks().forEach((t) => t.stop());
       rawMicStreamRef.current = null;
     }
-  }, []);
+    void cleanupLocalSpeakingMonitor();
+  }, [cleanupLocalSpeakingMonitor]);
 
   const syncParticipantsFromRoom = useCallback(() => {
     const room = roomRef.current;
@@ -766,6 +795,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         }, deviceId, options);
         micDeviceIdRef.current = deviceId;
         micFiltersActiveRef.current = !options.disableAudioFilters;
+        await startLocalSpeakingMonitor(rawMicStreamRef.current);
         scheduleLocalTracksUpdate();
       } catch (err) {
         cleanupMicPipeline();
@@ -785,8 +815,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     });
     micDeviceIdRef.current = null;
     micFiltersActiveRef.current = true;
+    await cleanupLocalSpeakingMonitor();
     scheduleLocalTracksUpdate();
-  }, [scheduleLocalTracksUpdate, cleanupMicPipeline]);
+  }, [scheduleLocalTracksUpdate, cleanupMicPipeline, cleanupLocalSpeakingMonitor]);
 
   // ─── Mute/Unmute Microphone (keeps track published) ──
   const muteMic = useCallback(async () => {
@@ -929,8 +960,14 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         roomRef.current = null;
       }
       cleanupMicPipeline();
+      void cleanupLocalSpeakingMonitor();
     };
-  }, [cleanupMicPipeline]);
+  }, [cleanupMicPipeline, cleanupLocalSpeakingMonitor]);
+
+  const effectiveActiveSpeakerIds =
+    isLocalSpeaking && currentUserId
+      ? Array.from(new Set([...activeSpeakerIds, currentUserId]))
+      : activeSpeakerIds;
 
   return {
     // Connection state
@@ -943,7 +980,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     voiceEpoch,
     isVoiceReconnecting,
     voiceReconnectFailed,
-    activeSpeakerIds,
+    activeSpeakerIds: effectiveActiveSpeakerIds,
     // Room connection
     connectRoom,
     disconnectRoom,

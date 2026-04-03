@@ -9,7 +9,7 @@
  * - RMS-based level detection
  * - Smooth attack/release (10ms attack, 50ms release)
  * - Hold time to prevent flutter (150ms)
- * - Level reporting for UI meter (throttled to ~60ms)
+ * - Level reporting for UI meter (throttled to ~16ms)
  */
 
 class NoiseGateProcessor extends AudioWorkletProcessor {
@@ -29,7 +29,7 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
 
     // Level reporting (throttled)
     this.frameCount = 0;
-    this.reportInterval = 128; // Report every 128 frames (~2.67ms at 48kHz)
+    this.reportInterval = 6; // Report every ~16ms at 48kHz / 128-sample render quanta
 
     // Calculate smoothing coefficients for 48kHz sample rate
     // attack = 10ms, release = 50ms

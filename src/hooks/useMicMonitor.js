@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createAudioLevelMonitor } from '../lib/audioLevelMonitor';
 import { createMicProcessingPipeline, normalizeMicFilterSettings } from '../lib/micProcessing';
 
 const MIC_MONITOR_STOPPED_ERROR = 'Microphone input stopped unexpectedly.';
@@ -53,6 +54,9 @@ export function useMicMonitor() {
     if (session?.cleanup) {
       await session.cleanup();
     }
+    if (session?.levelMonitor) {
+      await session.levelMonitor.cleanup();
+    }
   }, []);
 
   const start = useCallback(async ({ deviceId, settings }) => {
@@ -65,6 +69,12 @@ export function useMicMonitor() {
     const session = await createMicProcessingPipeline(stream, {
       monitorOutput: true,
       settings: initialSettings,
+    });
+    const levelMonitor = await createAudioLevelMonitor(stream, {
+      onLevelChange: (nextLevel) => {
+        if (!isMountedRef.current) return;
+        setLevel(nextLevel);
+      },
     });
     const track = stream.getAudioTracks()[0] ?? null;
     let diagnosticsAttached = true;
@@ -118,19 +128,20 @@ export function useMicMonitor() {
       session.noiseGateNode.port.onmessage = (event) => {
         if (event.data?.type !== 'level') return;
         if (!isMountedRef.current) return;
-        setLevel(event.data.level ?? 0);
         setGateOpen(Boolean(event.data.gateOpen));
       };
     }
 
     sessionRef.current = {
       ...session,
+      levelMonitor,
       captureSettings: initialSettings,
       deviceId,
       detachDiagnostics,
     };
     if (!isMountedRef.current) {
       detachDiagnostics();
+      await levelMonitor.cleanup();
       await session.cleanup();
       return;
     }

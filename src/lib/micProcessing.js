@@ -168,7 +168,10 @@ export async function createMicProcessingPipeline(stream, options = {}) {
     };
   }
 
-  const audioContext = new AudioContext({ sampleRate: 48_000 });
+  const audioContext = new AudioContext({
+    sampleRate: 48_000,
+    latencyHint: 'interactive',
+  });
   const source = audioContext.createMediaStreamSource(stream);
   const mediaDestination = audioContext.createMediaStreamDestination();
   mediaDestination.channelCount = 1;
