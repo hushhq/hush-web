@@ -144,6 +144,7 @@ export default function StreamView({
           ref={videoRef}
           autoPlay
           playsInline
+          data-voice-playback={!isLocal && attachAudioToVideo ? 'true' : undefined}
           muted={isLocal}
           className="sv-video"
           style={{ objectFit: isFullscreen ? 'contain' : (objectFit ?? 'contain') }}

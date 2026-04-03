@@ -381,7 +381,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const micBeforeDeafenRef = useRef(false);
 
   const setVoicePlaybackMuted = useCallback((next) => {
-    document.querySelectorAll('audio[autoplay], video[autoplay]').forEach((el) => {
+    document.querySelectorAll('[data-voice-playback="true"]').forEach((el) => {
       el.muted = next;
     });
   }, []);

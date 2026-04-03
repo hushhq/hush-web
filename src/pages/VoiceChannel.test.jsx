@@ -247,4 +247,42 @@ describe('VoiceChannel', () => {
       expect(unmuteMic.mock.calls.length).toBe(unmuteCallsBeforeUndeafen + 1);
     });
   });
+
+  it('mutes only tagged voice playback elements when deafening', async () => {
+    vi.mocked(useBreakpoint).mockReturnValue('mobile');
+
+    const taggedPlayback = document.createElement('audio');
+    taggedPlayback.autoplay = true;
+    taggedPlayback.dataset.voicePlayback = 'true';
+    taggedPlayback.muted = false;
+
+    const unrelatedAutoplay = document.createElement('audio');
+    unrelatedAutoplay.autoplay = true;
+    unrelatedAutoplay.muted = false;
+
+    document.body.appendChild(taggedPlayback);
+    document.body.appendChild(unrelatedAutoplay);
+
+    const channel = {
+      id: 'ch1',
+      name: 'voice-1',
+      serverId: 's1',
+      type: 'voice',
+      voiceMode: 'quality',
+    };
+
+    renderVoiceChannel(channel);
+
+    await waitFor(() => {
+      expect(ControlsProps).not.toBeNull();
+    });
+
+    await ControlsProps.onDeafen();
+
+    expect(taggedPlayback.muted).toBe(true);
+    expect(unrelatedAutoplay.muted).toBe(false);
+
+    taggedPlayback.remove();
+    unrelatedAutoplay.remove();
+  });
 });

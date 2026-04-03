@@ -55,7 +55,7 @@ export default function HiddenAudioOutput({
   }, [track, selectedAudioOutputId, audioOutputOptions]);
 
   if (useVideoElement) {
-    return <video ref={mediaRef} autoPlay playsInline style={OFFSCREEN_MEDIA_STYLE} />;
+    return <video ref={mediaRef} autoPlay playsInline data-voice-playback="true" style={OFFSCREEN_MEDIA_STYLE} />;
   }
-  return <audio ref={mediaRef} autoPlay playsInline style={OFFSCREEN_MEDIA_STYLE} />;
+  return <audio ref={mediaRef} autoPlay playsInline data-voice-playback="true" style={OFFSCREEN_MEDIA_STYLE} />;
 }
