@@ -4,7 +4,7 @@
  */
 
 import { RoomEvent, Track, LocalVideoTrack, LocalAudioTrack } from 'livekit-client';
-import { createMicProcessingPipeline } from './micProcessing';
+import { createMicProcessingPipeline, getMicFilterSettings, normalizeMicFilterSettings } from './micProcessing';
 export { preloadNoiseGateWorklet } from './micProcessing';
 import {
   QUALITY_PRESETS,
@@ -291,10 +291,19 @@ export async function unpublishWebcam(room, refs) {
  * @param {string|null} deviceId
  */
 export function buildPublishedMicAudioConstraints(deviceId = null) {
+  const settings = normalizeMicFilterSettings(getMicFilterSettings());
+  return buildPublishedMicAudioConstraintsFromSettings(deviceId, settings);
+}
+
+export function buildPublishedMicAudioConstraintsFromSettings(deviceId = null, settings = {}, options = {}) {
+  const normalizedSettings = normalizeMicFilterSettings(settings);
+  const echoCancellation = options.disableAudioFilters
+    ? false
+    : normalizedSettings.echoCancellation;
   const constraints = {
-    // Hush owns the microphone processing pipeline. Keep browser DSP off so
-    // the published path stays predictable before a future denoiser lands.
-    echoCancellation: false,
+    // Echo cancellation is a source-side browser capture feature. Hush keeps
+    // the rest of the DSP chain off and applies its own post-capture gate.
+    echoCancellation,
     noiseSuppression: false,
     autoGainControl: false,
     channelCount: 1,
@@ -305,9 +314,28 @@ export function buildPublishedMicAudioConstraints(deviceId = null) {
   return constraints;
 }
 
-export async function publishMic(room, refs, deviceId = null) {
-  const audioConstraints = buildPublishedMicAudioConstraints(deviceId);
+export async function publishMic(room, refs, deviceId = null, options = {}) {
+  const settings = getMicFilterSettings();
+  const audioConstraints = buildPublishedMicAudioConstraintsFromSettings(deviceId, settings, options);
   const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+  refs.rawMicStreamRef.current = stream;
+
+  if (options.disableAudioFilters) {
+    refs.audioContextRef.current = null;
+    refs.noiseGateNodeRef.current = null;
+
+    const rawTrack = stream.getAudioTracks()[0];
+    const localAudioTrack = new LocalAudioTrack(rawTrack);
+    await room.localParticipant.publishTrack(localAudioTrack, {
+      source: Track.Source.Microphone,
+    });
+    refs.localTracksRef.current.set(localAudioTrack.sid, {
+      track: localAudioTrack,
+      source: MEDIA_SOURCES.MIC,
+    });
+    return;
+  }
+
   const pipeline = await createMicProcessingPipeline(stream);
   refs.rawMicStreamRef.current = pipeline.rawStream;
   refs.audioContextRef.current = pipeline.audioContext;

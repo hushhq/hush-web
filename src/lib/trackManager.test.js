@@ -35,9 +35,13 @@ vi.mock('livekit-client', () => ({
   LocalVideoTrack: class {},
 }));
 
-vi.mock('./micProcessing', () => ({
-  createMicProcessingPipeline: mockCreateMicProcessingPipeline,
-}));
+vi.mock('./micProcessing', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    createMicProcessingPipeline: mockCreateMicProcessingPipeline,
+  };
+});
 
 import { MEDIA_SOURCES } from '../utils/constants';
 import { buildPublishedMicAudioConstraints, publishMic } from './trackManager';
@@ -52,7 +56,7 @@ describe('trackManager mic publishing', () => {
 
   it('builds published mic constraints without browser dsp filters', () => {
     expect(buildPublishedMicAudioConstraints('mic-1')).toEqual({
-      echoCancellation: false,
+      echoCancellation: true,
       noiseSuppression: false,
       autoGainControl: false,
       channelCount: 1,
@@ -90,7 +94,7 @@ describe('trackManager mic publishing', () => {
 
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
       audio: {
-        echoCancellation: false,
+        echoCancellation: true,
         noiseSuppression: false,
         autoGainControl: false,
         channelCount: 1,

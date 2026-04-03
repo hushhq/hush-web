@@ -37,6 +37,9 @@ const {
   const mockTrackMute = vi.fn().mockResolvedValue(undefined);
   const mockTrackUnmute = vi.fn().mockResolvedValue(undefined);
   const mockPublishMic = vi.fn().mockImplementation(async (_room, refs) => {
+    const rawTrack = {
+      applyConstraints: vi.fn().mockResolvedValue(undefined),
+    };
     refs.localTracksRef.current.set('mic-track', {
       source: MEDIA_SOURCES.MIC,
       track: {
@@ -44,6 +47,9 @@ const {
         unmute: mockTrackUnmute,
       },
     });
+    refs.rawMicStreamRef.current = {
+      getAudioTracks: () => [rawTrack],
+    };
   });
 
   return {
@@ -153,6 +159,13 @@ vi.mock('../lib/trackManager', () => ({
   publishWebcam: vi.fn(),
   unpublishWebcam: vi.fn(),
   publishMic: mockPublishMic,
+  buildPublishedMicAudioConstraintsFromSettings: vi.fn((deviceId, settings) => ({
+    echoCancellation: settings.echoCancellation,
+    noiseSuppression: false,
+    autoGainControl: false,
+    channelCount: 1,
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+  })),
   unpublishMic: vi.fn(),
   watchScreen: vi.fn(),
   unwatchScreen: vi.fn(),
@@ -425,6 +438,33 @@ describe('useRoom MLS voice E2EE', () => {
     });
 
     expect(mockTrackUnmute).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates raw microphone constraints when echo cancellation changes', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      await result.current.publishMic('mic-1');
+    });
+
+    const [, refs] = mockPublishMic.mock.calls.at(-1);
+    const rawTrack = refs.rawMicStreamRef.current.getAudioTracks()[0];
+
+    await act(async () => {
+      await result.current.updateMicFilterSettings({ echoCancellation: false });
+    });
+
+    expect(rawTrack.applyConstraints).toHaveBeenCalledWith({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 1,
+      deviceId: { exact: 'mic-1' },
+    });
   });
 
   it('MLS failure blocks voice entirely - no unencrypted fallback', async () => {

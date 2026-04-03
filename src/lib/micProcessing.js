@@ -1,5 +1,6 @@
 const MIC_GATE_ENABLED_KEY = 'hush_mic_noise_gate_enabled';
 const MIC_GATE_THRESHOLD_DB_KEY = 'hush_mic_noise_gate_threshold_db';
+const MIC_ECHO_CANCELLATION_KEY = 'hush_mic_echo_cancellation_enabled';
 const NOISE_GATE_WORKLET_URL = new URL('./noiseGateWorklet.js', import.meta.url);
 
 export const MIC_GATE_THRESHOLD_MIN_DB = -70;
@@ -7,6 +8,7 @@ export const MIC_GATE_THRESHOLD_MAX_DB = -20;
 export const MIC_GATE_THRESHOLD_STEP_DB = 1;
 
 export const DEFAULT_MIC_FILTER_SETTINGS = Object.freeze({
+  echoCancellation: true,
   noiseGateEnabled: true,
   noiseGateThresholdDb: -50,
 });
@@ -24,8 +26,8 @@ function resolveStorage(storage) {
 /**
  * Normalizes raw mic filter settings into the persisted runtime shape.
  *
- * @param {Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} raw
- * @returns {{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
+ * @param {Partial<{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} raw
+ * @returns {{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
  */
 export function normalizeMicFilterSettings(raw = {}) {
   const rawThreshold = raw.noiseGateThresholdDb;
@@ -33,6 +35,9 @@ export function normalizeMicFilterSettings(raw = {}) {
     ? Number.NaN
     : Number(rawThreshold);
   return {
+    echoCancellation: typeof raw.echoCancellation === 'boolean'
+      ? raw.echoCancellation
+      : DEFAULT_MIC_FILTER_SETTINGS.echoCancellation,
     noiseGateEnabled: typeof raw.noiseGateEnabled === 'boolean'
       ? raw.noiseGateEnabled
       : DEFAULT_MIC_FILTER_SETTINGS.noiseGateEnabled,
@@ -46,7 +51,7 @@ export function normalizeMicFilterSettings(raw = {}) {
  * Loads persisted mic filter settings from storage.
  *
  * @param {Storage|null} [storage]
- * @returns {{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
+ * @returns {{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
  */
 export function getMicFilterSettings(storage) {
   const resolvedStorage = resolveStorage(storage);
@@ -56,6 +61,7 @@ export function getMicFilterSettings(storage) {
 
   try {
     return normalizeMicFilterSettings({
+      echoCancellation: resolvedStorage.getItem(MIC_ECHO_CANCELLATION_KEY) !== '0',
       noiseGateEnabled: resolvedStorage.getItem(MIC_GATE_ENABLED_KEY) !== '0',
       noiseGateThresholdDb: resolvedStorage.getItem(MIC_GATE_THRESHOLD_DB_KEY),
     });
@@ -67,9 +73,9 @@ export function getMicFilterSettings(storage) {
 /**
  * Persists mic filter settings to storage.
  *
- * @param {Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} nextSettings
+ * @param {Partial<{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} nextSettings
  * @param {Storage|null} [storage]
- * @returns {{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
+ * @returns {{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
  */
 export function setMicFilterSettings(nextSettings, storage) {
   const resolvedStorage = resolveStorage(storage);
@@ -83,6 +89,7 @@ export function setMicFilterSettings(nextSettings, storage) {
   }
 
   try {
+    resolvedStorage.setItem(MIC_ECHO_CANCELLATION_KEY, normalized.echoCancellation ? '1' : '0');
     resolvedStorage.setItem(MIC_GATE_ENABLED_KEY, normalized.noiseGateEnabled ? '1' : '0');
     resolvedStorage.setItem(MIC_GATE_THRESHOLD_DB_KEY, String(normalized.noiseGateThresholdDb));
   } catch {
@@ -96,8 +103,8 @@ export function setMicFilterSettings(nextSettings, storage) {
  * Applies the current mic filter settings to an active noise-gate node.
  *
  * @param {AudioWorkletNode|null} noiseGateNode
- * @param {Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} settings
- * @returns {{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
+ * @param {Partial<{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} settings
+ * @returns {{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
  */
 export function applyMicFilterSettingsToNode(noiseGateNode, settings) {
   const normalized = normalizeMicFilterSettings(settings);
@@ -130,13 +137,13 @@ export async function preloadNoiseGateWorklet() {
  * and local mic-test monitoring in settings.
  *
  * @param {MediaStream} stream
- * @param {{ monitorOutput?: boolean, settings?: Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }> }} [options]
+ * @param {{ monitorOutput?: boolean, settings?: Partial<{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }> }} [options]
  * @returns {Promise<{
  *   audioContext: AudioContext|null,
  *   noiseGateNode: AudioWorkletNode|null,
  *   rawStream: MediaStream,
  *   processedStream: MediaStream,
- *   updateSettings: (nextSettings: Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>) => { noiseGateEnabled: boolean, noiseGateThresholdDb: number },
+ *   updateSettings: (nextSettings: Partial<{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }>) => { echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number },
  *   cleanup: () => Promise<void>,
  * }>}
  */

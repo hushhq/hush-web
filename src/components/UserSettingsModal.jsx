@@ -442,12 +442,16 @@ function AudioVideoTab({ voiceRuntime = null }) {
   const hasVideoLabels = videoDevices.some((d) => d.label);
 
   const applyMicFilters = useCallback((nextSettings) => {
+    const previousSettings = micFilterSettings;
     const normalized = setMicFilterSettings(nextSettings);
     setMicFilterSettingsState(normalized);
     voiceRuntime?.onMicFilterSettingsChange?.(normalized);
     updateMicMonitorSettings(normalized);
-    return normalized;
-  }, [voiceRuntime, updateMicMonitorSettings]);
+    return {
+      normalized,
+      captureSettingsChanged: previousSettings.echoCancellation !== normalized.echoCancellation,
+    };
+  }, [micFilterSettings, voiceRuntime, updateMicMonitorSettings]);
 
   const isolateVoiceForMicTest = useCallback(async () => {
     const runtime = voiceRuntimeRef.current;
@@ -560,6 +564,36 @@ function AudioVideoTab({ voiceRuntime = null }) {
     await startMicTest();
   }, [isMicTesting, startMicTest, stopMicTest]);
 
+  const handleEchoCancellationToggle = useCallback(async () => {
+    const { normalized, captureSettingsChanged } = applyMicFilters({
+      echoCancellation: !micFilterSettings.echoCancellation,
+    });
+
+    if (!captureSettingsChanged || !isMicTesting) {
+      return;
+    }
+
+    try {
+      await stopMicMonitor();
+      await startMicMonitor({
+        deviceId: selectedMicId || null,
+        settings: normalized,
+      });
+    } catch (error) {
+      await restoreVoiceAfterMicTest();
+      setMicTestError(getMicMonitorErrorMessage(error));
+    }
+  }, [
+    applyMicFilters,
+    isMicTesting,
+    micFilterSettings.echoCancellation,
+    restoreVoiceAfterMicTest,
+    selectedMicId,
+    setMicTestError,
+    startMicMonitor,
+    stopMicMonitor,
+  ]);
+
   useEffect(() => {
     return () => {
       void (async () => {
@@ -633,9 +667,34 @@ function AudioVideoTab({ voiceRuntime = null }) {
 
       <div className="settings-card">
         <div className="settings-card-row settings-card-row--stacked">
+          <div className="settings-field-label">Audio Filters</div>
           <div className="settings-mic-section-header">
             <div>
-              <div className="settings-field-label">Audio Filters</div>
+              <div className="settings-card-value">Echo cancellation</div>
+            </div>
+            <button
+              type="button"
+              className={`settings-pill-toggle${micFilterSettings.echoCancellation ? ' settings-pill-toggle--active' : ''}`}
+              onClick={() => {
+                void handleEchoCancellationToggle();
+              }}
+            >
+              {micFilterSettings.echoCancellation ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+          <div className="settings-field-note">
+            Uses browser acoustic echo cancellation during microphone capture, before Hush applies the gate.
+          </div>
+          {voiceRuntime?.isInVoice && voiceRuntime?.isLowLatency && (
+            <div className="settings-field-note" style={{ color: 'var(--hush-warning)' }}>
+              Your current room is in Performance mode, so live room audio bypasses echo cancellation and the gate.
+            </div>
+          )}
+        </div>
+        <div className="settings-card-separator" />
+        <div className="settings-card-row settings-card-row--stacked">
+          <div className="settings-mic-section-header">
+            <div>
               <div className="settings-card-value">Noise gate</div>
             </div>
             <button

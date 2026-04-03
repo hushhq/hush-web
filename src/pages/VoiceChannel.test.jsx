@@ -226,12 +226,8 @@ describe('VoiceChannel', () => {
     renderVoiceChannel(channel);
 
     await waitFor(() => {
-      expect(ControlsProps).not.toBeNull();
+      expect(publishMic).toHaveBeenCalledWith('mic-1', { disableAudioFilters: false });
     });
-
-    await ControlsProps.onMic();
-
-    expect(publishMic).toHaveBeenCalledWith('mic-1');
 
     const muteCallsBeforeDeafen = muteMic.mock.calls.length;
     await ControlsProps.onDeafen();
@@ -245,6 +241,52 @@ describe('VoiceChannel', () => {
 
     await waitFor(() => {
       expect(unmuteMic.mock.calls.length).toBe(unmuteCallsBeforeUndeafen + 1);
+    });
+  });
+
+  it('publishes microphone without filters in low-latency mode', async () => {
+    vi.mocked(useBreakpoint).mockReturnValue('mobile');
+
+    const publishMic = vi.fn();
+    vi.mocked(useRoom).mockReturnValue({
+      isReady: true,
+      error: null,
+      localTracks: new Map(),
+      remoteTracks: new Map(),
+      participants: [],
+      connectRoom: mockConnectRoom,
+      disconnectRoom: mockDisconnectRoom,
+      publishScreen: vi.fn(),
+      unpublishScreen: vi.fn(),
+      changeQuality: vi.fn(),
+      publishWebcam: vi.fn(),
+      unpublishWebcam: vi.fn(),
+      publishMic,
+      unpublishMic: vi.fn(),
+      muteMic: vi.fn(),
+      unmuteMic: vi.fn(),
+      availableScreens: new Map(),
+      watchedScreens: new Set(),
+      loadingScreens: new Set(),
+      watchScreen: vi.fn(),
+      unwatchScreen: vi.fn(),
+      isE2EEEnabled: false,
+      voiceEpoch: null,
+      isVoiceReconnecting: false,
+    });
+
+    const channel = {
+      id: 'ch1',
+      name: 'voice-1',
+      serverId: 's1',
+      type: 'voice',
+      voiceMode: 'low-latency',
+    };
+
+    renderVoiceChannel(channel);
+
+    await waitFor(() => {
+      expect(publishMic).toHaveBeenCalledWith('mic-1', { disableAudioFilters: true });
     });
   });
 

@@ -17,13 +17,14 @@ import UserSettingsModal from './UserSettingsModal';
  * @param {function} props.onDeafen - Toggle deafen.
  * @param {function} [props.onMicDeviceSwitch] - Opens microphone selection.
  * @param {function} [props.onAudioOutputSwitch] - Opens audio output selection.
- * @param {(settings: Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>) => void} [props.onMicFilterSettingsChange]
+ * @param {(settings: Partial<{ echoCancellation: boolean, noiseGateEnabled: boolean, noiseGateThresholdDb: number }>) => void} [props.onMicFilterSettingsChange]
  */
 export default function UserPanel({
   user,
   isMuted,
   isDeafened,
   isInVoice,
+  isLowLatency = false,
   onMute,
   onDeafen,
   onMicDeviceSwitch,
@@ -191,6 +192,7 @@ export default function UserPanel({
           onClose={() => setShowSettings(false)}
           voiceRuntime={{
             isInVoice,
+            isLowLatency,
             isMuted,
             isDeafened,
             onMute,

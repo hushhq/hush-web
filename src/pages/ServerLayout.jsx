@@ -1688,6 +1688,7 @@ export default function ServerLayout() {
         isMuted={!!activeVoiceChannel && !voiceMicOn}
         isDeafened={!!activeVoiceChannel && voiceDeafened}
         isInVoice={!!activeVoiceChannel}
+        isLowLatency={activeVoiceChannel?.voiceMode === 'low-latency'}
         onMute={() => voiceControlsRef.current?.toggleMic()}
         onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
         onMicDeviceSwitch={() => voiceControlsRef.current?.openMicPicker?.()}

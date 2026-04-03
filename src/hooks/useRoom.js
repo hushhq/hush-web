@@ -10,10 +10,15 @@ import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
 import { getDeviceId } from './useAuth';
-import { applyMicFilterSettingsToNode } from '../lib/micProcessing';
+import {
+  applyMicFilterSettingsToNode,
+  getMicFilterSettings,
+  normalizeMicFilterSettings,
+} from '../lib/micProcessing';
 
 import {
   attachRemoteTrackListeners,
+  buildPublishedMicAudioConstraintsFromSettings,
   preloadNoiseGateWorklet,
   publishScreen as trackPublishScreen,
   unpublishScreen as trackUnpublishScreen,
@@ -86,6 +91,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const audioContextRef = useRef(null);
   const noiseGateNodeRef = useRef(null);
   const rawMicStreamRef = useRef(null);
+  const micDeviceIdRef = useRef(null);
+  const micFilterSettingsRef = useRef(getMicFilterSettings());
+  const micFiltersActiveRef = useRef(true);
 
   // ─── Debounced State Updates ──────────────────────────
   const pendingLocalTracksUpdateRef = useRef(false);
@@ -746,7 +754,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
   // ─── Publish Microphone ───────────────────────────────
   const publishMic = useCallback(
-    async (deviceId = null) => {
+    async (deviceId = null, options = {}) => {
       if (!roomRef.current) throw new Error('Room not connected');
       try {
         await trackPublishMic(roomRef.current, {
@@ -755,7 +763,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           noiseGateNodeRef,
           rawMicStreamRef,
           cleanupMicPipeline,
-        }, deviceId);
+        }, deviceId, options);
+        micDeviceIdRef.current = deviceId;
+        micFiltersActiveRef.current = !options.disableAudioFilters;
         scheduleLocalTracksUpdate();
       } catch (err) {
         cleanupMicPipeline();
@@ -773,6 +783,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       rawMicStreamRef,
       cleanupMicPipeline,
     });
+    micDeviceIdRef.current = null;
+    micFiltersActiveRef.current = true;
     scheduleLocalTracksUpdate();
   }, [scheduleLocalTracksUpdate, cleanupMicPipeline]);
 
@@ -801,8 +813,40 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
    *
    * @param {Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} settings
    */
-  const updateMicFilterSettings = useCallback((settings) => {
-    applyMicFilterSettingsToNode(noiseGateNodeRef.current, settings);
+  const updateMicFilterSettings = useCallback(async (settings) => {
+    const nextSettings = normalizeMicFilterSettings({
+      ...micFilterSettingsRef.current,
+      ...settings,
+    });
+    const echoCancellationChanged =
+      micFilterSettingsRef.current.echoCancellation !== nextSettings.echoCancellation;
+
+    micFilterSettingsRef.current = nextSettings;
+    applyMicFilterSettingsToNode(noiseGateNodeRef.current, nextSettings);
+
+    if (!echoCancellationChanged) {
+      return;
+    }
+
+    if (!micFiltersActiveRef.current) {
+      return;
+    }
+
+    const rawTrack = rawMicStreamRef.current?.getAudioTracks?.()[0] ?? null;
+    if (typeof rawTrack?.applyConstraints !== 'function') {
+      return;
+    }
+
+    try {
+      await rawTrack.applyConstraints(
+        buildPublishedMicAudioConstraintsFromSettings(
+          micDeviceIdRef.current,
+          nextSettings,
+        ),
+      );
+    } catch (error) {
+      console.warn('[audio] Failed to update published mic capture constraints:', error);
+    }
   }, []);
 
   // ─── Watch Screen Share ───────────────────────────────

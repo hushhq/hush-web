@@ -169,7 +169,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     (async () => {
       try {
         if (hasSavedMic) {
-          await publishMic(selectedMicId);
+          await publishMic(selectedMicId, { disableAudioFilters: isLowLatency });
           micPublishedRef.current = true;
           setIsMicOn(true);
         } else {
@@ -180,7 +180,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         console.warn('[VoiceChannel] Auto-mic failed:', err);
       }
     })();
-  }, [isReady, hasSavedMic, selectedMicId, publishMic, requestPermission]);
+  }, [isReady, hasSavedMic, isLowLatency, selectedMicId, publishMic, requestPermission]);
 
   useEffect(() => {
     if (!wsClient || !channel?.id) return;
@@ -327,7 +327,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
       setShowMicPicker(true);
     } else if (!micPublishedRef.current) {
       // Never published - publish with saved device
-      await publishMic(selectedMicId);
+      await publishMic(selectedMicId, { disableAudioFilters: isLowLatency });
       micPublishedRef.current = true;
       setIsMicOn(true);
     } else {
@@ -341,7 +341,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     setShowMicPicker(false);
     selectMic(deviceId);
     if (micPublishedRef.current) await unpublishMic();
-    await publishMic(deviceId);
+    await publishMic(deviceId, { disableAudioFilters: isLowLatency });
     micPublishedRef.current = true;
     setIsMicOn(true);
   };
@@ -435,7 +435,12 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         toggleWebcam: () => handleWebcamRef.current(),
         openMicPicker: handleMicDeviceSwitch,
         openAudioOutputPicker: canSelectAudioOutput ? handleAudioOutputSwitch : null,
-        updateMicFilterSettings: (settings) => updateMicFilterSettingsRef.current(settings),
+        updateMicFilterSettings: (settings) => {
+          if (isLowLatency) {
+            return Promise.resolve();
+          }
+          return updateMicFilterSettingsRef.current(settings);
+        },
         isScreenSharing,
         isWebcamOn,
         isLowLatency,

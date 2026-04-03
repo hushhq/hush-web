@@ -14,6 +14,7 @@ describe('micProcessing', () => {
 
   it('returns the shipped defaults when no settings are stored', () => {
     expect(getMicFilterSettings()).toEqual({
+      echoCancellation: true,
       noiseGateEnabled: true,
       noiseGateThresholdDb: -50,
     });
@@ -21,17 +22,21 @@ describe('micProcessing', () => {
 
   it('normalizes and clamps threshold values', () => {
     expect(normalizeMicFilterSettings({
+      echoCancellation: 'yes',
       noiseGateEnabled: 'yes',
       noiseGateThresholdDb: -120,
     })).toEqual({
+      echoCancellation: true,
       noiseGateEnabled: true,
       noiseGateThresholdDb: MIC_GATE_THRESHOLD_MIN_DB,
     });
 
     expect(normalizeMicFilterSettings({
+      echoCancellation: false,
       noiseGateEnabled: false,
       noiseGateThresholdDb: 12,
     })).toEqual({
+      echoCancellation: false,
       noiseGateEnabled: false,
       noiseGateThresholdDb: MIC_GATE_THRESHOLD_MAX_DB,
     });
@@ -39,14 +44,17 @@ describe('micProcessing', () => {
 
   it('persists normalized mic filter settings to localStorage', () => {
     const normalized = setMicFilterSettings({
+      echoCancellation: false,
       noiseGateEnabled: false,
       noiseGateThresholdDb: -37.4,
     });
 
     expect(normalized).toEqual({
+      echoCancellation: false,
       noiseGateEnabled: false,
       noiseGateThresholdDb: -37,
     });
+    expect(localStorage.getItem('hush_mic_echo_cancellation_enabled')).toBe('0');
     expect(localStorage.getItem('hush_mic_noise_gate_enabled')).toBe('0');
     expect(localStorage.getItem('hush_mic_noise_gate_threshold_db')).toBe('-37');
     expect(getMicFilterSettings()).toEqual(normalized);

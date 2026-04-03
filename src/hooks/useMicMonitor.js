@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createMicProcessingPipeline } from '../lib/micProcessing';
+import { createMicProcessingPipeline, normalizeMicFilterSettings } from '../lib/micProcessing';
 
 const MIC_MONITOR_STOPPED_ERROR = 'Microphone input stopped unexpectedly.';
 
-export function buildMicMonitorAudioConstraints(deviceId = null) {
+export function buildMicMonitorAudioConstraints(deviceId = null, settings = {}) {
+  const normalizedSettings = normalizeMicFilterSettings(settings);
   const constraints = {
     // Local mic monitoring is a loopback path. Browser DSP can aggressively
-    // clamp or suppress that signal, so keep the monitor profile predictable
-    // and let Hush's own gate be the only active filter here.
-    echoCancellation: false,
+    // clamp or suppress that signal. Echo cancellation stays configurable as
+    // a source capture option, while Hush owns the gate post-processing step.
+    echoCancellation: normalizedSettings.echoCancellation,
     noiseSuppression: false,
     autoGainControl: false,
     channelCount: 1,
@@ -58,11 +59,12 @@ export function useMicMonitor() {
     await stop();
     setError(null);
 
-    const audioConstraints = buildMicMonitorAudioConstraints(deviceId);
+    const initialSettings = normalizeMicFilterSettings(settings);
+    const audioConstraints = buildMicMonitorAudioConstraints(deviceId, initialSettings);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
     const session = await createMicProcessingPipeline(stream, {
       monitorOutput: true,
-      settings,
+      settings: initialSettings,
     });
     const track = stream.getAudioTracks()[0] ?? null;
     let diagnosticsAttached = true;
@@ -123,6 +125,8 @@ export function useMicMonitor() {
 
     sessionRef.current = {
       ...session,
+      captureSettings: initialSettings,
+      deviceId,
       detachDiagnostics,
     };
     if (!isMountedRef.current) {
@@ -134,8 +138,33 @@ export function useMicMonitor() {
   }, []);
 
   const updateSettings = useCallback((settings) => {
-    if (!sessionRef.current) return;
-    sessionRef.current.updateSettings(settings);
+    const session = sessionRef.current;
+    if (!session) return;
+
+    const nextSettings = normalizeMicFilterSettings({
+      ...session.captureSettings,
+      ...settings,
+    });
+    const echoCancellationChanged =
+      session.captureSettings.echoCancellation !== nextSettings.echoCancellation;
+
+    session.captureSettings = nextSettings;
+    session.updateSettings(nextSettings);
+
+    if (!echoCancellationChanged) {
+      return;
+    }
+
+    const rawTrack = session.rawStream?.getAudioTracks?.()[0] ?? null;
+    if (typeof rawTrack?.applyConstraints !== 'function') {
+      return;
+    }
+
+    void rawTrack.applyConstraints(
+      buildMicMonitorAudioConstraints(session.deviceId ?? null, nextSettings),
+    ).catch((error) => {
+      console.warn('[audio] Failed to update mic monitor capture constraints:', error);
+    });
   }, []);
 
   useEffect(() => {

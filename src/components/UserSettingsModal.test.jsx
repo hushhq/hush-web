@@ -191,7 +191,7 @@ describe('UserSettingsModal', () => {
     expect(mockMicMonitorStart).toHaveBeenCalledWith(
       expect.objectContaining({
         deviceId: 'mic-1',
-        settings: expect.objectContaining({ noiseGateEnabled: true, noiseGateThresholdDb: -50 }),
+        settings: expect.objectContaining({ echoCancellation: true, noiseGateEnabled: true, noiseGateThresholdDb: -50 }),
       }),
     );
     expect(mockRefreshDevices).toHaveBeenCalled();
@@ -230,7 +230,7 @@ describe('UserSettingsModal', () => {
     expect(mockMicMonitorStart).toHaveBeenCalledWith(
       expect.objectContaining({
         deviceId: 'mic-1',
-        settings: expect.objectContaining({ noiseGateEnabled: true, noiseGateThresholdDb: -50 }),
+        settings: expect.objectContaining({ echoCancellation: true, noiseGateEnabled: true, noiseGateThresholdDb: -50 }),
       }),
     );
   });
@@ -276,6 +276,38 @@ describe('UserSettingsModal', () => {
     expect(mockMicMonitorStop).not.toHaveBeenCalled();
   });
 
+  it('persists echo cancellation and updates active mic paths', async () => {
+    const onMicFilterSettingsChange = vi.fn();
+    micMonitorState.isTesting = true;
+    render(
+      <UserSettingsModal
+        onClose={vi.fn()}
+        voiceRuntime={{ onMicFilterSettingsChange }}
+      />,
+    );
+
+    await openAudioVideoTab();
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /^enabled$/i })[0]);
+    });
+
+    expect(localStorage.getItem('hush_mic_echo_cancellation_enabled')).toBe('0');
+    expect(onMicFilterSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({ echoCancellation: false }),
+    );
+    expect(mockMicMonitorUpdateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ echoCancellation: false }),
+    );
+    expect(mockMicMonitorStop).toHaveBeenCalled();
+    expect(mockMicMonitorStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deviceId: 'mic-1',
+        settings: expect.objectContaining({ echoCancellation: false }),
+      }),
+    );
+  });
+
   it('restarts mic monitoring when the selected microphone changes during a test', async () => {
     micMonitorState.isTesting = true;
 
@@ -294,7 +326,7 @@ describe('UserSettingsModal', () => {
     expect(mockMicMonitorStart).toHaveBeenCalledWith(
       expect.objectContaining({
         deviceId: 'mic-2',
-        settings: expect.objectContaining({ noiseGateThresholdDb: -50 }),
+        settings: expect.objectContaining({ echoCancellation: true, noiseGateThresholdDb: -50 }),
       }),
     );
   });
