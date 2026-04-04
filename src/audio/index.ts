@@ -32,3 +32,17 @@ export type { VoiceAudioEngineOptions, StateListener } from './core/VoiceAudioEn
 
 export { useVoiceAudioEngine } from './adapters/useVoiceAudioEngine';
 export type { UseVoiceAudioEngineOptions } from './adapters/useVoiceAudioEngine';
+
+export { CaptureOrchestrator } from './capture/CaptureOrchestrator';
+export type {
+  CaptureState,
+  CaptureOrchestratorOptions,
+  MediaDevicesPort,
+  AudioContextFactory,
+  RoomPublishPort,
+  PublishedTrackHandle,
+} from './capture/CaptureOrchestrator';
+export { CaptureSession } from './capture/CaptureSession';
+export type { CaptureSessionResources } from './capture/CaptureSession';
+export { buildConstraints } from './capture/buildConstraints';
+export type { MicConstraints } from './capture/buildConstraints';
