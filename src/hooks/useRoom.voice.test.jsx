@@ -33,6 +33,7 @@ const {
   mockOrchestratorUpdateFilterSettings,
   MockCaptureOrchestrator,
   MockLiveKitRoomAdapter,
+  mockIsMobileWebAudio,
 } = vi.hoisted(() => {
   const mockSetKey = vi.fn().mockResolvedValue(undefined);
   // Must use a regular function (not arrow) so `new ExternalE2EEKeyProvider()` works
@@ -91,6 +92,7 @@ const {
     mockOrchestratorUpdateFilterSettings,
     MockCaptureOrchestrator,
     MockLiveKitRoomAdapter,
+    mockIsMobileWebAudio: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -208,7 +210,7 @@ vi.mock('../audio/adapters/LiveKitRoomAdapter', () => ({
   LiveKitRoomAdapter: MockLiveKitRoomAdapter,
 }));
 
-// Mock audio barrel (only CAPTURE_PROFILES needed by useRoom)
+// Mock audio barrel
 vi.mock('../audio', () => ({
   CAPTURE_PROFILES: {
     'desktop-standard': {
@@ -219,7 +221,29 @@ vi.mock('../audio', () => ({
       localMonitoring: true,
       echoCanConfigurable: true,
     },
+    'mobile-web-standard': {
+      mode: 'mobile-web-standard',
+      browserDsp: true,
+      hushProcessing: false,
+      useRawTrack: true,
+      localMonitoring: false,
+      echoCanConfigurable: false,
+    },
+    'low-latency': {
+      mode: 'low-latency',
+      browserDsp: false,
+      hushProcessing: false,
+      useRawTrack: true,
+      localMonitoring: false,
+      echoCanConfigurable: false,
+    },
   },
+  resolveMode: vi.fn(({ isLowLatency, isMobileWebAudio }) => {
+    if (isLowLatency) return 'low-latency';
+    if (isMobileWebAudio) return 'mobile-web-standard';
+    return 'desktop-standard';
+  }),
+  isMobileWebAudio: mockIsMobileWebAudio,
 }));
 
 import { useRoom } from './useRoom';
@@ -507,6 +531,61 @@ describe('useRoom MLS voice E2EE', () => {
     });
 
     expect(mockOrchestratorUnmute).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishMic resolves low-latency profile when isLowLatency is true', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2, isLowLatency: true }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      await result.current.publishMic();
+    });
+
+    expect(mockOrchestratorAcquire).toHaveBeenCalledTimes(1);
+    const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
+    expect(acquireProfile.mode).toBe('low-latency');
+  });
+
+  it('publishMic resolves mobile-web-standard when UA is mobile', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockIsMobileWebAudio.mockReturnValue(true);
+
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      await result.current.publishMic();
+    });
+
+    expect(mockOrchestratorAcquire).toHaveBeenCalledTimes(1);
+    const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
+    expect(acquireProfile.mode).toBe('mobile-web-standard');
+
+    mockIsMobileWebAudio.mockReturnValue(false);
+  });
+
+  it('low-latency takes priority over mobile UA for capture', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockIsMobileWebAudio.mockReturnValue(true);
+
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2, isLowLatency: true }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      await result.current.publishMic();
+    });
+
+    const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
+    expect(acquireProfile.mode).toBe('low-latency');
+
+    mockIsMobileWebAudio.mockReturnValue(false);
   });
 
   it('MLS failure blocks voice entirely - no unencrypted fallback', async () => {
