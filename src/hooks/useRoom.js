@@ -768,7 +768,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         throw err;
       }
     },
-    [scheduleLocalTracksUpdate, shutdownMicCapture],
+    [scheduleLocalTracksUpdate, shutdownMicCapture, isLowLatency],
   );
 
   // ─── Unpublish Microphone ─────────────────────────────
