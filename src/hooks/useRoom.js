@@ -13,7 +13,7 @@ import { getDeviceId } from './useAuth';
 import { NOISE_GATE_WORKLET_URL, getMicFilterSettings } from '../lib/micProcessing';
 import { CaptureOrchestrator } from '../audio/capture/CaptureOrchestrator';
 import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
-import { CAPTURE_PROFILES } from '../audio';
+import { CAPTURE_PROFILES, resolveMode, isMobileWebAudio } from '../audio';
 
 import {
   attachRemoteTrackListeners,
@@ -49,7 +49,7 @@ function fromBase64(b64) {
  * @param {{ wsClient: object, getToken: () => string|null, currentUserId: string, getStore: () => Promise<IDBDatabase>, voiceKeyRotationHours?: number }} deps
  * @returns {Object} Room state and media controls
  */
-export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyRotationHours }) {
+export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyRotationHours, isLowLatency }) {
   // ─── Connection State ─────────────────────────────────
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState(null);
@@ -746,7 +746,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const publishMic = useCallback(
     async (deviceId = null) => {
       if (!roomRef.current) throw new Error('Room not connected');
-      const profile = CAPTURE_PROFILES['desktop-standard'];
+      const mode = resolveMode({ isLowLatency, isMobileWebAudio: isMobileWebAudio() });
+      const profile = CAPTURE_PROFILES[mode];
       try {
         await shutdownMicCapture();
         const orch = new CaptureOrchestrator({
