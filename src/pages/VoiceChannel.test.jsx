@@ -237,4 +237,34 @@ describe('VoiceChannel', () => {
       expect(unmuteMic).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('passes isLowLatency to useRoom based on channel.voiceMode', () => {
+    const channel = {
+      id: 'ch1',
+      name: 'voice-1',
+      serverId: 's1',
+      type: 'voice',
+      voiceMode: 'low-latency',
+    };
+    renderVoiceChannel(channel);
+
+    const calls = vi.mocked(useRoom).mock.calls;
+    const lastCall = calls[calls.length - 1][0];
+    expect(lastCall.isLowLatency).toBe(true);
+  });
+
+  it('passes isLowLatency as false for quality mode channels', () => {
+    const channel = {
+      id: 'ch2',
+      name: 'voice-2',
+      serverId: 's1',
+      type: 'voice',
+      voiceMode: 'quality',
+    };
+    renderVoiceChannel(channel);
+
+    const calls = vi.mocked(useRoom).mock.calls;
+    const lastCall = calls[calls.length - 1][0];
+    expect(lastCall.isLowLatency).toBe(false);
+  });
 });
