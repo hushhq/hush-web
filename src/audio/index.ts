@@ -49,3 +49,5 @@ export type { MicConstraints } from './capture/buildConstraints';
 
 export { LiveKitRoomAdapter } from './adapters/LiveKitRoomAdapter';
 export type { LocalParticipantPort, LocalTracksRef } from './adapters/LiveKitRoomAdapter';
+
+export { isMobileWebAudio } from './core/detectAudioPlatform';
