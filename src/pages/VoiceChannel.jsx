@@ -121,6 +121,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     currentUserId,
     getStore,
     voiceKeyRotationHours: undefined, // uses server handshake default (2h) when undefined
+    isLowLatency,
   });
 
   // idle = connecting; waiting = alone; activating = others in room
