@@ -6,14 +6,22 @@
  * capture path. This is a best-effort heuristic based on UA string
  * patterns — it does not probe actual browser audio capabilities.
  *
- * Reuses the same detection patterns as src/lib/deviceLabel.js
- * (detectPlatformName, lines 42-45).
+ * Uses detectPlatformName from src/lib/deviceLabel.js as the single
+ * source of truth for platform identification. No duplicated regex.
  */
 
+import { detectPlatformName } from '../../lib/deviceLabel';
+
+const MOBILE_PLATFORMS = new Set(['iPhone', 'iPad', 'Android']);
+
+function resolveUserAgent(userAgent?: string): string {
+  if (userAgent) return userAgent;
+  if (typeof navigator !== 'undefined') return navigator.userAgent;
+  return '';
+}
+
 export function isMobileWebAudio(userAgent?: string): boolean {
-  const ua = userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '');
+  const ua = resolveUserAgent(userAgent);
   if (!ua) return false;
-  return /iPhone|iPad|iPod/i.test(ua)
-    || (/Macintosh/i.test(ua) && /Mobile/i.test(ua))
-    || /Android/i.test(ua);
+  return MOBILE_PLATFORMS.has(detectPlatformName(ua));
 }

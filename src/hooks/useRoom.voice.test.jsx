@@ -210,41 +210,15 @@ vi.mock('../audio/adapters/LiveKitRoomAdapter', () => ({
   LiveKitRoomAdapter: MockLiveKitRoomAdapter,
 }));
 
-// Mock audio barrel
-vi.mock('../audio', () => ({
-  CAPTURE_PROFILES: {
-    'desktop-standard': {
-      mode: 'desktop-standard',
-      browserDsp: false,
-      hushProcessing: true,
-      useRawTrack: false,
-      localMonitoring: true,
-      echoCanConfigurable: true,
-    },
-    'mobile-web-standard': {
-      mode: 'mobile-web-standard',
-      browserDsp: true,
-      hushProcessing: false,
-      useRawTrack: true,
-      localMonitoring: false,
-      echoCanConfigurable: false,
-    },
-    'low-latency': {
-      mode: 'low-latency',
-      browserDsp: false,
-      hushProcessing: false,
-      useRawTrack: true,
-      localMonitoring: false,
-      echoCanConfigurable: false,
-    },
-  },
-  resolveMode: vi.fn(({ isLowLatency, isMobileWebAudio }) => {
-    if (isLowLatency) return 'low-latency';
-    if (isMobileWebAudio) return 'mobile-web-standard';
-    return 'desktop-standard';
-  }),
-  isMobileWebAudio: mockIsMobileWebAudio,
-}));
+// Mock audio barrel — use real resolveMode + CAPTURE_PROFILES, only mock
+// isMobileWebAudio (UA detection) so tests control the platform signal.
+vi.mock('../audio', async (importOriginal) => {
+  const real = await importOriginal();
+  return {
+    ...real,
+    isMobileWebAudio: mockIsMobileWebAudio,
+  };
+});
 
 import { useRoom } from './useRoom';
 

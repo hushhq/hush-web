@@ -38,7 +38,7 @@ function detectBrowserName(userAgent) {
   return 'Browser';
 }
 
-function detectPlatformName(userAgent) {
+export function detectPlatformName(userAgent) {
   if (/iPhone/.test(userAgent)) return 'iPhone';
   if (/iPad/.test(userAgent)) return 'iPad';
   if (/Macintosh/.test(userAgent) && /Mobile/.test(userAgent)) return 'iPad';
