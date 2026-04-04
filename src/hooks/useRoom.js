@@ -10,7 +10,10 @@ import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
 import { getDeviceId } from './useAuth';
-import { applyMicFilterSettingsToNode } from '../lib/micProcessing';
+import { NOISE_GATE_WORKLET_URL, getMicFilterSettings } from '../lib/micProcessing';
+import { CaptureOrchestrator } from '../audio/capture/CaptureOrchestrator';
+import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
+import { CAPTURE_PROFILES } from '../audio';
 
 import {
   attachRemoteTrackListeners,
@@ -21,8 +24,6 @@ import {
   changeQuality as trackChangeQuality,
   publishWebcam as trackPublishWebcam,
   unpublishWebcam as trackUnpublishWebcam,
-  publishMic as trackPublishMic,
-  unpublishMic as trackUnpublishMic,
   watchScreen as trackWatchScreen,
   unwatchScreen as trackUnwatchScreen,
 } from '../lib/trackManager';
@@ -82,10 +83,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const connectionEpochRef = useRef(0);
   const reconnectAttemptCountRef = useRef(0);
 
-  // ─── Noise Gate Refs ──────────────────────────────────
-  const audioContextRef = useRef(null);
-  const noiseGateNodeRef = useRef(null);
-  const rawMicStreamRef = useRef(null);
+  // ─── Capture Orchestrator ─────────────────────────────
+  const orchestratorRef = useRef(null);
+  const adapterRef = useRef(null);
 
   // ─── Debounced State Updates ──────────────────────────
   const pendingLocalTracksUpdateRef = useRef(false);
@@ -121,20 +121,18 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     });
   }, []);
 
-  // ─── Cleanup Mic Audio Pipeline ───────────────────────
-  const cleanupMicPipeline = useCallback(() => {
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
+  // ─── Shutdown Mic Capture ─────────────────────────────
+  const shutdownMicCapture = useCallback(async () => {
+    const orch = orchestratorRef.current;
+    const adapter = adapterRef.current;
+    if (!orch) return;
+    if (adapter && orch.isLive) {
+      await orch.unpublish(adapter);
+    } else {
+      await orch.teardown();
     }
-    if (noiseGateNodeRef.current) {
-      noiseGateNodeRef.current.disconnect();
-      noiseGateNodeRef.current = null;
-    }
-    if (rawMicStreamRef.current) {
-      rawMicStreamRef.current.getTracks().forEach((t) => t.stop());
-      rawMicStreamRef.current = null;
-    }
+    orchestratorRef.current = null;
+    adapterRef.current = null;
   }, []);
 
   const syncParticipantsFromRoom = useCallback(() => {
@@ -618,7 +616,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         });
       }
 
-      cleanupMicPipeline();
+      await shutdownMicCapture();
 
       // Destroy local voice group state (fire-and-forget - server handles group
       // deletion when the last participant leaves via the LiveKit webhook)
@@ -667,7 +665,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     } catch (err) {
       console.error('[livekit] Disconnect error:', err);
     }
-  }, [cleanupMicPipeline, getStore, getToken]);
+  }, [shutdownMicCapture, getStore, getToken]);
 
   // ─── Unpublish Screen Share ───────────────────────────
   const unpublishScreen = useCallback(async () => {
@@ -748,51 +746,45 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const publishMic = useCallback(
     async (deviceId = null) => {
       if (!roomRef.current) throw new Error('Room not connected');
+      const profile = CAPTURE_PROFILES['desktop-standard'];
       try {
-        await trackPublishMic(roomRef.current, {
+        await shutdownMicCapture();
+        const orch = new CaptureOrchestrator({
+          noiseGateWorkletUrl: NOISE_GATE_WORKLET_URL,
+          initialFilterSettings: getMicFilterSettings(),
+        });
+        orchestratorRef.current = orch;
+        await orch.acquire(profile, deviceId);
+        const adapter = new LiveKitRoomAdapter(
+          roomRef.current.localParticipant,
           localTracksRef,
-          audioContextRef,
-          noiseGateNodeRef,
-          rawMicStreamRef,
-          cleanupMicPipeline,
-        }, deviceId);
-        scheduleLocalTracksUpdate();
+          scheduleLocalTracksUpdate,
+        );
+        adapterRef.current = adapter;
+        await orch.publishTo(adapter);
       } catch (err) {
-        cleanupMicPipeline();
+        await shutdownMicCapture();
         throw err;
       }
     },
-    [scheduleLocalTracksUpdate, cleanupMicPipeline],
+    [scheduleLocalTracksUpdate, shutdownMicCapture],
   );
 
   // ─── Unpublish Microphone ─────────────────────────────
   const unpublishMic = useCallback(async () => {
-    if (!roomRef.current) return;
-    await trackUnpublishMic(roomRef.current, {
-      localTracksRef,
-      rawMicStreamRef,
-      cleanupMicPipeline,
-    });
+    await shutdownMicCapture();
     scheduleLocalTracksUpdate();
-  }, [scheduleLocalTracksUpdate, cleanupMicPipeline]);
+  }, [scheduleLocalTracksUpdate, shutdownMicCapture]);
 
   // ─── Mute/Unmute Microphone (keeps track published) ──
   const muteMic = useCallback(async () => {
     if (!roomRef.current) return;
-    for (const [, info] of localTracksRef.current.entries()) {
-      if (info.source === MEDIA_SOURCES.MIC && info.track) {
-        await info.track.mute();
-      }
-    }
+    await orchestratorRef.current?.mute();
   }, []);
 
   const unmuteMic = useCallback(async () => {
     if (!roomRef.current) return;
-    for (const [, info] of localTracksRef.current.entries()) {
-      if (info.source === MEDIA_SOURCES.MIC && info.track) {
-        await info.track.unmute();
-      }
-    }
+    await orchestratorRef.current?.unmute();
   }, []);
 
   /**
@@ -802,7 +794,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
    * @param {Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} settings
    */
   const updateMicFilterSettings = useCallback((settings) => {
-    applyMicFilterSettingsToNode(noiseGateNodeRef.current, settings);
+    orchestratorRef.current?.updateFilterSettings(settings);
   }, []);
 
   // ─── Watch Screen Share ───────────────────────────────
@@ -884,9 +876,14 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         room.disconnect();
         roomRef.current = null;
       }
-      cleanupMicPipeline();
+      // Teardown-only: release capture resources without unpublishing
+      // or scheduling UI updates. The room is already disconnecting,
+      // and setState on an unmounted component is a React anti-pattern.
+      orchestratorRef.current?.teardown().catch(() => {});
+      orchestratorRef.current = null;
+      adapterRef.current = null;
     };
-  }, [cleanupMicPipeline]);
+  }, []);
 
   return {
     // Connection state

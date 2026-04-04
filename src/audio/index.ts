@@ -46,3 +46,6 @@ export { CaptureSession } from './capture/CaptureSession';
 export type { CaptureSessionResources } from './capture/CaptureSession';
 export { buildConstraints } from './capture/buildConstraints';
 export type { MicConstraints } from './capture/buildConstraints';
+
+export { LiveKitRoomAdapter } from './adapters/LiveKitRoomAdapter';
+export type { LocalParticipantPort, LocalTracksRef } from './adapters/LiveKitRoomAdapter';

@@ -24,9 +24,15 @@ const {
   mockGetMLSVoiceGroupInfo,
   mockSetKey,
   mockE2EEKeyProvider,
-  mockPublishMic,
-  mockTrackMute,
-  mockTrackUnmute,
+  mockOrchestratorMute,
+  mockOrchestratorUnmute,
+  mockOrchestratorAcquire,
+  mockOrchestratorPublishTo,
+  mockOrchestratorUnpublish,
+  mockOrchestratorTeardown,
+  mockOrchestratorUpdateFilterSettings,
+  MockCaptureOrchestrator,
+  MockLiveKitRoomAdapter,
 } = vi.hoisted(() => {
   const mockSetKey = vi.fn().mockResolvedValue(undefined);
   // Must use a regular function (not arrow) so `new ExternalE2EEKeyProvider()` works
@@ -34,17 +40,29 @@ const {
     this.setKey = mockSetKey;
   }
   const mockE2EEKeyProvider = vi.fn(MockExternalE2EEKeyProvider);
-  const mockTrackMute = vi.fn().mockResolvedValue(undefined);
-  const mockTrackUnmute = vi.fn().mockResolvedValue(undefined);
-  const mockPublishMic = vi.fn().mockImplementation(async (_room, refs) => {
-    refs.localTracksRef.current.set('mic-track', {
-      source: MEDIA_SOURCES.MIC,
-      track: {
-        mute: mockTrackMute,
-        unmute: mockTrackUnmute,
-      },
-    });
-  });
+
+  // CaptureOrchestrator mocks
+  const mockOrchestratorAcquire = vi.fn().mockResolvedValue(undefined);
+  const mockOrchestratorPublishTo = vi.fn().mockResolvedValue(undefined);
+  const mockOrchestratorMute = vi.fn().mockResolvedValue(undefined);
+  const mockOrchestratorUnmute = vi.fn().mockResolvedValue(undefined);
+  const mockOrchestratorUnpublish = vi.fn().mockResolvedValue(undefined);
+  const mockOrchestratorTeardown = vi.fn().mockResolvedValue(undefined);
+  const mockOrchestratorUpdateFilterSettings = vi.fn();
+
+  function MockCaptureOrchestrator() {
+    this.acquire = mockOrchestratorAcquire;
+    this.publishTo = mockOrchestratorPublishTo;
+    this.mute = mockOrchestratorMute;
+    this.unmute = mockOrchestratorUnmute;
+    this.unpublish = mockOrchestratorUnpublish;
+    this.teardown = mockOrchestratorTeardown;
+    this.updateFilterSettings = mockOrchestratorUpdateFilterSettings;
+    this.isLive = false;
+    this.session = null;
+  }
+
+  function MockLiveKitRoomAdapter() {}
 
   return {
     mockCreateVoiceGroup: vi.fn().mockResolvedValue({ epoch: 0 }),
@@ -64,9 +82,15 @@ const {
     mockGetMLSVoiceGroupInfo: vi.fn().mockRejectedValue(new Error('404')),
     mockSetKey,
     mockE2EEKeyProvider,
-    mockPublishMic,
-    mockTrackMute,
-    mockTrackUnmute,
+    mockOrchestratorAcquire,
+    mockOrchestratorPublishTo,
+    mockOrchestratorMute,
+    mockOrchestratorUnmute,
+    mockOrchestratorUnpublish,
+    mockOrchestratorTeardown,
+    mockOrchestratorUpdateFilterSettings,
+    MockCaptureOrchestrator,
+    MockLiveKitRoomAdapter,
   };
 });
 
@@ -129,11 +153,19 @@ vi.mock('livekit-client', () => {
     async disconnect() {}
   }
 
+  class MockLocalAudioTrack {
+    constructor(track) { this._track = track; this.sid = null; }
+    mute() { return Promise.resolve(); }
+    unmute() { return Promise.resolve(); }
+    stop() {}
+  }
+
   return {
     ExternalE2EEKeyProvider: mockE2EEKeyProvider,
     Room: MockRoom,
     RoomEvent,
-    Track: { Source: { ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio' }, Kind: { Video: 'video' } },
+    Track: { Source: { Microphone: 'microphone', ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio' }, Kind: { Video: 'video' } },
+    LocalAudioTrack: MockLocalAudioTrack,
   };
 });
 
@@ -152,10 +184,42 @@ vi.mock('../lib/trackManager', () => ({
   changeQuality: vi.fn(),
   publishWebcam: vi.fn(),
   unpublishWebcam: vi.fn(),
-  publishMic: mockPublishMic,
-  unpublishMic: vi.fn(),
   watchScreen: vi.fn(),
   unwatchScreen: vi.fn(),
+}));
+
+// Mock micProcessing exports used by useRoom
+vi.mock('../lib/micProcessing', () => ({
+  NOISE_GATE_WORKLET_URL: 'mock://noise-gate-worklet.js',
+  getMicFilterSettings: vi.fn().mockReturnValue({
+    noiseGateEnabled: true,
+    noiseGateThresholdDb: -50,
+    echoCancellation: false,
+  }),
+}));
+
+// Mock CaptureOrchestrator
+vi.mock('../audio/capture/CaptureOrchestrator', () => ({
+  CaptureOrchestrator: MockCaptureOrchestrator,
+}));
+
+// Mock LiveKitRoomAdapter
+vi.mock('../audio/adapters/LiveKitRoomAdapter', () => ({
+  LiveKitRoomAdapter: MockLiveKitRoomAdapter,
+}));
+
+// Mock audio barrel (only CAPTURE_PROFILES needed by useRoom)
+vi.mock('../audio', () => ({
+  CAPTURE_PROFILES: {
+    'desktop-standard': {
+      mode: 'desktop-standard',
+      browserDsp: false,
+      hushProcessing: true,
+      useRawTrack: false,
+      localMonitoring: true,
+      echoCanConfigurable: true,
+    },
+  },
 }));
 
 import { useRoom } from './useRoom';
@@ -227,9 +291,12 @@ describe('useRoom MLS voice E2EE', () => {
       signingPublicKey: new Uint8Array([2]),
       credentialBytes: new Uint8Array([3]),
     });
-    mockPublishMic.mockClear();
-    mockTrackMute.mockClear();
-    mockTrackUnmute.mockClear();
+    mockOrchestratorAcquire.mockResolvedValue(undefined);
+    mockOrchestratorPublishTo.mockResolvedValue(undefined);
+    mockOrchestratorMute.mockResolvedValue(undefined);
+    mockOrchestratorUnmute.mockResolvedValue(undefined);
+    mockOrchestratorUnpublish.mockResolvedValue(undefined);
+    mockOrchestratorTeardown.mockResolvedValue(undefined);
     mockSetKey.mockResolvedValue(undefined);
   });
 
@@ -401,7 +468,7 @@ describe('useRoom MLS voice E2EE', () => {
     expect(result.current.isVoiceReconnecting).toBe(false);
   });
 
-  it('muteMic and unmuteMic target the published local microphone track', async () => {
+  it('publishMic creates orchestrator, acquires desktop-standard, and publishes', async () => {
     mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
@@ -412,19 +479,34 @@ describe('useRoom MLS voice E2EE', () => {
       await result.current.publishMic();
     });
 
-    expect(mockPublishMic).toHaveBeenCalledTimes(1);
+    expect(mockOrchestratorAcquire).toHaveBeenCalledTimes(1);
+    const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
+    expect(acquireProfile.mode).toBe('desktop-standard');
+    expect(mockOrchestratorPublishTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('muteMic and unmuteMic delegate to orchestrator', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      await result.current.publishMic();
+    });
 
     await act(async () => {
       await result.current.muteMic();
     });
 
-    expect(mockTrackMute).toHaveBeenCalledTimes(1);
+    expect(mockOrchestratorMute).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await result.current.unmuteMic();
     });
 
-    expect(mockTrackUnmute).toHaveBeenCalledTimes(1);
+    expect(mockOrchestratorUnmute).toHaveBeenCalledTimes(1);
   });
 
   it('MLS failure blocks voice entirely - no unencrypted fallback', async () => {
@@ -508,11 +590,19 @@ vi.mock('livekit-client', () => {
     async disconnect() {}
   }
 
+  class MockLocalAudioTrack {
+    constructor(track) { this._track = track; this.sid = null; }
+    mute() { return Promise.resolve(); }
+    unmute() { return Promise.resolve(); }
+    stop() {}
+  }
+
   return {
     ExternalE2EEKeyProvider: mockE2EEKeyProvider,
     Room: MockRoom,
     RoomEvent,
-    Track: { Source: { ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio' }, Kind: { Video: 'video' } },
+    Track: { Source: { Microphone: 'microphone', ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio' }, Kind: { Video: 'video' } },
+    LocalAudioTrack: MockLocalAudioTrack,
   };
 });
 

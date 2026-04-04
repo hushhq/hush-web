@@ -1,6 +1,6 @@
 const MIC_GATE_ENABLED_KEY = 'hush_mic_noise_gate_enabled';
 const MIC_GATE_THRESHOLD_DB_KEY = 'hush_mic_noise_gate_threshold_db';
-const NOISE_GATE_WORKLET_URL = new URL('./noiseGateWorklet.js', import.meta.url);
+export const NOISE_GATE_WORKLET_URL = new URL('./noiseGateWorklet.js', import.meta.url);
 
 export const MIC_GATE_THRESHOLD_MIN_DB = -70;
 export const MIC_GATE_THRESHOLD_MAX_DB = -20;
