@@ -202,6 +202,7 @@ export default function VideoGrid({
   currentUserId,
   currentDisplayName,
   activeSpeakerIds = [],
+  localSpeaking = false,
   isMicOn = true,
   isDeafened = false,
   voiceMuteStates,
@@ -265,7 +266,9 @@ export default function VideoGrid({
           <>
             {orderedStreams.map((stream) => {
               const pid = stream.type === 'local' ? currentUserId : stream.participantId;
-              const isSpeaking = (stream.type === 'local' && !isMicOn) ? false : speakerSet.has(pid);
+              const isSpeaking = stream.type === 'local'
+                ? (isMicOn && localSpeaking)
+                : speakerSet.has(pid);
               return (
                 <div key={stream.id} style={getTileStyle(stream.id)} className={isSpeaking ? 'vg-tile-speaking' : undefined}>
                   <StreamView
@@ -294,7 +297,7 @@ export default function VideoGrid({
               const remoteState = !isSelf && voiceMuteStates?.get(p.userId);
               const pMuted = isSelf ? !isMicOn : (remoteState?.isMuted ?? false);
               const pDeafened = isSelf ? isDeafened : (remoteState?.isDeafened ?? false);
-              const isSpeaking = pMuted ? false : speakerSet.has(p.userId);
+              const isSpeaking = pMuted ? false : (isSelf ? localSpeaking : speakerSet.has(p.userId));
               const tileClass = `vg-placeholder-tile${isSpeaking ? ' vg-speaking' : ''}`;
               return (
                 <div key={`placeholder-${p.userId}`} style={normalTileStyle}>

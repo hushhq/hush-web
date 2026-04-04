@@ -1,9 +1,9 @@
 /**
  * Hush Voice Audio Subsystem — public API surface.
  *
- * This is the typed foundation for audio runtime contracts.
- * The JS modules (trackManager, useMicMonitor, micProcessing)
- * remain as the sole runtime implementation.
+ * Hush voice audio subsystem. Owns capture orchestration, profile
+ * resolution, local audio observation, and the typed engine state.
+ * useRoom delegates mic lifecycle to CaptureOrchestrator.
  */
 
 export type {
@@ -51,3 +51,10 @@ export { LiveKitRoomAdapter } from './adapters/LiveKitRoomAdapter';
 export type { LocalParticipantPort, LocalTracksRef } from './adapters/LiveKitRoomAdapter';
 
 export { isMobileWebAudio } from './core/detectAudioPlatform';
+
+export { LevelAnalyser } from './analysis/LevelAnalyser';
+export type { LevelSample, LevelListener, LevelAnalyserOptions } from './analysis/LevelAnalyser';
+export { SpeakingDetector } from './analysis/SpeakingDetector';
+export type { SpeakingListener, SpeakingDetectorOptions } from './analysis/SpeakingDetector';
+export { LocalAudioObserver } from './analysis/LocalAudioObserver';
+export type { ObserverState, ObserverListener, LocalAudioObserverOptions } from './analysis/LocalAudioObserver';

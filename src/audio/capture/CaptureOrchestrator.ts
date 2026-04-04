@@ -18,8 +18,8 @@
  * a VoiceAudioEngine instance when provided. It does not hold React
  * refs — all audio resources are owned by CaptureSession.
  *
- * NOT wired into useRoom or VoiceChannel in this branch. This is a
- * standalone module for future gradual adoption.
+ * Wired into useRoom as the active capture runtime. useRoom creates
+ * the orchestrator on publishMic and delegates all mic lifecycle to it.
  */
 
 import type { CaptureProfile, MicFilterSettings } from '../core/VoiceAudioTypes';
@@ -27,6 +27,8 @@ import type { VoiceAudioEngine } from '../core/VoiceAudioEngine';
 import { CaptureSession } from './CaptureSession';
 import type { CaptureSessionResources } from './CaptureSession';
 import { buildConstraints } from './buildConstraints';
+import { LocalAudioObserver } from '../analysis/LocalAudioObserver';
+import type { LocalAudioObserverOptions, ObserverState } from '../analysis/LocalAudioObserver';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -84,6 +86,8 @@ export interface CaptureOrchestratorOptions {
   noiseGateWorkletUrl?: URL | string;
   /** Initial mic filter settings. If not provided, uses defaults. */
   initialFilterSettings?: MicFilterSettings;
+  /** Options for the local audio observer (level + speaking detection). */
+  observerOptions?: LocalAudioObserverOptions;
 }
 
 // ─── Default implementations ────────────────────────────
@@ -106,11 +110,13 @@ export class CaptureOrchestrator {
   private _state: CaptureState = 'idle';
   private _session: CaptureSession | null = null;
   private _publishedHandle: PublishedTrackHandle | null = null;
+  private _observer: LocalAudioObserver | null = null;
   private _engine: VoiceAudioEngine | undefined;
   private _mediaDevices: MediaDevicesPort;
   private _audioContextFactory: AudioContextFactory;
   private _noiseGateWorkletUrl: URL | string | undefined;
   private _filterSettings: MicFilterSettings;
+  private _observerOptions: LocalAudioObserverOptions;
 
   constructor(options: CaptureOrchestratorOptions = {}) {
     this._engine = options.engine;
@@ -118,11 +124,14 @@ export class CaptureOrchestrator {
     this._audioContextFactory = options.audioContextFactory ?? defaultAudioContextFactory();
     this._noiseGateWorkletUrl = options.noiseGateWorkletUrl;
     this._filterSettings = options.initialFilterSettings ?? { ...DEFAULT_FILTER_SETTINGS };
+    this._observerOptions = options.observerOptions ?? {};
   }
 
   get state(): CaptureState { return this._state; }
   get session(): CaptureSession | null { return this._session; }
   get isLive(): boolean { return this._state === 'live'; }
+  /** The local audio observer. Non-null only while published (live). */
+  get observer(): LocalAudioObserver | null { return this._observer; }
 
   // ─── Acquire ────────────────────────────────────────
 
@@ -202,6 +211,19 @@ export class CaptureOrchestrator {
       );
       this._publishedHandle = handle;
       this._state = 'live';
+
+      // Start local audio observation ONLY after publish succeeds.
+      // The observer taps the published track (processedTrack).
+      // Non-critical: if AudioContext is unavailable (e.g. test env),
+      // the orchestrator continues without observation.
+      try {
+        const obs = new LocalAudioObserver(this._observerOptions);
+        obs.start(this._session!.processedTrack);
+        this._observer = obs;
+      } catch {
+        // Observer failed to start — continue without local metering.
+      }
+
       this._engine?.setMicApplied(true);
     } catch (err) {
       this._state = 'acquiring'; // Session still valid, just not published.
@@ -363,6 +385,10 @@ export class CaptureOrchestrator {
   // ─── Private: Teardown ──────────────────────────────
 
   private async _teardownSession(): Promise<void> {
+    if (this._observer) {
+      this._observer.stop();
+      this._observer = null;
+    }
     if (this._session) {
       await this._session.teardown();
       this._session = null;

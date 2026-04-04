@@ -61,6 +61,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const [isVoiceReconnecting, setIsVoiceReconnecting] = useState(false);
   const [voiceReconnectFailed, setVoiceReconnectFailed] = useState(false);
   const [activeSpeakerIds, setActiveSpeakerIds] = useState([]);
+  const [localSpeaking, setLocalSpeaking] = useState(false);
 
   // ─── Click-to-Watch Screen Shares ─────────────────────
   const [availableScreens, setAvailableScreens] = useState(new Map());
@@ -86,6 +87,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   // ─── Capture Orchestrator ─────────────────────────────
   const orchestratorRef = useRef(null);
   const adapterRef = useRef(null);
+  const observerUnsubRef = useRef(null);
 
   // ─── Debounced State Updates ──────────────────────────
   const pendingLocalTracksUpdateRef = useRef(false);
@@ -131,6 +133,11 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     } else {
       await orch.teardown();
     }
+    if (observerUnsubRef.current) {
+      observerUnsubRef.current();
+      observerUnsubRef.current = null;
+    }
+    setLocalSpeaking(false);
     orchestratorRef.current = null;
     adapterRef.current = null;
   }, []);
@@ -763,6 +770,14 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         );
         adapterRef.current = adapter;
         await orch.publishTo(adapter);
+
+        // Subscribe to local speaking state transitions from the observer.
+        // The observer is created by the orchestrator after publish succeeds.
+        if (orch.observer) {
+          observerUnsubRef.current = orch.observer.subscribe((obs) => {
+            setLocalSpeaking(obs.isSpeaking);
+          });
+        }
       } catch (err) {
         await shutdownMicCapture();
         throw err;
@@ -898,6 +913,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     isVoiceReconnecting,
     voiceReconnectFailed,
     activeSpeakerIds,
+    localSpeaking,
     // Room connection
     connectRoom,
     disconnectRoom,

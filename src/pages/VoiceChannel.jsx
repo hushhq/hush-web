@@ -115,6 +115,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     isVoiceReconnecting,
     voiceReconnectFailed,
     activeSpeakerIds,
+    localSpeaking,
   } = useRoom({
     wsClient,
     getToken,
@@ -589,6 +590,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
             currentUserId={currentUserId}
             currentDisplayName={displayName}
             activeSpeakerIds={activeSpeakerIds}
+            localSpeaking={localSpeaking}
             isMicOn={isMicOn}
             isDeafened={isDeafened}
             voiceMuteStates={voiceMuteStates}
