@@ -116,6 +116,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     voiceReconnectFailed,
     activeSpeakerIds,
     localSpeaking,
+    playbackManager,
   } = useRoom({
     wsClient,
     getToken,
@@ -124,6 +125,14 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     voiceKeyRotationHours: undefined, // uses server handshake default (2h) when undefined
     isLowLatency,
   });
+
+  // Bind PlaybackManager to a DOM container for remote audio elements.
+  const audioContainerRef = useRef(null);
+  useEffect(() => {
+    if (!playbackManager || !audioContainerRef.current) return;
+    playbackManager.bindContainer(audioContainerRef.current);
+    return () => { playbackManager.unbindContainer(); };
+  }, [playbackManager]);
 
   // idle = connecting; waiting = alone; activating = others in room
   const orbPhase = !isReady ? 'idle' : (displayParticipants.length > 0 ? 'activating' : 'waiting');
@@ -368,10 +377,8 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const handleDeafen = useCallback(() => {
     setIsDeafened((prev) => {
       const next = !prev;
-      // Mute/unmute all remote audio elements
-      document.querySelectorAll('audio[autoplay]').forEach((el) => {
-        el.muted = next;
-      });
+      // Mute/unmute remote audio via PlaybackManager
+      playbackManager?.setRemoteAudioMuted(next);
       if (next) {
         // Deafening: save mic state and mute if on
         micBeforeDeafenRef.current = isMicOn;
@@ -386,7 +393,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
       }
       return next;
     });
-  }, [isMicOn, muteMic, unmuteMic]);
+  }, [isMicOn, muteMic, unmuteMic, playbackManager]);
 
   // Expose controls to parent via ref (for VoiceConnectedPanel + UserPanel)
   const handleMicRef = useRef(handleMic);
@@ -479,6 +486,8 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
 
   return (
     <div className="vc-page">
+      {/* Hidden container for PlaybackManager's remote audio elements */}
+      <div ref={audioContainerRef} style={{ display: 'none' }} />
       <div className="vc-header">
         <div className="vc-header-left">
           {onMobileBack && (

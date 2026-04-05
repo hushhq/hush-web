@@ -14,6 +14,7 @@ import { NOISE_GATE_WORKLET_URL, getMicFilterSettings } from '../lib/micProcessi
 import { CaptureOrchestrator } from '../audio/capture/CaptureOrchestrator';
 import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
 import { CAPTURE_PROFILES, resolveMode, isMobileWebAudio } from '../audio';
+import { PlaybackManager } from '../audio/playback/PlaybackManager';
 
 import {
   attachRemoteTrackListeners,
@@ -88,6 +89,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const orchestratorRef = useRef(null);
   const adapterRef = useRef(null);
   const observerUnsubRef = useRef(null);
+
+  // ─── Playback Manager ───────────────────────────────
+  const playbackManagerRef = useRef(new PlaybackManager());
 
   // ─── Debounced State Updates ──────────────────────────
   const pendingLocalTracksUpdateRef = useRef(false);
@@ -174,6 +178,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         if (roomRef.current) {
           roomRef.current.disconnect();
           roomRef.current = null;
+          // Clear stale playback elements from the previous room session.
+          playbackManagerRef.current.dispose();
+          playbackManagerRef.current = new PlaybackManager();
         }
         // Cancel any in-flight voice WS listeners from a previous session
         if (voiceWsUnsubscribeRef.current) {
@@ -363,6 +370,18 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           watchedScreensRef,
         };
         attachRemoteTrackListeners(room, trackRefs, scheduleRemoteTracksUpdate, scheduleScreensUpdate);
+
+        // Route remote audio tracks to the PlaybackManager.
+        room.on(RoomEvent.TrackSubscribed, (track) => {
+          if (track.kind === 'audio') {
+            playbackManagerRef.current.addRemoteAudioTrack(track.sid, track.mediaStreamTrack);
+          }
+        });
+        room.on(RoomEvent.TrackUnsubscribed, (track) => {
+          if (track.kind === 'audio') {
+            playbackManagerRef.current.removeRemoteAudioTrack(track.sid);
+          }
+        });
 
         // Connected: E2EE key is already applied before room.connect() - no
         // additional setKey call needed here. setIsE2EEEnabled was already set
@@ -610,6 +629,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       setVoiceEpoch(null);
       setIsVoiceReconnecting(false);
       setVoiceReconnectFailed(false);
+      // Dispose playback even when room ref is already gone.
+      playbackManagerRef.current.dispose();
+      playbackManagerRef.current = new PlaybackManager();
       return;
     }
 
@@ -624,6 +646,11 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       }
 
       await shutdownMicCapture();
+
+      // Dispose playback manager to remove any stale audio elements.
+      // A fresh manager is created so subsequent connectRoom calls start clean.
+      playbackManagerRef.current.dispose();
+      playbackManagerRef.current = new PlaybackManager();
 
       // Destroy local voice group state (fire-and-forget - server handles group
       // deletion when the last participant leaves via the LiveKit webhook)
@@ -898,6 +925,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       orchestratorRef.current?.teardown().catch(() => {});
       orchestratorRef.current = null;
       adapterRef.current = null;
+      playbackManagerRef.current.dispose();
     };
   }, []);
 
@@ -931,6 +959,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     muteMic,
     unmuteMic,
     updateMicFilterSettings,
+    // Playback
+    playbackManager: playbackManagerRef.current,
     // Click-to-watch
     availableScreens,
     watchedScreens,

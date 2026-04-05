@@ -52,6 +52,9 @@ export type { LocalParticipantPort, LocalTracksRef } from './adapters/LiveKitRoo
 
 export { isMobileWebAudio } from './core/detectAudioPlatform';
 
+export { PlaybackManager } from './playback/PlaybackManager';
+export type { ManagedAudioTrack } from './playback/PlaybackManager';
+
 export { LevelAnalyser } from './analysis/LevelAnalyser';
 export type { LevelSample, LevelListener, LevelAnalyserOptions } from './analysis/LevelAnalyser';
 export { SpeakingDetector } from './analysis/SpeakingDetector';

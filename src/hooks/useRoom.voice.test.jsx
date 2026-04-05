@@ -1,3 +1,12 @@
+// jsdom does not provide MediaStream. Polyfill for PlaybackManager tests.
+if (typeof globalThis.MediaStream === 'undefined') {
+  globalThis.MediaStream = class MockMediaStream {
+    constructor(tracks) { this._tracks = tracks ?? []; }
+    getTracks() { return this._tracks; }
+    getAudioTracks() { return this._tracks.filter((t) => t.kind === 'audio'); }
+  };
+}
+
 /**
  * useRoom MLS voice E2EE tests
  *
@@ -750,5 +759,151 @@ describe('useRoom voice reconnect', () => {
     });
 
     expect(result.current.voiceReconnectFailed).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playback integration tests
+// ---------------------------------------------------------------------------
+
+describe('useRoom playback manager integration', () => {
+  let wsClient;
+  let getStore;
+  let getToken;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedRooms.length = 0;
+
+    wsClient = makeWsClient();
+    getStore = makeGetStore();
+    getToken = makeGetToken();
+    stubLivekitFetch();
+
+    mockCreateVoiceGroup.mockResolvedValue({ epoch: 0 });
+    mockExportVoiceFrameKey.mockResolvedValue({
+      frameKeyBytes: new Uint8Array(32).fill(0xab),
+      epoch: 1,
+    });
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetCredential.mockResolvedValue({
+      signingPrivateKey: new Uint8Array([1]),
+      signingPublicKey: new Uint8Array([2]),
+      credentialBytes: new Uint8Array([3]),
+    });
+    mockSetKey.mockResolvedValue(undefined);
+    mockOrchestratorAcquire.mockResolvedValue(undefined);
+    mockOrchestratorPublishTo.mockResolvedValue(undefined);
+    mockOrchestratorTeardown.mockResolvedValue(undefined);
+  });
+
+  it('TrackSubscribed adds remote audio track to playback manager', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    const room = capturedRooms[capturedRooms.length - 1];
+    expect(result.current.playbackManager.trackCount).toBe(0);
+
+    // Simulate a remote audio track subscription
+    await act(async () => {
+      room.emit('trackSubscribed', {
+        sid: 'remote-audio-1',
+        kind: 'audio',
+        mediaStreamTrack: { kind: 'audio', readyState: 'live' },
+      }, { source: 'microphone' }, { identity: 'alice' });
+    });
+
+    expect(result.current.playbackManager.trackCount).toBe(1);
+  });
+
+  it('TrackUnsubscribed removes remote audio track from playback manager', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    await act(async () => {
+      room.emit('trackSubscribed', {
+        sid: 'remote-audio-1',
+        kind: 'audio',
+        mediaStreamTrack: { kind: 'audio', readyState: 'live' },
+      }, { source: 'microphone' }, { identity: 'alice' });
+    });
+    expect(result.current.playbackManager.trackCount).toBe(1);
+
+    await act(async () => {
+      room.emit('trackUnsubscribed', {
+        sid: 'remote-audio-1',
+        kind: 'audio',
+      }, {}, { identity: 'alice' });
+    });
+    expect(result.current.playbackManager.trackCount).toBe(0);
+  });
+
+  it('disconnectRoom disposes playback manager and creates a fresh one', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    // Add a remote track
+    await act(async () => {
+      room.emit('trackSubscribed', {
+        sid: 'remote-audio-1',
+        kind: 'audio',
+        mediaStreamTrack: { kind: 'audio', readyState: 'live' },
+      }, { source: 'microphone' }, { identity: 'alice' });
+    });
+
+    const managerBefore = result.current.playbackManager;
+    expect(managerBefore.trackCount).toBe(1);
+
+    await act(async () => {
+      await result.current.disconnectRoom();
+    });
+
+    // Old manager is disposed
+    expect(managerBefore.isDisposed).toBe(true);
+    // New manager is fresh
+    expect(result.current.playbackManager).not.toBe(managerBefore);
+    expect(result.current.playbackManager.trackCount).toBe(0);
+    expect(result.current.playbackManager.isDisposed).toBe(false);
+  });
+
+  it('video tracks are not added to playback manager', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    await act(async () => {
+      room.emit('trackSubscribed', {
+        sid: 'remote-video-1',
+        kind: 'video',
+        mediaStreamTrack: { kind: 'video', readyState: 'live' },
+      }, { source: 'camera' }, { identity: 'alice' });
+    });
+
+    expect(result.current.playbackManager.trackCount).toBe(0);
   });
 });

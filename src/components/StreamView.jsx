@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 
 export default function StreamView({ track, audioTrack, label, source, isLocal, onUnwatch, objectFit, standByAfterMs }) {
   const videoRef = useRef(null);
-  const audioRef = useRef(null);
   const containerRef = useRef(null);
   const standbyTimerRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -35,45 +34,8 @@ export default function StreamView({ track, audioTrack, label, source, isLocal, 
     };
   }, [track]);
 
-  useEffect(() => {
-    console.log('[StreamView] Audio effect:', {
-      hasAudioRef: !!audioRef.current,
-      hasAudioTrack: !!audioTrack,
-      audioTrackState: audioTrack?.readyState,
-      audioTrackMuted: audioTrack?.muted,
-      isLocal,
-      label,
-    });
-
-    if (!audioRef.current || !audioTrack || isLocal) return;
-
-    const audio = audioRef.current;
-    audio.srcObject = new MediaStream([audioTrack]);
-    console.log('[StreamView] Audio srcObject set for:', label);
-
-    const tryPlay = async () => {
-      try {
-        await audio.play();
-        console.log('[StreamView] Audio playing for:', label);
-      } catch (err) {
-        console.warn('[StreamView] Audio autoplay blocked:', err.name, '- waiting for user interaction');
-        const resume = () => {
-          audio.play()
-            .then(() => console.log('[StreamView] Audio resumed after interaction'))
-            .catch((e) => console.error('[StreamView] Audio resume failed:', e));
-          document.removeEventListener('touchstart', resume);
-          document.removeEventListener('click', resume);
-        };
-        document.addEventListener('touchstart', resume, { once: true });
-        document.addEventListener('click', resume, { once: true });
-      }
-    };
-    tryPlay();
-
-    return () => {
-      audio.srcObject = null;
-    };
-  }, [audioTrack, isLocal, label]);
+  // Remote audio playback is now owned by PlaybackManager (TS layer).
+  // StreamView no longer creates or manages <audio> elements.
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -168,10 +130,7 @@ export default function StreamView({ track, audioTrack, label, source, isLocal, 
         />
       </div>
 
-      {/* Always render audio element so ref is available when useEffect runs */}
-      {!isLocal && (
-        <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
-      )}
+      {/* Remote audio playback is owned by PlaybackManager */}
 
       <button
         className={`sv-overlay-btn sv-fullscreen-btn`}

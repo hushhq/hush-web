@@ -42,30 +42,7 @@ function orderWithHeroLast(streams, heroId) {
   return [...streams.filter((s) => s.id !== heroId), hero];
 }
 
-function OrphanAudio({ track }) {
-  const audioRef = useRef(null);
-  useEffect(() => {
-    if (!audioRef.current || !track) return;
-    const audio = audioRef.current;
-    audio.srcObject = new MediaStream([track]);
-    const tryPlay = async () => {
-      try {
-        await audio.play();
-      } catch {
-        const resume = () => {
-          audio.play().catch(() => {});
-          document.removeEventListener('touchstart', resume);
-          document.removeEventListener('click', resume);
-        };
-        document.addEventListener('touchstart', resume, { once: true });
-        document.addEventListener('click', resume, { once: true });
-      }
-    };
-    tryPlay();
-    return () => { audio.srcObject = null; };
-  }, [track]);
-  return <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />;
-}
+// OrphanAudio removed — remote audio playback is now owned by PlaybackManager.
 
 /**
  * Builds stream objects from local and remote track maps.
@@ -331,9 +308,7 @@ export default function VideoGrid({
           </>
         )}
       </div>
-      {orphanAudioConsumers.map((oa) => (
-        <OrphanAudio key={oa.id} track={oa.track} />
-      ))}
+      {/* Orphan audio playback is now managed by PlaybackManager */}
     </>
   );
 }
