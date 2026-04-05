@@ -1,7 +1,7 @@
 /**
  * LevelAnalyser — side-chain AnalyserNode for audio level observation.
  *
- * Attaches a read-only AudioContext + AnalyserNode to a MediaStreamTrack.
+ * Uses buildObservationTap from the graph factory for node assembly.
  * Reports RMS level in dBFS and normalized 0-100 at a configurable
  * interval. Does NOT modify the observed track's audio graph.
  *
@@ -9,6 +9,8 @@
  * raw track for low-latency). The observation model is uniform across
  * all capture profiles.
  */
+
+import { buildObservationTap } from '../graph/ObservationTap';
 
 export interface LevelSample {
   /** RMS amplitude in dBFS (-Infinity to 0). Used for speaking detection. */
@@ -68,15 +70,10 @@ export class LevelAnalyser {
     const fftSize = this._options.fftSize ?? 2048;
     const intervalMs = this._options.intervalMs ?? 60;
 
-    this._ctx = new AudioContext({ sampleRate: 48_000 });
-    const stream = new MediaStream([track]);
-    this._source = this._ctx.createMediaStreamSource(stream);
-    this._analyser = this._ctx.createAnalyser();
-    this._analyser.fftSize = fftSize;
-    this._analyser.smoothingTimeConstant = 0;
-
-    // Side-chain: source → analyser only (no destination).
-    this._source.connect(this._analyser);
+    const tap = buildObservationTap(track, { fftSize });
+    this._ctx = tap.audioContext;
+    this._source = tap.sourceNode;
+    this._analyser = tap.analyserNode;
 
     this._timeDomainData = new Float32Array(fftSize);
 

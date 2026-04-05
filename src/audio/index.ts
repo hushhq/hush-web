@@ -52,6 +52,11 @@ export type { LocalParticipantPort, LocalTracksRef } from './adapters/LiveKitRoo
 
 export { isMobileWebAudio } from './core/detectAudioPlatform';
 
+export { buildCaptureGraph } from './graph/CaptureGraphFactory';
+export type { CaptureGraphResult, CaptureGraphOptions } from './graph/CaptureGraphFactory';
+export { buildObservationTap } from './graph/ObservationTap';
+export type { ObservationTapResult, ObservationTapOptions } from './graph/ObservationTap';
+
 export { PlaybackManager } from './playback/PlaybackManager';
 export type { ManagedAudioTrack } from './playback/PlaybackManager';
 

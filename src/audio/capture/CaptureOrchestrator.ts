@@ -27,6 +27,7 @@ import type { VoiceAudioEngine } from '../core/VoiceAudioEngine';
 import { CaptureSession } from './CaptureSession';
 import type { CaptureSessionResources } from './CaptureSession';
 import { buildConstraints } from './buildConstraints';
+import { buildCaptureGraph } from '../graph/CaptureGraphFactory';
 import { LocalAudioObserver } from '../analysis/LocalAudioObserver';
 import type { LocalAudioObserverOptions, ObserverState } from '../analysis/LocalAudioObserver';
 
@@ -117,6 +118,7 @@ export class CaptureOrchestrator {
   private _noiseGateWorkletUrl: URL | string | undefined;
   private _filterSettings: MicFilterSettings;
   private _observerOptions: LocalAudioObserverOptions;
+  private _applyFilterSettings: ((settings: Partial<MicFilterSettings>) => void) | null = null;
 
   constructor(options: CaptureOrchestratorOptions = {}) {
     this._engine = options.engine;
@@ -292,15 +294,7 @@ export class CaptureOrchestrator {
    */
   updateFilterSettings(settings: Partial<MicFilterSettings>): void {
     this._filterSettings = { ...this._filterSettings, ...settings };
-
-    const node = this._session?.noiseGateNode;
-    if (!node) return;
-
-    node.port.postMessage({
-      type: 'updateParams',
-      enabled: this._filterSettings.noiseGateEnabled,
-      threshold: this._filterSettings.noiseGateThresholdDb,
-    });
+    this._applyFilterSettings?.(this._filterSettings);
   }
 
   // ─── Private: Session Builders ──────────────────────
@@ -327,58 +321,30 @@ export class CaptureOrchestrator {
   }
 
   /**
-   * Pipeline path: AudioContext → noise gate worklet → MediaStreamDestination.
+   * Pipeline path: delegates to buildCaptureGraph for shared assembly.
    * Used by desktop-standard and local-monitor profiles.
    */
   private async _buildPipelineSession(
     profile: CaptureProfile,
     stream: MediaStream,
   ): Promise<CaptureSession> {
-    const audioContext = this._audioContextFactory.create({ sampleRate: 48_000 });
-    const source = audioContext.createMediaStreamSource(stream);
-    const destination = audioContext.createMediaStreamDestination();
-    destination.channelCount = 1;
+    const graph = await buildCaptureGraph({
+      stream,
+      workletUrl: this._noiseGateWorkletUrl,
+      filterSettings: this._filterSettings,
+      audioContextFactory: this._audioContextFactory,
+    });
 
-    let noiseGateNode: AudioWorkletNode | null = null;
-    let processingTail: AudioNode = source;
-
-    // Attempt to load noise gate worklet.
-    if (this._noiseGateWorkletUrl && typeof audioContext.audioWorklet !== 'undefined') {
-      try {
-        await audioContext.audioWorklet.addModule(this._noiseGateWorkletUrl);
-        noiseGateNode = new AudioWorkletNode(audioContext, 'noise-gate-processor');
-        source.connect(noiseGateNode);
-        processingTail = noiseGateNode;
-
-        // Apply initial filter settings.
-        noiseGateNode.port.postMessage({
-          type: 'updateParams',
-          enabled: this._filterSettings.noiseGateEnabled,
-          threshold: this._filterSettings.noiseGateThresholdDb,
-        });
-      } catch {
-        // Worklet failed to load. Continue without noise gate.
-        processingTail = source;
-      }
-    }
-
-    processingTail.connect(destination);
-
-    // Resume context if suspended (common on mobile).
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-
-    const processedTrack = destination.stream.getAudioTracks()[0];
+    this._applyFilterSettings = graph.applyFilterSettings;
 
     return new CaptureSession({
       profile,
       rawStream: stream,
-      processedTrack,
-      audioContext,
-      noiseGateNode,
-      sourceNode: source,
-      destinationNode: destination,
+      processedTrack: graph.processedTrack,
+      audioContext: graph.audioContext,
+      noiseGateNode: graph.noiseGateNode,
+      sourceNode: graph.sourceNode,
+      destinationNode: graph.destinationNode,
     });
   }
 
@@ -394,6 +360,7 @@ export class CaptureOrchestrator {
       this._session = null;
     }
     this._publishedHandle = null;
+    this._applyFilterSettings = null;
     this._state = 'idle';
   }
 }

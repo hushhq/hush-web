@@ -161,40 +161,24 @@ export async function createMicProcessingPipeline(stream, options = {}) {
     };
   }
 
-  const audioContext = new AudioContext({ sampleRate: 48_000 });
-  const source = audioContext.createMediaStreamSource(stream);
-  const mediaDestination = audioContext.createMediaStreamDestination();
-  mediaDestination.channelCount = 1;
+  // Delegate graph assembly to the shared factory.
+  const { buildCaptureGraph } = await import('../audio/graph/CaptureGraphFactory');
+  const graph = await buildCaptureGraph({
+    stream,
+    workletUrl: NOISE_GATE_WORKLET_URL,
+    filterSettings: initialSettings,
+    monitorOutput: options.monitorOutput ?? false,
+  });
 
-  let noiseGateNode = null;
-  let processingNode = source;
-  let monitorGainNode = null;
+  // Only warn when worklet was expected but failed to load — not when
+  // the browser simply doesn't support audioWorklet.
+  if (!graph.noiseGateNode && typeof graph.audioContext.audioWorklet !== 'undefined') {
+    console.warn('[audio] AudioWorklet failed, continuing without noise gate');
+  }
+
+  const { audioContext, sourceNode: source, destinationNode: mediaDestination, noiseGateNode, monitorGainNode } = graph;
+
   let currentSettings = initialSettings;
-
-  if (typeof audioContext.audioWorklet !== 'undefined') {
-    try {
-      await audioContext.audioWorklet.addModule(NOISE_GATE_WORKLET_URL);
-      noiseGateNode = new AudioWorkletNode(audioContext, 'noise-gate-processor');
-      source.connect(noiseGateNode);
-      processingNode = noiseGateNode;
-      applyMicFilterSettingsToNode(noiseGateNode, currentSettings);
-    } catch (err) {
-      console.warn('[audio] AudioWorklet failed, continuing without noise gate:', err);
-    }
-  }
-
-  processingNode.connect(mediaDestination);
-
-  if (options.monitorOutput) {
-    monitorGainNode = audioContext.createGain();
-    monitorGainNode.gain.value = 1;
-    processingNode.connect(monitorGainNode);
-    monitorGainNode.connect(audioContext.destination);
-  }
-
-  if (audioContext.state === 'suspended') {
-    await audioContext.resume();
-  }
 
   return {
     audioContext,
@@ -206,7 +190,7 @@ export async function createMicProcessingPipeline(stream, options = {}) {
         ...currentSettings,
         ...nextSettings,
       });
-      applyMicFilterSettingsToNode(noiseGateNode, currentSettings);
+      graph.applyFilterSettings(currentSettings);
       return currentSettings;
     },
     cleanup: async () => {
