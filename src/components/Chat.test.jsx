@@ -53,7 +53,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       render(<Chat {...defaultProps} />);
     });
 
-    const input = screen.getByPlaceholderText('send a message...');
+    const input = screen.getByPlaceholderText('Message...');
     await act(async () => {
       fireEvent.change(input, { target: { value: 'Hello world' } });
     });
@@ -67,7 +67,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       render(<Chat {...defaultProps} />);
     });
 
-    const input = screen.getByPlaceholderText('send a message...');
+    const input = screen.getByPlaceholderText('Message...');
     // Create a string that is exactly 4001 ASCII bytes (1 byte per char)
     const oversizedText = 'a'.repeat(4001);
 
@@ -84,7 +84,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       render(<Chat {...defaultProps} />);
     });
 
-    const input = screen.getByPlaceholderText('send a message...');
+    const input = screen.getByPlaceholderText('Message...');
     // Exactly 4000 ASCII bytes - should be allowed
     const exactText = 'a'.repeat(4000);
 
@@ -101,7 +101,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       render(<Chat {...defaultProps} />);
     });
 
-    const input = screen.getByPlaceholderText('send a message...');
+    const input = screen.getByPlaceholderText('Message...');
     // 3201 bytes > 80% of 4000 (3200 threshold)
     const nearLimitText = 'a'.repeat(3201);
 
@@ -119,7 +119,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       render(<Chat {...defaultProps} />);
     });
 
-    const input = screen.getByPlaceholderText('send a message...');
+    const input = screen.getByPlaceholderText('Message...');
     await act(async () => {
       fireEvent.change(input, { target: { value: 'short message' } });
     });
