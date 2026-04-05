@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { Track } from 'livekit-client';
 import StreamView from './StreamView';
 import ScreenShareCard from './ScreenShareCard';
@@ -46,15 +46,15 @@ function orderWithHeroLast(streams, heroId) {
 
 /**
  * Builds stream objects from local and remote track maps.
- * Returns { allStreams, orphanAudioConsumers, unwatchedScreens }.
+ * Remote audio is owned by PlaybackManager — only video streams are built here.
  */
 function buildStreams(localTracks, remoteTracks, availableScreens, watchedScreens, localScreenWatched) {
   const allStreams = [];
-  const pairedAudioTracks = new Set();
 
   for (const [trackSid, info] of localTracks.entries()) {
     if (info.track.kind === 'video') {
       if (info.source === MEDIA_SOURCES.SCREEN && !localScreenWatched) continue;
+      // Local screen share may have paired audio for the video element.
       let audioTrack = null;
       if (info.source === MEDIA_SOURCES.SCREEN) {
         for (const [, localInfo] of localTracks.entries()) {
@@ -77,38 +77,14 @@ function buildStreams(localTracks, remoteTracks, availableScreens, watchedScreen
 
   for (const [trackSid, info] of remoteTracks.entries()) {
     if (info.kind === 'video') {
-      const participantId = info.participant.identity;
-      const videoSource = info.source;
-      const pairedAudioSource =
-        videoSource === Track.Source.ScreenShare ? Track.Source.ScreenShareAudio : Track.Source.Microphone;
-      let audioTrack = null;
-      for (const [audioSid, audioInfo] of remoteTracks.entries()) {
-        if (
-          audioInfo.kind === 'audio' &&
-          audioInfo.source === pairedAudioSource &&
-          audioInfo.participant.identity === participantId
-        ) {
-          audioTrack = audioInfo.track.mediaStreamTrack;
-          pairedAudioTracks.add(audioSid);
-          break;
-        }
-      }
       allStreams.push({
         id: trackSid,
         type: 'remote',
         track: info.track.mediaStreamTrack,
-        audioTrack,
         label: info.participant.name || info.participant.identity,
         participantId: info.participant.identity,
-        source: videoSource === Track.Source.ScreenShare ? MEDIA_SOURCES.SCREEN : MEDIA_SOURCES.WEBCAM,
+        source: info.source === Track.Source.ScreenShare ? MEDIA_SOURCES.SCREEN : MEDIA_SOURCES.WEBCAM,
       });
-    }
-  }
-
-  const orphanAudioConsumers = [];
-  for (const [trackSid, info] of remoteTracks.entries()) {
-    if (info.kind === 'audio' && !pairedAudioTracks.has(trackSid)) {
-      orphanAudioConsumers.push({ id: trackSid, track: info.track.mediaStreamTrack });
     }
   }
 
@@ -123,11 +99,11 @@ function buildStreams(localTracks, remoteTracks, availableScreens, watchedScreen
     }
   }
 
-  return { allStreams, orphanAudioConsumers, unwatchedScreens };
+  return { allStreams, unwatchedScreens };
 }
 
 /**
- * Video grid: renders StreamView tiles, ScreenShareCards, and orphan audio elements.
+ * Video grid: renders StreamView tiles and ScreenShareCards.
  * Extracted from VoiceChannel to keep components under 300 lines.
  */
 /** Extracts initials from a display name - first letter of each word. */
@@ -184,7 +160,7 @@ export default function VideoGrid({
   isDeafened = false,
   voiceMuteStates,
 }) {
-  const { allStreams, orphanAudioConsumers, unwatchedScreens } = buildStreams(
+  const { allStreams, unwatchedScreens } = buildStreams(
     localTracks, remoteTracks, availableScreens, watchedScreens, localScreenWatched,
   );
 
@@ -250,7 +226,6 @@ export default function VideoGrid({
                 <div key={stream.id} style={getTileStyle(stream.id)} className={isSpeaking ? 'vg-tile-speaking' : undefined}>
                   <StreamView
                     track={stream.track}
-                    audioTrack={stream.audioTrack}
                     label={stream.label}
                     source={stream.source}
                     isLocal={stream.type === 'local'}
@@ -308,7 +283,6 @@ export default function VideoGrid({
           </>
         )}
       </div>
-      {/* Orphan audio playback is now managed by PlaybackManager */}
     </>
   );
 }

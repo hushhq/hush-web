@@ -2,8 +2,8 @@
  * VoiceAudioEngine — central owner of Hush voice audio runtime state.
  *
  * The engine owns mode selection, profile resolution, and operation state.
- * It does NOT own the audio graph or media pipeline — those remain in
- * trackManager.js, useMicMonitor.js, and useRoom.js.
+ * Audio graphs are built by CaptureGraphFactory and owned by
+ * CaptureOrchestrator (capture) and PlaybackManager (playback).
  *
  * React components consume engine state via useVoiceAudioEngine().
  */

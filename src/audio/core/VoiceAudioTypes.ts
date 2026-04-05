@@ -1,10 +1,9 @@
 /**
  * Core type definitions for the Hush voice audio subsystem.
  *
- * These types define the intended typed runtime model for future gradual
- * adoption. They do not replace or reinterpret the JS runtime behavior.
- * The JS modules (trackManager, useMicMonitor, micProcessing) remain
- * as the sole runtime implementation.
+ * These types are the authoritative runtime model. Capture, playback,
+ * and observation are owned by the TS audio subsystem. micProcessing.js
+ * retains only settings persistence and worklet URL resolution.
  *
  * The model separates two independent axes:
  *
@@ -41,9 +40,8 @@ export type AudioRuntimeMode =
 /**
  * Declares the capture strategy for each runtime mode.
  *
- * Each profile is immutable per mode. Future phases will use these
- * to drive runtime graph construction; this branch only defines
- * the typed contract.
+ * Each profile is immutable per mode. CaptureOrchestrator and
+ * buildCaptureGraph use these to drive runtime graph construction.
  */
 export interface CaptureProfile {
   readonly mode: AudioRuntimeMode;

@@ -6,12 +6,12 @@
  *   → MediaStreamDestination → processedTrack
  *
  * Used by:
- *   - CaptureOrchestrator._buildPipelineSession (TS capture path)
- *   - micProcessing.createMicProcessingPipeline (JS mic test path)
+ *   - CaptureOrchestrator._buildPipelineSession (capture publish path)
+ *   - useMicMonitor (settings mic test with monitorOutput)
  *
  * The factory does NOT absorb caller-specific logging, error handling,
  * or return-shape adaptation. Callers wrap the result into their own
- * structures (CaptureSession, micProcessing return object, etc.).
+ * structures (CaptureSession for publish, cleanup closures for mic test).
  */
 
 import type { MicFilterSettings } from '../core/VoiceAudioTypes';

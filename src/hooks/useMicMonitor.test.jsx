@@ -1,11 +1,29 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildMicMonitorAudioConstraints, useMicMonitor } from './useMicMonitor';
-import { createMicProcessingPipeline } from '../lib/micProcessing';
+
+// jsdom does not provide AudioContext. Polyfill so useMicMonitor's
+// typeof AudioContext guard passes and the buildCaptureGraph path runs.
+if (typeof globalThis.AudioContext === 'undefined') {
+  globalThis.AudioContext = class MockAudioContext {};
+}
+
+const { mockBuildCaptureGraph } = vi.hoisted(() => ({
+  mockBuildCaptureGraph: vi.fn(),
+}));
+
+vi.mock('../audio/graph/CaptureGraphFactory', () => ({
+  buildCaptureGraph: mockBuildCaptureGraph,
+}));
 
 vi.mock('../lib/micProcessing', () => ({
-  createMicProcessingPipeline: vi.fn(),
+  normalizeMicFilterSettings: vi.fn((s) => ({
+    noiseGateEnabled: s?.noiseGateEnabled ?? true,
+    noiseGateThresholdDb: s?.noiseGateThresholdDb ?? -50,
+  })),
+  NOISE_GATE_WORKLET_URL: 'mock://noise-gate-worklet.js',
 }));
+
+import { buildMicMonitorAudioConstraints, useMicMonitor } from './useMicMonitor';
 
 function createFakeAudioTrack() {
   const track = new EventTarget();
@@ -16,7 +34,23 @@ function createFakeAudioTrack() {
 function createFakeAudioContext() {
   const context = new EventTarget();
   context.state = 'running';
+  context.close = vi.fn().mockResolvedValue(undefined);
   return context;
+}
+
+function mockGraphResult(overrides = {}) {
+  const track = createFakeAudioTrack();
+  const audioContext = createFakeAudioContext();
+  return {
+    audioContext,
+    sourceNode: { disconnect: vi.fn() },
+    destinationNode: { disconnect: vi.fn() },
+    noiseGateNode: null,
+    processedTrack: track,
+    monitorGainNode: null,
+    applyFilterSettings: vi.fn(),
+    ...overrides,
+  };
 }
 
 describe('useMicMonitor', () => {
@@ -41,21 +75,13 @@ describe('useMicMonitor', () => {
 
   it('requests mic monitor media without browser dsp filters', async () => {
     const track = createFakeAudioTrack();
-    const audioContext = createFakeAudioContext();
     const stream = {
       getAudioTracks: () => [track],
       getTracks: () => [track],
     };
 
     navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
-    createMicProcessingPipeline.mockResolvedValue({
-      audioContext,
-      noiseGateNode: null,
-      rawStream: stream,
-      processedStream: { getAudioTracks: () => [track] },
-      updateSettings: vi.fn(),
-      cleanup: vi.fn(),
-    });
+    mockBuildCaptureGraph.mockResolvedValue(mockGraphResult());
 
     const { result } = renderHook(() => useMicMonitor());
 
@@ -72,27 +98,21 @@ describe('useMicMonitor', () => {
         deviceId: { exact: 'mic-1' },
       },
     });
+    expect(mockBuildCaptureGraph).toHaveBeenCalledWith(
+      expect.objectContaining({ monitorOutput: true }),
+    );
     expect(result.current.isTesting).toBe(true);
   });
 
   it('stops and surfaces an error when the browser ends the mic track', async () => {
     const track = createFakeAudioTrack();
-    const audioContext = createFakeAudioContext();
-    const cleanup = vi.fn();
     const stream = {
       getAudioTracks: () => [track],
       getTracks: () => [track],
     };
 
     navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
-    createMicProcessingPipeline.mockResolvedValue({
-      audioContext,
-      noiseGateNode: null,
-      rawStream: stream,
-      processedStream: { getAudioTracks: () => [track] },
-      updateSettings: vi.fn(),
-      cleanup,
-    });
+    mockBuildCaptureGraph.mockResolvedValue(mockGraphResult());
 
     const { result } = renderHook(() => useMicMonitor());
 
@@ -105,9 +125,41 @@ describe('useMicMonitor', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.isTesting).toBe(false);
+      expect(result.current.error).not.toBeNull();
     });
-    expect(cleanup).toHaveBeenCalledTimes(1);
-    expect(result.current.error?.message).toBe('Microphone input stopped unexpectedly.');
+    expect(result.current.isTesting).toBe(false);
+  });
+
+  it('falls back to raw-stream session when AudioContext is unavailable', async () => {
+    // Temporarily remove AudioContext to exercise the fallback path.
+    const savedAudioContext = globalThis.AudioContext;
+    delete globalThis.AudioContext;
+
+    const track = createFakeAudioTrack();
+    const stream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+    navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
+
+    try {
+      const { result } = renderHook(() => useMicMonitor());
+
+      await act(async () => {
+        await result.current.start({ deviceId: null, settings: {} });
+      });
+
+      // Should start testing without calling buildCaptureGraph.
+      expect(result.current.isTesting).toBe(true);
+      expect(mockBuildCaptureGraph).not.toHaveBeenCalled();
+
+      // Stop should clean up without error.
+      await act(async () => {
+        await result.current.stop();
+      });
+      expect(result.current.isTesting).toBe(false);
+    } finally {
+      globalThis.AudioContext = savedAudioContext;
+    }
   });
 });

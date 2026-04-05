@@ -92,24 +92,8 @@ export function setMicFilterSettings(nextSettings, storage) {
   return normalized;
 }
 
-/**
- * Applies the current mic filter settings to an active noise-gate node.
- *
- * @param {AudioWorkletNode|null} noiseGateNode
- * @param {Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>} settings
- * @returns {{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }}
- */
-export function applyMicFilterSettingsToNode(noiseGateNode, settings) {
-  const normalized = normalizeMicFilterSettings(settings);
-  if (noiseGateNode?.port) {
-    noiseGateNode.port.postMessage({
-      type: 'updateParams',
-      enabled: normalized.noiseGateEnabled,
-      threshold: normalized.noiseGateThresholdDb,
-    });
-  }
-  return normalized;
-}
+// applyMicFilterSettingsToNode removed — now handled by CaptureGraphFactory's
+// applyFilterSettings closure.
 
 /**
  * Best-effort warmup for the noise-gate worklet so the first mic publish is faster.
@@ -125,100 +109,6 @@ export async function preloadNoiseGateWorklet() {
   }
 }
 
-/**
- * Creates the reusable mic processing graph used for both published mic audio
- * and local mic-test monitoring in settings.
- *
- * @param {MediaStream} stream
- * @param {{ monitorOutput?: boolean, settings?: Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }> }} [options]
- * @returns {Promise<{
- *   audioContext: AudioContext|null,
- *   noiseGateNode: AudioWorkletNode|null,
- *   rawStream: MediaStream,
- *   processedStream: MediaStream,
- *   updateSettings: (nextSettings: Partial<{ noiseGateEnabled: boolean, noiseGateThresholdDb: number }>) => { noiseGateEnabled: boolean, noiseGateThresholdDb: number },
- *   cleanup: () => Promise<void>,
- * }>}
- */
-export async function createMicProcessingPipeline(stream, options = {}) {
-  const initialSettings = normalizeMicFilterSettings(
-    options.settings ?? getMicFilterSettings(),
-  );
-
-  if (typeof AudioContext === 'undefined') {
-    return {
-      audioContext: null,
-      noiseGateNode: null,
-      rawStream: stream,
-      processedStream: stream,
-      updateSettings: (nextSettings) => normalizeMicFilterSettings({
-        ...initialSettings,
-        ...nextSettings,
-      }),
-      cleanup: async () => {
-        stream.getTracks().forEach((track) => track.stop());
-      },
-    };
-  }
-
-  // Delegate graph assembly to the shared factory.
-  const { buildCaptureGraph } = await import('../audio/graph/CaptureGraphFactory');
-  const graph = await buildCaptureGraph({
-    stream,
-    workletUrl: NOISE_GATE_WORKLET_URL,
-    filterSettings: initialSettings,
-    monitorOutput: options.monitorOutput ?? false,
-  });
-
-  // Only warn when worklet was expected but failed to load — not when
-  // the browser simply doesn't support audioWorklet.
-  if (!graph.noiseGateNode && typeof graph.audioContext.audioWorklet !== 'undefined') {
-    console.warn('[audio] AudioWorklet failed, continuing without noise gate');
-  }
-
-  const { audioContext, sourceNode: source, destinationNode: mediaDestination, noiseGateNode, monitorGainNode } = graph;
-
-  let currentSettings = initialSettings;
-
-  return {
-    audioContext,
-    noiseGateNode,
-    rawStream: stream,
-    processedStream: mediaDestination.stream,
-    updateSettings: (nextSettings) => {
-      currentSettings = normalizeMicFilterSettings({
-        ...currentSettings,
-        ...nextSettings,
-      });
-      graph.applyFilterSettings(currentSettings);
-      return currentSettings;
-    },
-    cleanup: async () => {
-      try {
-        monitorGainNode?.disconnect();
-      } catch {
-        // Ignore disconnect errors during teardown.
-      }
-      try {
-        noiseGateNode?.disconnect();
-      } catch {
-        // Ignore disconnect errors during teardown.
-      }
-      try {
-        source.disconnect();
-      } catch {
-        // Ignore disconnect errors during teardown.
-      }
-
-      stream.getTracks().forEach((track) => track.stop());
-
-      if (audioContext.state !== 'closed') {
-        try {
-          await audioContext.close();
-        } catch {
-          // Ignore close errors during teardown.
-        }
-      }
-    },
-  };
-}
+// createMicProcessingPipeline removed — capture graphs are now built via
+// buildCaptureGraph from src/audio/graph/CaptureGraphFactory.ts.
+// useMicMonitor calls it directly; CaptureOrchestrator calls it for publish.

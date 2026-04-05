@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export default function StreamView({ track, audioTrack, label, source, isLocal, onUnwatch, objectFit, standByAfterMs }) {
+export default function StreamView({ track, label, source, isLocal, onUnwatch, objectFit, standByAfterMs }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const standbyTimerRef = useRef(null);
@@ -34,8 +34,6 @@ export default function StreamView({ track, audioTrack, label, source, isLocal, 
     };
   }, [track]);
 
-  // Remote audio playback is now owned by PlaybackManager (TS layer).
-  // StreamView no longer creates or manages <audio> elements.
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -130,7 +128,6 @@ export default function StreamView({ track, audioTrack, label, source, isLocal, 
         />
       </div>
 
-      {/* Remote audio playback is owned by PlaybackManager */}
 
       <button
         className={`sv-overlay-btn sv-fullscreen-btn`}

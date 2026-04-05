@@ -1,10 +1,11 @@
 /**
- * Local and remote track publishing, subscription, quality, and click-to-watch.
- * Used by useRoom; receives room and refs to avoid holding React state.
+ * Remote track subscription, screen share, webcam, and click-to-watch.
+ * Mic capture is owned by CaptureOrchestrator; remote audio playback
+ * is owned by PlaybackManager. This module retains non-mic track
+ * management only.
  */
 
 import { RoomEvent, Track, LocalVideoTrack, LocalAudioTrack } from 'livekit-client';
-import { createMicProcessingPipeline } from './micProcessing';
 export { preloadNoiseGateWorklet } from './micProcessing';
 import {
   QUALITY_PRESETS,
@@ -285,59 +286,7 @@ export async function unpublishWebcam(room, refs) {
   }
 }
 
-/**
- * @param {import('livekit-client').Room} room
- * @param {{ localTracksRef: import('react').MutableRefObject<Map>, audioContextRef: import('react').MutableRefObject<AudioContext|null>, noiseGateNodeRef: import('react').MutableRefObject<AudioWorkletNode|null>, rawMicStreamRef: import('react').MutableRefObject<MediaStream|null>, cleanupMicPipeline: () => void }} refs
- * @param {string|null} deviceId
- */
-export function buildPublishedMicAudioConstraints(deviceId = null) {
-  const constraints = {
-    // Hush owns the microphone processing pipeline. Keep browser DSP off so
-    // the published path stays predictable before a future denoiser lands.
-    echoCancellation: false,
-    noiseSuppression: false,
-    autoGainControl: false,
-    channelCount: 1,
-  };
-  if (deviceId) {
-    constraints.deviceId = { exact: deviceId };
-  }
-  return constraints;
-}
-
-export async function publishMic(room, refs, deviceId = null) {
-  const audioConstraints = buildPublishedMicAudioConstraints(deviceId);
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-  const pipeline = await createMicProcessingPipeline(stream);
-  refs.rawMicStreamRef.current = pipeline.rawStream;
-  refs.audioContextRef.current = pipeline.audioContext;
-  refs.noiseGateNodeRef.current = pipeline.noiseGateNode;
-
-  const processedTrack = pipeline.processedStream.getAudioTracks()[0];
-  const localAudioTrack = new LocalAudioTrack(processedTrack);
-  await room.localParticipant.publishTrack(localAudioTrack, {
-    source: Track.Source.Microphone,
-  });
-  refs.localTracksRef.current.set(localAudioTrack.sid, {
-    track: localAudioTrack,
-    source: MEDIA_SOURCES.MIC,
-  });
-}
-
-/**
- * @param {import('livekit-client').Room} room
- * @param {{ localTracksRef: import('react').MutableRefObject<Map>, rawMicStreamRef: import('react').MutableRefObject<MediaStream|null>, cleanupMicPipeline: () => void }} refs
- */
-export async function unpublishMic(room, refs) {
-  for (const [trackSid, info] of refs.localTracksRef.current.entries()) {
-    if (info.source === MEDIA_SOURCES.MIC) {
-      info.track.stop();
-      await room.localParticipant.unpublishTrack(info.track);
-      refs.localTracksRef.current.delete(trackSid);
-    }
-  }
-  refs.cleanupMicPipeline();
-}
+// Mic publish/unpublish removed — now owned by CaptureOrchestrator via useRoom.
 
 /**
  * @param {import('livekit-client').Room} room
