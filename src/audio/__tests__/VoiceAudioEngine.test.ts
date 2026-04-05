@@ -16,14 +16,6 @@ describe('resolveMode', () => {
     expect(resolveMode({ isLocalMonitor: true })).toBe('local-monitor');
   });
 
-  it('local-monitor takes priority over isLowLatency', () => {
-    expect(resolveMode({ isLocalMonitor: true, isLowLatency: true })).toBe('local-monitor');
-  });
-
-  it('returns low-latency when isLowLatency is true', () => {
-    expect(resolveMode({ isLowLatency: true })).toBe('low-latency');
-  });
-
   it('returns mobile-web-standard when isMobileWebAudio is true', () => {
     expect(resolveMode({ isMobileWebAudio: true })).toBe('mobile-web-standard');
   });
@@ -32,8 +24,8 @@ describe('resolveMode', () => {
     expect(resolveMode({})).toBe('desktop-standard');
   });
 
-  it('low-latency capture overrides mobile-web-standard capture', () => {
-    expect(resolveMode({ isLowLatency: true, isMobileWebAudio: true })).toBe('low-latency');
+  it('local-monitor takes priority over mobile-web-standard', () => {
+    expect(resolveMode({ isLocalMonitor: true, isMobileWebAudio: true })).toBe('local-monitor');
   });
 });
 
@@ -54,14 +46,6 @@ describe('resolvePlatform', () => {
 describe('resolvePlaybackContext', () => {
   it('local-monitor mode gets its own playback context', () => {
     expect(resolvePlaybackContext('local-monitor', 'desktop')).toBe('local-monitor');
-  });
-
-  it('desktop low-latency gets desktop playback', () => {
-    expect(resolvePlaybackContext('low-latency', 'desktop')).toBe('desktop');
-  });
-
-  it('mobile low-latency gets mobile-web playback', () => {
-    expect(resolvePlaybackContext('low-latency', 'mobile-web')).toBe('mobile-web');
   });
 
   it('desktop-standard gets desktop playback', () => {
@@ -90,16 +74,9 @@ describe('derivePublishOptions', () => {
     expect(opts.useBrowserDsp).toBe(true);
   });
 
-  it('low-latency: raw track + all filters disabled', () => {
-    const opts = derivePublishOptions(CAPTURE_PROFILES['low-latency']);
-    expect(opts.disableAudioFilters).toBe(true);
-    expect(opts.useRawTrack).toBe(true);
-    expect(opts.useBrowserDsp).toBe(false);
-  });
-
   it('consistency: useRawTrack and hushProcessing are never both true', () => {
     const modes: AudioRuntimeMode[] = [
-      'desktop-standard', 'mobile-web-standard', 'low-latency', 'local-monitor',
+      'desktop-standard', 'mobile-web-standard', 'local-monitor',
     ];
     for (const mode of modes) {
       const profile = CAPTURE_PROFILES[mode];
@@ -123,18 +100,11 @@ describe('VoiceAudioEngine', () => {
   });
 
   it('initializes with platform-driven playback profile', () => {
-    const engine = new VoiceAudioEngine({ mode: 'low-latency', platform: 'mobile-web' });
-    expect(engine.mode).toBe('low-latency');
+    const engine = new VoiceAudioEngine({ mode: 'mobile-web-standard', platform: 'mobile-web' });
+    expect(engine.mode).toBe('mobile-web-standard');
     expect(engine.platform).toBe('mobile-web');
     expect(engine.playbackProfile.useVideoElement).toBe(true);
     expect(engine.playbackProfile.outputSelection).toBe(false);
-    engine.dispose();
-  });
-
-  it('low-latency on desktop gets desktop playback', () => {
-    const engine = new VoiceAudioEngine({ mode: 'low-latency', platform: 'desktop' });
-    expect(engine.playbackProfile.outputSelection).toBe(true);
-    expect(engine.playbackProfile.useVideoElement).toBe(false);
     engine.dispose();
   });
 
@@ -250,9 +220,9 @@ describe('VoiceAudioEngine', () => {
   });
 
   it('state snapshot includes platform', () => {
-    const engine = new VoiceAudioEngine({ mode: 'low-latency', platform: 'mobile-web' });
+    const engine = new VoiceAudioEngine({ mode: 'mobile-web-standard', platform: 'mobile-web' });
     expect(engine.state.platform).toBe('mobile-web');
-    expect(engine.state.mode).toBe('low-latency');
+    expect(engine.state.mode).toBe('mobile-web-standard');
     engine.dispose();
   });
 });

@@ -1670,7 +1670,6 @@ export default function ServerLayout() {
       {activeVoiceChannel && (
         <VoiceConnectedPanel
           channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}
-          isLowLatency={voiceControlsRef.current?.isLowLatency ?? false}
           isScreenSharing={voiceScreenSharing}
           isWebcamOn={voiceWebcamOn}
           signalBars={connQuality.bars}

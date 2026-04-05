@@ -516,22 +516,6 @@ describe('useRoom MLS voice E2EE', () => {
     expect(mockOrchestratorUnmute).toHaveBeenCalledTimes(1);
   });
 
-  it('publishMic resolves low-latency profile when isLowLatency is true', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
-    const { result } = renderHook(() =>
-      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2, isLowLatency: true }),
-    );
-
-    await act(async () => {
-      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
-      await result.current.publishMic();
-    });
-
-    expect(mockOrchestratorAcquire).toHaveBeenCalledTimes(1);
-    const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
-    expect(acquireProfile.mode).toBe('low-latency');
-  });
-
   it('publishMic resolves mobile-web-standard when UA is mobile', async () => {
     mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
     mockIsMobileWebAudio.mockReturnValue(true);
@@ -548,25 +532,6 @@ describe('useRoom MLS voice E2EE', () => {
     expect(mockOrchestratorAcquire).toHaveBeenCalledTimes(1);
     const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
     expect(acquireProfile.mode).toBe('mobile-web-standard');
-
-    mockIsMobileWebAudio.mockReturnValue(false);
-  });
-
-  it('low-latency takes priority over mobile UA for capture', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
-    mockIsMobileWebAudio.mockReturnValue(true);
-
-    const { result } = renderHook(() =>
-      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2, isLowLatency: true }),
-    );
-
-    await act(async () => {
-      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
-      await result.current.publishMic();
-    });
-
-    const acquireProfile = mockOrchestratorAcquire.mock.calls[0][0];
-    expect(acquireProfile.mode).toBe('low-latency');
 
     mockIsMobileWebAudio.mockReturnValue(false);
   });

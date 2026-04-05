@@ -14,7 +14,6 @@ import { VoiceAudioEngine, resolveMode, resolvePlatform } from '../core/VoiceAud
 import type { VoiceAudioState, PublishMicOptions, AudioRuntimeMode, AudioPlatform } from '../core/VoiceAudioTypes';
 
 export interface UseVoiceAudioEngineOptions {
-  isLowLatency?: boolean;
   isLocalMonitor?: boolean;
   isMobileWebAudio?: boolean;
 }

@@ -8,11 +8,10 @@
  * The model separates two independent axes:
  *
  *   AudioRuntimeMode — determines capture behavior (DSP pipeline).
- *     Depends on both platform and latency preference.
+ *     Depends on platform.
  *
  *   AudioPlatform — determines playback constraints (output routing).
- *     Depends only on the device/browser. A mobile user in a
- *     low-latency room is still on a mobile platform.
+ *     Depends only on the device/browser.
  */
 
 // ─── Platform ───────────────────────────────────────────
@@ -25,14 +24,12 @@ export type AudioPlatform = 'desktop' | 'mobile-web';
 /**
  * Capture mode. Determines the DSP pipeline strategy.
  *
- * 'low-latency' capture behavior is the same on both platforms
- * (raw track, all DSP off). Platform differences surface only
- * in playback, which is resolved separately via AudioPlatform.
+ * Platform differences surface only in playback, which is
+ * resolved separately via AudioPlatform.
  */
 export type AudioRuntimeMode =
   | 'desktop-standard'
   | 'mobile-web-standard'
-  | 'low-latency'
   | 'local-monitor';
 
 // ─── Capture Profiles ───────────────────────────────────
@@ -63,7 +60,6 @@ export interface CaptureProfile {
  * These describe the intended per-mode capture architecture:
  * - desktop-standard: full Hush pipeline (AudioContext + noise gate)
  * - mobile-web-standard: raw track with browser DSP (NS+AGC on, no AudioContext)
- * - low-latency: raw track, all DSP disabled (same on desktop and mobile)
  * - local-monitor: Hush pipeline with loopback monitoring
  */
 export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>> = {
@@ -78,14 +74,6 @@ export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>
   'mobile-web-standard': {
     mode: 'mobile-web-standard',
     browserDsp: true,
-    hushProcessing: false,
-    useRawTrack: true,
-    localMonitoring: false,
-    echoCanConfigurable: false,
-  },
-  'low-latency': {
-    mode: 'low-latency',
-    browserDsp: false,
     hushProcessing: false,
     useRawTrack: true,
     localMonitoring: false,
@@ -106,9 +94,8 @@ export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>
 /**
  * The key used to look up a playback profile.
  *
- * Playback constraints are driven by platform, not latency mode.
- * A mobile user in a low-latency room still needs iOS video element
- * routing and cannot use setSinkId(). 'local-monitor' is a special
+ * Playback constraints are driven by platform.
+ * 'local-monitor' is a special
  * case with its own playback rules (no autoplay retry, no output
  * selection).
  */

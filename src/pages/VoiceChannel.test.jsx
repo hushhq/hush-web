@@ -123,14 +123,14 @@ describe('VoiceChannel', () => {
   });
 
   it('renders channel name and Live badge', () => {
-    const channel = { id: 'ch1', name: 'voice-1', serverId: 's1', type: 'voice', voiceMode: 'quality' };
+    const channel = { id: 'ch1', name: 'voice-1', serverId: 's1', type: 'voice' };
     renderVoiceChannel(channel);
     expect(screen.getByText('#voice-1')).toBeInTheDocument();
     expect(screen.getByText('Live')).toBeInTheDocument();
   });
 
   it('calls connectRoom with derived room name and displayName', async () => {
-    const channel = { id: 'ch1', name: 'voice-1', serverId: 's1', type: 'voice', voiceMode: 'quality' };
+    const channel = { id: 'ch1', name: 'voice-1', serverId: 's1', type: 'voice' };
     renderVoiceChannel(channel, 's1');
     await waitFor(() => {
       expect(mockConnectRoom).toHaveBeenCalledWith(
@@ -141,30 +141,13 @@ describe('VoiceChannel', () => {
     });
   });
 
-  it('hides video controls in low-latency mode', () => {
+  it('always shows video controls', () => {
     vi.mocked(useBreakpoint).mockReturnValue('mobile');
     const channel = {
       id: 'ch1',
       name: 'voice-1',
       serverId: 's1',
       type: 'voice',
-      voiceMode: 'low-latency',
-    };
-    renderVoiceChannel(channel);
-    expect(ControlsProps).not.toBeNull();
-    expect(ControlsProps.showScreenShare).toBe(false);
-    expect(ControlsProps.showWebcam).toBe(false);
-    expect(ControlsProps.showQualityPicker).toBe(false);
-  });
-
-  it('shows video controls in quality mode', () => {
-    vi.mocked(useBreakpoint).mockReturnValue('mobile');
-    const channel = {
-      id: 'ch1',
-      name: 'voice-1',
-      serverId: 's1',
-      type: 'voice',
-      voiceMode: 'quality',
     };
     renderVoiceChannel(channel);
     expect(ControlsProps).not.toBeNull();
@@ -212,7 +195,6 @@ describe('VoiceChannel', () => {
       name: 'voice-1',
       serverId: 's1',
       type: 'voice',
-      voiceMode: 'quality',
     };
 
     renderVoiceChannel(channel);
@@ -238,33 +220,17 @@ describe('VoiceChannel', () => {
     });
   });
 
-  it('passes isLowLatency to useRoom based on channel.voiceMode', () => {
+  it('does not pass isLowLatency to useRoom', () => {
     const channel = {
       id: 'ch1',
       name: 'voice-1',
       serverId: 's1',
       type: 'voice',
-      voiceMode: 'low-latency',
     };
     renderVoiceChannel(channel);
 
     const calls = vi.mocked(useRoom).mock.calls;
     const lastCall = calls[calls.length - 1][0];
-    expect(lastCall.isLowLatency).toBe(true);
-  });
-
-  it('passes isLowLatency as false for quality mode channels', () => {
-    const channel = {
-      id: 'ch2',
-      name: 'voice-2',
-      serverId: 's1',
-      type: 'voice',
-      voiceMode: 'quality',
-    };
-    renderVoiceChannel(channel);
-
-    const calls = vi.mocked(useRoom).mock.calls;
-    const lastCall = calls[calls.length - 1][0];
-    expect(lastCall.isLowLatency).toBe(false);
+    expect(lastCall).not.toHaveProperty('isLowLatency');
   });
 });

@@ -259,36 +259,6 @@ describe('ChannelList', () => {
     });
   });
 
-  it('create channel modal shows voice mode only for voice type', async () => {
-    render(
-      <ChannelList
-        getToken={getToken}
-        serverId="s1"
-        serverName="My Server"
-        channels={[]}
-        myRole="admin"
-        activeChannelId={null}
-        onChannelSelect={() => {}}
-      />
-    );
-    const addBtn = screen.getByTitle('Create channel');
-    addBtn.click();
-    await waitFor(() => {
-      expect(screen.getByText('Create channel')).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText('Type')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Voice mode')).not.toBeInTheDocument();
-    const typeSelect = screen.getByLabelText('Type');
-    const options = typeSelect.querySelectorAll('option');
-    const voiceOption = Array.from(options).find((o) => o.value === 'voice');
-    expect(voiceOption).toBeTruthy();
-    typeSelect.value = 'voice';
-    typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    await waitFor(() => {
-      expect(screen.getByLabelText('Voice mode')).toBeInTheDocument();
-    });
-  });
-
   it('builds and copies an instance-aware invite link from the invite modal', async () => {
     const { createGuildInvite } = await import('../lib/api');
     createGuildInvite.mockResolvedValueOnce({ code: 'abc123' });

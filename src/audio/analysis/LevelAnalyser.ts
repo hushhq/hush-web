@@ -6,8 +6,8 @@
  * interval. Does NOT modify the observed track's audio graph.
  *
  * Always taps the published track (post-pipeline for desktop-standard,
- * raw track for low-latency). The observation model is uniform across
- * all capture profiles.
+ * raw track for mobile-web-standard). The observation model is uniform
+ * across all capture profiles.
  */
 
 import { buildObservationTap } from '../graph/ObservationTap';

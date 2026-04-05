@@ -14,10 +14,6 @@
  *   mobile-web-standard:
  *     Browser DSP ON (NS + AGC + EC). No AudioContext pipeline.
  *     Relies on the browser's built-in processing for stability.
- *
- *   low-latency:
- *     All DSP OFF. Raw track published directly.
- *     Shortest, most predictable path.
  */
 
 import type { CaptureProfile } from '../core/VoiceAudioTypes';

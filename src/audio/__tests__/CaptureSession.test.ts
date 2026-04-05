@@ -42,7 +42,7 @@ describe('CaptureSession (raw-track)', () => {
   it('creates without AudioContext for raw-track profiles', () => {
     const stream = mockMediaStream();
     const session = new CaptureSession({
-      profile: CAPTURE_PROFILES['low-latency'],
+      profile: CAPTURE_PROFILES['mobile-web-standard'],
       rawStream: stream,
       processedTrack: stream.getAudioTracks()[0],
       audioContext: null,
@@ -60,7 +60,7 @@ describe('CaptureSession (raw-track)', () => {
   it('teardown stops raw tracks', async () => {
     const stream = mockMediaStream();
     const session = new CaptureSession({
-      profile: CAPTURE_PROFILES['low-latency'],
+      profile: CAPTURE_PROFILES['mobile-web-standard'],
       rawStream: stream,
       processedTrack: stream.getAudioTracks()[0],
       audioContext: null,
@@ -78,7 +78,7 @@ describe('CaptureSession (raw-track)', () => {
   it('teardown is idempotent', async () => {
     const stream = mockMediaStream();
     const session = new CaptureSession({
-      profile: CAPTURE_PROFILES['low-latency'],
+      profile: CAPTURE_PROFILES['mobile-web-standard'],
       rawStream: stream,
       processedTrack: stream.getAudioTracks()[0],
       audioContext: null,
@@ -178,7 +178,7 @@ describe('CaptureSession (pipeline)', () => {
     const stream = mockMediaStream();
     const track = stream.getAudioTracks()[0];
     const session = new CaptureSession({
-      profile: CAPTURE_PROFILES['low-latency'],
+      profile: CAPTURE_PROFILES['mobile-web-standard'],
       rawStream: stream,
       processedTrack: track, // same object
       audioContext: null,

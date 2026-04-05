@@ -835,7 +835,7 @@ export async function deleteGuild(token, serverId, baseUrl = '') {
  * List all channels in a guild.
  * @param {string} token - JWT
  * @param {string} serverId - Guild UUID
- * @returns {Promise<Array<{ id: string, name: string, type: string, voiceMode?: string, parentId?: string, position: number, createdAt: string }>>}
+ * @returns {Promise<Array<{ id: string, name: string, type: string, parentId?: string, position: number, createdAt: string }>>}
  */
 export async function getGuildChannels(token, serverId, baseUrl = '') {
   const res = await fetchWithAuth(token, `/api/servers/${encodeURIComponent(serverId)}/channels`, {}, baseUrl);
@@ -852,7 +852,7 @@ export async function getGuildChannels(token, serverId, baseUrl = '') {
  * Create a channel in a guild (admin+).
  * @param {string} token - JWT
  * @param {string} serverId - Guild UUID
- * @param {{ name: string, type: 'text'|'voice', voiceMode?: string, parentId?: string, position?: number }} body
+ * @param {{ name: string, type: 'text'|'voice', parentId?: string, position?: number }} body
  * @returns {Promise<object>} Created channel
  */
 export async function createGuildChannel(token, serverId, body, baseUrl = '') {

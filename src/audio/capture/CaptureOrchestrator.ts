@@ -8,11 +8,10 @@
  *     → MediaStreamDestination → processed track → LiveKit publish.
  *     Hush owns all DSP. Noise gate threshold is configurable.
  *
- *   Raw path (low-latency, mobile-web-standard):
+ *   Raw path (mobile-web-standard):
  *     getUserMedia (constraints per profile) → raw track → LiveKit publish.
  *     No AudioContext. Shortest, most predictable path.
  *     mobile-web enables browser DSP via constraints.
- *     low-latency disables everything.
  *
  * The orchestrator reports operation state (pending/applied/failed) to
  * a VoiceAudioEngine instance when provided. It does not hold React
@@ -301,7 +300,7 @@ export class CaptureOrchestrator {
 
   /**
    * Raw-track path: getUserMedia stream → raw track.
-   * Used by low-latency and mobile-web-standard profiles.
+   * Used by mobile-web-standard profiles.
    */
   private _buildRawSession(
     profile: CaptureProfile,

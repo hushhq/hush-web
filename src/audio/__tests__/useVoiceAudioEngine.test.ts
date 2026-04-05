@@ -3,30 +3,22 @@ import { renderHook, act } from '@testing-library/react';
 import { useVoiceAudioEngine } from '../adapters/useVoiceAudioEngine';
 
 describe('useVoiceAudioEngine', () => {
-  it('creates engine with resolved mode and platform from flags', () => {
-    const { result } = renderHook(() =>
-      useVoiceAudioEngine({ isLowLatency: true }),
-    );
-    expect(result.current.mode).toBe('low-latency');
+  it('defaults to desktop-standard on desktop', () => {
+    const { result } = renderHook(() => useVoiceAudioEngine());
+    expect(result.current.mode).toBe('desktop-standard');
     expect(result.current.platform).toBe('desktop');
     expect(result.current.engine).toBeDefined();
     expect(result.current.engine.isDisposed).toBe(false);
   });
 
-  it('defaults to desktop-standard on desktop', () => {
-    const { result } = renderHook(() => useVoiceAudioEngine());
-    expect(result.current.mode).toBe('desktop-standard');
-    expect(result.current.platform).toBe('desktop');
-  });
-
-  it('mobile low-latency gets low-latency capture + mobile playback', () => {
+  it('mobile gets mobile-web-standard capture + mobile playback', () => {
     const { result } = renderHook(() =>
-      useVoiceAudioEngine({ isLowLatency: true, isMobileWebAudio: true }),
+      useVoiceAudioEngine({ isMobileWebAudio: true }),
     );
-    expect(result.current.mode).toBe('low-latency');
+    expect(result.current.mode).toBe('mobile-web-standard');
     expect(result.current.platform).toBe('mobile-web');
     expect(result.current.state.captureProfile.useRawTrack).toBe(true);
-    expect(result.current.state.captureProfile.browserDsp).toBe(false);
+    expect(result.current.state.captureProfile.browserDsp).toBe(true);
     expect(result.current.state.playbackProfile.useVideoElement).toBe(true);
     expect(result.current.state.playbackProfile.outputSelection).toBe(false);
   });
@@ -45,15 +37,15 @@ describe('useVoiceAudioEngine', () => {
 
   it('exposes publishOptions derived from capture profile', () => {
     const { result } = renderHook(() =>
-      useVoiceAudioEngine({ isLowLatency: true }),
+      useVoiceAudioEngine(),
     );
-    expect(result.current.publishOptions.disableAudioFilters).toBe(true);
-    expect(result.current.publishOptions.useRawTrack).toBe(true);
+    expect(result.current.publishOptions.disableAudioFilters).toBe(false);
+    expect(result.current.publishOptions.useRawTrack).toBe(false);
   });
 
   it('state updates when engine operations are called', () => {
     const { result } = renderHook(() =>
-      useVoiceAudioEngine({ isLowLatency: false }),
+      useVoiceAudioEngine(),
     );
 
     act(() => {
@@ -82,18 +74,18 @@ describe('useVoiceAudioEngine', () => {
   });
 
   it('creates new engine when mode changes', () => {
-    let isLowLatency = false;
+    let isMobileWebAudio = false;
     const { result, rerender } = renderHook(() =>
-      useVoiceAudioEngine({ isLowLatency }),
+      useVoiceAudioEngine({ isMobileWebAudio }),
     );
 
     const firstEngine = result.current.engine;
     expect(result.current.mode).toBe('desktop-standard');
 
-    isLowLatency = true;
+    isMobileWebAudio = true;
     rerender();
 
-    expect(result.current.mode).toBe('low-latency');
+    expect(result.current.mode).toBe('mobile-web-standard');
     expect(result.current.engine).not.toBe(firstEngine);
   });
 

@@ -80,7 +80,6 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   const seenParticipantIdsRef = useRef(null);
 
   const roomName = `channel-${channel.id}`;
-  const isLowLatency = channel.voiceMode === 'low-latency';
 
   const getStore = useCallback(
     () => mlsStore.openStore(user?.id ?? '', getDeviceId()),
@@ -123,7 +122,6 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     currentUserId,
     getStore,
     voiceKeyRotationHours: undefined, // uses server handshake default (2h) when undefined
-    isLowLatency,
   });
 
   // Bind PlaybackManager to a DOM container for remote audio elements.
@@ -265,7 +263,6 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   }, [qualityChangeError]);
 
   const handleScreenShare = async () => {
-    if (isLowLatency) return;
     if (isScreenSharing) {
       await unpublishScreen();
       setIsScreenSharing(false);
@@ -288,7 +285,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   };
 
   const handleSwitchScreen = async () => {
-    if (!isScreenSharing || isLowLatency) return;
+    if (!isScreenSharing) return;
     try {
       const result = await switchScreenSource(quality);
       if (result) {
@@ -345,7 +342,6 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
   };
 
   const handleWebcam = async () => {
-    if (isLowLatency) return;
     if (isWebcamOn) {
       await unpublishWebcam();
       setIsWebcamOn(false);
@@ -417,7 +413,6 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         updateMicFilterSettings: (settings) => updateMicFilterSettingsRef.current(settings),
         isScreenSharing,
         isWebcamOn,
-        isLowLatency,
       };
     }
     onVoiceStateChange?.({ isMicOn, isDeafened, isScreenSharing, isWebcamOn });
@@ -432,7 +427,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
         is_deafened: isDeafened,
       });
     }
-  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, isLowLatency, handleDeafen, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
+  }, [voiceControlsRef, isMicOn, isDeafened, isScreenSharing, isWebcamOn, handleDeafen, onVoiceStateChange, wsClient, serverId, channel?.id, currentUserId, updateMicFilterSettings]);
 
   const handleWebcamDeviceSwitch = async () => {
     await requestPermission('video');
@@ -525,14 +520,6 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
               Live
             </span>
           )}
-          {isLowLatency && (
-            <span className="vc-mode-badge" title="Audio processing bypassed for lowest latency">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
-              Performance
-            </span>
-          )}
         </div>
         <div className="vc-header-right">
           <button
@@ -613,9 +600,9 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
               isWebcamOn={isWebcamOn}
               quality={quality}
               isMobile={isMobile}
-              showScreenShare={!isLowLatency}
-              showWebcam={!isLowLatency}
-              showQualityPicker={!isLowLatency}
+              showScreenShare={true}
+              showWebcam={true}
+              showQualityPicker={true}
               onScreenShare={handleScreenShare}
               onOpenQualityOrWindow={() => setShowQualityPicker(true)}
               onMic={handleMic}

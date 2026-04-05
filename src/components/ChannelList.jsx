@@ -98,7 +98,6 @@ function groupChannelsByParent(channels) {
 function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCreated }) {
   const [name, setName] = useState('');
   const [type, setType] = useState(CHANNEL_TYPE_TEXT);
-  const [voiceMode, setVoiceMode] = useState('quality');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -132,7 +131,6 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
     setLoading(true);
     try {
       const body = { name: trimmed, type };
-      if (type === CHANNEL_TYPE_VOICE) body.voiceMode = voiceMode;
       const channel = await createGuildChannel(token, serverId, body);
 
       // Create the MLS group for text channels so encrypted chat works.
@@ -205,20 +203,6 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
               <option value={CHANNEL_TYPE_VOICE}>Voice</option>
             </select>
           </div>
-          {type === CHANNEL_TYPE_VOICE && (
-            <div>
-              <label className="modal-field-label" htmlFor="create-channel-voice-mode">Voice mode</label>
-              <select
-                id="create-channel-voice-mode"
-                className="input"
-                value={voiceMode}
-                onChange={(e) => setVoiceMode(e.target.value)}
-              >
-                <option value="quality">Quality</option>
-                <option value="low-latency">Low Latency</option>
-              </select>
-            </div>
-          )}
           {error && <div className="modal-error">{error}</div>}
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
@@ -606,13 +590,6 @@ function ChannelRowContent({ channel, isActive, onSelect, participantCount, voic
         <span className="cl-channel-name">
           {channel._displayName ?? (channel.name || (channel.type === 'voice' ? 'General' : 'general'))}
         </span>
-        {isVoice && channel.voiceMode === 'low-latency' && (
-          <span className="cl-voice-mode-badge" title="Low latency">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
-          </span>
-        )}
         {isVoice && participantCount != null && (
           <span className="cl-voice-count">{participantCount}</span>
         )}

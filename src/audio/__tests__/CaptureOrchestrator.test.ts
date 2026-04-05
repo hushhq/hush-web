@@ -95,10 +95,10 @@ describe('CaptureOrchestrator: state transitions', () => {
     });
 
     // Acquire for a raw-track profile (simplest path)
-    const session = await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    const session = await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     expect(orch.state).toBe('acquiring');
     expect(session).toBeDefined();
-    expect(session.profile.mode).toBe('low-latency');
+    expect(session.profile.mode).toBe('mobile-web-standard');
 
     // Publish
     await orch.publishTo(room);
@@ -126,7 +126,7 @@ describe('CaptureOrchestrator: state transitions', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    const session = await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    const session = await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     expect(session.isTornDown).toBe(false);
 
     await orch.teardown();
@@ -140,10 +140,10 @@ describe('CaptureOrchestrator: state transitions', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
 
     await expect(
-      orch.acquire(CAPTURE_PROFILES['low-latency']),
+      orch.acquire(CAPTURE_PROFILES['mobile-web-standard']),
     ).rejects.toThrow('session already active');
   });
 
@@ -161,7 +161,7 @@ describe('CaptureOrchestrator: state transitions', () => {
     });
     const room = mockRoom();
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     await orch.publishTo(room);
 
     await expect(orch.publishTo(room)).rejects.toThrow('already published');
@@ -186,7 +186,7 @@ describe('CaptureOrchestrator: engine state reporting', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
 
     // acquire calls setMicPending
     expect(listener.mock.calls[0][0].micOperation.state).toBe('pending');
@@ -236,7 +236,7 @@ describe('CaptureOrchestrator: engine state reporting', () => {
     });
     const room = mockRoom();
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     await orch.publishTo(room);
 
     listener.mockClear();
@@ -252,44 +252,6 @@ describe('CaptureOrchestrator: engine state reporting', () => {
   });
 });
 
-// ─── Low-Latency Invariants ─────────────────────────────
-
-describe('CaptureOrchestrator: low-latency bypass', () => {
-  it('low-latency uses raw track (no AudioContext)', async () => {
-    const ctxFactory = mockAudioContextFactory();
-
-    const orch = new CaptureOrchestrator({
-      mediaDevices: mockMediaDevices(),
-      audioContextFactory: ctxFactory,
-    });
-
-    const session = await orch.acquire(CAPTURE_PROFILES['low-latency']);
-
-    expect(session.usesProcessingPipeline).toBe(false);
-    expect(session.audioContext).toBeNull();
-    expect(session.noiseGateNode).toBeNull();
-    expect(ctxFactory.create).not.toHaveBeenCalled();
-
-    await orch.teardown();
-  });
-
-  it('low-latency constraints have all DSP off', async () => {
-    const devices = mockMediaDevices();
-
-    const orch = new CaptureOrchestrator({
-      mediaDevices: devices,
-    });
-
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
-
-    const constraints = (devices.getUserMedia as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(constraints.audio.echoCancellation).toBe(false);
-    expect(constraints.audio.noiseSuppression).toBe(false);
-    expect(constraints.audio.autoGainControl).toBe(false);
-
-    await orch.teardown();
-  });
-});
 
 // ─── Mobile-Web Conservative Invariants ─────────────────
 
@@ -376,7 +338,7 @@ describe('CaptureOrchestrator: mute/unmute', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     await orch.publishTo(room);
     await orch.mute();
 
@@ -393,7 +355,7 @@ describe('CaptureOrchestrator: mute/unmute', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     await orch.publishTo(room);
     await orch.unmute();
 
@@ -444,7 +406,7 @@ describe('CaptureOrchestrator: cleanup on failure', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
     await orch.publishTo(room);
 
     // Should not throw despite unpublishTrack error
@@ -463,7 +425,7 @@ describe('CaptureOrchestrator: cleanup on failure', () => {
       mediaDevices: mockMediaDevices(),
     });
 
-    const session = await orch.acquire(CAPTURE_PROFILES['low-latency']);
+    const session = await orch.acquire(CAPTURE_PROFILES['mobile-web-standard']);
 
     await expect(orch.publishTo(room)).rejects.toThrow('publish failed');
 

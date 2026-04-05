@@ -50,7 +50,7 @@ function fromBase64(b64) {
  * @param {{ wsClient: object, getToken: () => string|null, currentUserId: string, getStore: () => Promise<IDBDatabase>, voiceKeyRotationHours?: number }} deps
  * @returns {Object} Room state and media controls
  */
-export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyRotationHours, isLowLatency }) {
+export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyRotationHours }) {
   // ─── Connection State ─────────────────────────────────
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState(null);
@@ -780,7 +780,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const publishMic = useCallback(
     async (deviceId = null) => {
       if (!roomRef.current) throw new Error('Room not connected');
-      const mode = resolveMode({ isLowLatency, isMobileWebAudio: isMobileWebAudio() });
+      const mode = resolveMode({ isMobileWebAudio: isMobileWebAudio() });
       const profile = CAPTURE_PROFILES[mode];
       try {
         await shutdownMicCapture();
@@ -810,7 +810,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         throw err;
       }
     },
-    [scheduleLocalTracksUpdate, shutdownMicCapture, isLowLatency],
+    [scheduleLocalTracksUpdate, shutdownMicCapture],
   );
 
   // ─── Unpublish Microphone ─────────────────────────────

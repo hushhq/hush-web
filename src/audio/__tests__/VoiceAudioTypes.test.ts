@@ -5,7 +5,6 @@ import type { AudioRuntimeMode, PlaybackContext } from '../core/VoiceAudioTypes'
 const ALL_MODES: AudioRuntimeMode[] = [
   'desktop-standard',
   'mobile-web-standard',
-  'low-latency',
   'local-monitor',
 ];
 
@@ -41,14 +40,6 @@ describe('CAPTURE_PROFILES', () => {
     expect(p.localMonitoring).toBe(false);
   });
 
-  it('low-latency: all processing OFF, raw track', () => {
-    const p = CAPTURE_PROFILES['low-latency'];
-    expect(p.browserDsp).toBe(false);
-    expect(p.hushProcessing).toBe(false);
-    expect(p.useRawTrack).toBe(true);
-    expect(p.echoCanConfigurable).toBe(false);
-  });
-
   it('local-monitor: Hush processing ON, browser DSP OFF, monitoring enabled', () => {
     const p = CAPTURE_PROFILES['local-monitor'];
     expect(p.browserDsp).toBe(false);
@@ -78,7 +69,6 @@ describe('PLAYBACK_PROFILES', () => {
   });
 
   it('playback is keyed by platform, not by capture mode', () => {
-    // There is no 'low-latency' key in PLAYBACK_PROFILES.
     // Playback constraints are platform-driven.
     expect(Object.keys(PLAYBACK_PROFILES).sort()).toEqual(
       ['desktop', 'local-monitor', 'mobile-web'],

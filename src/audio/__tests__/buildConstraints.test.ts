@@ -18,13 +18,6 @@ describe('buildConstraints', () => {
     expect(c.autoGainControl).toBe(true);
   });
 
-  it('low-latency: all DSP off', () => {
-    const c = buildConstraints(CAPTURE_PROFILES['low-latency']);
-    expect(c.echoCancellation).toBe(false);
-    expect(c.noiseSuppression).toBe(false);
-    expect(c.autoGainControl).toBe(false);
-  });
-
   it('local-monitor: browser DSP off (same as desktop)', () => {
     const c = buildConstraints(CAPTURE_PROFILES['local-monitor']);
     expect(c.echoCancellation).toBe(false);

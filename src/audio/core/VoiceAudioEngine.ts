@@ -33,19 +33,13 @@ export interface VoiceAudioEngineOptions {
 /**
  * Resolves the capture mode from context flags.
  *
- * Priority: local-monitor > low-latency > platform-standard.
- *
- * Platform detection (isMobileWebAudio) affects the standard-mode
- * capture path but does NOT override low-latency. A mobile user in
- * a low-latency room gets low-latency capture + mobile playback.
+ * Priority: local-monitor > platform-standard.
  */
 export function resolveMode(context: {
-  isLowLatency?: boolean;
   isLocalMonitor?: boolean;
   isMobileWebAudio?: boolean;
 }): AudioRuntimeMode {
   if (context.isLocalMonitor) return 'local-monitor';
-  if (context.isLowLatency) return 'low-latency';
   if (context.isMobileWebAudio) return 'mobile-web-standard';
   return 'desktop-standard';
 }

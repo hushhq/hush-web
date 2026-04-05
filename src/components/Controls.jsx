@@ -40,25 +40,23 @@ function SignalIcon({ bars = 0, color = 'var(--hush-text-muted)', isReconnecting
  * when the user is connected to a voice channel.
  *
  * Shows connection status, channel name, and voice-specific controls
- * (screenshare, webcam for quality channels; disconnect always).
+ * (screenshare, webcam, disconnect).
  * Mic/deafen live in UserPanel - never duplicated here.
  *
  * @param {object} props
  * @param {string} props.channelName - Name of the connected voice channel.
- * @param {boolean} props.isLowLatency - Whether this is a low-latency channel.
  * @param {boolean} props.isScreenSharing - Whether screen is being shared.
  * @param {boolean} props.isWebcamOn - Whether webcam is on.
  * @param {number|null} props.signalBars - Number of signal bars to show (0-4).
  * @param {string} props.signalColor - CSS color for active signal bars.
  * @param {boolean} props.signalReconnecting - Whether WS is reconnecting.
  * @param {number|null} props.rtt - Round-trip time in ms.
- * @param {function} props.onScreenShare - Toggle screen share (quality only).
+ * @param {function} props.onScreenShare - Toggle screen share.
  * @param {function} props.onSwitchScreen - Switch shared window/screen without stopping.
  * @param {function} props.onWebcam - Toggle webcam (quality only).
  * @param {function} props.onDisconnect - Disconnect from voice.
  */
-export function VoiceConnectedPanel({ channelName, isLowLatency, isScreenSharing, isWebcamOn, signalBars, signalColor, signalReconnecting, rtt, onScreenShare, onSwitchScreen, onWebcam, onDisconnect }) {
-  const isQuality = !isLowLatency;
+export function VoiceConnectedPanel({ channelName, isScreenSharing, isWebcamOn, signalBars, signalColor, signalReconnecting, rtt, onScreenShare, onSwitchScreen, onWebcam, onDisconnect }) {
   return (
     <div className="voice-panel">
       <div className="voice-panel-header">
@@ -81,10 +79,9 @@ export function VoiceConnectedPanel({ channelName, isLowLatency, isScreenSharing
           </svg>
         </button>
       </div>
-      {isQuality && (
-        <div className="voice-panel-controls">
-          {/* Webcam */}
-          <button
+      <div className="voice-panel-controls">
+        {/* Webcam */}
+        <button
             type="button"
             className={`voice-panel-btn${isWebcamOn ? ' active' : ''}`}
             onClick={onWebcam}
@@ -134,7 +131,6 @@ export function VoiceConnectedPanel({ channelName, isLowLatency, isScreenSharing
             </button>
           )}
         </div>
-      )}
     </div>
   );
 }
@@ -166,7 +162,7 @@ export default function Controls({
 
   return (
     <div className="ctrl-bar">
-      {/* Screen Share - hidden when showScreenShare false (e.g. low-latency voice) or mobile when not supported */}
+      {/* Screen Share */}
       {showScreenShare && (!isMobile || IS_SCREEN_SHARE_SUPPORTED) && (
         <button
           className={`ctrl-btn${isScreenSharing ? ' ctrl-btn--active' : ''}`}
@@ -316,7 +312,7 @@ export default function Controls({
       )}
 
       {showWebcam && <div className="ctrl-divider" />}
-      {/* Webcam + device switch (hidden when showWebcam false, e.g. low-latency voice) */}
+      {/* Webcam + device switch */}
       {showWebcam && onWebcamDeviceSwitch ? (
         <div
           className="ctrl-device-group"
