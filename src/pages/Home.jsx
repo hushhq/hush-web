@@ -401,7 +401,9 @@ export default function Home() {
       const uRect = range.getBoundingClientRect();
       const parentRect = el.getBoundingClientRect();
       const uCenter = uRect.left + uRect.width / 2 - parentRect.left;
-      setDotLeft(uCenter - 5);
+      // The home wordmark dot is a 14px circle. Position its left edge slightly
+      // left of the measured "u" center so it reads visually centered above the glyph.
+      setDotLeft(uCenter - 8);
     };
     document.fonts.ready.then(measure);
     const ro = new ResizeObserver(measure);
