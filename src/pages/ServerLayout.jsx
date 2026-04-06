@@ -1686,8 +1686,8 @@ export default function ServerLayout() {
 
   /** Channel list column with voice panel + persistent user panel at bottom. */
   const channelSidebarEl = (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-      <div style={{ flex: 1, overflow: 'hidden' }}>{isDmView ? dmListEl : channelListEl}</div>
+    <div className="sidebar-shell">
+      {isDmView ? dmListEl : channelListEl}
       {activeVoiceChannel && (
         <VoiceConnectedPanel
           channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}

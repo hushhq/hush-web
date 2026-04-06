@@ -389,6 +389,7 @@ export default function Chat({
     } finally {
       lastSentTempIdRef.current = null;
       setIsSending(false);
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   };
 
@@ -558,8 +559,12 @@ export default function Chat({
             className={`chat-send-btn${!inputText.trim() || isSending || inputByteLength > MAX_PLAINTEXT_BYTES ? ' chat-send-btn--disabled' : ''}`}
             onClick={handleSend}
             disabled={!inputText.trim() || isSending || inputByteLength > MAX_PLAINTEXT_BYTES}
+            aria-label="Send message"
           >
-            Send
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
           </button>
         </div>
       </div>

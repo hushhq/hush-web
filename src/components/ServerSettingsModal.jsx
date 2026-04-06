@@ -588,13 +588,101 @@ export default function ServerSettingsModal({
 
       <div className={`settings-content${isMobile ? ' settings-content--mobile' : ''}`}>
         {tab === TAB_OVERVIEW && isAdmin && (
-          <OverviewTab serverName={instanceName} />
+          <>
+            <OverviewTab serverName={instanceName} />
+
+            {/* Danger Zone — only in the Overview tab for admins */}
+            {myRole === 'owner' ? (
+              <div className="settings-danger-zone">
+                <div className="settings-danger-title">Danger Zone</div>
+                <p className="settings-danger-action-text" style={{ marginBottom: 12 }}>
+                  Permanently delete this server and all its channels, messages, and members. This cannot be undone.
+                </p>
+                {!showDeleteConfirm ? (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    Delete Server
+                  </button>
+                ) : (
+                  <div className="settings-delete-confirm">
+                    <p className="settings-danger-action-text">
+                      Type the server name to confirm: <strong>{serverName}</strong>
+                    </p>
+                    <input
+                      className="settings-delete-input"
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="Type server name..."
+                      autoFocus
+                    />
+                    <div className="settings-delete-actions">
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        disabled={deleteConfirmText !== serverName || isDeleting}
+                        onClick={handleDeleteServer}
+                      >
+                        {isDeleting ? 'Deleting...' : 'Permanently Delete'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="settings-danger-zone">
+                <div className="settings-danger-title">Danger Zone</div>
+                <div className="settings-danger-action">
+                  <span className="settings-danger-action-text">
+                    Leave this server. You will lose access to all channels.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => setShowLeaveConfirm(true)}
+                  >
+                    Leave Server
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
         {tab === TAB_MEMBERS && (
-          <MembersTab
-            getToken={getToken}
-            serverId={serverId}
-          />
+          <>
+            <MembersTab
+              getToken={getToken}
+              serverId={serverId}
+            />
+
+            {/* Danger Zone — only in the Members tab for non-admins (who cannot see Overview) */}
+            {!isAdmin && (
+              <div className="settings-danger-zone">
+                <div className="settings-danger-title">Danger Zone</div>
+                <div className="settings-danger-action">
+                  <span className="settings-danger-action-text">
+                    Leave this server. You will lose access to all channels.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => setShowLeaveConfirm(true)}
+                  >
+                    Leave Server
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
         {tab === TAB_AUDIT_LOG && isAdmin && (
           <AuditLogTab
@@ -610,72 +698,6 @@ export default function ServerSettingsModal({
             serverId={serverId}
             showToast={showToast}
           />
-        )}
-
-        {myRole !== 'owner' && (
-          <div className="settings-danger-zone">
-            <div className="settings-danger-title">Danger Zone</div>
-            <div className="settings-danger-action">
-              <span className="settings-danger-action-text">
-                Leave this server. You will lose access to all channels.
-              </span>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => setShowLeaveConfirm(true)}
-              >
-                Leave Server
-              </button>
-            </div>
-          </div>
-        )}
-
-        {myRole === 'owner' && (
-          <div className="settings-danger-zone">
-            <div className="settings-danger-title">Danger Zone</div>
-            <p className="settings-danger-action-text" style={{ marginBottom: 12 }}>
-              Permanently delete this server and all its channels, messages, and members. This cannot be undone.
-            </p>
-            {!showDeleteConfirm ? (
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                Delete Server
-              </button>
-            ) : (
-              <div className="settings-delete-confirm">
-                <p className="settings-danger-action-text">
-                  Type the server name to confirm: <strong>{serverName}</strong>
-                </p>
-                <input
-                  className="settings-delete-input"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder="Type server name..."
-                  autoFocus
-                />
-                <div className="settings-delete-actions">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    disabled={deleteConfirmText !== serverName || isDeleting}
-                    onClick={handleDeleteServer}
-                  >
-                    {isDeleting ? 'Deleting...' : 'Permanently Delete'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         )}
       </div>
 

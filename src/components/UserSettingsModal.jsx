@@ -630,24 +630,23 @@ function AudioVideoTab({ voiceRuntime = null }) {
           <div className="settings-mic-section-header">
             <div>
               <div className="settings-field-label">Audio Filters</div>
-              <div className="settings-card-value">Noise gate</div>
+              <div className="settings-card-value">Input processing</div>
             </div>
-            <button
-              type="button"
-              className={`settings-pill-toggle${micFilterSettings.noiseGateEnabled ? ' settings-pill-toggle--active' : ''}`}
-              onClick={() => applyMicFilters({
+            <input
+              type="checkbox"
+              className="toggle-switch"
+              checked={micFilterSettings.noiseGateEnabled}
+              onChange={() => applyMicFilters({
                 noiseGateEnabled: !micFilterSettings.noiseGateEnabled,
               })}
-            >
-              {micFilterSettings.noiseGateEnabled ? 'Enabled' : 'Disabled'}
-            </button>
+            />
           </div>
           <div className="settings-field-note">
             Filters the published mic stream before it goes to the room.
           </div>
           <div className="settings-slider-row">
             <label className="settings-slider-label" htmlFor="noise-gate-threshold">
-              Gate threshold
+              Sensitivity threshold
             </label>
             <span className="settings-slider-value">
               {micFilterSettings.noiseGateThresholdDb} dB
@@ -676,7 +675,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
           <div className="settings-mic-section-header">
             <div>
               <div className="settings-field-label">Mic Test</div>
-              <div className="settings-card-value">Monitor your mic locally while tuning the gate</div>
+              <div className="settings-card-value">Monitor your mic locally while adjusting input processing</div>
             </div>
             <button
               type="button"
@@ -706,7 +705,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
           </div>
           <div className="settings-mic-test-status">
             {isMicTesting
-              ? `Monitoring locally${micFilterSettings.noiseGateEnabled ? ` · gate ${isMicGateOpen ? 'open' : 'closed'}` : ' · gate disabled'}`
+              ? `Monitoring locally${micFilterSettings.noiseGateEnabled ? ` · ${isMicGateOpen ? 'processing' : 'bypassed'}` : ' · processing disabled'}`
               : 'Start the test to hear your mic locally while you adjust the filter.'}
           </div>
           {micTestError && (

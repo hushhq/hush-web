@@ -148,3 +148,11 @@ export async function getServiceIdentity() {
   const response = await request('/service-identity');
   return response.json();
 }
+
+export async function setGuildMemberCap(serverId, memberCapOverride) {
+  const response = await request(`/guilds/${encodeURIComponent(serverId)}/member-cap`, {
+    method: 'PUT',
+    body: JSON.stringify({ memberCapOverride }),
+  });
+  return response.json();
+}

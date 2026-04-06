@@ -58,7 +58,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       fireEvent.change(input, { target: { value: 'Hello world' } });
     });
 
-    const sendBtn = screen.getByText('Send');
+    const sendBtn = screen.getByRole('button', { name: 'Send message' });
     expect(sendBtn).not.toBeDisabled();
   });
 
@@ -75,7 +75,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       fireEvent.change(input, { target: { value: oversizedText } });
     });
 
-    const sendBtn = screen.getByText('Send');
+    const sendBtn = screen.getByRole('button', { name: 'Send message' });
     expect(sendBtn).toBeDisabled();
   });
 
@@ -92,7 +92,7 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
       fireEvent.change(input, { target: { value: exactText } });
     });
 
-    const sendBtn = screen.getByText('Send');
+    const sendBtn = screen.getByRole('button', { name: 'Send message' });
     expect(sendBtn).not.toBeDisabled();
   });
 

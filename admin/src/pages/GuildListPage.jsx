@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { listGuilds } from '../lib/adminApi.js';
+import { listGuilds, setGuildMemberCap, getConfig } from '../lib/adminApi.js';
 
 /**
  * GuildListPage - shows guild infrastructure metrics.
@@ -71,6 +71,44 @@ const PAGE_STYLES = {
     transition: 'color 0.12s ease',
     marginLeft: '4px',
   },
+  capCell: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'nowrap',
+  },
+  capInput: {
+    width: '60px',
+    padding: '3px 6px',
+    background: 'var(--bg)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text)',
+    fontSize: '0.78rem',
+    outline: 'none',
+  },
+  capBtn: {
+    background: 'none',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text-muted)',
+    cursor: 'pointer',
+    padding: '2px 8px',
+    fontSize: '0.72rem',
+    fontWeight: 500,
+    transition: 'color 0.12s ease, border-color 0.12s ease',
+    whiteSpace: 'nowrap',
+  },
+  capLabel: {
+    fontSize: '0.78rem',
+    color: 'var(--text-muted)',
+    whiteSpace: 'nowrap',
+  },
+  capEffective: {
+    fontSize: '0.72rem',
+    color: 'var(--text-muted)',
+    fontStyle: 'italic',
+  },
   badge: (color) => ({
     display: 'inline-block',
     padding: '2px 8px',
@@ -100,6 +138,7 @@ const PAGE_STYLES = {
 const COLUMNS = [
   { key: 'id', label: 'Guild ID' },
   { key: 'memberCount', label: 'Members', numeric: true },
+  { key: 'memberCap', label: 'Member Cap', sortable: false },
   { key: 'messageCount', label: 'Messages', numeric: true },
   { key: 'activeMembers30d', label: 'Active (30d)', numeric: true },
   { key: 'storageBytes', label: 'Storage', numeric: true },
@@ -144,19 +183,114 @@ function CopyButton({ text }) {
   );
 }
 
+/**
+ * Inline member cap override control for a single guild row.
+ * Shows current override (or "Default"), input to set a new value, and clear button.
+ */
+function MemberCapCell({ guild, instanceDefault, onUpdated }) {
+  const [inputValue, setInputValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const hasOverride = guild.memberCapOverride != null && guild.memberCapOverride > 0;
+
+  const handleSet = async () => {
+    const parsed = parseInt(inputValue, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setFeedback('Min 1');
+      setTimeout(() => setFeedback(''), 2000);
+      return;
+    }
+    setSaving(true);
+    setFeedback('');
+    try {
+      const result = await setGuildMemberCap(guild.id, parsed);
+      onUpdated(guild.id, result);
+      setInputValue('');
+      setFeedback(`Cap: ${result.effectiveCap}`);
+      setTimeout(() => setFeedback(''), 3000);
+    } catch (e) {
+      setFeedback(e.message);
+      setTimeout(() => setFeedback(''), 4000);
+    }
+    setSaving(false);
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    setFeedback('');
+    try {
+      const result = await setGuildMemberCap(guild.id, 0);
+      onUpdated(guild.id, result);
+      setInputValue('');
+      setFeedback(`Cleared (cap: ${result.effectiveCap})`);
+      setTimeout(() => setFeedback(''), 3000);
+    } catch (e) {
+      setFeedback(e.message);
+      setTimeout(() => setFeedback(''), 4000);
+    }
+    setSaving(false);
+  };
+
+  const currentLabel = hasOverride
+    ? String(guild.memberCapOverride)
+    : `Default${instanceDefault != null ? ` (${instanceDefault})` : ''}`;
+
+  return (
+    <div>
+      <div style={PAGE_STYLES.capCell}>
+        <span style={PAGE_STYLES.capLabel}>{currentLabel}</span>
+        <input
+          type="number"
+          min="1"
+          style={PAGE_STYLES.capInput}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSet(); }}
+          placeholder="#"
+          disabled={saving}
+        />
+        <button
+          type="button"
+          style={PAGE_STYLES.capBtn}
+          onClick={handleSet}
+          disabled={saving || !inputValue}
+        >
+          Set
+        </button>
+        {hasOverride && (
+          <button
+            type="button"
+            style={{ ...PAGE_STYLES.capBtn, color: 'var(--danger)' }}
+            onClick={handleClear}
+            disabled={saving}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {feedback && <div style={PAGE_STYLES.capEffective}>{feedback}</div>}
+    </div>
+  );
+}
+
 export default function GuildListPage() {
   const [guilds, setGuilds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sortKey, setSortKey] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
+  const [instanceDefaultCap, setInstanceDefaultCap] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await listGuilds();
+      const [data, config] = await Promise.all([listGuilds(), getConfig()]);
       setGuilds(Array.isArray(data) ? data : []);
+      if (config.maxMembersPerServer != null) {
+        setInstanceDefaultCap(config.maxMembersPerServer);
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -164,6 +298,16 @@ export default function GuildListPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleCapUpdated = useCallback((guildId, result) => {
+    setGuilds((prev) =>
+      prev.map((g) =>
+        g.id === guildId
+          ? { ...g, memberCapOverride: result.memberCapOverride ?? null }
+          : g
+      )
+    );
+  }, []);
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -213,11 +357,16 @@ export default function GuildListPage() {
               {COLUMNS.map((col) => (
                 <th
                   key={col.key}
-                  style={PAGE_STYLES.th}
-                  onClick={() => handleSort(col.key)}
+                  style={{
+                    ...PAGE_STYLES.th,
+                    ...(col.sortable === false ? { cursor: 'default' } : {}),
+                  }}
+                  onClick={col.sortable !== false ? () => handleSort(col.key) : undefined}
                 >
                   {col.label}
-                  <SortIndicator active={sortKey === col.key} dir={sortDir} />
+                  {col.sortable !== false && (
+                    <SortIndicator active={sortKey === col.key} dir={sortDir} />
+                  )}
                 </th>
               ))}
             </tr>
@@ -230,6 +379,13 @@ export default function GuildListPage() {
                   {g.id && <CopyButton text={g.id} />}
                 </td>
                 <td style={PAGE_STYLES.td}>{g.memberCount ?? '-'}</td>
+                <td style={PAGE_STYLES.td}>
+                  <MemberCapCell
+                    guild={g}
+                    instanceDefault={instanceDefaultCap}
+                    onUpdated={handleCapUpdated}
+                  />
+                </td>
                 <td style={PAGE_STYLES.td}>{g.messageCount ?? '-'}</td>
                 <td style={PAGE_STYLES.td}>{g.activeMembers30d ?? '-'}</td>
                 <td style={PAGE_STYLES.td}>{formatBytes(g.storageBytes)}</td>
