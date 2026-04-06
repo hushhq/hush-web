@@ -1728,16 +1728,16 @@ export default function ServerLayout() {
       {!isMobile && (
         <>
           {serverListEl}
-          <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', overflow: 'hidden' }}>
+          <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', position: 'relative' }}>
             {channelSidebarEl}
+            <div
+              className="lay-resize-handle"
+              onMouseDown={handleSidebarResize}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize channel list"
+            />
           </div>
-          <div
-            className="lay-resize-handle"
-            onMouseDown={handleSidebarResize}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize channel list"
-          />
         </>
       )}
       {/* ── Mobile stack navigation ── */}
