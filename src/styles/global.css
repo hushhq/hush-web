@@ -27,15 +27,15 @@
   --hush-on-amber:     #000000;
 
   /* ── Borders (3-tier) ── */
-  --hush-border:       rgba(255,255,255,.10);
-  --hush-border-hover: rgba(255,255,255,.15);
-  --hush-border-focus: rgba(255,255,255,.22);
+  --hush-border:       rgba(255,255,255,.12);
+  --hush-border-hover: rgba(255,255,255,.20);
+  --hush-border-focus: rgba(255,255,255,.28);
 
   /* ── Text Hierarchy (opacity-based) ── */
-  --hush-text:           rgba(255,255,255,.95);
-  --hush-text-secondary: rgba(255,255,255,.62);
-  --hush-text-muted:     rgba(255,255,255,.36);
-  --hush-text-ghost:     rgba(255,255,255,.16);
+  --hush-text:           rgba(255,255,255,.97);
+  --hush-text-secondary: rgba(255,255,255,.72);
+  --hush-text-muted:     rgba(255,255,255,.48);
+  --hush-text-ghost:     rgba(255,255,255,.25);
 
   /* ── Status Colors (functional only) ── */
   --hush-live:         #4ade80;
@@ -88,14 +88,14 @@
     --hush-amber-ghost:  rgba(20,18,16,.03);
     --hush-on-amber:     #F0EEE9;
 
-    --hush-border:       rgba(0,0,0,.12);
-    --hush-border-hover: rgba(0,0,0,.18);
-    --hush-border-focus: rgba(0,0,0,.25);
+    --hush-border:       rgba(0,0,0,.15);
+    --hush-border-hover: rgba(0,0,0,.22);
+    --hush-border-focus: rgba(0,0,0,.30);
 
-    --hush-text:           rgba(20,18,16,.92);
-    --hush-text-secondary: rgba(20,18,16,.65);
-    --hush-text-muted:     rgba(20,18,16,.42);
-    --hush-text-ghost:     rgba(20,18,16,.20);
+    --hush-text:           rgba(20,18,16,.95);
+    --hush-text-secondary: rgba(20,18,16,.72);
+    --hush-text-muted:     rgba(20,18,16,.50);
+    --hush-text-ghost:     rgba(20,18,16,.28);
 
     --hush-glass-bg:         rgba(232,231,227,.95);
     --hush-video-label-bg:   rgba(26,26,24,.65);
@@ -121,14 +121,14 @@
   --hush-amber-ghost:  rgba(20,18,16,.03);
   --hush-on-amber:     #F0EEE9;
 
-  --hush-border:       rgba(0,0,0,.12);
-  --hush-border-hover: rgba(0,0,0,.18);
-  --hush-border-focus: rgba(0,0,0,.25);
+  --hush-border:       rgba(0,0,0,.15);
+  --hush-border-hover: rgba(0,0,0,.22);
+  --hush-border-focus: rgba(0,0,0,.30);
 
-  --hush-text:           rgba(20,18,16,.92);
-  --hush-text-secondary: rgba(20,18,16,.65);
-  --hush-text-muted:     rgba(20,18,16,.42);
-  --hush-text-ghost:     rgba(20,18,16,.20);
+  --hush-text:           rgba(20,18,16,.95);
+  --hush-text-secondary: rgba(20,18,16,.72);
+  --hush-text-muted:     rgba(20,18,16,.50);
+  --hush-text-ghost:     rgba(20,18,16,.28);
 
   --hush-glass-bg:         rgba(232,231,227,.95);
   --hush-video-label-bg:   rgba(26,26,24,.65);
@@ -152,14 +152,14 @@
   --hush-amber-ghost:  rgba(240,238,233,.03);
   --hush-on-amber:     #000000;
 
-  --hush-border:       rgba(255,255,255,.10);
-  --hush-border-hover: rgba(255,255,255,.15);
-  --hush-border-focus: rgba(255,255,255,.22);
+  --hush-border:       rgba(255,255,255,.12);
+  --hush-border-hover: rgba(255,255,255,.20);
+  --hush-border-focus: rgba(255,255,255,.28);
 
-  --hush-text:           rgba(255,255,255,.95);
-  --hush-text-secondary: rgba(255,255,255,.62);
-  --hush-text-muted:     rgba(255,255,255,.36);
-  --hush-text-ghost:     rgba(255,255,255,.16);
+  --hush-text:           rgba(255,255,255,.97);
+  --hush-text-secondary: rgba(255,255,255,.72);
+  --hush-text-muted:     rgba(255,255,255,.48);
+  --hush-text-ghost:     rgba(255,255,255,.25);
 
   --hush-glass-bg:         rgba(12,10,9,.9);
   --hush-video-label-bg:   rgba(12,10,9,.8);
@@ -1679,13 +1679,13 @@ select:focus-visible {
 
 .user-panel-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .user-panel-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
   border: 1px solid var(--hush-border);
   cursor: pointer;
@@ -4943,7 +4943,7 @@ select:focus-visible {
   font-style: normal;
   font-weight: 500;
   font-size: 8rem;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   color: var(--hush-text);
   text-transform: lowercase;
   position: relative;
