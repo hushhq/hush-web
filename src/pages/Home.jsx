@@ -750,7 +750,7 @@ export default function Home() {
               <span style={{ display: 'inline-block' }}>hush is open source and self-hostable.</span>
               {' '}
               <span style={{ display: 'inline-block' }}>
-                <a href="https://github.com/YarinCardillo/hush-app" className="home-footer-link">
+                <a href="https://github.com/hushhq" className="home-footer-link">
                   github
                 </a>
                 {' · '}

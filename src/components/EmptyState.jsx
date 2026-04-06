@@ -3,10 +3,10 @@
  *
  * Renders:
  *   1. Welcome heading
- *   2. "Browse public servers" primary button
- *   3. Invite link explanation paragraph
- *   4. "Create a server" secondary button (conditional - visible only when at least one
- *      connected instance has server_creation_policy = 'open')
+ *   2. "Create a server" primary button (always rendered; disabled when no instance
+ *      allows creation, with explanatory text)
+ *   3. "Browse public servers" secondary button
+ *   4. Invite link explanation paragraph
  *   5. Footer links: "Get a server" and "Self-host" (external)
  *
  * @param {{
@@ -22,7 +22,7 @@ export default function EmptyState({ instanceStates, onCreateServer, onBrowseSer
     <div className="empty-container" data-testid="empty-state">
       <div className="empty-icon" aria-hidden="true">
         {/* Simple server icon (Lucide-style) */}
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
           <rect x="2" y="2" width="20" height="8" rx="0" />
           <rect x="2" y="14" width="20" height="8" rx="0" />
           <line x1="6" y1="6" x2="6.01" y2="6" />
@@ -40,6 +40,21 @@ export default function EmptyState({ instanceStates, onCreateServer, onBrowseSer
       <button
         type="button"
         className="empty-btn-primary"
+        onClick={onCreateServer}
+        disabled={!canCreateServer}
+      >
+        Create a server
+      </button>
+
+      {!canCreateServer && (
+        <p className="empty-creation-blocked" data-testid="creation-blocked-text">
+          Server creation is not available on this instance
+        </p>
+      )}
+
+      <button
+        type="button"
+        className="empty-btn-secondary"
         onClick={onBrowseServers}
       >
         Browse public servers
@@ -48,16 +63,6 @@ export default function EmptyState({ instanceStates, onCreateServer, onBrowseSer
       <p className="empty-invite-hint">
         Have an invite link? Just click it - you&apos;ll be connected automatically.
       </p>
-
-      {canCreateServer && (
-        <button
-          type="button"
-          className="empty-btn-secondary"
-          onClick={onCreateServer}
-        >
-          Create a server
-        </button>
-      )}
 
       <div className="empty-footer">
         <a

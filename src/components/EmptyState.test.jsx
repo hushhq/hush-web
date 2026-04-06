@@ -95,9 +95,20 @@ describe('EmptyState', () => {
     expect(selfHost.getAttribute('target')).toBe('_blank');
   });
 
-  // ── Conditional Create button ───────────────────────────────────────────────
+  // ── Create button (always rendered) ─────────────────────────────────────────
 
-  it('shows Create a server button when at least one instance has open policy', () => {
+  it('always renders Create a server button regardless of policy', () => {
+    render(
+      <EmptyState
+        instanceStates={new Map()}
+        onCreateServer={() => {}}
+        onBrowseServers={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /create a server/i })).toBeInTheDocument();
+  });
+
+  it('Create button is enabled when at least one instance has open policy', () => {
     const instanceStates = new Map([
       ['https://a.example.com', {
         connectionState: 'connected',
@@ -111,10 +122,10 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.getByRole('button', { name: /create a server/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).not.toBeDisabled();
   });
 
-  it('hides Create a server button when the instance policy is any_member', () => {
+  it('Create button is disabled when instance policy is any_member', () => {
     const instanceStates = new Map([
       ['https://a.example.com', {
         connectionState: 'connected',
@@ -128,10 +139,10 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.queryByRole('button', { name: /create a server/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).toBeDisabled();
   });
 
-  it('hides Create a server button when all instances have disabled policy', () => {
+  it('shows explanatory text when creation is blocked', () => {
     const instanceStates = new Map([
       ['https://a.example.com', {
         connectionState: 'connected',
@@ -145,10 +156,28 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.queryByRole('button', { name: /create a server/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).toBeDisabled();
+    expect(screen.getByText(/server creation is not available/i)).toBeInTheDocument();
   });
 
-  it('hides Create a server button when all instances have subscribers policy', () => {
+  it('does not show explanatory text when creation is allowed', () => {
+    const instanceStates = new Map([
+      ['https://a.example.com', {
+        connectionState: 'connected',
+        handshakeData: { server_creation_policy: 'open' },
+      }],
+    ]);
+    render(
+      <EmptyState
+        instanceStates={instanceStates}
+        onCreateServer={() => {}}
+        onBrowseServers={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/server creation is not available/i)).not.toBeInTheDocument();
+  });
+
+  it('Create button is disabled when all instances have subscribers policy', () => {
     const instanceStates = new Map([
       ['https://a.example.com', {
         connectionState: 'connected',
@@ -162,10 +191,10 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.queryByRole('button', { name: /create a server/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).toBeDisabled();
   });
 
-  it('shows Create button if at least one of multiple instances allows creation', () => {
+  it('Create button is enabled if at least one of multiple instances allows creation', () => {
     const instanceStates = new Map([
       ['https://a.example.com', {
         connectionState: 'connected',
@@ -183,10 +212,10 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.getByRole('button', { name: /create a server/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).not.toBeDisabled();
   });
 
-  it('hides Create button when instanceStates is empty (no instances)', () => {
+  it('Create button is disabled when instanceStates is empty (no instances)', () => {
     render(
       <EmptyState
         instanceStates={new Map()}
@@ -194,10 +223,10 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.queryByRole('button', { name: /create a server/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).toBeDisabled();
   });
 
-  it('hides Create button when the open-policy instance is offline', () => {
+  it('Create button is disabled when the open-policy instance is offline', () => {
     const instanceStates = new Map([
       ['https://a.example.com', {
         connectionState: 'offline',
@@ -211,7 +240,20 @@ describe('EmptyState', () => {
         onBrowseServers={() => {}}
       />,
     );
-    expect(screen.queryByRole('button', { name: /create a server/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a server/i })).toBeDisabled();
+  });
+
+  it('Browse public servers renders as secondary button', () => {
+    render(
+      <EmptyState
+        instanceStates={new Map()}
+        onCreateServer={() => {}}
+        onBrowseServers={() => {}}
+      />,
+    );
+    const browseBtn = screen.getByRole('button', { name: /browse public servers/i });
+    expect(browseBtn).toBeInTheDocument();
+    expect(browseBtn.className).toContain('empty-btn-secondary');
   });
 
   it('calls onCreateServer when Create button is clicked', () => {

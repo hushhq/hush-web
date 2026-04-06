@@ -154,6 +154,8 @@ function InstanceConfigSection() {
   const [regMode, setRegMode] = useState('open');
   const [guildDiscovery, setGuildDiscovery] = useState('disabled');
   const [serverCreationPolicy, setServerCreationPolicy] = useState('open');
+  const [maxServersPerUser, setMaxServersPerUser] = useState('');
+  const [maxMembersPerServer, setMaxMembersPerServer] = useState('');
   const [name, setName] = useState('');
   const [iconUrl, setIconUrl] = useState('');
   const [saving, setSaving] = useState(false);
@@ -168,6 +170,8 @@ function InstanceConfigSection() {
       setRegMode(data.registrationMode || 'open');
       setGuildDiscovery(data.guildDiscovery || 'disabled');
       setServerCreationPolicy(data.serverCreationPolicy || 'open');
+      setMaxServersPerUser(data.maxServersPerUser != null ? String(data.maxServersPerUser) : '');
+      setMaxMembersPerServer(data.maxMembersPerServer != null ? String(data.maxMembersPerServer) : '');
       setName(data.name || '');
       setIconUrl(data.iconUrl || '');
     }).catch((e) => {
@@ -181,13 +185,18 @@ function InstanceConfigSection() {
     setError('');
     setSuccess('');
     try {
-      await updateConfig({
+      const updates = {
         name: name.trim() || undefined,
         iconUrl: iconUrl.trim() || undefined,
         registrationMode: regMode,
         guildDiscovery,
         serverCreationPolicy,
-      });
+      };
+      const parsedMaxServers = parseInt(maxServersPerUser, 10);
+      if (!isNaN(parsedMaxServers)) updates.maxServersPerUser = parsedMaxServers;
+      const parsedMaxMembers = parseInt(maxMembersPerServer, 10);
+      if (!isNaN(parsedMaxMembers)) updates.maxMembersPerServer = parsedMaxMembers;
+      await updateConfig(updates);
       setSuccess('Configuration saved. Changes apply to clients on next connection.');
       setTimeout(() => setSuccess(''), 4000);
     } catch (e) {
@@ -271,6 +280,38 @@ function InstanceConfigSection() {
         </select>
         <div style={PAGE_STYLES.note}>
           Whether guilds can opt into discovery listings.
+        </div>
+      </div>
+
+      <div style={PAGE_STYLES.fieldRow}>
+        <label style={PAGE_STYLES.label}>Max servers per user</label>
+        <input
+          type="number"
+          className="input"
+          min="0"
+          value={maxServersPerUser}
+          onChange={(e) => setMaxServersPerUser(e.target.value)}
+          placeholder="No limit"
+          style={{ maxWidth: '200px' }}
+        />
+        <div style={PAGE_STYLES.note}>
+          Maximum number of servers a single user can own. Set to 0 to remove the limit.
+        </div>
+      </div>
+
+      <div style={PAGE_STYLES.fieldRow}>
+        <label style={PAGE_STYLES.label}>Max members per server</label>
+        <input
+          type="number"
+          className="input"
+          min="0"
+          value={maxMembersPerServer}
+          onChange={(e) => setMaxMembersPerServer(e.target.value)}
+          placeholder="No limit"
+          style={{ maxWidth: '200px' }}
+        />
+        <div style={PAGE_STYLES.note}>
+          Maximum number of members allowed in a single server. Set to 0 to remove the limit.
         </div>
       </div>
 

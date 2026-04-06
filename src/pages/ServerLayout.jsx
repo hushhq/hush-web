@@ -893,6 +893,27 @@ export default function ServerLayout() {
     return () => wsClient.off('instance_banned', handler);
   }, [wsClient, showToast]);
 
+  // server_deleted: navigate away and notify when the current server is deleted
+  useEffect(() => {
+    if (!wsClient) return;
+    const handler = (data) => {
+      if (data.server_id && data.server_id !== serverId) return;
+      const serverName = activeGuildName ?? activeGuild?.name ?? 'the server';
+      showToast({ message: `"${serverName}" has been deleted`, variant: 'error' });
+      setTimeout(() => {
+        const nextGuild = mergedGuilds.find((g) => g.id !== serverId);
+        if (nextGuild) {
+          navigateToGuild(nextGuild.id);
+        } else {
+          navigateRef.current('/home', { replace: true });
+        }
+      }, 1500);
+    };
+    wsClient.on('server_deleted', handler);
+    return () => wsClient.off('server_deleted', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsClient, serverId, mergedGuilds, activeGuild, activeGuildName, showToast]);
+
   // device_revoked_reconnect_attempt: a previously revoked device tried to reconnect.
   // The event is emitted by the server when device_id binding is added to JWT (future phase).
   // The listener is wired now so the UI is ready when the server-side detection ships.

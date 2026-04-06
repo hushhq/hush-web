@@ -1,12 +1,21 @@
 /* ── Hush Design System ─────────────────────── */
 /* Theme: default is dark. Light applied via prefers-color-scheme or [data-theme="light"]. */
 
+@font-face {
+  font-family: 'Sharphy';
+  src: url('../assets/fonts/Sharphy-Medium.woff2') format('woff2'),
+       url('../assets/fonts/Sharphy-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* ── Core Surfaces ── */
   --hush-black:        #000000;          /* void black, page bg */
   --hush-surface:      rgba(12,10,9,.9); /* panel backgrounds */
   --hush-elevated:     rgba(255,255,255,.045); /* elevated surfaces within panels */
-  --hush-hover:        rgba(255,255,255,.07);  /* hover states */
+  --hush-hover:        rgba(255,255,255,.12);  /* hover states */
   --hush-modal:        rgba(255,255,255,.10);  /* modal/overlay surfaces */
 
   /* ── Primary Accent (warm cloud white) ── */
@@ -18,15 +27,15 @@
   --hush-on-amber:     #000000;
 
   /* ── Borders (3-tier) ── */
-  --hush-border:       rgba(255,255,255,.055);
-  --hush-border-hover: rgba(255,255,255,.11);
-  --hush-border-focus: rgba(255,255,255,.18);
+  --hush-border:       rgba(255,255,255,.10);
+  --hush-border-hover: rgba(255,255,255,.15);
+  --hush-border-focus: rgba(255,255,255,.22);
 
   /* ── Text Hierarchy (opacity-based) ── */
-  --hush-text:           rgba(255,255,255,.92);
-  --hush-text-secondary: rgba(255,255,255,.45);
-  --hush-text-muted:     rgba(255,255,255,.22);
-  --hush-text-ghost:     rgba(255,255,255,.10);
+  --hush-text:           rgba(255,255,255,.95);
+  --hush-text-secondary: rgba(255,255,255,.62);
+  --hush-text-muted:     rgba(255,255,255,.36);
+  --hush-text-ghost:     rgba(255,255,255,.16);
 
   /* ── Status Colors (functional only) ── */
   --hush-live:         #4ade80;
@@ -45,6 +54,7 @@
   /* ── Typography ── */
   --font-sans:  'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono:  'Geist Mono', 'SF Mono', Consolas, monospace;
+  --font-brand: 'Sharphy', var(--font-sans);
 
   /* ── Spacing & Radius ── */
   --radius-sm:   3px;
@@ -66,10 +76,10 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --hush-black:        #F0EEE9;
-    --hush-surface:      rgba(0,0,0,.048);
-    --hush-elevated:     rgba(0,0,0,.07);
-    --hush-hover:        rgba(0,0,0,.07);
-    --hush-modal:        rgba(0,0,0,.10);
+    --hush-surface:      #E8E7E3;
+    --hush-elevated:     #DFDEDA;
+    --hush-hover:        rgba(0,0,0,.09);
+    --hush-modal:        #ffffff;
 
     --hush-amber:        #1a1714;
     --hush-amber-bright: #000000;
@@ -78,16 +88,16 @@
     --hush-amber-ghost:  rgba(20,18,16,.03);
     --hush-on-amber:     #F0EEE9;
 
-    --hush-border:       rgba(0,0,0,.07);
-    --hush-border-hover: rgba(0,0,0,.13);
-    --hush-border-focus: rgba(0,0,0,.20);
+    --hush-border:       rgba(0,0,0,.12);
+    --hush-border-hover: rgba(0,0,0,.18);
+    --hush-border-focus: rgba(0,0,0,.25);
 
-    --hush-text:           rgba(20,18,16,.90);
-    --hush-text-secondary: rgba(20,18,16,.50);
-    --hush-text-muted:     rgba(20,18,16,.28);
-    --hush-text-ghost:     rgba(20,18,16,.14);
+    --hush-text:           rgba(20,18,16,.92);
+    --hush-text-secondary: rgba(20,18,16,.65);
+    --hush-text-muted:     rgba(20,18,16,.42);
+    --hush-text-ghost:     rgba(20,18,16,.20);
 
-    --hush-glass-bg:         rgba(234,232,227,.9);
+    --hush-glass-bg:         rgba(232,231,227,.95);
     --hush-video-label-bg:   rgba(26,26,24,.65);
     --hush-badge-live-bg:    rgba(74,222,128,.08);
     --hush-btn-danger-hover: rgba(239, 68, 68, 0.12);
@@ -99,10 +109,10 @@
 /* Explicit theme override (for future in-app setting: system / light / dark) */
 [data-theme="light"] {
   --hush-black:        #F0EEE9;
-  --hush-surface:      rgba(0,0,0,.048);
-  --hush-elevated:     rgba(0,0,0,.07);
-  --hush-hover:        rgba(0,0,0,.07);
-  --hush-modal:        rgba(0,0,0,.10);
+  --hush-surface:      #E8E7E3;
+  --hush-elevated:     #DFDEDA;
+  --hush-hover:        rgba(0,0,0,.09);
+  --hush-modal:        #ffffff;
 
   --hush-amber:        #1a1714;
   --hush-amber-bright: #000000;
@@ -111,16 +121,16 @@
   --hush-amber-ghost:  rgba(20,18,16,.03);
   --hush-on-amber:     #F0EEE9;
 
-  --hush-border:       rgba(0,0,0,.07);
-  --hush-border-hover: rgba(0,0,0,.13);
-  --hush-border-focus: rgba(0,0,0,.20);
+  --hush-border:       rgba(0,0,0,.12);
+  --hush-border-hover: rgba(0,0,0,.18);
+  --hush-border-focus: rgba(0,0,0,.25);
 
-  --hush-text:           rgba(20,18,16,.90);
-  --hush-text-secondary: rgba(20,18,16,.50);
-  --hush-text-muted:     rgba(20,18,16,.28);
-  --hush-text-ghost:     rgba(20,18,16,.14);
+  --hush-text:           rgba(20,18,16,.92);
+  --hush-text-secondary: rgba(20,18,16,.65);
+  --hush-text-muted:     rgba(20,18,16,.42);
+  --hush-text-ghost:     rgba(20,18,16,.20);
 
-  --hush-glass-bg:         rgba(234,232,227,.9);
+  --hush-glass-bg:         rgba(232,231,227,.95);
   --hush-video-label-bg:   rgba(26,26,24,.65);
   --hush-badge-live-bg:    rgba(74,222,128,.08);
   --hush-btn-danger-hover: rgba(239, 68, 68, 0.12);
@@ -132,7 +142,7 @@
   --hush-black:        #000000;
   --hush-surface:      rgba(12,10,9,.9);
   --hush-elevated:     rgba(255,255,255,.045);
-  --hush-hover:        rgba(255,255,255,.07);
+  --hush-hover:        rgba(255,255,255,.12);
   --hush-modal:        rgba(255,255,255,.10);
 
   --hush-amber:        #F0EEE9;
@@ -142,14 +152,14 @@
   --hush-amber-ghost:  rgba(240,238,233,.03);
   --hush-on-amber:     #000000;
 
-  --hush-border:       rgba(255,255,255,.055);
-  --hush-border-hover: rgba(255,255,255,.11);
-  --hush-border-focus: rgba(255,255,255,.18);
+  --hush-border:       rgba(255,255,255,.10);
+  --hush-border-hover: rgba(255,255,255,.15);
+  --hush-border-focus: rgba(255,255,255,.22);
 
-  --hush-text:           rgba(255,255,255,.92);
-  --hush-text-secondary: rgba(255,255,255,.45);
-  --hush-text-muted:     rgba(255,255,255,.22);
-  --hush-text-ghost:     rgba(255,255,255,.10);
+  --hush-text:           rgba(255,255,255,.95);
+  --hush-text-secondary: rgba(255,255,255,.62);
+  --hush-text-muted:     rgba(255,255,255,.36);
+  --hush-text-ghost:     rgba(255,255,255,.16);
 
   --hush-glass-bg:         rgba(12,10,9,.9);
   --hush-video-label-bg:   rgba(12,10,9,.8);
@@ -342,7 +352,8 @@ code, .mono {
 }
 
 .btn-secondary:hover {
-  background: var(--hush-elevated);
+  background: var(--hush-hover);
+  border-color: var(--hush-border-hover);
   color: var(--hush-text);
 }
 
@@ -430,6 +441,7 @@ a[href]:active {
 }
 .home-auth-choice-btn:hover {
   background: var(--hush-hover);
+  border-color: var(--hush-border-hover);
   color: var(--hush-text);
 }
 .home-auth-choice-btn:disabled {
@@ -821,7 +833,7 @@ select:focus-visible {
 }
 
 .member-list-row:hover {
-  background: var(--hush-elevated);
+  background: var(--hush-hover);
 }
 
 /* ── Sidebar desktop (in-flow column, slide via width + transform) ─── */
@@ -1304,14 +1316,14 @@ select:focus-visible {
 
 .cl-category-label {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--hush-text-ghost);
   padding: 10px 13px 3px;
   margin-top: 8px;
-  border-top: 1px solid rgba(255,255,255,.03);
+  border-top: 1px solid color-mix(in srgb, var(--hush-border) 40%, transparent);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1341,7 +1353,7 @@ select:focus-visible {
 }
 
 .cl-channel-item:hover {
-  background: var(--hush-elevated);
+  background: var(--hush-hover);
   color: var(--hush-text-secondary);
 }
 
@@ -1493,7 +1505,6 @@ select:focus-visible {
 .voice-panel {
   border-top: 1px solid var(--hush-border);
   padding: 10px 12px;
-  background: var(--hush-elevated);
   flex-shrink: 0;
 }
 
@@ -1606,7 +1617,6 @@ select:focus-visible {
   justify-content: space-between;
   height: 46px;
   padding: 0 12px;
-  background: var(--hush-elevated);
   border-top: 1px solid var(--hush-border);
   flex-shrink: 0;
 }
@@ -1736,7 +1746,7 @@ select:focus-visible {
   background: none;
   border: none;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -2138,7 +2148,7 @@ select:focus-visible {
 
 .chat-input:focus {
   border-color: var(--hush-border-focus);
-  box-shadow: 0 0 0 3px rgba(255,255,255,.03);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hush-border) 30%, transparent);
 }
 
 .chat-input::placeholder {
@@ -2531,7 +2541,7 @@ select:focus-visible {
 
 .ml-role-header {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -2551,7 +2561,7 @@ select:focus-visible {
 }
 
 .ml-member-item:hover {
-  background: var(--hush-elevated);
+  background: var(--hush-hover);
 }
 
 .ml-avatar {
@@ -3042,6 +3052,30 @@ select:focus-visible {
 .settings-danger-action-text {
   font-size: 0.85rem;
   color: var(--hush-text-secondary);
+}
+
+.settings-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-delete-input {
+  background: var(--hush-elevated);
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--hush-text);
+  outline: none;
+}
+.settings-delete-input:focus {
+  border-color: var(--hush-danger);
+}
+.settings-delete-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 /* Appearance: theme mode buttons */
@@ -4256,7 +4290,7 @@ select:focus-visible {
 }
 
 .empty-btn-secondary:hover {
-  background: var(--hush-elevated);
+  background: var(--hush-hover);
 }
 
 .empty-footer {
@@ -4622,7 +4656,7 @@ select:focus-visible {
   align-items: center;
   gap: 5px;
   padding: 3px 8px;
-  background: rgba(12, 12, 18, 0.75);
+  background: var(--hush-video-label-bg);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-md);
   font-size: 9px;
@@ -4659,7 +4693,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(12, 12, 18, 0.75);
+  background: var(--hush-video-label-bg);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-md);
   color: var(--hush-text-secondary);
@@ -4893,11 +4927,11 @@ select:focus-visible {
 }
 
 .home-logo-title {
-  font-family: var(--font-sans);
-  font-style: italic;
-  font-weight: 400;
+  font-family: var(--font-brand);
+  font-style: normal;
+  font-weight: 500;
   font-size: 8rem;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--hush-text);
   text-transform: lowercase;
   position: relative;
@@ -4988,6 +5022,12 @@ select:focus-visible {
   cursor: pointer;
   font: inherit;
   color: var(--hush-amber-dim);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.home-register-link:hover {
+  color: var(--hush-amber);
+  text-decoration: underline;
 }
 
 .home-loading {
@@ -5376,6 +5416,7 @@ select:focus-visible {
 .tc-chat-area {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -5753,6 +5794,23 @@ select:focus-visible {
 .explore-tab--active {
   color: var(--hush-amber);
   border-bottom-color: var(--hush-amber);
+}
+
+.explore-back-btn {
+  background: none;
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-md);
+  color: var(--hush-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.explore-back-btn:hover {
+  background: var(--hush-hover);
+  color: var(--hush-text);
+  border-color: var(--hush-border-hover);
 }
 
 .explore-search-wrap {
@@ -6783,6 +6841,7 @@ select:focus-visible {
 
 .home-lost-device-link:hover {
   color: var(--hush-amber);
+  text-decoration: underline;
 }
 
 /* ── MnemonicGrid ─────────────────────────── */

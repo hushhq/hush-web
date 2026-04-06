@@ -109,7 +109,7 @@ export default function ExplorePage() {
       }
     } catch (err) {
       console.error('[ExplorePage] join failed:', err);
-      setJoinMessage('Failed to join server');
+      setJoinMessage(err.message || 'Failed to join server');
     } finally {
       setJoining(false);
     }
@@ -120,6 +120,13 @@ export default function ExplorePage() {
   return (
     <div className="explore-root">
       <div className="explore-header">
+        <button
+          type="button"
+          className="explore-back-btn"
+          onClick={() => navigate('/home')}
+        >
+          &larr; Back
+        </button>
         <h1 className="explore-title">Explore Servers</h1>
       </div>
 

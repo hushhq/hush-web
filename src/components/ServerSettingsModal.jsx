@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getGuildMembers, listBans, listMutes, unbanUser, unmuteUser, getAuditLog, leaveGuild } from '../lib/api';
+import { getGuildMembers, listBans, listMutes, unbanUser, unmuteUser, getAuditLog, leaveGuild, deleteGuild } from '../lib/api';
 import ConfirmModal from './ConfirmModal';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 
@@ -477,6 +477,9 @@ export default function ServerSettingsModal({
   const [tab, setTab] = useState(isAdmin ? TAB_OVERVIEW : TAB_MEMBERS);
   const [isOpen, setIsOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const breakpoint = useBreakpoint();
   const isMobile = breakpoint === 'mobile';
 
@@ -504,6 +507,21 @@ export default function ServerSettingsModal({
       setShowLeaveConfirm(false);
     }
   }, [getToken, serverId, onClose, showToast]);
+
+  const serverName = instanceName || 'Unnamed server';
+
+  const handleDeleteServer = useCallback(async () => {
+    if (deleteConfirmText !== serverName || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteGuild(getToken(), serverId);
+      onClose();
+      // Navigation handled by server_deleted WS event in ServerLayout
+    } catch (err) {
+      setIsDeleting(false);
+      showToast?.({ message: err.message || 'Failed to delete server', variant: 'error' });
+    }
+  }, [deleteConfirmText, serverName, isDeleting, getToken, serverId, onClose, showToast]);
 
   const tabs = [
     ...(isAdmin ? [{ key: TAB_OVERVIEW, label: 'Overview' }] : []),
@@ -609,6 +627,54 @@ export default function ServerSettingsModal({
                 Leave Server
               </button>
             </div>
+          </div>
+        )}
+
+        {myRole === 'owner' && (
+          <div className="settings-danger-zone">
+            <div className="settings-danger-title">Danger Zone</div>
+            <p className="settings-danger-action-text" style={{ marginBottom: 12 }}>
+              Permanently delete this server and all its channels, messages, and members. This cannot be undone.
+            </p>
+            {!showDeleteConfirm ? (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete Server
+              </button>
+            ) : (
+              <div className="settings-delete-confirm">
+                <p className="settings-danger-action-text">
+                  Type the server name to confirm: <strong>{serverName}</strong>
+                </p>
+                <input
+                  className="settings-delete-input"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Type server name..."
+                  autoFocus
+                />
+                <div className="settings-delete-actions">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    disabled={deleteConfirmText !== serverName || isDeleting}
+                    onClick={handleDeleteServer}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Permanently Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

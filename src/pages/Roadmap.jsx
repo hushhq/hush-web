@@ -722,8 +722,8 @@ export default function Roadmap() {
         <footer className="rm-footer">
           <span className="rm-footer-text">hush is open source and self-hostable.</span>
           <div className="rm-footer-links">
-            <a className="rm-footer-link" href="https://github.com/YarinCardillo/hush-app" target="_blank" rel="noopener noreferrer">github</a>
-            <a className="rm-footer-link" href="https://github.com/YarinCardillo/hush-app/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">changelog</a>
+            <a className="rm-footer-link" href="https://github.com/hushhq" target="_blank" rel="noopener noreferrer">github</a>
+            <a className="rm-footer-link" href="https://github.com/hushhq/hush-web/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">changelog</a>
           </div>
         </footer>
 

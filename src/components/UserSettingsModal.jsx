@@ -852,7 +852,7 @@ export default function UserSettingsModal({ onClose, voiceRuntime = null }) {
 
           {/* Info links */}
           <div className="settings-sidebar-group">
-            <button type="button" className="settings-sidebar-item" onClick={() => window.open('https://github.com/nicholasgriffintn/hush/blob/main/CHANGELOG.md', '_blank')}>
+            <button type="button" className="settings-sidebar-item" onClick={() => window.open('https://github.com/hushhq/hush-web/blob/main/CHANGELOG.md', '_blank')}>
               <IconChangelog />
               Changelog
               <svg className="settings-external-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
