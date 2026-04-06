@@ -21,5 +21,6 @@ RUN npx vite build --base /admin/
 
 # --- Stage 3: Caddy serve ---
 FROM caddy:2-alpine
+COPY docker/caddy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=client-builder /app/dist /srv
 COPY --from=admin-builder /dist-admin /srv/admin
