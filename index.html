@@ -6,14 +6,14 @@
   <title>Hush - Your server. Nobody else's.</title>
   <meta name="description" content="Private screen sharing. No limits, no tracking, no bullshit." />
   <!-- Favicon and apple-touch-icon: set from system preference for first paint, then kept in sync by app (FaviconThemeSync) when data-theme is set -->
-  <link rel="icon" type="image/png" href="/favicon.png" id="favicon">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" id="apple-touch-icon">
+  <link rel="icon" type="image/png" href="/favicon.png?v=43a6f36-og2" id="favicon">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=43a6f36-og2" id="apple-touch-icon">
   <script>
     (function(){
       var dark = !window.matchMedia('(prefers-color-scheme: light)').matches;
       var f = document.getElementById('favicon'); var a = document.getElementById('apple-touch-icon');
-      if (f) f.href = dark ? '/favicon.png' : '/favicon-light.png';
-      if (a) a.href = dark ? '/apple-touch-icon.png' : '/apple-touch-icon-light.png';
+      if (f) f.href = dark ? '/favicon.png?v=43a6f36-og2' : '/favicon-light.png?v=43a6f36-og2';
+      if (a) a.href = dark ? '/apple-touch-icon.png?v=43a6f36-og2' : '/apple-touch-icon-light.png?v=43a6f36-og2';
     })();
   </script>
   <meta property="og:image" content="https://gethush.live/og-image.png?v=47a36b2-og2">
