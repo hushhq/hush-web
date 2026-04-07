@@ -11,6 +11,7 @@ const REG_DB_STORE = 'state';
 
 const generateIdentityMnemonic = vi.hoisted(() => vi.fn(() => ORIGINAL_MNEMONIC));
 const checkUsernameAvailable = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+const getInviteInfo = vi.hoisted(() => vi.fn().mockResolvedValue({ code: 'invite123' }));
 
 vi.mock('../../lib/bip39Identity', () => ({
   generateIdentityMnemonic,
@@ -18,6 +19,7 @@ vi.mock('../../lib/bip39Identity', () => ({
 
 vi.mock('../../lib/api', () => ({
   checkUsernameAvailable,
+  getInviteInfo,
 }));
 
 function deleteRegistrationDb() {
@@ -83,6 +85,8 @@ describe('RegistrationWizard hardening', () => {
     generateIdentityMnemonic.mockReturnValue(ORIGINAL_MNEMONIC);
     checkUsernameAvailable.mockReset();
     checkUsernameAvailable.mockResolvedValue(true);
+    getInviteInfo.mockReset();
+    getInviteInfo.mockResolvedValue({ code: 'invite123' });
     sessionStorage.clear();
     localStorage.clear();
     await deleteRegistrationDb();
@@ -112,6 +116,50 @@ describe('RegistrationWizard hardening', () => {
       );
     }, { timeout: 2000 });
     expect(await screen.findByText(/available on chat\.example\.com/i)).toBeInTheDocument();
+  });
+
+  it('validates the invite code before advancing from the invite step', async () => {
+    let resolveInvite;
+    getInviteInfo.mockReturnValueOnce(new Promise((resolve) => {
+      resolveInvite = resolve;
+    }));
+
+    renderWizard({
+      registrationMode: 'invite_only',
+      instanceUrl: 'https://chat.example.com',
+    });
+
+    fireEvent.change(screen.getByLabelText(/invite code/i), { target: { value: 'invite123' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(await screen.findByText(/checking invite code/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(getInviteInfo).toHaveBeenCalledWith('invite123', 'https://chat.example.com');
+    });
+
+    resolveInvite({ code: 'invite123' });
+    expect(await screen.findByText(/choose a username/i)).toBeInTheDocument();
+  });
+
+  it('keeps the user on the invite step when the invite code is invalid', async () => {
+    getInviteInfo.mockRejectedValueOnce(new Error('Invalid invite code'));
+
+    renderWizard({
+      registrationMode: 'invite_only',
+      instanceUrl: 'https://chat.example.com',
+    });
+
+    fireEvent.change(screen.getByLabelText(/invite code/i), { target: { value: 'bad-code' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(getInviteInfo).toHaveBeenCalledWith('bad-code', 'https://chat.example.com');
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid invite code/i);
+    expect(screen.getByText(/enter invite code/i)).toBeInTheDocument();
+    expect(screen.queryByText(/choose a username/i)).not.toBeInTheDocument();
   });
 
   it('blocks progress when username availability cannot be checked', async () => {

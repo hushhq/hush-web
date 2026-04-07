@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { generateIdentityMnemonic } from '../../lib/bip39Identity';
-import { checkUsernameAvailable } from '../../lib/api';
+import { checkUsernameAvailable, getInviteInfo } from '../../lib/api';
 import { MnemonicGrid } from './MnemonicGrid';
 import { MnemonicConfirm } from './MnemonicConfirm';
 
@@ -209,6 +209,7 @@ export function RegistrationWizard({
   const [savedConfirmed, setSavedConfirmed] = useState(false);
   const [localError, setLocalError] = useState('');
   const [ignoreExternalError, setIgnoreExternalError] = useState(false);
+  const [inviteState, setInviteState] = useState('idle');
   const idbRestoredRef = useRef(false);
   const confirmHistoryGuardRef = useRef(false);
 
@@ -266,6 +267,10 @@ export function RegistrationWizard({
   }, [error]);
 
   useEffect(() => {
+    setInviteState('idle');
+  }, [inviteCode]);
+
+  useEffect(() => {
     onInstanceLockedChange?.(pastUsernameStep);
   }, [onInstanceLockedChange, pastUsernameStep]);
 
@@ -296,6 +301,7 @@ export function RegistrationWizard({
     setPastDisplayStep(false);
     setSavedConfirmed(false);
     setIgnoreExternalError(true);
+    setInviteState('idle');
     setLocalError('');
     setStep(initialStep);
   }, [initialStep]);
@@ -359,14 +365,29 @@ export function RegistrationWizard({
     }
   }, [currentStepIndex, visibleSteps]);
 
-  const handleInviteNext = useCallback(() => {
-    if (!inviteCode.trim()) {
+  const handleInviteNext = useCallback(async () => {
+    const trimmedInviteCode = inviteCode.trim();
+    if (!trimmedInviteCode) {
       setLocalError('Please enter an invite code.');
       return;
     }
+    setInviteState('checking');
     setLocalError('');
-    goNext();
-  }, [inviteCode, goNext]);
+    try {
+      await getInviteInfo(trimmedInviteCode, instanceUrl);
+      setInviteState('ok');
+      goNext();
+    } catch (err) {
+      setInviteState('invalid');
+      setLocalError(err?.message || 'Invalid invite code.');
+    }
+  }, [goNext, instanceUrl, inviteCode]);
+
+  const handleInviteChange = useCallback((nextValue) => {
+    setInviteCode(nextValue);
+    setInviteState('idle');
+    setLocalError('');
+  }, []);
 
   const handleUsernameNext = useCallback(() => {
     const trimmedUsername = username.trim();
@@ -469,7 +490,8 @@ export function RegistrationWizard({
       {step === STEP.INVITE_CODE && (
         <InviteCodeStep
           value={inviteCode}
-          onChange={setInviteCode}
+          onChange={handleInviteChange}
+          inviteState={inviteState}
           onNext={handleInviteNext}
           onCancel={onCancel}
         />
@@ -525,9 +547,30 @@ export function RegistrationWizard({
 
 // ── Sub-step components ──────────────────────────────────────────────────────
 
-function InviteCodeStep({ value, onChange, onNext, onCancel }) {
+function InviteCodeStep({ value, onChange, inviteState, onNext, onCancel }) {
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') onNext();
+    if (e.key === 'Enter' && inviteState !== 'checking') onNext();
+  };
+
+  const inviteHint =
+    inviteState === 'checking'
+      ? 'Checking invite code...'
+      : inviteState === 'ok'
+      ? 'Invite code is valid.'
+      : inviteState === 'invalid'
+      ? 'Invite code is not valid.'
+      : null;
+
+  const inviteHintStyle = {
+    fontSize: '0.72rem',
+    marginTop: '4px',
+    color:
+      inviteState === 'ok'
+        ? 'var(--hush-live)'
+        : inviteState === 'invalid'
+        ? 'var(--hush-danger)'
+        : 'var(--hush-text-muted)',
+    fontFamily: 'var(--font-mono)',
   };
 
   return (
@@ -543,12 +586,19 @@ function InviteCodeStep({ value, onChange, onNext, onCancel }) {
           className="input"
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Enter your invite code"
           autoComplete="off"
           autoFocus
         />
+        {inviteHint && (
+          <div style={inviteHintStyle} aria-live="polite">
+            {inviteHint}
+          </div>
+        )}
       </div>
       <div className="rw-actions">
         <button type="button" className="back-link" onClick={onCancel}>
@@ -557,11 +607,11 @@ function InviteCodeStep({ value, onChange, onNext, onCancel }) {
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!value.trim()}
+          disabled={!value.trim() || inviteState === 'checking'}
           onClick={onNext}
           style={{ flex: 1, padding: '10px' }}
         >
-          Continue
+          {inviteState === 'checking' ? 'Checking...' : 'Continue'}
         </button>
       </div>
     </div>
