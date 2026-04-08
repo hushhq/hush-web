@@ -514,10 +514,6 @@ export default function LinkDevice() {
         ) : (
           <ApproveLinkView initialPayload={qrPayload} unlockResumePath={unlockResumePath} />
         )}
-
-        <div className="ld-footer-link">
-          <Link to="/">Return to Hush</Link>
-        </div>
       </div>
     </div>
   );
