@@ -178,7 +178,7 @@ describe('RegistrationWizard hardening', () => {
     expect(screen.queryByText(/choose a username/i)).not.toBeInTheDocument();
   });
 
-  it('restores invite-only registration to username after a validated invite', () => {
+  it('does not restore invite-only username state before the recovery phrase step', () => {
     seedWizardSessionState({
       step: 'USERNAME',
       inviteCode: 'invite123',
@@ -191,8 +191,8 @@ describe('RegistrationWizard hardening', () => {
       instanceUrl: 'https://chat.example.com',
     });
 
-    expect(screen.getByText(/choose a username/i)).toBeInTheDocument();
-    expect(screen.queryByText(/enter invite code/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/enter invite code/i)).toBeInTheDocument();
+    expect(screen.queryByText(/choose a username/i)).not.toBeInTheDocument();
   });
 
   it('blocks progress when username availability cannot be checked', async () => {
@@ -236,6 +236,46 @@ describe('RegistrationWizard hardening', () => {
     fireEvent.click(screen.getByRole('button', { name: /^← back$/i }));
     expect(await screen.findByText(/choose a username/i)).toBeInTheDocument();
     expect(onInstanceLockedChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it('does not persist registration state while still on the username step', async () => {
+    renderWizard({
+      instanceUrl: 'https://chat.example.com',
+      instanceName: 'chat.example.com',
+    });
+
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'Alice' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/available on chat\.example\.com/i)).toBeInTheDocument();
+    }, { timeout: 2000 });
+
+    expect(sessionStorage.getItem(REG_SESSION_KEY)).toBeNull();
+  });
+
+  it('starts persisting registration state once the recovery phrase is shown', async () => {
+    renderWizard({
+      instanceUrl: 'https://chat.example.com',
+      instanceName: 'chat.example.com',
+    });
+
+    fireEvent.change(screen.getByLabelText(/username/i), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText(/display name/i), { target: { value: 'Alice' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/available on chat\.example\.com/i)).toBeInTheDocument();
+    }, { timeout: 2000 });
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    await screen.findByText(/write these 12 words down and keep them safe/i);
+
+    const persisted = JSON.parse(sessionStorage.getItem(REG_SESSION_KEY));
+    expect(persisted.step).toBe('MNEMONIC_DISPLAY');
+    expect(persisted.username).toBe('alice');
+    expect(persisted.pastUsernameStep).toBe(true);
+    expect(persisted.mnemonic).toBe(ORIGINAL_MNEMONIC);
   });
 
   it('hides the in-app back button on the mnemonic confirmation step', () => {
@@ -283,13 +323,7 @@ describe('RegistrationWizard hardening', () => {
     fireEvent(window, new PopStateEvent('popstate'));
 
     await screen.findByText(/choose a username/i);
-    const persisted = JSON.parse(sessionStorage.getItem(REG_SESSION_KEY));
-
-    expect(persisted.step).toBe('USERNAME');
-    expect(persisted.pastDisplayStep).toBe(false);
-    expect(persisted.challengePositions).toBe(null);
-    expect(persisted.username).toBe('');
-    expect(persisted.mnemonic).toBe(NEW_MNEMONIC);
+    expect(sessionStorage.getItem(REG_SESSION_KEY)).toBeNull();
   });
 
   it('lets the user start over from confirmation with a fresh mnemonic', async () => {
@@ -309,12 +343,7 @@ describe('RegistrationWizard hardening', () => {
     await user.click(screen.getByRole('button', { name: /start over/i }));
 
     await screen.findByText(/choose a username/i);
-    const persisted = JSON.parse(sessionStorage.getItem(REG_SESSION_KEY));
-
-    expect(persisted.step).toBe('USERNAME');
-    expect(persisted.pastDisplayStep).toBe(false);
-    expect(persisted.challengePositions).toBe(null);
-    expect(persisted.mnemonic).toBe(NEW_MNEMONIC);
+    expect(sessionStorage.getItem(REG_SESSION_KEY)).toBeNull();
   });
 
   it('restores the confirmation step from IDB without re-showing the mnemonic words', async () => {

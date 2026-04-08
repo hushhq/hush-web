@@ -59,6 +59,13 @@ function hasAdvancedPastUsername(step, visibleSteps) {
   return usernameIndex !== -1 && currentIndex > usernameIndex;
 }
 
+function hasReachedMnemonicStep(state, visibleSteps) {
+  if (!state) return false;
+  return Boolean(
+    state.pastUsernameStep || hasAdvancedPastUsername(state.step, visibleSteps),
+  );
+}
+
 /**
  * Multi-step registration wizard.
  *
@@ -135,7 +142,7 @@ async function saveWizardStateToIDB(state) {
   } catch { /* best-effort */ }
 }
 
-async function loadWizardStateFromIDB() {
+async function loadWizardStateFromIDB(visibleSteps) {
   try {
     const db = await openRegIDB();
     const tx = db.transaction(REG_IDB_STORE, 'readonly');
@@ -144,6 +151,10 @@ async function loadWizardStateFromIDB() {
     db.close();
     if (!result) return null;
     if (result.savedAt && Date.now() - result.savedAt > REG_STATE_TTL_MS) {
+      await clearWizardStateFromIDB();
+      return null;
+    }
+    if (!hasReachedMnemonicStep(result, visibleSteps)) {
       await clearWizardStateFromIDB();
       return null;
     }
@@ -163,16 +174,20 @@ async function clearWizardStateFromIDB() {
 
 /** Check if there's an interrupted registration in IDB (called from Home.jsx on mount). */
 export async function hasInterruptedRegistration() {
-  const state = await loadWizardStateFromIDB();
+  const state = await loadWizardStateFromIDB(getVisibleSteps('open'));
   return state !== null;
 }
 
-function loadSavedWizardState() {
+function loadSavedWizardState(visibleSteps) {
   try {
     const raw = sessionStorage.getItem(REG_SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed?.savedAt && Date.now() - parsed.savedAt > REG_STATE_TTL_MS) {
+      sessionStorage.removeItem(REG_SESSION_KEY);
+      return null;
+    }
+    if (!hasReachedMnemonicStep(parsed, visibleSteps)) {
       sessionStorage.removeItem(REG_SESSION_KEY);
       return null;
     }
@@ -204,7 +219,7 @@ export function RegistrationWizard({
   const initialStep = visibleSteps[0];
 
   // Try sessionStorage first (sync), then IDB fallback (async) for iOS page discards.
-  const syncSaved = useRef(loadSavedWizardState()).current;
+  const syncSaved = useRef(loadSavedWizardState(visibleSteps)).current;
   const syncSavedPastDisplayStep = Boolean(syncSaved?.pastDisplayStep);
   const syncSavedPastUsernameStep = Boolean(
     syncSaved?.pastUsernameStep || hasAdvancedPastUsername(syncSaved?.step, visibleSteps),
@@ -250,7 +265,7 @@ export function RegistrationWizard({
   useEffect(() => {
     if (syncSaved || idbRestoredRef.current) return;
     idbRestoredRef.current = true;
-    loadWizardStateFromIDB().then((idbState) => {
+    loadWizardStateFromIDB(visibleSteps).then((idbState) => {
       if (!idbState) return;
       const restoredPastDisplayStep = Boolean(idbState.pastDisplayStep);
       const restoredPastUsernameStep = Boolean(
@@ -285,8 +300,12 @@ export function RegistrationWizard({
     });
   }, [initialStep, registrationMode, syncSaved, visibleSteps]);
 
-  // Persist wizard state on every change - dual-write to sessionStorage + IDB.
+  // Persist only once the user has reached the recovery-phrase stage.
   useEffect(() => {
+    if (!hasReachedMnemonicStep({ step, pastUsernameStep }, visibleSteps)) {
+      clearWizardState();
+      return;
+    }
     saveWizardState({
       step,
       inviteCode,
@@ -308,6 +327,7 @@ export function RegistrationWizard({
     challengePositions,
     pastUsernameStep,
     pastDisplayStep,
+    visibleSteps,
   ]);
 
   useEffect(() => {
