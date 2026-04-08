@@ -47,6 +47,14 @@ function buildUnlockResumePath(location) {
   return `/?returnTo=${encodeURIComponent(current)}`;
 }
 
+function LinkDeviceBackLink() {
+  return (
+    <Link className="back-link ld-back-link" to="/">
+      ← Back
+    </Link>
+  );
+}
+
 function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSelectInstance }) {
   const { completeDeviceLink, loading: authLoading } = useAuth();
   const [requestState, setRequestState] = useState(null);
@@ -225,10 +233,8 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         <button type="button" className="btn btn-secondary" onClick={() => setRefreshKey((value) => value + 1)}>
           Regenerate
         </button>
-        <Link className="btn btn-secondary" to="/">
-          Back
-        </Link>
       </div>
+      <LinkDeviceBackLink />
     </div>
   );
 }
@@ -388,10 +394,8 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           <button type="button" className="btn btn-primary" onClick={() => navigate(unlockResumePath)}>
             Unlock to approve
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>
-            Back
-          </button>
         </div>
+        <LinkDeviceBackLink />
       </div>
     );
   }
@@ -408,11 +412,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
             QR request detected. This browser does not have a local Hush vault for that account.
           </div>
         )}
-        <div className="ld-actions">
-          <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>
-            Back
-          </button>
-        </div>
+        <LinkDeviceBackLink />
       </div>
     );
   }

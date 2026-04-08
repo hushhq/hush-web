@@ -162,6 +162,39 @@ describe('RegistrationWizard hardening', () => {
     expect(screen.queryByText(/choose a username/i)).not.toBeInTheDocument();
   });
 
+  it('does not restore invite-only registration to username without a validated invite', () => {
+    seedWizardSessionState({
+      step: 'USERNAME',
+      inviteCode: 'invite123',
+      username: 'alice',
+    });
+
+    renderWizard({
+      registrationMode: 'invite_only',
+      instanceUrl: 'https://chat.example.com',
+    });
+
+    expect(screen.getByText(/enter invite code/i)).toBeInTheDocument();
+    expect(screen.queryByText(/choose a username/i)).not.toBeInTheDocument();
+  });
+
+  it('restores invite-only registration to username after a validated invite', () => {
+    seedWizardSessionState({
+      step: 'USERNAME',
+      inviteCode: 'invite123',
+      inviteValidated: true,
+      username: 'alice',
+    });
+
+    renderWizard({
+      registrationMode: 'invite_only',
+      instanceUrl: 'https://chat.example.com',
+    });
+
+    expect(screen.getByText(/choose a username/i)).toBeInTheDocument();
+    expect(screen.queryByText(/enter invite code/i)).not.toBeInTheDocument();
+  });
+
   it('blocks progress when username availability cannot be checked', async () => {
     checkUsernameAvailable.mockRejectedValueOnce(new Error('Load failed'));
 
@@ -300,5 +333,23 @@ describe('RegistrationWizard hardening', () => {
     });
     expect(screen.queryByText(/^your recovery phrase$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/write these 12 words down and keep them safe/i)).not.toBeInTheDocument();
+  });
+
+  it('does not restore invite-only username step from IDB without a validated invite', async () => {
+    await writeWizardIdbState({
+      step: 'USERNAME',
+      inviteCode: 'invite123',
+      username: 'alice',
+    });
+
+    renderWizard({
+      registrationMode: 'invite_only',
+      instanceUrl: 'https://chat.example.com',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/enter invite code/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/choose a username/i)).not.toBeInTheDocument();
   });
 });

@@ -86,9 +86,29 @@ function createFreshMnemonicState() {
   };
 }
 
-function normalizeRestoredStep(step, visibleSteps, initialStep, pastDisplayStep) {
+function hasInviteValidatedState(savedState, registrationMode, visibleSteps) {
+  if (registrationMode !== 'invite_only') return true;
+  if (savedState?.inviteValidated) return true;
+  return Boolean(
+    savedState?.pastUsernameStep
+      || savedState?.pastDisplayStep
+      || hasAdvancedPastUsername(savedState?.step, visibleSteps),
+  );
+}
+
+function normalizeRestoredStep(
+  step,
+  visibleSteps,
+  initialStep,
+  pastDisplayStep,
+  registrationMode,
+  inviteValidated,
+) {
   if (pastDisplayStep) return STEP.MNEMONIC_CONFIRM;
   if (step === STEP.SUBMITTING) return STEP.MNEMONIC_CONFIRM;
+  if (registrationMode === 'invite_only' && !inviteValidated && step !== STEP.INVITE_CODE) {
+    return STEP.INVITE_CODE;
+  }
   return visibleSteps.includes(step) ? step : initialStep;
 }
 
@@ -189,6 +209,11 @@ export function RegistrationWizard({
   const syncSavedPastUsernameStep = Boolean(
     syncSaved?.pastUsernameStep || hasAdvancedPastUsername(syncSaved?.step, visibleSteps),
   );
+  const syncSavedInviteValidated = hasInviteValidatedState(
+    syncSaved,
+    registrationMode,
+    visibleSteps,
+  );
   const initialMnemonicState = useRef(
     syncSaved?.mnemonic
       ? { mnemonic: syncSaved.mnemonic, mnemonicWords: syncSaved.mnemonic.split(' ') }
@@ -196,7 +221,14 @@ export function RegistrationWizard({
   ).current;
 
   const [step, setStep] = useState(
-    normalizeRestoredStep(syncSaved?.step, visibleSteps, initialStep, syncSavedPastDisplayStep),
+    normalizeRestoredStep(
+      syncSaved?.step,
+      visibleSteps,
+      initialStep,
+      syncSavedPastDisplayStep,
+      registrationMode,
+      syncSavedInviteValidated,
+    ),
   );
   const [inviteCode, setInviteCode] = useState(syncSaved?.inviteCode ?? '');
   const [username, setUsername] = useState(syncSaved?.username ?? '');
@@ -206,6 +238,7 @@ export function RegistrationWizard({
   const [challengePositions, setChallengePositions] = useState(syncSaved?.challengePositions ?? null);
   const [pastUsernameStep, setPastUsernameStep] = useState(syncSavedPastUsernameStep);
   const [pastDisplayStep, setPastDisplayStep] = useState(syncSavedPastDisplayStep);
+  const [inviteValidated, setInviteValidated] = useState(syncSavedInviteValidated);
   const [savedConfirmed, setSavedConfirmed] = useState(false);
   const [localError, setLocalError] = useState('');
   const [ignoreExternalError, setIgnoreExternalError] = useState(false);
@@ -223,11 +256,24 @@ export function RegistrationWizard({
       const restoredPastUsernameStep = Boolean(
         idbState.pastUsernameStep || hasAdvancedPastUsername(idbState.step, visibleSteps),
       );
+      const restoredInviteValidated = hasInviteValidatedState(
+        idbState,
+        registrationMode,
+        visibleSteps,
+      );
       setStep(
-        normalizeRestoredStep(idbState.step, visibleSteps, initialStep, restoredPastDisplayStep),
+        normalizeRestoredStep(
+          idbState.step,
+          visibleSteps,
+          initialStep,
+          restoredPastDisplayStep,
+          registrationMode,
+          restoredInviteValidated,
+        ),
       );
       setPastUsernameStep(restoredPastUsernameStep);
       setPastDisplayStep(restoredPastDisplayStep);
+      setInviteValidated(restoredInviteValidated);
       setInviteCode(idbState.inviteCode ?? '');
       setUsername(idbState.username ?? '');
       setDisplayName(idbState.displayName ?? '');
@@ -237,13 +283,14 @@ export function RegistrationWizard({
       }
       setChallengePositions(idbState.challengePositions?.length === 3 ? idbState.challengePositions : null);
     });
-  }, [initialStep, syncSaved, visibleSteps]);
+  }, [initialStep, registrationMode, syncSaved, visibleSteps]);
 
   // Persist wizard state on every change - dual-write to sessionStorage + IDB.
   useEffect(() => {
     saveWizardState({
       step,
       inviteCode,
+      inviteValidated,
       username,
       displayName,
       mnemonic,
@@ -254,6 +301,7 @@ export function RegistrationWizard({
   }, [
     step,
     inviteCode,
+    inviteValidated,
     username,
     displayName,
     mnemonic,
@@ -292,6 +340,7 @@ export function RegistrationWizard({
     const nextMnemonicState = createFreshMnemonicState();
     clearWizardState();
     setInviteCode('');
+    setInviteValidated(false);
     setUsername('');
     setDisplayName('');
     setMnemonic(nextMnemonicState.mnemonic);
@@ -376,6 +425,7 @@ export function RegistrationWizard({
     try {
       await getInviteInfo(trimmedInviteCode, instanceUrl);
       setInviteState('ok');
+      setInviteValidated(true);
       goNext();
     } catch (err) {
       setInviteState('invalid');
@@ -385,6 +435,7 @@ export function RegistrationWizard({
 
   const handleInviteChange = useCallback((nextValue) => {
     setInviteCode(nextValue);
+    setInviteValidated(false);
     setInviteState('idle');
     setLocalError('');
   }, []);
