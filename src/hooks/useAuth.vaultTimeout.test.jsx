@@ -35,6 +35,14 @@ vi.mock('../lib/identityVault', () => ({
     if (pin === 'wrong') throw new DOMException('decryption failed', 'OperationError');
     return new Uint8Array(blob.slice(12));
   }),
+  decryptVaultAndExportKey: vi.fn().mockImplementation(async (blob, pin) => {
+    if (pin === 'wrong') throw new DOMException('decryption failed', 'OperationError');
+    return {
+      privateKey: new Uint8Array(blob.slice(12)),
+      rawKeyHex: 'ab'.repeat(32),
+    };
+  }),
+  decryptVaultWithRawKey: vi.fn().mockImplementation(async (blob) => new Uint8Array(blob.slice(12))),
   openVaultStore: vi.fn().mockImplementation(async (userId) => ({
     userId,
     close: vi.fn(),

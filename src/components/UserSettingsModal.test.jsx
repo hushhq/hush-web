@@ -156,7 +156,7 @@ describe('UserSettingsModal', () => {
 
     await openAudioVideoTab();
 
-    fireEvent.change(screen.getByRole('slider', { name: /gate threshold/i }), {
+    fireEvent.change(screen.getByRole('slider', { name: /sensitivity threshold/i }), {
       target: { value: '-42' },
     });
 
