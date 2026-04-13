@@ -110,19 +110,6 @@ Types: `feat`, `fix`, `test`, `refactor`, `chore`, `docs`.
 
 ---
 
-## Admin Dashboard
-
-The admin dashboard is in `admin/`. It is a standalone Vite app. Run and test it separately:
-
-```bash
-cd admin
-npm ci
-npm run dev
-npm run test:run
-```
-
----
-
 ## Security Issues
 
 Do not open public issues for security vulnerabilities. Email `security@gethush.live` with details. See the main security policy for the full responsible disclosure process.

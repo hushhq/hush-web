@@ -2,14 +2,6 @@
 	root * /srv
 	encode zstd gzip
 
-	@adminNoSlash path /admin
-	redir @adminNoSlash /admin/ 302
-
-	handle /admin/* {
-		try_files {path} /admin/index.html
-		file_server
-	}
-
 	handle {
 		try_files {path} /index.html
 		file_server
