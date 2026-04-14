@@ -922,9 +922,6 @@ select:focus-visible {
   flex-direction: column;
   align-items: center;
   width: 48px;
-  background: var(--hush-surface);
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-xl);
   padding: 8px 0;
   gap: 3px;
   overflow-y: auto;
@@ -2039,8 +2036,8 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  height: 46px;
-  min-height: 46px;
+  height: 48px;
+  min-height: 48px;
   background: var(--hush-elevated);
   border-bottom: 1px solid var(--hush-border);
   flex-shrink: 0;
@@ -2247,20 +2244,24 @@ select:focus-visible {
   margin-top: 12px;
 }
 
-.chat-message-row:hover {
-  background: var(--hush-elevated);
-  padding-left: 16px;
-  padding-right: 16px;
-  margin-left: 2px;
-  margin-right: 2px;
+/* Hover effects only on pointer devices — suppressed on touch to prevent
+   sticky highlight during scroll on mobile. */
+@media (hover: hover) {
+  .chat-message-row:hover {
+    background: var(--hush-elevated);
+    padding-left: 16px;
+    padding-right: 16px;
+    margin-left: 2px;
+    margin-right: 2px;
+  }
+
+  .chat-message-row--own:hover {
+    background: color-mix(in srgb, var(--hush-amber-ghost) 80%, var(--hush-hover));
+  }
 }
 
 .chat-message-row--own {
   background: var(--hush-amber-ghost);
-}
-
-.chat-message-row--own:hover {
-  background: color-mix(in srgb, var(--hush-amber-ghost) 80%, var(--hush-hover));
 }
 
 .chat-message-row--failed {
@@ -3801,7 +3802,10 @@ select:focus-visible {
 .gcm-context-menu {
   position: fixed;
   z-index: 9999;
+  /* var(--hush-surface) is semi-transparent in dark mode; strip the alpha so
+     content behind the menu is fully occluded. */
   background: var(--hush-surface);
+  background: rgb(from var(--hush-surface) r g b);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-md);
   min-width: 200px;
@@ -5127,8 +5131,8 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  height: 46px;
-  min-height: 46px;
+  height: 48px;
+  min-height: 48px;
   background: var(--hush-elevated);
   border-bottom: 1px solid var(--hush-border);
   flex-shrink: 0;
