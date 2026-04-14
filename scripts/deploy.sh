@@ -11,7 +11,8 @@
 #   <target>/current -> releases/YYYYMMDDHHMMSS-<shortsha>/  <- symlink
 #
 # Configure your web server to serve from <target>/current.
-# The symlink swap (ln + mv) is atomic on POSIX filesystems.
+# The symlink swap uses ln -sfn, which replaces the symlink directly without
+# following it into the pointed-to directory (the mv -f trap on Linux).
 # Old releases beyond --keep are pruned after a successful deploy.
 #
 # ---- HOSTED TOPOLOGY NOTE -------------------------------------------------
@@ -100,10 +101,12 @@ mkdir -p "$RELEASE_DIR"
 cp -r dist/. "$RELEASE_DIR/"
 
 # ---------------------------------------------------------------------------
-# Atomic symlink swap
+# Symlink swap: ln -sfn replaces the symlink in-place.
+# Do NOT use: ln -s current.new + mv -f current.new current
+# mv follows a symlink-to-directory and deposits current.new inside the old
+# release dir instead of replacing the symlink (false-success deploy).
 # ---------------------------------------------------------------------------
-ln -s "releases/$RELEASE" "$TARGET_ABS/current.new"
-mv -f "$TARGET_ABS/current.new" "$TARGET_ABS/current"
+ln -sfn "releases/$RELEASE" "$TARGET_ABS/current"
 log "Deployed: $TARGET_ABS/current -> releases/$RELEASE"
 
 # ---------------------------------------------------------------------------
