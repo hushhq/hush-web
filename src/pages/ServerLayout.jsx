@@ -335,6 +335,7 @@ export default function ServerLayout() {
   const [voiceMuteStates, setVoiceMuteStates] = useState(() => new Map());
 
   const { width: sidebarWidth, handleMouseDown: handleSidebarResize } = useSidebarResize();
+  const [requestOpenSettings, setRequestOpenSettings] = useState(false);
 
   const isMobile = breakpoint === 'mobile';
   const [showDrawer, setShowDrawer] = useState(false);
@@ -1579,6 +1580,7 @@ export default function ServerLayout() {
           guilds={mergedGuilds}
           activeGuild={null}
           onGuildSelect={handleGuildSelect}
+          onGuildSettings={() => setRequestOpenSettings(true)}
           onGuildCreated={handleGuildCreated}
           getMetadataKey={getMetadataKey}
           getMetadataKeys={getMetadataKeys}
@@ -1681,6 +1683,8 @@ export default function ServerLayout() {
       showToast={showToast}
       members={members}
       currentUserId={currentUserId}
+      openSettings={requestOpenSettings}
+      onSettingsClosed={() => setRequestOpenSettings(false)}
     />
   );
 

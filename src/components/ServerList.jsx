@@ -326,6 +326,7 @@ export default function ServerList({
   userRole = 'member',
   userPermissionLevel = 0,
   compact = false,
+  onGuildSettings,
 }) {
   // Read InstanceContext without throwing - null when InstanceProvider is absent.
   const instanceCtx = useContext(InstanceContext);
@@ -666,7 +667,7 @@ export default function ServerList({
           onMute={handleMute}
           onCopyInvite={handleCopyInvite}
           onMarkRead={handleMarkRead}
-          onSettings={(guild) => onGuildSelect?.(guild)}
+          onSettings={(guild) => { onGuildSelect?.(guild); onGuildSettings?.(); }}
           onInstanceInfo={handleInstanceInfo}
         />
       )}

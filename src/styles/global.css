@@ -1875,7 +1875,8 @@ select:focus-visible {
   top: 100%;
   left: 0;
   right: 0;
-  background: var(--hush-modal);
+  background: var(--hush-surface);
+  background: rgb(from var(--hush-surface) r g b);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-md);
   z-index: 100;
