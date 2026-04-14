@@ -1295,11 +1295,21 @@ select:focus-visible {
 .sidebar-shell {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
   height: 100%;
   background: var(--hush-surface);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-xl);
   overflow: hidden;
+}
+
+/* When sidebar-shell lives inside the unified lay-main panel, strip its own
+   card appearance — the parent already provides border and border-radius. */
+.lay-content-row .sidebar-shell {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--hush-border);
 }
 
 /* ── Channel Sidebar (ChannelList.jsx) ──────────── */
@@ -2216,8 +2226,11 @@ select:focus-visible {
   background: var(--hush-hover);
 }
 
-.chat-messages-scroll--has-messages {
-  justify-content: flex-end;
+/* Spacer pushes messages to the bottom when content is shorter than the container.
+   Must be a flex sibling BEFORE the messages, not justify-content: flex-end,
+   because flex-end causes top-overflow that is unreachable by scrollTop. */
+.chat-messages-spacer {
+  flex: 1;
 }
 
 .chat-message-row {

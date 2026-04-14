@@ -1724,22 +1724,8 @@ export default function ServerLayout() {
         </div>
       )}
 
-      {/* ── Left navigation: in-flow on desktop, drawer on mobile ── */}
-      {!isMobile && (
-        <>
-          {serverListEl}
-          <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', position: 'relative' }}>
-            {channelSidebarEl}
-            <div
-              className="lay-resize-handle"
-              onMouseDown={handleSidebarResize}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize channel list"
-            />
-          </div>
-        </>
-      )}
+      {/* ── Server strip: desktop only (channel sidebar lives inside lay-main below) ── */}
+      {!isMobile && serverListEl}
       {/* ── Mobile stack navigation ── */}
       {isMobile && (
         <>
@@ -1863,6 +1849,17 @@ export default function ServerLayout() {
       {/* ── Desktop layout ── */}
       {!isMobile && <div className="lay-main">
         <div className="lay-content-row">
+          {/* Channel sidebar — inside lay-main so sidebar+content form one contiguous panel */}
+          <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', position: 'relative' }}>
+            {channelSidebarEl}
+            <div
+              className="lay-resize-handle"
+              onMouseDown={handleSidebarResize}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize channel list"
+            />
+          </div>
           <div className="lay-channel-area">
             {activeVoiceChannel && (
               <div style={{ display: isViewingVoice ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0, overflow: 'hidden', position: 'relative', zIndex: 1 }}>

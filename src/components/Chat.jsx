@@ -434,8 +434,12 @@ export default function Chat({
         <div
           ref={messagesScrollRef}
           onScroll={handleScroll}
-          className={`chat-messages-scroll${hasMessages ? ' chat-messages-scroll--has-messages' : ''}`}
+          className="chat-messages-scroll"
         >
+          {/* Spacer: grows to push messages to the bottom when they don't fill the container.
+              Must come BEFORE messages — justify-content: flex-end is not usable here because
+              it makes top-overflow unreachable (negative scrollTop territory). */}
+          <div className="chat-messages-spacer" />
           {!isChannelTransitioning && hasMoreOlder && (loadMoreLoading || visibleMessages.length > 0) && (
             <div className="chat-load-more-hint">
               {loadMoreLoading ? 'Loading…' : 'Scroll up for older messages'}
