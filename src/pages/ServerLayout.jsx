@@ -186,6 +186,7 @@ export default function ServerLayout() {
   const {
     instanceStates,
     mergedGuilds,
+    dmGuilds,
     getWsClient,
     getTokenForInstance,
     refreshGuilds,
@@ -218,12 +219,13 @@ export default function ServerLayout() {
    * For legacy routes: match by serverId.
    */
   const activeGuild = useMemo(() => {
+    const allGuilds = [...mergedGuilds, ...(dmGuilds ?? [])];
     if (legacyServerId) {
-      return mergedGuilds.find((g) => g.id === legacyServerId) ?? null;
+      return allGuilds.find((g) => g.id === legacyServerId) ?? null;
     }
     if (instanceParam && guildSlug) {
       const { guildId: guildIdFromRoute, slug: legacySlug } = parseGuildRouteRef(guildSlug);
-      return mergedGuilds.find((g) => {
+      return allGuilds.find((g) => {
         if (!g.instanceUrl) return false;
         try {
           const host = new URL(g.instanceUrl).host;
@@ -239,13 +241,17 @@ export default function ServerLayout() {
       }) ?? null;
     }
     return null;
-  }, [mergedGuilds, legacyServerId, instanceParam, guildSlug]);
+  }, [mergedGuilds, dmGuilds, legacyServerId, instanceParam, guildSlug]);
 
   /** The guild's server UUID (used in API calls). */
   const serverId = activeGuild?.id ?? legacyServerId ?? null;
 
   /** The instance URL for routing API and WS calls. */
   const instanceUrl = activeGuild?.instanceUrl ?? null;
+
+  // Instance URL for DM operations when no guild is active (DM list mode).
+  // Falls back to the first known instance so refreshGuilds is always callable.
+  const dmInstanceUrl = instanceUrl ?? ([...instanceStates.keys()][0] ?? null);
 
   /** Per-instance JWT - falls back to local sessionStorage token for legacy paths. */
   const token = instanceUrl
@@ -783,7 +789,7 @@ export default function ServerLayout() {
       navigateRef.current('/home', { replace: true });
       return;
     }
-    const guild = mergedGuilds.find((g) => g.id === guildId);
+    const guild = mergedGuilds.find((g) => g.id === guildId) ?? (dmGuilds ?? []).find((g) => g.id === guildId);
     const path = buildGuildPath(guild, chId ?? null);
     if (path) {
       navigateRef.current(path, { replace: true });
@@ -794,7 +800,7 @@ export default function ServerLayout() {
       ? `/servers/${guildId}/channels/${chId}`
       : `/servers/${guildId}/channels`;
     navigateRef.current(legacyPath, { replace: true });
-  }, [mergedGuilds]);
+  }, [mergedGuilds, dmGuilds]);
 
   const handleVoiceLeave = useCallback(() => {
     leavingVoiceRef.current = true;
@@ -1377,12 +1383,24 @@ export default function ServerLayout() {
     navigateToGuild(guild.id);
   }, [navigateToGuild]);
 
-  const handleDmSelect = useCallback((dmGuild) => {
+  const handleDmSelect = useCallback(async (dmGuild) => {
     setDmMode(false);
     setShowDrawer(false);
     setMobileStack(2);
-    navigateToGuild(dmGuild.id);
-  }, [navigateToGuild]);
+
+    // Refresh before navigating when the guild is brand-new (not yet in local state).
+    // Without this, activeGuild stays null after the route change → wsClient is null
+    // → chat send is blocked. Existing DMs are already in dmGuilds so skip the refresh.
+    const isKnown = (dmGuilds ?? []).some((g) => g.id === dmGuild.id);
+    if (!isKnown) {
+      const targetInstanceUrl = dmGuild.instanceUrl ?? dmInstanceUrl;
+      if (targetInstanceUrl) {
+        await refreshGuilds(targetInstanceUrl).catch(() => {});
+      }
+    }
+
+    navigateToGuild(dmGuild.id, dmGuild.channelId ?? dmGuild.channels?.[0]?.id);
+  }, [navigateToGuild, dmGuilds, refreshGuilds, dmInstanceUrl]);
 
   /** Called by GuildCreateModal on success - refresh guilds and navigate to new guild. */
   const handleGuildCreated = useCallback(async (newGuild) => {
@@ -1419,13 +1437,16 @@ export default function ServerLayout() {
     const memberId = member.id ?? member.userId;
     if (!memberId || !token) return;
     try {
-      const dmGuild = await api.createOrFindDM(token, memberId, instanceUrl ?? '');
-      if (dmGuild?.id) {
+      const resp = await api.createOrFindDM(token, memberId, instanceUrl ?? '');
+      // Server returns { server, otherUser, channelId } — unwrap before use.
+      const guildId = resp?.server?.id;
+      const dmChannelId = resp?.channelId;
+      if (guildId) {
         // Refresh guilds so the new DM appears in the sidebar.
         if (instanceUrl) {
           await refreshGuilds(instanceUrl).catch(() => {});
         }
-        navigateToGuild(dmGuild.id);
+        navigateToGuild(guildId, dmChannelId);
       }
     } catch (err) {
       console.error('[ServerLayout] handleSendMessage failed:', err);
@@ -1633,8 +1654,6 @@ export default function ServerLayout() {
     );
   }
 
-  const dmGuilds = (mergedGuilds ?? []).filter((g) => g.isDm === true);
-
   const serverListEl = (
     <ServerList
       getToken={getToken}
@@ -1661,6 +1680,7 @@ export default function ServerLayout() {
       dmGuilds={dmGuilds}
       onSelectDm={handleDmSelect}
       getToken={getToken}
+      instanceUrl={dmInstanceUrl}
     />
   );
 

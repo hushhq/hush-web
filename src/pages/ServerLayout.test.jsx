@@ -108,6 +108,7 @@ vi.mock('../contexts/InstanceContext', () => ({
   useInstanceContext: vi.fn(() => ({
     instanceStates: new Map(),
     mergedGuilds: [{ id: 's1', name: 'Test Guild', ownerId: 'u1' }],
+    dmGuilds: [],
     getWsClient: vi.fn(() => null),
     getTokenForInstance: vi.fn(() => null),
     refreshGuilds: vi.fn().mockResolvedValue(undefined),
@@ -138,6 +139,12 @@ vi.mock('../lib/api', () => ({
   uploadMLSKeyPackages: vi.fn().mockResolvedValue(undefined),
   getKeyPackageCount: vi.fn().mockResolvedValue(100),
   getHandshake: vi.fn().mockResolvedValue({ key_package_low_threshold: 10 }),
+  createOrFindDM: vi.fn().mockResolvedValue({
+    server: { id: 'dm-1', isDm: true, instanceUrl: 'https://local.example.com', accessPolicy: 'closed' },
+    otherUser: { id: 'u2', username: 'bob', displayName: 'Bob' },
+    channelId: 'ch-dm-1',
+  }),
+  searchUsersForDM: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../hooks/useBreakpoint', () => ({
@@ -265,6 +272,7 @@ describe('ServerLayout', () => {
     vi.mocked(useInstanceContext).mockReturnValue({
       instanceStates: new Map(),
       mergedGuilds: [{ id: 's1', name: 'Test Guild', ownerId: 'u1' }],
+      dmGuilds: [],
       getWsClient: vi.fn(() => null),
       getTokenForInstance: vi.fn(() => null),
       refreshGuilds: vi.fn().mockResolvedValue(undefined),
@@ -653,5 +661,121 @@ describe('ServerLayout', () => {
 
     expect(TransparencyVerifier).not.toHaveBeenCalled();
     expect(mockVerifyOwnKey).not.toHaveBeenCalled();
+  });
+});
+
+describe('ServerLayout – DM flow', () => {
+  beforeEach(() => {
+    cleanup();
+    sessionStorage.setItem('hush_jwt', 'test-token');
+    vi.mocked(getGuildChannels).mockResolvedValue([]);
+    vi.mocked(getGuildMembers).mockResolvedValue([]);
+  });
+
+  // DM list is fed from the real dmGuilds collection, not mergedGuilds --------
+
+  it('resolves activeGuild from dmGuilds when URL matches a DM guild', async () => {
+    const dmGuild = {
+      id: 'dm-99',
+      isDm: true,
+      instanceUrl: 'http://localhost',
+      accessPolicy: 'closed',
+    };
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map(),
+      mergedGuilds: [],
+      dmGuilds: [dmGuild],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => null),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    // Legacy route: DM guild ID directly in path
+    renderAtRoute('/servers/dm-99/channels');
+
+    await waitFor(() => {
+      // getGuildChannels is called with the DM guild's ID iff activeGuild resolved correctly
+      expect(getGuildChannels).toHaveBeenCalledWith(
+        expect.anything(),
+        'dm-99',
+        expect.anything(),
+      );
+    });
+  });
+
+  // handleDmSelect refreshes guild state for brand-new DMs ----------------------
+
+  it('handleDmSelect calls refreshGuilds before navigating when the DM is brand-new', async () => {
+    const { createOrFindDM, searchUsersForDM } = await import('../lib/api');
+    const refreshGuilds = vi.fn().mockResolvedValue(undefined);
+    const existingDmGuild = { id: 'dm-existing', isDm: true, instanceUrl: 'http://localhost', accessPolicy: 'closed' };
+
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map([['http://localhost', { connectionState: 'connected', jwt: 'test-token' }]]),
+      mergedGuilds: [],
+      dmGuilds: [existingDmGuild],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => 'test-token'),
+      refreshGuilds,
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    // createOrFindDM returns a guild that is NOT in dmGuilds yet
+    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-new', username: 'dave', displayName: 'Dave' }]);
+    vi.mocked(createOrFindDM).mockResolvedValue({
+      server: { id: 'dm-new', isDm: true, accessPolicy: 'closed' },
+      otherUser: { id: 'u-new', username: 'dave', displayName: 'Dave' },
+      channelId: 'ch-new',
+    });
+
+    // Render at the existing DM guild route → isDmView = true → DmListView is in the DOM
+    renderAtRoute('/servers/dm-existing/channels');
+    await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
+
+    // Trigger new-DM creation via DmListView search
+    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'dave' } });
+    await waitFor(() => expect(screen.getByText('Dave')).toBeTruthy());
+    fireEvent.click(screen.getByText('Dave'));
+
+    // The critical guarantee: refreshGuilds is called so the new DM appears in
+    // context before navigation, ensuring activeGuild resolves and wsClient is non-null.
+    await waitFor(() => expect(refreshGuilds).toHaveBeenCalledWith('http://localhost'));
+  });
+
+  it('handleDmSelect does not call refreshGuilds for an already-known DM guild', async () => {
+    const refreshGuilds = vi.fn().mockResolvedValue(undefined);
+    const existingDmGuild = {
+      id: 'dm-existing',
+      isDm: true,
+      instanceUrl: 'http://localhost',
+      accessPolicy: 'closed',
+      otherUser: { displayName: 'Alice', username: 'alice' },
+      channels: [{ id: 'ch-existing', unreadCount: 0 }],
+    };
+
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map([['http://localhost', { connectionState: 'connected', jwt: 'test-token' }]]),
+      mergedGuilds: [],
+      dmGuilds: [existingDmGuild],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => 'test-token'),
+      refreshGuilds,
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    renderAtRoute('/servers/dm-existing/channels');
+    await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
+
+    // Click an existing DM item — calls handleDmSelect with a guild already in dmGuilds
+    fireEvent.click(screen.getByText('Alice'));
+
+    // No refresh needed for a guild we already know about
+    await new Promise((r) => setTimeout(r, 50));
+    expect(refreshGuilds).not.toHaveBeenCalled();
   });
 });

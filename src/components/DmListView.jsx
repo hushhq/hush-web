@@ -5,7 +5,7 @@ import { searchUsersForDM, createOrFindDM } from '../lib/api';
  * Full-height DM conversation list with search.
  * Replaces the channel sidebar when DM mode is active.
  */
-export default function DmListView({ dmGuilds, onSelectDm, getToken }) {
+export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -42,11 +42,17 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken }) {
     try {
       const token = getToken?.();
       if (!token) return;
-      const dmGuild = await createOrFindDM(token, user.id);
+      const resp = await createOrFindDM(token, user.id, instanceUrl ?? '');
       setShowSearch(false);
       setSearchQuery('');
       setSearchResults([]);
-      onSelectDm?.(dmGuild);
+      // Server returns { server, otherUser, channelId } — normalize to a guild-like object.
+      // Include instanceUrl so handleDmSelect can refresh the correct instance for new DMs.
+      if (resp?.server?.id) {
+        const guild = { ...resp.server, channelId: resp.channelId };
+        if (instanceUrl) guild.instanceUrl = instanceUrl;
+        onSelectDm?.(guild);
+      }
     } catch (err) {
       console.error('[DmListView] createOrFindDM failed:', err);
     }
