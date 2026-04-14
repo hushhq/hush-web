@@ -1641,6 +1641,7 @@ export default function ServerLayout() {
       guilds={mergedGuilds}
       activeGuild={dmMode ? null : activeGuild}
       onGuildSelect={handleGuildSelect}
+      onGuildSettings={() => { setRequestOpenSettings(true); setTimeout(() => setRequestOpenSettings(false), 0); }}
       onGuildCreated={handleGuildCreated}
       onDmOpen={handleDmOpen}
       isDmActive={dmMode || activeGuild?.isDm}
