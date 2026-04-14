@@ -778,7 +778,6 @@ export default function ChannelList({
   members,
   currentUserId,
   openSettings = false,
-  onSettingsClosed,
 }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCreateCategoryModal, setShowCreateCategoryModal] = useState(false);
@@ -787,8 +786,8 @@ export default function ChannelList({
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    if (openSettings) { setShowSettings(true); onSettingsClosed?.(); }
-  }, [openSettings, onSettingsClosed]);
+    if (openSettings) setShowSettings(true);
+  }, [openSettings]);
   const [confirmDelete, setConfirmDelete] = useState(null); // { id, name, isCategory }
   const [activeId, setActiveId] = useState(null);
   const [localChannels, setLocalChannels] = useState(channels ?? []);

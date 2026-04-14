@@ -3875,7 +3875,7 @@ select:focus-visible {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 8px 14px;
+  padding: 6px 12px;
   background: transparent;
   border: none;
   border-radius: var(--radius-md);
@@ -3883,7 +3883,7 @@ select:focus-visible {
   cursor: pointer;
   color: var(--hush-text);
   font-family: var(--font-sans);
-  font-size: 0.85rem;
+  font-size: 12px;
   transition: background 150ms var(--ease-out);
 }
 

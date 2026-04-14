@@ -1580,7 +1580,7 @@ export default function ServerLayout() {
           guilds={mergedGuilds}
           activeGuild={null}
           onGuildSelect={handleGuildSelect}
-          onGuildSettings={() => setRequestOpenSettings(true)}
+          onGuildSettings={() => { setRequestOpenSettings(true); setTimeout(() => setRequestOpenSettings(false), 0); }}
           onGuildCreated={handleGuildCreated}
           getMetadataKey={getMetadataKey}
           getMetadataKeys={getMetadataKeys}
@@ -1684,7 +1684,6 @@ export default function ServerLayout() {
       members={members}
       currentUserId={currentUserId}
       openSettings={requestOpenSettings}
-      onSettingsClosed={() => setRequestOpenSettings(false)}
     />
   );
 
