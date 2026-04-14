@@ -1686,6 +1686,11 @@ export default function ServerLayout() {
 
   const isDmView = dmMode || activeGuild?.isDm;
 
+  // Displayed in the TextChannel header instead of #channel-name for DM conversations.
+  const dmPeerName = activeGuild?.isDm
+    ? (activeGuild?.otherUser?.displayName ?? activeGuild?.otherUser?.username ?? null)
+    : null;
+
   const channelListEl = (
     <ChannelList
       getToken={getToken}
@@ -1830,11 +1835,12 @@ export default function ServerLayout() {
                     wsClient={wsClient}
                     members={members}
                     showMembers={false}
-                    onToggleMembers={toggleMemberDrawer}
+                    onToggleMembers={isDmView ? undefined : toggleMemberDrawer}
                     onToggleDrawer={undefined}
                     onMobileBack={handleMobileBack}
                     sidebarSlot={null}
                     baseUrl={instanceUrl ?? ''}
+                    headerTitle={dmPeerName}
                   />
                 ) : currentChannel && currentChannel.type !== 'voice' ? (
                   <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1 }}>Unknown channel type</div>
@@ -1933,11 +1939,12 @@ export default function ServerLayout() {
                   getToken={getToken}
                   wsClient={wsClient}
                   members={members}
-                  showMembers={showMembers}
-                  onToggleMembers={() => togglePanel('members')}
+                  showMembers={isDmView ? false : showMembers}
+                  onToggleMembers={isDmView ? undefined : () => togglePanel('members')}
                   onToggleDrawer={isMobile ? toggleDrawer : undefined}
                   baseUrl={instanceUrl ?? ''}
-                  sidebarSlot={!isMobile ? (
+                  headerTitle={dmPeerName}
+                  sidebarSlot={isDmView ? null : (!isMobile ? (
                     <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`}>
                       <div className="sidebar-desktop-inner">
                         <MemberList
@@ -1953,7 +1960,7 @@ export default function ServerLayout() {
                         />
                       </div>
                     </div>
-                  ) : null}
+                  ) : null)}
                 />
               ) : currentChannel && currentChannel.type !== 'voice' ? (
                 <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1 }}>Unknown channel type</div>

@@ -20,6 +20,7 @@ export default function TextChannel({
   onMobileBack,
   sidebarSlot = null,
   baseUrl = '',
+  headerTitle,
 }) {
   const { user } = useAuth();
   const currentUserId = user?.id ?? '';
@@ -57,7 +58,7 @@ export default function TextChannel({
               </svg>
             </button>
           ) : null}
-          <span className="tc-channel-name">#{channel._displayName ?? channel.name ?? ''}</span>
+          <span className="tc-channel-name">{headerTitle ?? `#${channel._displayName ?? channel.name ?? ''}`}</span>
         </div>
         {onToggleMembers && (
           <button

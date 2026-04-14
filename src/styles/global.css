@@ -3985,7 +3985,7 @@ select:focus-visible {
   padding: 6px 12px;
   width: 100%;
   background: var(--hush-amber);
-  color: var(--hush-text);
+  color: var(--hush-black);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
