@@ -89,6 +89,40 @@ To build the Docker image:
 docker build -t hush-web .
 ```
 
+### Admin UI
+
+`/admin` is **not** part of the hush-web client. The admin dashboard is embedded in `hush-server` and is served by the Go binary at `/admin/`. Do not include admin assets in a hush-web deploy.
+
+---
+
+## Hosted Deploy
+
+`scripts/deploy.sh` publishes the built client using a timestamped release directory and an atomic symlink swap:
+
+```bash
+./scripts/deploy.sh --target /path/to/document-root
+./scripts/deploy.sh --target /path/to/document-root --keep 10   # retain 10 releases
+./scripts/deploy.sh --target /path/to/document-root --no-build  # skip build step
+```
+
+After a successful deploy the document root contains:
+
+```
+releases/
+  20260413220000-abc1234/   <- this release
+  20260412190000-def5678/   <- previous release
+current -> releases/20260413220000-abc1234/   <- symlink; serve from here
+```
+
+Configure the web server to serve from `<target>/current`.
+
+**Branch and revision discipline:** deploy only from a stable, intentional revision — a tagged release or a designated stable branch. Verify before deploying:
+
+```bash
+git log --oneline -1
+git status
+```
+
 ---
 
 ## Environment Variables
@@ -97,12 +131,16 @@ Variables prefixed with `VITE_` are embedded in the client bundle at build time.
 
 | Variable | Required | Description |
 |-|-|-|
-| `VITE_API_BASE_URL` | Yes | Go API base URL (e.g., `https://chat.example.com`) |
-| `VITE_WS_URL` | Yes | WebSocket URL (e.g., `wss://chat.example.com/ws`) |
-| `VITE_LIVEKIT_URL` | Yes | LiveKit WebSocket URL (e.g., `wss://chat.example.com/livekit`) |
+| `VITE_API_BASE_URL` | Self-host only | Go API base URL (e.g., `https://chat.example.com`) |
+| `VITE_WS_URL` | Self-host only | WebSocket URL (e.g., `wss://chat.example.com/ws`) |
+| `VITE_LIVEKIT_URL` | Self-host only | LiveKit WebSocket URL (e.g., `wss://chat.example.com/livekit`) |
 | `VITE_INSTANCE_NAME` | No | Display name shown in the client title |
 
-**Never put private keys, bootstrap secrets, session secrets, or any other server-side secrets in `.env.local`** - Vite embeds these values in the JavaScript bundle.
+**Hosted topology:** when the SPA is served from the same origin as the API (via a reverse proxy such as `hush-server/caddy/Caddyfile.prod`), no `VITE_*` variables are needed. Vite builds with relative-path defaults (`/api`, `/ws`, `/livekit`) that route correctly through the proxy.
+
+**Self-hosted instances** where the SPA lives on a different domain than the API must set `VITE_API_BASE_URL`, `VITE_WS_URL`, and `VITE_LIVEKIT_URL`.
+
+**Never put private keys, bootstrap secrets, session secrets, or any other server-side secrets in `.env.local`** — Vite embeds these values in the JavaScript bundle.
 
 ---
 

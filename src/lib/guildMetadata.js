@@ -170,7 +170,7 @@ export function fromBase64(base64String) {
  * @returns {string} URI-encoded guild name
  */
 export function encodeGuildNameForInvite(guildName) {
-  return guildName;
+  return encodeURIComponent(guildName);
 }
 
 /**
