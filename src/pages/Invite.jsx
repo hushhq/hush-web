@@ -11,6 +11,7 @@ import {
   openGuildMetadataKeyStore,
   setGuildMetadataKeyBytes,
 } from '../lib/guildMetadataKeyStore';
+import { CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE } from '../lib/inviteLinks';
 import { getDeviceId } from '../hooks/useAuth';
 
 const POST_CLAIM_SETUP_ERROR =
@@ -34,11 +35,11 @@ function buildUnlockResumePath(location) {
  * Invite page - handles two URL patterns:
  *
  * 1. /invite/:code                   - same-instance invite (legacy)
- * 2. /join/:instance/:code           - cross-instance invite (new)
+ * 2. /join/:instance/:code           - cross-instance invite (blocked for MVP)
  *
  * Cross-instance flow:
- *   - Show confirm modal with guild name + instance host
- *   - On confirm: bootInstance(instanceUrl) -> claimInvite -> navigate to guild
+ *   - Show a clear MVP unsupported message
+ *   - Do not fetch invite info, boot a remote instance, or claim the invite
  *
  * Same-instance flow:
  *   - Authenticated: auto-claim invite -> navigate to guild
@@ -58,6 +59,9 @@ export default function Invite() {
 
   /** Whether this is a cross-instance invite. */
   const isCrossInstance = Boolean(instanceParam);
+
+  /** Cross-instance invites are blocked for MVP. */
+  const crossInstanceBlocked = isCrossInstance;
 
   /** Canonical base URL for the remote instance (cross-instance only). */
   const instanceUrl = useMemo(() => {
@@ -133,9 +137,18 @@ export default function Invite() {
     }
   }, [claimRecovery, completeJoinedMembership]);
 
+  // Cross-instance invite block (MVP).
+
+  useEffect(() => {
+    if (!crossInstanceBlocked) return;
+    setLoading(false);
+    setError(CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE);
+  }, [crossInstanceBlocked]);
+
   // ── Invite info fetch ──────────────────────────────────────────────────
 
   useEffect(() => {
+    if (crossInstanceBlocked) return;
     if (!code) {
       setLoading(false);
       setError('Invalid invite link.');
@@ -160,7 +173,7 @@ export default function Invite() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [code, instanceUrl]);
+  }, [code, crossInstanceBlocked, instanceUrl]);
 
   // ── Locked known-browser flow: redirect to canonical unlock/resume ───────
 
@@ -172,11 +185,11 @@ export default function Invite() {
   // ── Queue invite URL only for true no-session/no-vault auth flows ─────
 
   useEffect(() => {
-    if (!hasSession && !needsUnlock) {
+    if (!hasSession && !needsUnlock && !crossInstanceBlocked) {
       // Store invite URL so Home.jsx can redirect back after authentication.
       sessionStorage.setItem('hush_pending_invite', window.location.href);
     }
-  }, [hasSession, needsUnlock]);
+  }, [crossInstanceBlocked, hasSession, needsUnlock]);
 
   // ── Same-instance authenticated flow: auto-claim ──────────────────────
 
@@ -233,6 +246,7 @@ export default function Invite() {
 
   const handleCrossInstanceJoin = useCallback(async () => {
     if (!instanceUrl || !code) return;
+    if (crossInstanceBlocked) return;
     setError(null);
     setClaimRecovery(null);
     setBooting(true);
@@ -260,7 +274,7 @@ export default function Invite() {
       setBooting(false);
       setJoining(false);
     }
-  }, [instanceUrl, code, bootInstance, getTokenForInstance, invite, completeJoinedMembership, startClaimRecovery]);
+  }, [instanceUrl, code, crossInstanceBlocked, bootInstance, getTokenForInstance, invite, completeJoinedMembership, startClaimRecovery]);
 
   // ── Unauthenticated flow: redirect to / with pending invite queued ────
 

@@ -259,7 +259,7 @@ describe('ChannelList', () => {
     });
   });
 
-  it('builds and copies an instance-aware invite link from the invite modal', async () => {
+  it('blocks cross-instance invite link generation from the invite modal', async () => {
     const { createGuildInvite } = await import('../lib/api');
     createGuildInvite.mockResolvedValueOnce({ code: 'abc123' });
 
@@ -279,15 +279,43 @@ describe('ChannelList', () => {
     fireEvent.click(screen.getByTitle('Server menu'));
     fireEvent.click(screen.getByRole('button', { name: /invite people/i }));
 
+    await waitFor(() => {
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
+    });
+
+    expect(createGuildInvite).not.toHaveBeenCalled();
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it('builds and copies a same-instance invite link from the invite modal', async () => {
+    const { createGuildInvite } = await import('../lib/api');
+    createGuildInvite.mockResolvedValueOnce({ code: 'abc123' });
+
+    render(
+      <ChannelList
+        getToken={getToken}
+        serverId="s1"
+        guildName="My Server"
+        instanceUrl={window.location.origin}
+        channels={[textChannel]}
+        myRole="admin"
+        activeChannelId={null}
+        onChannelSelect={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('Server menu'));
+    fireEvent.click(screen.getByRole('button', { name: /invite people/i }));
+
     const expectedLink = buildGuildInviteLink(
       window.location.origin,
-      'https://remote.example.com',
+      window.location.origin,
       'abc123',
       'My Server',
     );
 
     await waitFor(() => {
-      expect(createGuildInvite).toHaveBeenCalledWith('test-token', 's1', {}, 'https://remote.example.com');
+      expect(createGuildInvite).toHaveBeenCalledWith('test-token', 's1', {}, window.location.origin);
       expect(screen.getByDisplayValue(expectedLink)).toBeInTheDocument();
     });
 

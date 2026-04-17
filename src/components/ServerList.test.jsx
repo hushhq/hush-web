@@ -78,6 +78,7 @@ function renderWithInstanceCtx(ctxValue, props = {}) {
 describe('ServerList - legacy prop-based mode', () => {
   beforeEach(() => {
     cleanup();
+    window.alert = vi.fn();
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -342,7 +343,7 @@ describe('ServerList - multi-instance mode via InstanceContext', () => {
     ).toBeTruthy();
   });
 
-  it('creates and copies an instance-aware invite link from the context menu', async () => {
+  it('blocks cross-instance invite link copying from the context menu', async () => {
     const apiModule = await import('../lib/api');
     const ctxValue = {
       mergedGuilds: [{ id: 'g1', name: 'Alpha Guild', instanceUrl: 'https://a.example.com' }],
@@ -362,14 +363,12 @@ describe('ServerList - multi-instance mode via InstanceContext', () => {
     fireEvent.click(screen.getByText('Copy invite link'));
 
     await waitFor(() => {
-      expect(ctxValue.getTokenForInstance).toHaveBeenCalledWith('https://a.example.com');
-      expect(apiModule.createGuildInvite).toHaveBeenCalledWith(
-        'instance-jwt',
-        'g1',
-        {},
-        'https://a.example.com',
+      expect(window.alert).toHaveBeenCalledWith(
+        'Cross-instance invites are not supported in this MVP. Open the invite from an account on the same instance.',
       );
     });
+    expect(ctxValue.getTokenForInstance).not.toHaveBeenCalled();
+    expect(apiModule.createGuildInvite).not.toHaveBeenCalled();
   });
 });
 

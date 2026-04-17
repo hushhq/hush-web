@@ -290,187 +290,155 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
     sessionStorage.clear();
   });
 
-  it('fetches invite info via the remote instance baseUrl', async () => {
+  it('shows MVP unsupported message for cross-instance invites', async () => {
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x', memberCount: 7 });
-    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(apiModule.getInviteInfo).toHaveBeenCalledWith('xyz789', 'https://remote.example.com');
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
+    });
+
+    // Should NOT fetch invite info for cross-instance.
+    expect(apiModule.getInviteInfo).not.toHaveBeenCalled();
+  });
+
+  it('cross-instance invite shows return-to-home link', async () => {
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    useInstanceContext.mockReturnValue(makeInstanceContext());
+
+    renderInvite('/join/remote.example.com/xyz789');
+
+    await waitFor(() => {
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
+      expect(screen.getByText(/return to home/i)).toBeInTheDocument();
     });
   });
 
-  it('shows guild name and hosted-on line in confirm modal', async () => {
+  it('fetches invite info via the remote instance baseUrl', async () => {
+    // Cross-instance invites are blocked in MVP - getInviteInfo is never called.
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    useInstanceContext.mockReturnValue(makeInstanceContext());
+
+    renderInvite('/join/remote.example.com/xyz789');
+
+    await waitFor(() => {
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
+    });
+    expect(apiModule.getInviteInfo).not.toHaveBeenCalled();
+  });
+
+  it('shows MVP blocked message instead of guild name and hosted-on line', async () => {
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
     window.location.hash = '#name=Secret%20Guild';
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x', memberCount: 3 });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByText(/you're invited to join/i)).toBeInTheDocument();
-      expect(screen.getByText(/remote\.example\.com/i)).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
+    // Should NOT show the confirm modal UI.
+    expect(screen.queryByText(/hosted on/i)).not.toBeInTheDocument();
   });
 
-  it('shows member count in cross-instance confirm modal', async () => {
+  it('shows MVP blocked message instead of member count in cross-instance confirm modal', async () => {
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
-    apiModule.getInviteInfo.mockResolvedValue({ memberCount: 5 });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByText(/5 members/i)).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
   });
 
-  it('calls bootInstance then claimInvite on confirm click', async () => {
+  it('does not call bootInstance or claimInvite for cross-instance invites', async () => {
     const ctx = makeInstanceContext();
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(ctx);
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
-    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
-
-    await waitFor(() => {
-      expect(ctx.bootInstance).toHaveBeenCalledWith('https://remote.example.com');
-      expect(apiModule.claimInvite).toHaveBeenCalledWith(
-        'instance-jwt',
-        'xyz789',
-        'https://remote.example.com',
-      );
-      expect(ctx.refreshGuilds).toHaveBeenCalledWith('https://remote.example.com');
-    });
+    expect(ctx.bootInstance).not.toHaveBeenCalled();
+    expect(apiModule.claimInvite).not.toHaveBeenCalled();
   });
 
-  it('shows connecting state during bootInstance', async () => {
-    const ctx = makeInstanceContext({
-      bootInstance: vi.fn(() => new Promise(() => {})), // never resolves
-    });
+  it('does not show connecting state for cross-instance invites', async () => {
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
-    useInstanceContext.mockReturnValue(ctx);
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
+    useInstanceContext.mockReturnValue(makeInstanceContext());
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
-
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/connecting to instance/i)).toBeInTheDocument();
-    });
+    expect(screen.queryByText(/connecting to instance/i)).not.toBeInTheDocument();
   });
 
-  it('shows a retry setup action when local post-claim setup fails', async () => {
-    const ctx = makeInstanceContext();
+  it('does not attempt claim or metadata key storage for cross-instance invites', async () => {
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
-    useInstanceContext.mockReturnValue(ctx);
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
-    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
+    useInstanceContext.mockReturnValue(makeInstanceContext());
     window.location.hash = '#name=Secret%20Guild&mk=encoded-key';
-    guildMetadataKeyStore.setGuildMetadataKeyBytes
-      .mockRejectedValueOnce(new Error('idb failed'))
-      .mockResolvedValueOnce(undefined);
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/membership is active, but local setup failed/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /retry setup/i })).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /retry setup/i }));
-
-    await waitFor(() => {
-      expect(apiModule.claimInvite).toHaveBeenCalledTimes(1);
-      expect(ctx.refreshGuilds).toHaveBeenCalledWith('https://remote.example.com');
-      expect(screen.getByText('Server channel')).toBeInTheDocument();
-    });
+    expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).not.toHaveBeenCalled();
+    expect(apiModule.claimInvite).not.toHaveBeenCalled();
   });
 
-  it('blocks navigation when the post-claim guild refresh fails', async () => {
-    const ctx = makeInstanceContext({
-      refreshGuilds: vi.fn().mockRejectedValue(new Error('refresh failed')),
-    });
+  it('does not attempt guild refresh for cross-instance invites', async () => {
+    const ctx = makeInstanceContext();
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(ctx);
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
-    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/membership is active, but local setup failed/i)).toBeInTheDocument();
-      expect(screen.queryByText('Server channel')).not.toBeInTheDocument();
-    });
+    expect(ctx.refreshGuilds).not.toHaveBeenCalled();
   });
 
-  it('ignores an invalid metadata key fragment instead of persisting it', async () => {
-    const guildMetadata = await import('../lib/guildMetadata');
-    vi.mocked(guildMetadata.decodeGuildMetadataKeyFromInvite).mockReturnValueOnce(null);
+  it('does not attempt metadata key storage for cross-instance invites', async () => {
     useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
-    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-x' });
     window.location.hash = '#name=Secret%20Guild&mk=bad-key';
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^join$/i })).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
-
-    await waitFor(() => {
-      expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).not.toHaveBeenCalled();
-      expect(screen.getByText('Server channel')).toBeInTheDocument();
-    });
+    expect(guildMetadataKeyStore.setGuildMetadataKeyBytes).not.toHaveBeenCalled();
   });
 
-  it('stores pending invite in sessionStorage for unauthenticated cross-instance user', async () => {
+  it('does not store pending invite for unauthenticated cross-instance user', async () => {
     useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext());
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(sessionStorage.getItem('hush_pending_invite')).toBeTruthy();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
+    expect(sessionStorage.getItem('hush_pending_invite')).toBeNull();
   });
 
   it('redirects locked known-browser cross-instance users through returnTo', async () => {
     useAuth.mockReturnValue(makeAuthState({ needsUnlock: true }));
     useInstanceContext.mockReturnValue(makeInstanceContext());
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
 
     renderInvite('/join/remote.example.com/xyz789');
 
@@ -478,15 +446,14 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
     expect(sessionStorage.getItem('hush_pending_invite')).toBeNull();
   });
 
-  it('unauthenticated cross-instance user sees Sign in to join button', async () => {
+  it('unauthenticated cross-instance user sees MVP blocked message, not Sign in button', async () => {
     useAuth.mockReturnValue(makeAuthState());
     useInstanceContext.mockReturnValue(makeInstanceContext());
-    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-x' });
 
     renderInvite('/join/remote.example.com/xyz789');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /sign in to join/i })).toBeInTheDocument();
+      expect(screen.getByText(/cross-instance invites are not supported in this MVP/i)).toBeInTheDocument();
     });
   });
 });
