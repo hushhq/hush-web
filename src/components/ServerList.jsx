@@ -18,7 +18,11 @@ import { CSS } from '@dnd-kit/utilities';
 import GuildCreateModal from './GuildCreateModal';
 import GuildContextMenu from './GuildContextMenu';
 import { decryptGuildMetadata, fromBase64, importMetadataKey } from '../lib/guildMetadata';
-import { buildGuildInviteLink } from '../lib/inviteLinks';
+import {
+  buildGuildInviteLink,
+  CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE,
+  isCrossInstanceInviteLink,
+} from '../lib/inviteLinks';
 import { InstanceContext } from '../contexts/InstanceContext.jsx';
 import { createGuildInvite, searchUsersForDM, createOrFindDM } from '../lib/api';
 
@@ -504,6 +508,10 @@ export default function ServerList({
   const handleCopyInvite = useCallback(async (guild) => {
     try {
       const baseUrl = guild.instanceUrl ?? '';
+      if (isCrossInstanceInviteLink(window.location.origin, baseUrl)) {
+        window.alert?.(CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE);
+        return;
+      }
       const token = guild.instanceUrl && getTokenForInstance
         ? getTokenForInstance(guild.instanceUrl)
         : getToken();

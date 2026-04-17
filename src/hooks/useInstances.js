@@ -38,7 +38,6 @@ import {
   getHandshake,
   requestChallenge,
   verifyChallenge,
-  federatedVerify,
   getMyGuilds,
   fetchWithAuth,
 } from '../lib/api.js';
@@ -420,31 +419,15 @@ export function useInstances() {
         jwt = result.token;
         authUser = result.user;
       } catch (err) {
-        // 404 means the key is unknown on this instance - authenticate as a federated user.
+        // 404 means the key is unknown on this instance - federated sign-in
+        // would have been the fallback, but federation is not supported in MVP.
         const isNotFound = err?.status === 404
           || err?.response?.status === 404
           || (typeof err?.message === 'string' && err.message.includes('unknown public key'));
-        if (!isNotFound) throw err;
-
-        // The nonce was consumed by the failed verify - request a fresh challenge.
-        const homeInstance = getActiveAuthInstanceUrlSync();
-        const { nonce: fedNonce } = await requestChallenge(publicKeyBase64, instanceUrl);
-        const fedNonceBytes = hexToBytes(fedNonce);
-        const fedSignature = await signChallenge(fedNonceBytes, privateKey);
-        const fedSignatureBase64 = toBase64(fedSignature);
-        const result = await federatedVerify(
-          publicKeyBase64,
-          fedNonce,
-          fedSignatureBase64,
-          homeInstance,
-          username,
-          displayName,
-          instanceUrl,
-        );
-        if (!isActiveGeneration()) return;
-        jwt = result.token;
-        // federatedVerify returns { token, federatedIdentity } not { token, user }
-        authUser = result.federatedIdentity;
+        if (isNotFound) {
+          throw new Error('Federated sign-in is not available in this MVP. Add this instance from the sign-in screen or use an account registered on that instance.');
+        }
+        throw err;
       }
 
       // Step 3: Persist to IDB.

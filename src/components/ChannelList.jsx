@@ -20,7 +20,11 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { getGuildChannels, createGuildChannel, createGuildInvite, moveChannel, deleteGuildChannel } from '../lib/api';
 import * as apiLib from '../lib/api';
-import { buildGuildInviteLink } from '../lib/inviteLinks';
+import {
+  buildGuildInviteLink,
+  CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE,
+  isCrossInstanceInviteLink,
+} from '../lib/inviteLinks';
 import * as mlsGroupLib from '../lib/mlsGroup';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
@@ -329,6 +333,11 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetad
     (async () => {
       const token = getToken();
       if (!token) { setError('Not authenticated'); setLoading(false); return; }
+      if (isCrossInstanceInviteLink(window.location.origin, instanceUrl)) {
+        setError(CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE);
+        setLoading(false);
+        return;
+      }
       try {
         const inv = await createGuildInvite(token, serverId, {}, instanceUrl ?? '');
         if (!cancelled) { setInviteCode(inv.code); setLoading(false); }

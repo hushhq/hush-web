@@ -274,38 +274,29 @@ describe('useInstances', () => {
     });
   });
 
-  it('bootInstance falls back to federated auth when verifyChallenge returns 404', async () => {
+  it('bootInstance throws MVP error when verifyChallenge returns 404 (federated fallback blocked)', async () => {
     const { useInstances } = await import('./useInstances.js');
 
     apiModule.getHandshake.mockResolvedValueOnce({ server_version: '1.0', api_version: '1' });
-    apiModule.requestChallenge
-      .mockResolvedValueOnce({ nonce: 'deadbeef' })
-      .mockResolvedValueOnce({ nonce: 'beadfeed' });
-    // Simulate unknown-key 404 response.
+    apiModule.requestChallenge.mockResolvedValueOnce({ nonce: 'deadbeef' });
     const notFoundErr = Object.assign(new Error('verifyChallenge 404'), { status: 404 });
     apiModule.verifyChallenge.mockRejectedValueOnce(notFoundErr);
-    apiModule.federatedVerify.mockResolvedValueOnce({ token: JWT_A, federatedIdentity: USER_A });
-    apiModule.getMyGuilds.mockResolvedValueOnce(GUILDS_A);
 
     const { result } = renderHook(() => useInstances());
     await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
 
+    let thrownError;
     await act(async () => {
-      await result.current.bootInstance(INSTANCE_A);
+      try {
+        await result.current.bootInstance(INSTANCE_A);
+      } catch (err) {
+        thrownError = err;
+      }
     });
 
-    await waitFor(() => {
-      expect(apiModule.federatedVerify).toHaveBeenCalledWith(
-        expect.any(String),
-        'beadfeed',
-        expect.any(String),
-        expect.any(String),
-        'testuser',
-        'testuser',
-        INSTANCE_A,
-      );
-      expect(result.current.instanceStates.get(INSTANCE_A)?.connectionState).toBe('connected');
-    });
+    expect(thrownError).toBeDefined();
+    expect(thrownError.message).toContain('Federated sign-in is not available in this MVP');
+    expect(apiModule.federatedVerify).not.toHaveBeenCalled();
   });
 
   // ── Parallel boot on mount ────────────────────────────────────────────────

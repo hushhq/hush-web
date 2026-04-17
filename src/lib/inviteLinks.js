@@ -3,6 +3,9 @@ import {
   encodeGuildNameForInvite,
 } from './guildMetadata';
 
+export const CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE =
+  'Cross-instance invites are not supported in this MVP. Open the invite from an account on the same instance.';
+
 /**
  * Parses a pasted invite link into instance host and invite code.
  * Supports formats:
@@ -54,10 +57,25 @@ export function getInviteInstanceHost(instanceUrl) {
 }
 
 /**
+ * Returns true when an invite would need the disabled cross-instance /join flow.
+ *
+ * @param {string} appOrigin
+ * @param {string|null|undefined} instanceUrl
+ * @returns {boolean}
+ */
+export function isCrossInstanceInviteLink(appOrigin, instanceUrl) {
+  const instanceHost = getInviteInstanceHost(instanceUrl);
+  if (!instanceHost) return false;
+  const appHost = getInviteInstanceHost(appOrigin);
+  return Boolean(appHost && instanceHost !== appHost);
+}
+
+/**
  * Builds a user-facing invite URL for the web app.
  *
- * New links always prefer the instance-aware /join/:instance/:code route so
- * the client knows which backend instance owns the invite before login.
+ * MVP links are same-instance only. Existing /join links are still parsed so
+ * the Invite page can show an explicit unsupported message, but new links must
+ * not generate cross-instance invite URLs while federation is frozen.
  *
  * @param {string} appOrigin
  * @param {string|null|undefined} instanceUrl
@@ -67,13 +85,10 @@ export function getInviteInstanceHost(instanceUrl) {
  */
 export function buildGuildInviteLink(appOrigin, instanceUrl, code, guildName, guildMetadataKeyBytes = null) {
   const url = new URL(appOrigin);
-  const instanceHost = getInviteInstanceHost(instanceUrl);
-
-  if (instanceHost) {
-    url.pathname = `/join/${instanceHost}/${encodeURIComponent(code)}`;
-  } else {
-    url.pathname = `/invite/${encodeURIComponent(code)}`;
+  if (isCrossInstanceInviteLink(appOrigin, instanceUrl)) {
+    throw new Error(CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE);
   }
+  url.pathname = `/invite/${encodeURIComponent(code)}`;
 
   url.search = '';
   const fragment = new URLSearchParams();

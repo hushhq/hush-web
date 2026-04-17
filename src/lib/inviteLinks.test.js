@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { buildGuildInviteLink, parseInviteLink } from './inviteLinks.js';
+import {
+  buildGuildInviteLink,
+  CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE,
+  isCrossInstanceInviteLink,
+  parseInviteLink,
+} from './inviteLinks.js';
 
 describe('parseInviteLink', () => {
   it('parses cross-instance invite: /join/{host}/{code}', () => {
@@ -45,17 +50,47 @@ describe('parseInviteLink', () => {
 });
 
 describe('buildGuildInviteLink', () => {
-  it('includes the encrypted guild metadata key in the URL fragment when provided', () => {
-    const link = buildGuildInviteLink(
+  it('rejects cross-instance invite link generation for MVP', () => {
+    expect(() => buildGuildInviteLink(
       'https://app.gethush.live',
       'https://remote.example.com',
       'AbC12345',
       'Secret Guild',
       new Uint8Array(32).fill(1),
+    )).toThrow(CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE);
+  });
+
+  it('includes the encrypted guild metadata key in same-instance URL fragments when provided', () => {
+    const link = buildGuildInviteLink(
+      'https://app.gethush.live',
+      'https://app.gethush.live',
+      'AbC12345',
+      'Secret Guild',
+      new Uint8Array(32).fill(1),
     );
 
-    expect(link).toContain('/join/remote.example.com/AbC12345');
+    expect(link).toContain('/invite/AbC12345');
     expect(link).toContain('#name=');
     expect(link).toContain('&mk=');
+  });
+
+  it('builds same-instance invite link without instance host', () => {
+    const link = buildGuildInviteLink(
+      'https://app.gethush.live',
+      null,
+      'AbC12345',
+      null,
+    );
+
+    expect(link).toContain('/invite/AbC12345');
+    expect(link).not.toContain('/join/');
+  });
+});
+
+describe('isCrossInstanceInviteLink', () => {
+  it('returns true only when app origin and invite instance differ', () => {
+    expect(isCrossInstanceInviteLink('https://app.gethush.live', 'https://remote.example.com')).toBe(true);
+    expect(isCrossInstanceInviteLink('https://app.gethush.live', 'https://app.gethush.live')).toBe(false);
+    expect(isCrossInstanceInviteLink('https://app.gethush.live', null)).toBe(false);
   });
 });
