@@ -129,6 +129,8 @@ export default function Chat({
   wsClient: wsClientProp,
   members = [],
   onNewMessage,
+  markReadEnabled = false,
+  onMarkRead = null,
   baseUrl = '',
 }) {
   const [messages, setMessages] = useState([]);
@@ -146,6 +148,11 @@ export default function Chat({
   const wsClientRef = useRef(wsClientProp);
   wsClientRef.current = wsClientProp;
   const scrollRestoreRef = useRef(null);
+  const lastAckedIdRef = useRef(null);
+  const markReadEnabledRef = useRef(markReadEnabled);
+  const onMarkReadRef = useRef(onMarkRead);
+  markReadEnabledRef.current = markReadEnabled;
+  onMarkReadRef.current = onMarkRead;
 
   const displayNameMap = useMemo(() => {
     const map = new Map();
@@ -187,6 +194,7 @@ export default function Chat({
     knownMessageIdsRef.current = new Set();
     lastSentTempIdRef.current = null;
     scrollRestoreRef.current = null;
+    lastAckedIdRef.current = null;
 
     const loadHistory = async () => {
       try {
@@ -208,6 +216,20 @@ export default function Chat({
         setMessages(decrypted);
         setHasMoreOlder(list.length >= 50);
         setInputText('');
+        // Acknowledge newest visible non-own message to advance the read marker.
+        if (markReadEnabledRef.current && wsClientRef.current?.isConnected()) {
+          for (let i = decrypted.length - 1; i >= 0; i--) {
+            const m = decrypted[i];
+            if (m.sender !== currentUserId && m.id && !m.pending) {
+              if (lastAckedIdRef.current !== m.id) {
+                lastAckedIdRef.current = m.id;
+                wsClientRef.current.send('message.mark_read', { channel_id: channelId, message_id: m.id });
+                onMarkReadRef.current?.(channelId);
+              }
+              break;
+            }
+          }
+        }
       } catch (err) {
         console.error('[chat] Load history failed:', err.message);
         loadedChannelRef.current = channelId;
@@ -327,6 +349,13 @@ export default function Chat({
       };
       onNewMessage?.();
       setMessages((prev) => [...prev, msg]);
+      // Acknowledge non-own messages with a concrete backend ID.
+      if (markReadEnabledRef.current && data.id && senderId !== currentUserId &&
+          wsClientRef.current?.isConnected() && lastAckedIdRef.current !== id) {
+        lastAckedIdRef.current = id;
+        wsClientRef.current.send('message.mark_read', { channel_id: channelId, message_id: id });
+        onMarkReadRef.current?.(channelId);
+      }
     };
     const onError = (data) => {
       if (data.code === 'forbidden' || data.code === 'internal') {

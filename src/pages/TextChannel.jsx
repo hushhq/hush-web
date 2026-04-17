@@ -18,6 +18,8 @@ export default function TextChannel({
   onToggleMembers,
   onToggleDrawer,
   onMobileBack,
+  markReadEnabled = false,
+  onMarkRead = null,
   sidebarSlot = null,
   baseUrl = '',
   headerTitle,
@@ -82,6 +84,8 @@ export default function TextChannel({
             getHistoryStore={getHistoryStore}
             wsClient={wsClient}
             members={members}
+            markReadEnabled={markReadEnabled}
+            onMarkRead={onMarkRead}
             baseUrl={baseUrl}
           />
         </div>

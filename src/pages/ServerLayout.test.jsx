@@ -116,6 +116,7 @@ vi.mock('../contexts/InstanceContext', () => ({
     disconnectInstance: vi.fn().mockResolvedValue(undefined),
     guildOrder: [],
     setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    setChannelUnreadCount: vi.fn(),
   })),
   InstanceProvider: ({ children }) => children,
 }));

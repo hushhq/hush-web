@@ -584,6 +584,51 @@ describe('InstanceContext', () => {
     });
   });
 
+  // setChannelUnreadCount.
+
+  it('setChannelUnreadCount updates only the target channel on the target instance', async () => {
+    const { useInstances } = await import('./useInstances.js');
+
+    const guildsWithChannels = [
+      { id: 'guild-dm', isDm: true, channels: [{ id: 'ch-dm', unreadCount: 5 }] },
+      { id: 'guild-other', isDm: true, channels: [{ id: 'ch-other', unreadCount: 2 }] },
+    ];
+    const otherInstanceGuilds = [
+      { id: 'guild-remote', isDm: true, channels: [{ id: 'ch-dm', unreadCount: 7 }] },
+    ];
+
+    setupAuthMocks(JWT_A, USER_A, guildsWithChannels);
+    setupAuthMocks(JWT_B, USER_B, otherInstanceGuilds);
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.bootInstance(INSTANCE_A);
+      await result.current.bootInstance(INSTANCE_B);
+    });
+
+    await waitFor(() => {
+      expect(result.current.instanceStates.get(INSTANCE_A)?.connectionState).toBe('connected');
+      expect(result.current.instanceStates.get(INSTANCE_B)?.connectionState).toBe('connected');
+    });
+
+    act(() => {
+      result.current.setChannelUnreadCount(INSTANCE_A, 'ch-dm', 0);
+    });
+
+    await waitFor(() => {
+      const guilds = result.current.instanceStates.get(INSTANCE_A)?.guilds ?? [];
+      const dmGuild = guilds.find((g) => g.id === 'guild-dm');
+      const otherGuild = guilds.find((g) => g.id === 'guild-other');
+      const remoteGuilds = result.current.instanceStates.get(INSTANCE_B)?.guilds ?? [];
+      const remoteGuild = remoteGuilds.find((g) => g.id === 'guild-remote');
+      expect(dmGuild?.channels?.[0]?.unreadCount).toBe(0);
+      expect(otherGuild?.channels?.[0]?.unreadCount).toBe(2);
+      expect(remoteGuild?.channels?.[0]?.unreadCount).toBe(7);
+    });
+  });
+
   it('useInstanceContext throws when used outside InstanceProvider', async () => {
     const { useInstanceContext } = await import('../contexts/InstanceContext.jsx');
 

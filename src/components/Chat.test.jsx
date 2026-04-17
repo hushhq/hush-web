@@ -129,3 +129,74 @@ describe('Chat byte limit enforcement (LNCH-05)', () => {
     expect(counter).not.toBeInTheDocument();
   });
 });
+
+// mark_read tests.
+
+import * as api from '../lib/api';
+
+function makeMsg(id, senderId, timestamp = '2026-04-01T00:00:00.000Z') {
+  return { id, senderId, channelId: 'ch-1', ciphertext: 'YWJj', timestamp };
+}
+
+describe('Chat mark_read behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('sends mark_read for newest non-own message after history load', async () => {
+    // API returns newest-first: msg-3 (other), msg-2 (own), msg-1 (other)
+    vi.mocked(api.getChannelMessages).mockResolvedValueOnce([
+      makeMsg('msg-3', 'user-other', '2026-04-01T00:00:03Z'),
+      makeMsg('msg-2', 'user-1',    '2026-04-01T00:00:02Z'),
+      makeMsg('msg-1', 'user-other', '2026-04-01T00:00:01Z'),
+    ]);
+    const onMarkRead = vi.fn();
+    const wsClient = { send: vi.fn(), on: vi.fn(), off: vi.fn(), isConnected: () => true };
+
+    await act(async () => {
+      render(<Chat {...defaultProps} wsClient={wsClient} markReadEnabled onMarkRead={onMarkRead} />);
+    });
+
+    expect(wsClient.send).toHaveBeenCalledWith('message.mark_read', {
+      channel_id: 'ch-1',
+      message_id: 'msg-3',
+    });
+    expect(onMarkRead).toHaveBeenCalledWith('ch-1');
+  });
+
+  it('does not send mark_read when all loaded messages are own', async () => {
+    vi.mocked(api.getChannelMessages).mockResolvedValueOnce([
+      makeMsg('msg-1', 'user-1', '2026-04-01T00:00:01Z'),
+      makeMsg('msg-2', 'user-1', '2026-04-01T00:00:02Z'),
+    ]);
+    const send = vi.fn();
+    const wsClient = { send, on: vi.fn(), off: vi.fn(), isConnected: () => true };
+
+    await act(async () => {
+      render(<Chat {...defaultProps} wsClient={wsClient} markReadEnabled />);
+    });
+
+    const markReadCalls = send.mock.calls.filter(([type]) => type === 'message.mark_read');
+    expect(markReadCalls).toHaveLength(0);
+  });
+
+  it('does not send mark_read when read acknowledgements are disabled', async () => {
+    vi.mocked(api.getChannelMessages).mockResolvedValueOnce([
+      makeMsg('msg-1', 'user-other', '2026-04-01T00:00:01Z'),
+    ]);
+    const send = vi.fn();
+    const wsClient = { send, on: vi.fn(), off: vi.fn(), isConnected: () => true };
+
+    await act(async () => {
+      render(<Chat {...defaultProps} wsClient={wsClient} markReadEnabled={false} />);
+    });
+
+    const markReadCalls = send.mock.calls.filter(([type]) => type === 'message.mark_read');
+    expect(markReadCalls).toHaveLength(0);
+  });
+});

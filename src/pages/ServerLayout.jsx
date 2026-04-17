@@ -190,6 +190,7 @@ export default function ServerLayout() {
     getWsClient,
     getTokenForInstance,
     refreshGuilds,
+    setChannelUnreadCount,
   } = useInstanceContext();
 
   // ── Auth ────────────────────────────────────────────────────────────────
@@ -367,6 +368,11 @@ export default function ServerLayout() {
   const handleDmOpen = useCallback(() => {
     setDmMode(true);
   }, []);
+
+  const handleMarkRead = useCallback((markedChannelId) => {
+    if (!instanceUrl || !setChannelUnreadCount) return;
+    setChannelUnreadCount(instanceUrl, markedChannelId, 0);
+  }, [instanceUrl, setChannelUnreadCount]);
 
   const { toasts, show: showToast } = useToast();
 
@@ -1838,6 +1844,8 @@ export default function ServerLayout() {
                     onToggleMembers={isDmView ? undefined : toggleMemberDrawer}
                     onToggleDrawer={undefined}
                     onMobileBack={handleMobileBack}
+                    markReadEnabled={isDmView}
+                    onMarkRead={handleMarkRead}
                     sidebarSlot={null}
                     baseUrl={instanceUrl ?? ''}
                     headerTitle={dmPeerName}
@@ -1942,6 +1950,8 @@ export default function ServerLayout() {
                   showMembers={isDmView ? false : showMembers}
                   onToggleMembers={isDmView ? undefined : () => togglePanel('members')}
                   onToggleDrawer={isMobile ? toggleDrawer : undefined}
+                  markReadEnabled={isDmView}
+                  onMarkRead={handleMarkRead}
                   baseUrl={instanceUrl ?? ''}
                   headerTitle={dmPeerName}
                   sidebarSlot={isDmView ? null : (!isMobile ? (

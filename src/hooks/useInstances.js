@@ -644,6 +644,38 @@ export function useInstances() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flushState, wireWsHandlers]);
 
+  // Channel unread management.
+
+  /**
+   * Updates the unread count for a specific channel within an instance's guild list.
+   * Used to clear the local unread badge after sending a read acknowledgement.
+   *
+   * Only modifies the target channel on the target instance; all other channels
+   * and instances are left unchanged.
+   *
+   * @param {string} targetInstanceUrl
+   * @param {string} channelId
+   * @param {number} unreadCount
+   */
+  const setChannelUnreadCount = useCallback((targetInstanceUrl, channelId, unreadCount) => {
+    const entry = instancesRef.current.get(targetInstanceUrl);
+    if (!entry?.guilds) return;
+    let changed = false;
+    entry.guilds = entry.guilds.map((guild) => {
+      if (!Array.isArray(guild.channels)) return guild;
+      const idx = guild.channels.findIndex((ch) => ch.id === channelId);
+      if (idx < 0) return guild;
+      changed = true;
+      return {
+        ...guild,
+        channels: guild.channels.map((ch, i) =>
+          i === idx ? { ...ch, unreadCount } : ch
+        ),
+      };
+    });
+    if (changed) flushState();
+  }, [flushState]);
+
   // ── Accessor functions ────────────────────────────────────────────────────
 
   /**
@@ -800,5 +832,6 @@ export function useInstances() {
     guildOrder,
     setGuildOrder,
     refreshGuilds,
+    setChannelUnreadCount,
   };
 }
