@@ -203,12 +203,13 @@ export async function getPreKeyBundleByDevice(token, userId, deviceId, baseUrl =
  * @param {string} token - JWT
  * @param {string} serverId - Guild UUID the channel belongs to
  * @param {string} channelId - Channel UUID
- * @param {{ before?: string, limit?: number }} [opts] - before: RFC3339 cursor; limit: default 50, max 50
+ * @param {{ before?: string, after?: string, limit?: number }} [opts] - before/after: RFC3339 cursor (mutually exclusive); limit: default 50, max 50
  * @returns {Promise<Array<{ id: string, channelId: string, senderId: string, ciphertext: string, timestamp: string }>>}
  */
 export async function getChannelMessages(token, serverId, channelId, opts = {}, baseUrl = '') {
   const params = new URLSearchParams();
   if (opts.before) params.set('before', opts.before);
+  if (opts.after) params.set('after', opts.after);
   if (opts.limit != null) params.set('limit', String(opts.limit));
   const qs = params.toString();
   const path = `/api/servers/${encodeURIComponent(serverId)}/channels/${encodeURIComponent(channelId)}/messages${qs ? `?${qs}` : ''}`;

@@ -9,6 +9,7 @@ const MAX_PLAINTEXT_BYTES = 4000;
 
 /** Show byte counter when this fraction of MAX_PLAINTEXT_BYTES is exceeded. */
 const COUNTER_SHOW_THRESHOLD = 0.8;
+const CHANNEL_MESSAGES_PAGE_LIMIT = 50;
 import * as api from '../lib/api';
 import { useMLS } from '../hooks/useMLS';
 
@@ -149,6 +150,7 @@ export default function Chat({
   wsClientRef.current = wsClientProp;
   const scrollRestoreRef = useRef(null);
   const lastAckedIdRef = useRef(null);
+  const latestBackendTsRef = useRef(null);
   const markReadEnabledRef = useRef(markReadEnabled);
   const onMarkReadRef = useRef(onMarkRead);
   markReadEnabledRef.current = markReadEnabled;
@@ -195,10 +197,11 @@ export default function Chat({
     lastSentTempIdRef.current = null;
     scrollRestoreRef.current = null;
     lastAckedIdRef.current = null;
+    latestBackendTsRef.current = null;
 
     const loadHistory = async () => {
       try {
-        const list = await api.getChannelMessages(token, serverId, channelId, { limit: 50 }, baseUrl);
+        const list = await api.getChannelMessages(token, serverId, channelId, { limit: CHANNEL_MESSAGES_PAGE_LIMIT }, baseUrl);
         const decrypted = [];
         for (let i = list.length - 1; i >= 0; i--) {
           const m = list[i];
@@ -214,7 +217,10 @@ export default function Chat({
         // Atomic replacement: old messages → new messages in one render
         loadedChannelRef.current = channelId;
         setMessages(decrypted);
-        setHasMoreOlder(list.length >= 50);
+        setHasMoreOlder(list.length >= CHANNEL_MESSAGES_PAGE_LIMIT);
+        if (decrypted.length > 0) {
+          latestBackendTsRef.current = decrypted[decrypted.length - 1].timestamp;
+        }
         setInputText('');
         // Acknowledge newest visible non-own message to advance the read marker.
         if (markReadEnabledRef.current && wsClientRef.current?.isConnected()) {
@@ -250,12 +256,12 @@ export default function Chat({
     setLoadMoreLoading(true);
     try {
       const before = new Date(oldestTs).toISOString();
-      const list = await api.getChannelMessages(token, serverId, channelId, { before, limit: 50 }, baseUrl);
+      const list = await api.getChannelMessages(token, serverId, channelId, { before, limit: CHANNEL_MESSAGES_PAGE_LIMIT }, baseUrl);
       if (list.length === 0) {
         setHasMoreOlder(false);
         return;
       }
-      if (list.length < 50) setHasMoreOlder(false);
+      if (list.length < CHANNEL_MESSAGES_PAGE_LIMIT) setHasMoreOlder(false);
       const older = [];
       for (let i = list.length - 1; i >= 0; i--) {
         const m = list[i];
@@ -304,6 +310,11 @@ export default function Chat({
       knownMessageIdsRef.current.add(id);
       const senderId = data.sender_id;
       const ts = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
+
+      // Track the latest backend timestamp for reconnect catch-up.
+      if (data.id && ts > (latestBackendTsRef.current ?? 0)) {
+        latestBackendTsRef.current = ts;
+      }
 
       const isOwnLocalEcho = senderId === currentUserId && data.sender_device_id === getDeviceId();
       if (isOwnLocalEcho) {
@@ -371,6 +382,79 @@ export default function Chat({
       if (wsClient.isConnected()) wsClient.send('unsubscribe', { channel_id: channelId });
     };
   }, [wsClient, channelId, currentUserId, onNewMessage]);
+
+  // Reconnect catch-up: fetch missed messages using the after cursor.
+  useEffect(() => {
+    if (!wsClient || !channelId || !serverId || !getToken) return;
+
+    const onReconnected = async () => {
+      const latestTs = latestBackendTsRef.current;
+      if (latestTs == null) return;
+      const token = getToken?.();
+      if (!token) return;
+      try {
+        let newestNonOwnId = null;
+        let newestNonOwnTs = 0;
+        const appended = [];
+        let cursorTs = latestTs;
+
+        for (;;) {
+          const after = new Date(cursorTs).toISOString();
+          const list = await api.getChannelMessages(
+            token,
+            serverId,
+            channelId,
+            { after, limit: CHANNEL_MESSAGES_PAGE_LIMIT },
+            baseUrl
+          );
+          if (list.length === 0) break;
+
+          let nextCursorTs = cursorTs;
+          for (const m of list) {
+            const ts = new Date(m.timestamp).getTime();
+            if (ts > nextCursorTs) nextCursorTs = ts;
+            if (knownMessageIdsRef.current.has(m.id)) continue;
+            knownMessageIdsRef.current.add(m.id);
+            const decrypted = await decryptMessageRow(m, currentUserId, {
+              decryptFromChannel: decryptFromChannelRef.current,
+              getCachedMessage: getCachedMessageRef.current,
+              setCachedMessage: setCachedMessageRef.current,
+            });
+            appended.push(decrypted);
+            if (m.senderId !== currentUserId && m.id && ts > newestNonOwnTs) {
+              newestNonOwnId = m.id;
+              newestNonOwnTs = ts;
+            }
+          }
+
+          if (nextCursorTs <= cursorTs || list.length < CHANNEL_MESSAGES_PAGE_LIMIT) break;
+          cursorTs = nextCursorTs;
+        }
+        if (appended.length === 0) return;
+        setMessages((prev) => {
+          const merged = [...prev, ...appended];
+          merged.sort((a, b) => a.timestamp - b.timestamp);
+          return merged;
+        });
+        if (appended[appended.length - 1].timestamp > latestTs) {
+          latestBackendTsRef.current = appended[appended.length - 1].timestamp;
+        }
+        if (markReadEnabledRef.current && newestNonOwnId && wsClientRef.current?.isConnected() &&
+            lastAckedIdRef.current !== newestNonOwnId) {
+          lastAckedIdRef.current = newestNonOwnId;
+          wsClientRef.current.send('message.mark_read', { channel_id: channelId, message_id: newestNonOwnId });
+          onMarkReadRef.current?.(channelId);
+        }
+      } catch (err) {
+        console.error('[chat] Reconnect catch-up failed:', err.message);
+      }
+    };
+
+    wsClient.on('reconnected', onReconnected);
+    return () => {
+      wsClient.off('reconnected', onReconnected);
+    };
+  }, [wsClient, channelId, serverId, getToken, currentUserId, baseUrl]);
 
   useEffect(() => {
     const rest = scrollRestoreRef.current;

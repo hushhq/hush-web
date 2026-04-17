@@ -107,7 +107,7 @@ export function createInstanceApi(baseUrl, getToken) {
 
     // ── Channel Messages ─────────────────────────────────────────────────────
 
-    /** @param {string|null} token @param {string} serverId @param {string} channelId @param {{ before?: string, limit?: number }} [opts] */
+    /** @param {string|null} token @param {string} serverId @param {string} channelId @param {{ before?: string, after?: string, limit?: number }} [opts] */
     getChannelMessages: (token, serverId, channelId, opts = {}) =>
       apiModule.getChannelMessages(tok(token), serverId, channelId, opts, baseUrl),
 

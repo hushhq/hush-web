@@ -7,6 +7,7 @@ import {
   checkUsernameAvailable,
   createDeviceLinkRequest,
   fetchWithAuth,
+  getChannelMessages,
   leaveGuild,
   getHandshake,
   registerWithPublicKey,
@@ -545,5 +546,61 @@ describe('auth instance routing', () => {
       'https://chat.example.com/api/auth/challenge',
       expect.any(Object),
     );
+  });
+});
+
+// getChannelMessages
+
+describe('getChannelMessages', () => {
+  const TOKEN = 'jwt-token';
+  const SERVER_ID = 'srv-1';
+  const CHANNEL_ID = 'ch-1';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('includes after query param when opts.after is provided', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await getChannelMessages(TOKEN, SERVER_ID, CHANNEL_ID, {
+      after: '2026-04-01T12:00:00.000Z',
+    });
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain('after=2026-04-01T12%3A00%3A00.000Z');
+  });
+
+  it('includes before query param when opts.before is provided', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await getChannelMessages(TOKEN, SERVER_ID, CHANNEL_ID, {
+      before: '2026-04-01T12:00:00.000Z',
+    });
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toContain('before=2026-04-01T12%3A00%3A00.000Z');
+  });
+
+  it('omits before and after when not provided', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await getChannelMessages(TOKEN, SERVER_ID, CHANNEL_ID, { limit: 50 });
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).not.toContain('before=');
+    expect(url).not.toContain('after=');
   });
 });
