@@ -28,7 +28,7 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
       try {
         const token = getToken?.();
         if (!token) return;
-        const results = await searchUsersForDM(token, q.trim());
+        const results = await searchUsersForDM(token, q.trim(), instanceUrl ?? '');
         setSearchResults(Array.isArray(results) ? results : []);
       } catch {
         setSearchResults([]);

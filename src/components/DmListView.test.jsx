@@ -97,6 +97,17 @@ describe('DmListView', () => {
 
   // ── instanceUrl is forwarded through the API call and normalized object ──────
 
+  it('passes instanceUrl to searchUsersForDM', async () => {
+    vi.mocked(searchUsersForDM).mockResolvedValue([]);
+
+    render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://my-instance.example.com" />);
+    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'dave' } });
+
+    await waitFor(() => expect(searchUsersForDM).toHaveBeenCalled());
+    expect(searchUsersForDM).toHaveBeenCalledWith('tok', 'dave', 'http://my-instance.example.com');
+  });
+
   it('passes instanceUrl as baseUrl to createOrFindDM', async () => {
     vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-99', username: 'carol', displayName: 'Carol' }]);
     vi.mocked(createOrFindDM).mockResolvedValue({
