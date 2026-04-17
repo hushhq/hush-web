@@ -10,6 +10,7 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [dmError, setDmError] = useState('');
   const searchTimerRef = useRef(null);
 
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
@@ -17,6 +18,7 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
   const handleSearchChange = (e) => {
     const q = e.target.value;
     setSearchQuery(q);
+    setDmError('');
     clearTimeout(searchTimerRef.current);
     if (!q.trim()) {
       setSearchResults([]);
@@ -39,6 +41,7 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
   };
 
   const handleSelectUser = async (user) => {
+    setDmError('');
     try {
       const token = getToken?.();
       if (!token) return;
@@ -55,6 +58,7 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
       }
     } catch (err) {
       console.error('[DmListView] createOrFindDM failed:', err);
+      setDmError('Could not start conversation. Please try again.');
     }
   };
 
@@ -88,10 +92,14 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
                 setShowSearch(false);
                 setSearchQuery('');
                 setSearchResults([]);
+                setDmError('');
               }
             }}
             className="dm-list-search-input"
           />
+          {dmError && (
+            <div className="dm-list-error">{dmError}</div>
+          )}
           {(searchResults.length > 0 || searching) && (
             <div className="dm-list-search-results">
               {searching && (

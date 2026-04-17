@@ -150,4 +150,84 @@ describe('DmListView', () => {
     expect(arg.instanceUrl).toBe('http://my-instance.example.com');
     expect(arg.server).toBeUndefined();
   });
+
+  // DM creation error feedback.
+
+  it('shows error message when createOrFindDM rejects', async () => {
+    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-99', username: 'carol', displayName: 'Carol' }]);
+    vi.mocked(createOrFindDM).mockRejectedValue(new Error('network error'));
+
+    render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://localhost" />);
+    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'carol' } });
+    await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
+    fireEvent.click(screen.getByText('Carol'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Could not start conversation. Please try again.')).toBeTruthy();
+    });
+  });
+
+  it('clears error when search query changes', async () => {
+    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-99', username: 'carol', displayName: 'Carol' }]);
+    vi.mocked(createOrFindDM).mockRejectedValue(new Error('network error'));
+
+    render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://localhost" />);
+    fireEvent.click(screen.getByTitle('New message'));
+    const input = screen.getByPlaceholderText('Find a user...');
+    fireEvent.change(input, { target: { value: 'carol' } });
+    await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
+    fireEvent.click(screen.getByText('Carol'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Could not start conversation. Please try again.')).toBeTruthy();
+    });
+
+    fireEvent.change(input, { target: { value: 'dave' } });
+    await waitFor(() => {
+      expect(screen.queryByText('Could not start conversation. Please try again.')).toBeNull();
+    });
+  });
+
+  it('clears error on retry and success opens the DM', async () => {
+    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-99', username: 'carol', displayName: 'Carol' }]);
+    vi.mocked(createOrFindDM)
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockResolvedValueOnce({
+        server: { id: 'dm-new', isDm: true },
+        otherUser: { id: 'u-99', username: 'carol', displayName: 'Carol' },
+        channelId: 'ch-new',
+      });
+
+    const onSelectDm = vi.fn();
+    render(<DmListView dmGuilds={[]} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://localhost" />);
+    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'carol' } });
+    await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
+
+    // First click: fails.
+    fireEvent.click(screen.getByText('Carol'));
+    await waitFor(() => {
+      expect(screen.getByText('Could not start conversation. Please try again.')).toBeTruthy();
+    });
+
+    // Retry: change query to trigger new search, then select again.
+    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-99', username: 'carol', displayName: 'Carol' }]);
+    const input = screen.getByPlaceholderText('Find a user...');
+    fireEvent.change(input, { target: { value: 'car' } });
+    await waitFor(() => {
+      expect(screen.queryByText('Could not start conversation. Please try again.')).toBeNull();
+    });
+
+    await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
+    fireEvent.click(screen.getByText('Carol'));
+
+    await waitFor(() => expect(onSelectDm).toHaveBeenCalledTimes(1));
+    expect(onSelectDm.mock.calls[0][0]).toMatchObject({
+      id: 'dm-new',
+      channelId: 'ch-new',
+      instanceUrl: 'http://localhost',
+    });
+    expect(screen.queryByText('Could not start conversation. Please try again.')).toBeNull();
+  });
 });
