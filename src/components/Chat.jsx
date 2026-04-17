@@ -112,7 +112,13 @@ async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCach
  * @returns {Promise<void>}
  */
 async function encryptAndSendMLS(wsClient, channelId, plaintext, encryptForChannel) {
+  if (!wsClient?.isConnected?.()) {
+    throw new Error('Connection lost. Reconnect and retry.');
+  }
   const { ciphertext } = await encryptForChannel(plaintext);
+  if (!wsClient?.isConnected?.()) {
+    throw new Error('Connection lost. Reconnect and retry.');
+  }
   wsClient.send('message.send', {
     channel_id: channelId,
     ciphertext: uint8ArrayToBase64(ciphertext),
@@ -370,7 +376,7 @@ export default function Chat({
     };
     const onError = (data) => {
       if (data.code === 'forbidden' || data.code === 'internal') {
-        setMessages((prev) => prev.map((m) => (m.pending ? { ...m, failed: true } : m)));
+        setMessages((prev) => prev.map((m) => (m.pending ? { ...m, pending: false, failed: true } : m)));
       }
     };
     wsClient.on('message.new', onMessageNew);
@@ -498,7 +504,7 @@ export default function Chat({
       await encryptAndSendMLS(wsClient, channelId, trimmed, encryptForChannelRef.current);
     } catch (err) {
       console.error('[chat] Send failed:', err?.message ?? err);
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, failed: true } : m)));
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
     } finally {
       lastSentTempIdRef.current = null;
       setIsSending(false);
@@ -516,7 +522,7 @@ export default function Chat({
       await encryptAndSendMLS(wsClient, channelId, trimmed, encryptForChannelRef.current);
     } catch (err) {
       console.error('[chat] Retry send failed:', err.message);
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, failed: true } : m)));
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
     }
   };
 

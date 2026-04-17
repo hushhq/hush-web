@@ -200,3 +200,69 @@ describe('Chat mark_read behavior', () => {
     expect(markReadCalls).toHaveLength(0);
   });
 });
+
+describe('Chat same-instance DM send failure feedback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('marks an optimistic message failed instead of leaving it pending when the socket is disconnected', async () => {
+    const wsClient = {
+      send: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      isConnected: () => false,
+    };
+
+    await act(async () => {
+      render(<Chat {...defaultProps} wsClient={wsClient} />);
+    });
+
+    const input = screen.getByPlaceholderText('Message...');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Are you there?' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    });
+
+    expect(screen.getByText('Are you there?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByText(/sending/i)).not.toBeInTheDocument();
+    expect(wsClient.send).not.toHaveBeenCalledWith('message.send', expect.any(Object));
+  });
+
+  it('retries a failed message after the socket reconnects', async () => {
+    let connected = false;
+    const wsClient = {
+      send: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      isConnected: () => connected,
+    };
+
+    await act(async () => {
+      render(<Chat {...defaultProps} wsClient={wsClient} />);
+    });
+
+    const input = screen.getByPlaceholderText('Message...');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Retry me' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    });
+
+    connected = true;
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    });
+
+    expect(wsClient.send).toHaveBeenCalledWith('message.send', {
+      channel_id: 'ch-1',
+      ciphertext: expect.any(String),
+    });
+    expect(screen.getByText(/sending/i)).toBeInTheDocument();
+  });
+});
