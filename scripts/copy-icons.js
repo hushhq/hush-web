@@ -1,21 +1,22 @@
 /**
- * Copies icon PNGs into client/public/ for the build (favicon, apple-touch-icon,
- * PWA icons, og-image). Run via npm prebuild.
+ * Copies icon PNGs into this repo's public/ directory.
  *
- * Source: HUSH_ICONS_DIR if set (path to folder containing the PNGs), otherwise
- * repo root hush-icons/ if present. If neither exists, skips; use icons already
- * in client/public/ (e.g. after copying from your external hush-icons once).
+ * This script is optional. The committed assets in public/ are the source used by
+ * normal builds. When HUSH_ICONS_DIR is set, it refreshes those committed files
+ * from an external asset source.
  */
 import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = join(__dirname, '../..');
+const repoRoot = join(__dirname, '..');
 const srcDir = process.env.HUSH_ICONS_DIR
-  ? (process.env.HUSH_ICONS_DIR.startsWith('/') ? process.env.HUSH_ICONS_DIR : join(root, process.env.HUSH_ICONS_DIR))
-  : join(root, 'hush-icons');
-const destDir = join(root, 'client/public');
+  ? (process.env.HUSH_ICONS_DIR.startsWith('/')
+      ? process.env.HUSH_ICONS_DIR
+      : join(repoRoot, process.env.HUSH_ICONS_DIR))
+  : null;
+const destDir = join(repoRoot, 'public');
 
 const files = [
   'favicon.png',
@@ -29,7 +30,7 @@ const files = [
   'og-image.png',
 ];
 
-if (!existsSync(srcDir)) {
+if (!srcDir || !existsSync(srcDir)) {
   process.exit(0);
 }
 
