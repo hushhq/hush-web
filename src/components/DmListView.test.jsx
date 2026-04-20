@@ -230,4 +230,38 @@ describe('DmListView', () => {
     });
     expect(screen.queryByText('Could not start conversation. Please try again.')).toBeNull();
   });
+
+  // First-message unread path.
+
+  it('renders unread badge for DM with unreadCount > 0 (first message visible to recipient)', () => {
+    const dmWithUnread = [
+      { id: 'dm-new', isDm: true, channelId: 'ch-new', channels: [{ id: 'ch-new', unreadCount: 1 }], otherUser: { displayName: 'Carol', username: 'carol' } },
+    ];
+    const onSelectDm = vi.fn();
+    render(<DmListView dmGuilds={dmWithUnread} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://localhost" />);
+    expect(screen.getByText('1')).toBeTruthy();
+    expect(screen.getByText('Carol')).toBeTruthy();
+  });
+
+  it('selecting DM with unread calls onSelectDm with guild containing channelId', () => {
+    const dmWithUnread = [
+      { id: 'dm-new', isDm: true, channelId: 'ch-new', channels: [{ id: 'ch-new', unreadCount: 1 }], otherUser: { displayName: 'Carol', username: 'carol' } },
+    ];
+    const onSelectDm = vi.fn();
+    render(<DmListView dmGuilds={dmWithUnread} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://localhost" />);
+    fireEvent.click(screen.getByText('Carol'));
+    expect(onSelectDm).toHaveBeenCalledTimes(1);
+    const arg = onSelectDm.mock.calls[0][0];
+    expect(arg.id).toBe('dm-new');
+    expect(arg.channelId).toBe('ch-new');
+  });
+
+  it('renders no badge for DM with unreadCount 0', () => {
+    const dmRead = [
+      { id: 'dm-read', isDm: true, channelId: 'ch-read', channels: [{ id: 'ch-read', unreadCount: 0 }], otherUser: { displayName: 'Dave', username: 'dave' } },
+    ];
+    render(<DmListView dmGuilds={dmRead} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://localhost" />);
+    expect(screen.getByText('Dave')).toBeTruthy();
+    expect(screen.queryByText('9+')).toBeNull();
+  });
 });
