@@ -1498,6 +1498,11 @@ select:focus-visible {
   background: var(--mauve4);
 }
 
+.cl-channel-item:focus-visible {
+  background: var(--mauve3);
+  color: var(--mauve11);
+}
+
 /* Unread channel: primary text color + medium weight */
 .cl-channel-item.unread {
   color: var(--hush-text);
@@ -1860,6 +1865,10 @@ select:focus-visible {
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
+.cl-channel-delete-btn:focus-visible {
+  opacity: 1;
+}
+
 .cl-category-label--hovered {
   color: var(--hush-text);
 }
@@ -1879,6 +1888,7 @@ select:focus-visible {
 .cl-category-toggle-btn {
   padding: 0;
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   font-family: var(--font-mono);
@@ -1891,6 +1901,19 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 4px;
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.cl-category-toggle-btn:focus-visible {
+  background: var(--hush-hover);
+}
+
+.cl-category-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .cl-category-chevron {
@@ -1913,6 +1936,10 @@ select:focus-visible {
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
+.cl-category-delete-btn:focus-visible {
+  opacity: 1;
+}
+
 .cl-header {
   padding: 0 14px;
   border-bottom: 1px solid var(--hush-border);
@@ -1930,10 +1957,18 @@ select:focus-visible {
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  padding: 0;
+  padding: 4px;
+  margin: -4px;
   min-width: 0;
   flex: 1;
   font-family: var(--font-sans);
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.cl-server-name-btn:hover,
+.cl-server-name-btn:focus-visible {
+  background: var(--hush-hover);
 }
 
 .cl-server-chevron {
@@ -1982,7 +2017,8 @@ select:focus-visible {
   transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
 }
 
-.cl-add-btn:hover {
+.cl-add-btn:hover,
+.cl-add-btn:focus-visible {
   color: var(--hush-text);
   background: var(--hush-hover);
 }
@@ -2018,7 +2054,8 @@ select:focus-visible {
   transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
-.cl-server-menu-item:hover {
+.cl-server-menu-item:hover,
+.cl-server-menu-item:focus-visible {
   background: var(--hush-hover);
   color: var(--hush-text);
 }
