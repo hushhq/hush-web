@@ -2664,7 +2664,8 @@ select:focus-visible {
   transition: background var(--duration-fast) var(--ease-out);
 }
 
-.ml-member-item:hover {
+.ml-member-item:hover,
+.ml-member-item:focus-visible {
   background: var(--mauve3);
 }
 

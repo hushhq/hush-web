@@ -77,4 +77,17 @@ describe('MemberList', () => {
     );
     expect(screen.getByText(/Caller \(You\)/)).toBeInTheDocument();
   });
+
+  it('member rows are keyboard accessible with role=button and tabIndex', () => {
+    render(
+      <MemberList
+        members={[member1]}
+        onlineUserIds={new Set()}
+        currentUserId=""
+      />
+    );
+    const btn = screen.getByRole('button', { name: /Caller/i });
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveAttribute('tabindex', '0');
+  });
 });

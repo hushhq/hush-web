@@ -188,10 +188,20 @@ export default function MemberList({
                 return (
                   <div
                     key={memberId}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${m.displayName || 'Unknown'}${isYou ? ' (You)' : ''}`}
                     className="ml-member-item member-list-row"
                     onClick={(e) => {
                       setSelectedMember(m);
                       setProfilePosition({ x: e.clientX, y: e.clientY });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedMember(m);
+                        setProfilePosition({ x: 0, y: 0 });
+                      }
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
