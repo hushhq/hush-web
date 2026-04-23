@@ -565,7 +565,7 @@ export default function Chat({
             </div>
           )}
           {isChannelTransitioning || isInitialLoading ? (
-            <div className="chat-empty">
+            <div className="chat-empty chat-empty--loading">
               <div className="chat-empty-text">Loading…</div>
             </div>
           ) : !hasMessages ? (

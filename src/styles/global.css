@@ -1383,6 +1383,12 @@ select:focus-visible {
   font-size: 13px;
 }
 
+.dm-list-error {
+  padding: 6px 12px 8px;
+  font-size: 12px;
+  color: var(--hush-danger);
+}
+
 .dm-list-item {
   display: flex;
   align-items: center;
@@ -2484,6 +2490,11 @@ select:focus-visible {
   background: color-mix(in srgb, var(--hush-danger) 20%, transparent);
 }
 
+.chat-retry-btn:focus-visible {
+  outline: 2px solid var(--hush-danger);
+  outline-offset: 2px;
+}
+
 .chat-input-wrapper {
   display: flex;
   align-items: flex-end;
@@ -2559,6 +2570,10 @@ select:focus-visible {
   color: var(--hush-text-muted);
   text-align: center;
   padding: 40px 20px;
+}
+
+.chat-empty--loading .chat-empty-text {
+  animation: hush-pulse 1.8s ease-in-out infinite;
 }
 
 .chat-empty-icon {
@@ -5318,8 +5333,8 @@ select:focus-visible {
 
 .vc-error-text {
   color: var(--hush-danger);
-  font-size: 12px;
-  font-family: var(--font-mono);
+  font-size: 13px;
+  font-family: var(--font-sans);
   font-weight: 500;
   text-align: center;
   max-width: 360px;
@@ -5986,7 +6001,7 @@ select:focus-visible {
   height: 120px;
   background: var(--hush-surface);
   border: 1px solid var(--hush-border);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: hush-pulse 1.5s ease-in-out infinite;
 }
 
 .explore-empty {

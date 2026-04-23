@@ -266,3 +266,26 @@ describe('Chat same-instance DM send failure feedback', () => {
     expect(screen.getByText(/sending/i)).toBeInTheDocument();
   });
 });
+
+describe('Chat loading state presentation', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  afterEach(() => { cleanup(); });
+
+  it('applies chat-empty--loading class while history is loading', async () => {
+    let resolveMessages;
+    vi.mocked(api.getChannelMessages).mockReturnValueOnce(
+      new Promise((res) => { resolveMessages = res; })
+    );
+
+    await act(async () => {
+      render(<Chat {...defaultProps} />);
+    });
+
+    const loadingEl = document.querySelector('.chat-empty--loading');
+    expect(loadingEl).toBeInTheDocument();
+
+    await act(async () => { resolveMessages([]); });
+
+    expect(document.querySelector('.chat-empty--loading')).not.toBeInTheDocument();
+  });
+});
