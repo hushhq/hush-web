@@ -16,6 +16,7 @@ import {
 } from '../lib/micProcessing';
 import DeviceManagement from './DeviceManagement.jsx';
 import InstancesSettingsTab from './InstancesSettingsTab.jsx';
+import { Switch, Separator } from './ui/index.js';
 
 const TAB_ACCOUNT = 'account';
 const TAB_APPEARANCE = 'appearance';
@@ -243,14 +244,14 @@ function AccountTab() {
             <div className="settings-card-value">{displayName}</div>
           </div>
         </div>
-        <div className="settings-card-separator" />
+        <Separator />
         <div className="settings-card-row">
           <div>
             <div className="settings-field-label">Username</div>
             <div className="settings-card-value">{user?.username || '\u2014'}</div>
           </div>
         </div>
-        <div className="settings-card-separator" />
+        <Separator />
         <div className="settings-card-row">
           <div style={{ flex: 1 }}>
             <div className="settings-field-label">Vault timeout</div>
@@ -264,7 +265,7 @@ function AccountTab() {
               ))}
             </select>
             {vaultTimeout === 'never' && (
-              <div className="settings-field-note" style={{ color: 'var(--hush-danger)' }}>
+              <div className="settings-field-note settings-field-note--danger">
                 Your key will remain decrypted in memory.
               </div>
             )}
@@ -595,7 +596,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
             )}
           </div>
         </div>
-        <div className="settings-card-separator" />
+        <Separator />
         <div className="settings-card-row">
           <div style={{ flex: 1 }}>
             <div className="settings-field-label">Webcam</div>
@@ -632,13 +633,10 @@ function AudioVideoTab({ voiceRuntime = null }) {
               <div className="settings-field-label">Audio Filters</div>
               <div className="settings-card-value">Input processing</div>
             </div>
-            <input
-              type="checkbox"
-              className="toggle-switch"
+            <Switch
               checked={micFilterSettings.noiseGateEnabled}
-              onChange={() => applyMicFilters({
-                noiseGateEnabled: !micFilterSettings.noiseGateEnabled,
-              })}
+              onCheckedChange={(checked) => applyMicFilters({ noiseGateEnabled: checked })}
+              aria-label="Enable audio filters"
             />
           </div>
           <div className="settings-field-note">
@@ -670,7 +668,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
             <span>More aggressive</span>
           </div>
         </div>
-        <div className="settings-card-separator" />
+        <Separator />
         <div className="settings-card-row settings-card-row--stacked">
           <div className="settings-mic-section-header">
             <div>

@@ -3073,6 +3073,10 @@ select:focus-visible {
   margin-top: 4px;
 }
 
+.settings-field-note--danger {
+  color: var(--hush-danger);
+}
+
 .settings-field-row {
   margin-bottom: 24px;
 }

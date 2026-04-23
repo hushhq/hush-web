@@ -269,4 +269,28 @@ describe('UserSettingsModal', () => {
       expect(localStorage.getItem('hush_theme_mode')).toBe('light');
     });
   });
+
+  describe('AudioVideoTab – audio filters Switch', () => {
+    it('renders a switch control for the audio filters toggle', async () => {
+      render(<UserSettingsModal onClose={vi.fn()} />);
+      await openAudioVideoTab();
+
+      const filterSwitch = screen.getByRole('switch', { name: /enable audio filters/i });
+      expect(filterSwitch).toBeTruthy();
+      expect(filterSwitch.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('toggling the switch off calls applyMicFilters with noiseGateEnabled false', async () => {
+      render(<UserSettingsModal onClose={vi.fn()} />);
+      await openAudioVideoTab();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('switch', { name: /enable audio filters/i }));
+      });
+
+      expect(mockMicMonitorUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ noiseGateEnabled: false }),
+      );
+    });
+  });
 });
