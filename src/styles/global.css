@@ -5337,17 +5337,18 @@ select:focus-visible {
 }
 
 .tc-channel-name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--hush-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .tc-members-toggle {
-  padding: 4px 8px;
-  font-size: 0.8rem;
+  padding: 4px 10px;
+  font-size: 12px;
   font-family: var(--font-sans);
   background: none;
   border: 1px solid var(--hush-border);
@@ -5355,20 +5356,49 @@ select:focus-visible {
   color: var(--hush-text-secondary);
   cursor: pointer;
   flex-shrink: 0;
+  transition: border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+}
+
+.tc-members-toggle:hover {
+  border-color: var(--hush-border-hover);
+  color: var(--hush-text);
+}
+
+.tc-members-toggle[aria-pressed="true"] {
+  background: var(--hush-elevated);
+  border-color: var(--hush-border-focus);
+  color: var(--hush-text);
+}
+
+.tc-members-toggle:focus-visible {
+  border-color: var(--hush-border-focus);
+  color: var(--hush-text);
 }
 
 .tc-drawer-toggle {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: none;
   border: none;
+  border-radius: var(--radius-sm);
   color: var(--hush-text-secondary);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.tc-drawer-toggle:hover {
+  background: var(--hush-elevated);
+  color: var(--hush-text);
+}
+
+.tc-drawer-toggle:focus-visible {
+  background: var(--hush-elevated);
+  color: var(--hush-text);
 }
 
 .tc-main {
@@ -7020,6 +7050,12 @@ select:focus-visible {
   .tc-back-btn:hover,
   .vc-back-btn:hover,
   .sc-back-btn:hover { color: var(--hush-text); }
+  .tc-back-btn:focus-visible,
+  .vc-back-btn:focus-visible,
+  .sc-back-btn:focus-visible {
+    background: var(--hush-elevated);
+    color: var(--hush-text);
+  }
 
   /* Mobile content area (fills remaining space in stack 2) */
   .mobile-content-area {
