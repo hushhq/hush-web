@@ -163,7 +163,6 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
           className="btn btn-primary"
           type="submit"
           disabled={!pin || pin.length < 4 || isLoading || isDelayed}
-          style={{ width: '100%', padding: '12px' }}
         >
           {isLoading ? 'Unlocking...' : 'Unlock'}
         </button>
