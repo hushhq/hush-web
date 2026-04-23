@@ -2264,16 +2264,19 @@ select:focus-visible {
 
 .chat-input:focus {
   border-color: var(--hush-border-focus);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hush-border) 30%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hush-border-focus) 50%, transparent);
+}
+
+.chat-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .chat-input::placeholder {
-  font-family: var(--font-sans);
-  font-size: 13px;
   color: var(--hush-text-muted);
-  text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-container {
@@ -2412,8 +2415,21 @@ select:focus-visible {
 
 .chat-input-wrapper {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
+}
+
+.chat-byte-counter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--hush-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.chat-byte-counter--over {
+  color: var(--hush-danger);
+  font-weight: 600;
 }
 
 .chat-send-btn {
