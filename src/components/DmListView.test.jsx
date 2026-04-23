@@ -62,7 +62,7 @@ describe('DmListView', () => {
     render(<DmListView dmGuilds={[]} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://localhost" />);
 
     // Open search
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     const input = screen.getByPlaceholderText('Find a user...');
     fireEvent.change(input, { target: { value: 'carol' } });
 
@@ -84,7 +84,7 @@ describe('DmListView', () => {
     vi.mocked(createOrFindDM).mockResolvedValue({ server: null, channelId: null });
 
     render(<DmListView dmGuilds={[]} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://localhost" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     const input = screen.getByPlaceholderText('Find a user...');
     fireEvent.change(input, { target: { value: 'carol' } });
 
@@ -101,7 +101,7 @@ describe('DmListView', () => {
     vi.mocked(searchUsersForDM).mockResolvedValue([]);
 
     render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://my-instance.example.com" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'dave' } });
 
     await waitFor(() => expect(searchUsersForDM).toHaveBeenCalled());
@@ -117,7 +117,7 @@ describe('DmListView', () => {
     });
 
     render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://my-instance.example.com" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'carol' } });
     await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
     fireEvent.click(screen.getByText('Carol'));
@@ -136,7 +136,7 @@ describe('DmListView', () => {
     });
 
     render(<DmListView dmGuilds={[]} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://my-instance.example.com" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'carol' } });
     await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
     fireEvent.click(screen.getByText('Carol'));
@@ -158,7 +158,7 @@ describe('DmListView', () => {
     vi.mocked(createOrFindDM).mockRejectedValue(new Error('network error'));
 
     render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://localhost" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'carol' } });
     await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
     fireEvent.click(screen.getByText('Carol'));
@@ -173,7 +173,7 @@ describe('DmListView', () => {
     vi.mocked(createOrFindDM).mockRejectedValue(new Error('network error'));
 
     render(<DmListView dmGuilds={[]} onSelectDm={vi.fn()} getToken={() => 'tok'} instanceUrl="http://localhost" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     const input = screen.getByPlaceholderText('Find a user...');
     fireEvent.change(input, { target: { value: 'carol' } });
     await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
@@ -201,7 +201,7 @@ describe('DmListView', () => {
 
     const onSelectDm = vi.fn();
     render(<DmListView dmGuilds={[]} onSelectDm={onSelectDm} getToken={() => 'tok'} instanceUrl="http://localhost" />);
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'carol' } });
     await waitFor(() => expect(screen.getByText('Carol')).toBeTruthy());
 

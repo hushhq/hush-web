@@ -2,7 +2,7 @@ import { useState } from 'react';
 import MemberProfileCard from './MemberProfileCard';
 import MemberContextMenu from './MemberContextMenu';
 import ModerationModal from './ModerationModal';
-import { ScrollArea } from './ui';
+import { ScrollArea, Separator } from './ui';
 import { kickUser, banUser, muteUser, changePermissionLevel, changeUserRole } from '../lib/api';
 import { JWT_KEY } from '../hooks/useAuth';
 
@@ -170,6 +170,8 @@ export default function MemberList({
 
   return (
     <div className="ml-container ml-panel">
+      <div className="ml-panel-header">Members</div>
+      <Separator />
       <ScrollArea className="ml-list">
         {LEVEL_ORDER.map((level) => {
           const list = byLevel.get(level);

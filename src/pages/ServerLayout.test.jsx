@@ -737,7 +737,7 @@ describe('ServerLayout – DM flow', () => {
     await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
 
     // Trigger new-DM creation via DmListView search
-    fireEvent.click(screen.getByTitle('New message'));
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
     fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'dave' } });
     await waitFor(() => expect(screen.getByText('Dave')).toBeTruthy());
     fireEvent.click(screen.getByText('Dave'));

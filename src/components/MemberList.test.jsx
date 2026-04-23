@@ -10,6 +10,17 @@ const member2 = { userId: 'u2', displayName: 'Dana', role: 'member', joinedAt: '
 describe('MemberList', () => {
   beforeEach(() => cleanup());
 
+  it('renders Members panel header', () => {
+    render(
+      <MemberList
+        members={[member1]}
+        onlineUserIds={new Set()}
+        currentUserId=""
+      />
+    );
+    expect(screen.getByText('Members')).toBeInTheDocument();
+  });
+
   it('renders members grouped by role with admin and member sections', () => {
     render(
       <MemberList

@@ -1302,20 +1302,12 @@ select:focus-visible {
   color: var(--hush-text);
 }
 
-.dm-list-new-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-md);
-  color: var(--hush-text-secondary);
-  cursor: pointer;
-  padding: 0;
+.dm-list-new-icon-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border-color: var(--hush-border);
 }
-.dm-list-new-btn:hover { color: var(--hush-text); }
 
 .dm-list-search {
   padding: 0 12px 8px;
@@ -2676,15 +2668,12 @@ select:focus-visible {
   padding: 0;
 }
 
-/* Panel header (CSS-only, pseudo-element) */
-.ml-panel::before {
-  content: 'Members';
+.ml-panel-header {
   display: flex;
   align-items: center;
   height: 46px;
   padding: 0 14px;
   background: var(--hush-elevated);
-  border-bottom: 1px solid var(--hush-border);
   font-size: 12px;
   font-weight: 500;
   color: var(--hush-text-secondary);

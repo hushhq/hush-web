@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { searchUsersForDM, createOrFindDM } from '../lib/api';
+import { IconButton, Separator } from './ui';
 
 /**
  * Full-height DM conversation list with search.
@@ -66,18 +67,19 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
     <div className="dm-list-view">
       <div className="dm-list-header">
         <span className="dm-list-title">Direct Messages</span>
-        <button
-          type="button"
-          className="dm-list-new-btn"
+        <IconButton
+          aria-label="New message"
+          className="dm-list-new-icon-btn"
           onClick={() => setShowSearch((v) => !v)}
-          title="New message"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-        </button>
+        </IconButton>
       </div>
+
+      <Separator />
 
       {showSearch && (
         <div className="dm-list-search">
