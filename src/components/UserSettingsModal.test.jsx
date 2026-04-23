@@ -219,4 +219,54 @@ describe('UserSettingsModal', () => {
       }),
     );
   });
+
+  describe('AppearanceTab theme labels and persistence', () => {
+    async function openAppearanceTab() {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /appearance/i }));
+      });
+    }
+
+    it('dark theme picker shows "Dark" label, not "OG Dark"', async () => {
+      localStorage.setItem('hush_theme_mode', 'dark');
+      render(<UserSettingsModal onClose={vi.fn()} />);
+      await openAppearanceTab();
+      expect(screen.queryByText('OG Dark')).toBeNull();
+      // In dark mode both the mode button and the dark theme picker button are labeled "Dark"
+      expect(screen.getAllByText('Dark').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('light theme picker shows "Light" label, not "OG Light"', async () => {
+      localStorage.setItem('hush_theme_mode', 'light');
+      render(<UserSettingsModal onClose={vi.fn()} />);
+      await openAppearanceTab();
+      expect(screen.queryByText('OG Light')).toBeNull();
+      // In light mode both the mode button and the light theme picker button are labeled "Light"
+      expect(screen.getAllByText('Light').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('selecting Dark mode persists "dark" to localStorage', async () => {
+      // Start in light mode so showDarkPicker is false — no dark picker button,
+      // making the "Dark" mode button unambiguous for getByRole.
+      localStorage.setItem('hush_theme_mode', 'light');
+      render(<UserSettingsModal onClose={vi.fn()} />);
+      await openAppearanceTab();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /^Dark$/i }));
+      });
+      expect(localStorage.getItem('hush_theme_mode')).toBe('dark');
+    });
+
+    it('selecting Light mode persists "light" to localStorage', async () => {
+      // Start in dark mode so showLightPicker is false — no light picker button,
+      // making the "Light" mode button unambiguous for getByRole.
+      localStorage.setItem('hush_theme_mode', 'dark');
+      render(<UserSettingsModal onClose={vi.fn()} />);
+      await openAppearanceTab();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /^Light$/i }));
+      });
+      expect(localStorage.getItem('hush_theme_mode')).toBe('light');
+    });
+  });
 });

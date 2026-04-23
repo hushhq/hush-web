@@ -41,11 +41,11 @@ const DARK_THEME_KEY = 'hush_dark_theme';
 const LIGHT_THEME_KEY = 'hush_light_theme';
 
 const DARK_THEMES = [
-  { key: 'og-dark', label: 'OG Dark', css: 'dark' },
+  { key: 'og-dark', label: 'Dark', css: 'dark' },
 ];
 
 const LIGHT_THEMES = [
-  { key: 'og-light', label: 'OG Light', css: 'light' },
+  { key: 'og-light', label: 'Light', css: 'light' },
 ];
 
 function formatVaultTimeoutValue(timeout) {
