@@ -149,12 +149,7 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
         Devices
       </div>
 
-      <div style={{
-        margin: '0 0 16px',
-        color: 'var(--hush-text-muted)',
-        fontSize: '0.82rem',
-        lineHeight: 1.5,
-      }}>
+      <div className="dm-help">
         On the new device, open <strong>Link to existing device</strong> from the sign-in screen to
         show its QR code or fallback code.
         Use this page on your current signed-in device to scan that QR code or enter that fallback code and approve the link.

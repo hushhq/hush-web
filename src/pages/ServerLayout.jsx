@@ -1540,55 +1540,28 @@ export default function ServerLayout() {
   // Transparency hard-fail: key mismatch detected - block the app.
   if (transparencyError) {
     return (
-      <div style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--hush-black)',
-        color: 'var(--hush-text-primary)',
-        padding: '32px',
-        textAlign: 'center',
-        zIndex: 9999,
-      }}>
-        <div style={{
-          maxWidth: '480px',
-          padding: '32px',
-          background: 'var(--hush-surface)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--hush-danger)',
-        }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>&#9888;</div>
-          <h2 style={{ color: 'var(--hush-danger)', marginBottom: '12px', fontSize: '1.2rem' }}>
+      <div className="transp-hard-fail-overlay">
+        <div className="transp-hard-fail-card">
+          <div className="transp-hard-fail-icon">&#9888;</div>
+          <h2 className="transp-hard-fail-heading">
             Key Verification Failed
           </h2>
-          <p style={{ color: 'var(--hush-text-secondary)', marginBottom: '8px', lineHeight: 1.6 }}>
+          <p className="transp-hard-fail-body">
             {transparencyError}
           </p>
-          <p style={{ color: 'var(--hush-text-muted)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: 1.5 }}>
+          <p className="transp-hard-fail-note">
             Your account may be compromised. Do not continue using this session.
             Contact your instance administrator.
           </p>
           <button
             type="button"
+            className="transp-hard-fail-btn"
             onClick={() => {
               // Sign out - leave local vault intact for recovery.
               import('../contexts/AuthContext').then(({ useAuth: _ }) => {
                 sessionStorage.clear();
                 window.location.href = '/';
               });
-            }}
-            style={{
-              padding: '10px 24px',
-              background: 'var(--hush-danger)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-sans)',
-              fontSize: '0.9rem',
             }}
           >
             Sign Out
@@ -1633,22 +1606,9 @@ export default function ServerLayout() {
         )}
         {hasNoTransparencyLog && authToken && (
           <div
+            className="transp-no-log-badge"
             title="Transparency log not configured - key operations cannot be independently verified"
             aria-label="Transparency log not configured"
-            style={{
-              position: 'fixed',
-              bottom: '12px',
-              left: '12px',
-              zIndex: 10,
-              width: '20px',
-              height: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--hush-amber, #f59e0b)',
-              cursor: 'default',
-              opacity: 0.85,
-            }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 14h2v2h-2v-2zm0-8h2v6h-2V7z" />
@@ -2076,30 +2036,11 @@ export default function ServerLayout() {
           corner overlapping the server list footer area. */}
       {hasNoTransparencyLog && authToken && (
         <div
+          className="transp-no-log-badge"
           title="Transparency log not configured - key operations cannot be independently verified"
           aria-label="Transparency log not configured"
-          style={{
-            position: 'fixed',
-            bottom: '12px',
-            left: '12px',
-            zIndex: 10,
-            width: '20px',
-            height: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--hush-amber, #f59e0b)',
-            cursor: 'default',
-            opacity: 0.85,
-          }}
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 14h2v2h-2v-2zm0-8h2v6h-2V7z" />
           </svg>
         </div>

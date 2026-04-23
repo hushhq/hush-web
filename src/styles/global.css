@@ -4251,6 +4251,110 @@ select:focus-visible {
   justify-content: flex-end;
 }
 
+.dm-stale-warning {
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.dm-stale-warning--warning {
+  color: var(--hush-amber);
+}
+
+.dm-stale-warning--critical {
+  color: var(--hush-danger);
+  font-weight: 500;
+}
+
+.dm-revoke-btn--stale {
+  border-color: var(--hush-danger);
+  background: var(--hush-danger-ghost);
+}
+
+.dm-revoke-btn:focus-visible {
+  outline: 2px solid var(--hush-danger);
+  outline-offset: 2px;
+}
+
+/* ── Transparency surfaces ─────────────────── */
+.transp-no-log-badge {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 10;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hush-amber);
+  cursor: default;
+  opacity: 0.85;
+}
+
+.transp-hard-fail-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--hush-black);
+  color: var(--hush-text-primary);
+  padding: 32px;
+  text-align: center;
+  z-index: 9999;
+}
+
+.transp-hard-fail-card {
+  width: 100%;
+  max-width: 480px;
+  padding: 32px;
+  background: var(--hush-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--hush-danger);
+}
+
+.transp-hard-fail-icon {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+}
+
+.transp-hard-fail-heading {
+  color: var(--hush-danger);
+  margin-bottom: 12px;
+  font-size: 1.2rem;
+}
+
+.transp-hard-fail-body {
+  color: var(--hush-text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.transp-hard-fail-note {
+  color: var(--hush-text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.transp-hard-fail-btn {
+  padding: 10px 24px;
+  background: var(--hush-danger);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+}
+
+.transp-hard-fail-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 /* ── EmptyState ───────────────────────────── */
 .empty-container {
   display: flex;

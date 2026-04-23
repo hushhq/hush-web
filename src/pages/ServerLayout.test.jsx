@@ -780,3 +780,41 @@ describe('ServerLayout – DM flow', () => {
     expect(refreshGuilds).not.toHaveBeenCalled();
   });
 });
+
+describe('ServerLayout – transparency hard-fail screen', () => {
+  beforeEach(() => {
+    cleanup();
+    sessionStorage.setItem('hush_jwt', 'test-token');
+  });
+
+  it('renders sign-out button and failure heading when transparencyError is set', () => {
+    vi.mocked(useAuth).mockReturnValueOnce({
+      token: 'test-token',
+      user: { id: 'u1' },
+      logout: vi.fn(),
+      identityKeyRef: { current: null },
+      transparencyError: 'Key mismatch detected.',
+      setTransparencyError: vi.fn(),
+    });
+
+    renderAtRoute('/home');
+
+    expect(screen.getByRole('heading', { name: /key verification failed/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeTruthy();
+  });
+
+  it('does not render hard-fail screen when transparencyError is null', () => {
+    vi.mocked(useAuth).mockReturnValueOnce({
+      token: 'test-token',
+      user: { id: 'u1' },
+      logout: vi.fn(),
+      identityKeyRef: { current: null },
+      transparencyError: null,
+      setTransparencyError: vi.fn(),
+    });
+
+    renderAtRoute('/home');
+
+    expect(screen.queryByRole('heading', { name: /key verification failed/i })).toBeNull();
+  });
+});

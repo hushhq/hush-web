@@ -106,3 +106,60 @@ describe('DeviceManagement', () => {
     expect(mockVerifyOwnKey).not.toHaveBeenCalled();
   });
 });
+
+describe('DeviceManagement – staleness rendering', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('shows critical staleness warning for device inactive 90+ days', async () => {
+    listDeviceKeys.mockResolvedValueOnce([
+      {
+        deviceId: 'device-old',
+        label: 'Old Laptop',
+        lastSeen: '2026-01-01T00:00:00.000Z',
+        certifiedAt: '2025-12-01T00:00:00.000Z',
+      },
+    ]);
+
+    render(
+      <DeviceManagement
+        token="t"
+        currentDeviceId="device-current"
+        identityKeyRef={{ current: null }}
+        handshakeData={null}
+        setTransparencyError={vi.fn()}
+      />,
+    );
+
+    const warning = await screen.findByText(/Inactive 90\+ days/);
+    expect(warning.className).toContain('dm-stale-warning--critical');
+  });
+
+  it('shows warning-tier staleness for device inactive 30–89 days', async () => {
+    const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 86400000).toISOString();
+    listDeviceKeys.mockResolvedValueOnce([
+      {
+        deviceId: 'device-mid',
+        label: 'Mid Laptop',
+        lastSeen: thirtyFiveDaysAgo,
+        certifiedAt: null,
+      },
+    ]);
+
+    render(
+      <DeviceManagement
+        token="t"
+        currentDeviceId="device-current"
+        identityKeyRef={{ current: null }}
+        handshakeData={null}
+        setTransparencyError={vi.fn()}
+      />,
+    );
+
+    const warning = await screen.findByText(/Inactive 30\+ days/);
+    expect(warning.className).toContain('dm-stale-warning--warning');
+  });
+});
