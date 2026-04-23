@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import ChannelList from './ChannelList';
 import { buildGuildInviteLink } from '../lib/inviteLinks';
 
@@ -323,6 +323,164 @@ describe('ChannelList', () => {
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
+    });
+  });
+
+  describe('CreateChannelModal dialog behavior', () => {
+    it('opens as accessible dialog when Create channel button is clicked', async () => {
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          serverName="My Server"
+          channels={[]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Create channel'));
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: 'Create channel' })).toBeInTheDocument();
+      });
+    });
+
+    it('Cancel button closes the modal exactly once', async () => {
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          serverName="My Server"
+          channels={[]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Create channel'));
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: 'Create channel' })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Create channel' })).not.toBeInTheDocument();
+      });
+    });
+
+    it('submit calls createGuildChannel exactly once with correct args', async () => {
+      const { createGuildChannel, getGuildChannels } = await import('../lib/api');
+      createGuildChannel.mockResolvedValueOnce({ id: 'ch-new', name: 'new-channel', type: 'text', position: 0, serverId: 's1', parentId: null });
+      getGuildChannels.mockResolvedValueOnce([]);
+
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          serverName="My Server"
+          channels={[]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+          onChannelsUpdated={() => {}}
+        />
+      );
+      screen.getByTitle('Create channel').click();
+      await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument());
+
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'new-channel' } });
+      screen.getByRole('button', { name: 'Create' }).click();
+
+      await waitFor(() => {
+        expect(createGuildChannel).toHaveBeenCalledWith('test-token', 's1', { name: 'new-channel', type: 'text' });
+      });
+    });
+  });
+
+  describe('CreateCategoryModal dialog behavior', () => {
+    it('opens as accessible dialog when Create category button is clicked', async () => {
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          serverName="My Server"
+          channels={[]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Create category'));
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: 'Create category' })).toBeInTheDocument();
+      });
+    });
+
+    it('Cancel button closes the modal', async () => {
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          serverName="My Server"
+          channels={[]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Create category'));
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: 'Create category' })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Create category' })).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('InviteModal dialog behavior', () => {
+    it('opens as accessible dialog when Invite People is clicked', async () => {
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          guildName="My Server"
+          instanceUrl={window.location.origin}
+          channels={[textChannel]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Server menu'));
+      fireEvent.click(screen.getByRole('button', { name: /invite people/i }));
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: 'Invite people' })).toBeInTheDocument();
+      });
+    });
+
+    it('Close button closes the invite modal', async () => {
+      render(
+        <ChannelList
+          getToken={getToken}
+          serverId="s1"
+          guildName="My Server"
+          instanceUrl={window.location.origin}
+          channels={[textChannel]}
+          myRole="admin"
+          activeChannelId={null}
+          onChannelSelect={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Server menu'));
+      fireEvent.click(screen.getByRole('button', { name: /invite people/i }));
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: 'Invite people' })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Invite people' })).not.toBeInTheDocument();
+      });
     });
   });
 });

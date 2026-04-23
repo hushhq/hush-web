@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { DialogRoot, DialogContent } from './ui';
 import { createGuild, listServerTemplates } from '../lib/api';
 import { parseInviteLink } from '../lib/inviteLinks.js';
 import {
@@ -131,7 +131,6 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
 
   // Template picker state
   const [templates, setTemplates] = useState([]);
@@ -170,21 +169,6 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
   const selectedHandshake = instanceStates.get(selectedInstanceUrl ?? '')?.handshakeData ?? null;
   const creationPolicy = selectedHandshake?.server_creation_policy ?? selectedHandshake?.server_creation_policy_value ?? null;
   const { annotation, disabled: policyDisabled, buttonLabel } = getPolicyState(creationPolicy);
-
-  // ── Modal lifecycle ────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
 
   // ── Load templates for selected instance ──────────────────────────────
 
@@ -286,19 +270,9 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
 
   // ── Render ────────────────────────────────────────────────────────────
 
-  return createPortal(
-    <div
-      className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`}
-      onClick={onClose}
-    >
-      <div
-        className={`modal-content ${isOpen ? 'modal-content-open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-title">
-          {activeTab === 'create' ? 'Create a server' : 'Join a server'}
-        </div>
-
+  return (
+    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent title={activeTab === 'create' ? 'Create a server' : 'Join a server'}>
         {/* Tab bar */}
         <div className="gcm-tab-bar">
           <button
@@ -413,7 +387,7 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
                 className="btn btn-primary"
                 disabled={loading || !name.trim() || policyDisabled || connectedInstances.length === 0}
               >
-                {loading ? 'Creating\u2026' : buttonLabel}
+                {loading ? 'Creating…' : buttonLabel}
               </button>
             </div>
           </form>
@@ -452,8 +426,7 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
             </div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </DialogRoot>
   );
 }

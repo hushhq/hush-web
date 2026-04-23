@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { DialogRoot, DialogContent } from './ui/Dialog';
 import {
   DndContext,
   PointerSensor,
@@ -104,20 +104,6 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
   const [type, setType] = useState(CHANNEL_TYPE_TEXT);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -170,16 +156,9 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
     }
   };
 
-  return createPortal(
-    <div
-      className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`}
-      onClick={onClose}
-    >
-      <div
-        className={`modal-content ${isOpen ? 'modal-content-open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-title">Create channel</div>
+  return (
+    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent title="Create channel">
         <form className="modal-form" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="channel-name" className="modal-field-label">Name</label>
@@ -217,9 +196,8 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
             </button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
@@ -227,20 +205,6 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -267,16 +231,9 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
     }
   };
 
-  return createPortal(
-    <div
-      className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`}
-      onClick={onClose}
-    >
-      <div
-        className={`modal-content ${isOpen ? 'modal-content-open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-title">Create category</div>
+  return (
+    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent title="Create category">
         <form className="modal-form" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="category-name" className="modal-field-label">Name</label>
@@ -302,31 +259,16 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </DialogRoot>
   );
 }
 
 function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetadataKey, onClose }) {
-  const [isOpen, setIsOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,10 +332,9 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetad
     } catch { /* clipboard may not be available */ }
   };
 
-  return createPortal(
-    <div className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`} onClick={onClose}>
-      <div className={`modal-content ${isOpen ? 'modal-content-open' : ''}`} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">Invite people</div>
+  return (
+    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent title="Invite people">
         {loading ? (
           <div style={{ color: 'var(--hush-text-secondary)', fontSize: '0.85rem', padding: '16px 0' }}>
             Generating invite link...
@@ -422,9 +363,8 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetad
         <div className="modal-actions" style={{ marginTop: '16px' }}>
           <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </DialogRoot>
   );
 }
 

@@ -358,7 +358,7 @@ describe('GuildCreateModal - submission', () => {
     });
   });
 
-  it('calls onClose when Cancel is clicked', () => {
+  it('Cancel calls onClose exactly once', () => {
     useInstanceContext.mockReturnValue(makeCtx([
       ['https://a.example.com', { connectionState: 'connected', handshakeData: { server_creation_policy: 'open' }, jwt: 'jwt-a' }],
     ]));
@@ -367,6 +367,47 @@ describe('GuildCreateModal - submission', () => {
     renderModal({ activeInstanceUrl: 'https://a.example.com', onClose });
 
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('Escape calls onClose exactly once', () => {
+    useInstanceContext.mockReturnValue(makeCtx([
+      ['https://a.example.com', { connectionState: 'connected', handshakeData: { server_creation_policy: 'open' }, jwt: 'jwt-a' }],
+    ]));
+    const onClose = vi.fn();
+
+    renderModal({ activeInstanceUrl: 'https://a.example.com', onClose });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GuildCreateModal - join tab', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    apiModule.listServerTemplates.mockResolvedValue([]);
+  });
+
+  it('switches to Join tab and shows invite input', () => {
+    useInstanceContext.mockReturnValue(makeCtx([]));
+
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it('Join Cancel calls onClose exactly once', () => {
+    useInstanceContext.mockReturnValue(makeCtx([]));
+    const onClose = vi.fn();
+
+    renderModal({ onClose });
+
+    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
 });
