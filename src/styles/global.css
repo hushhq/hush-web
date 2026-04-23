@@ -532,35 +532,9 @@ a[href]:active {
 
 /* Home: auth choice buttons (Sign in / Register) - hover only.
    Base and hover in CSS so hover is not overridden by inline styles. */
-.home-auth-choice-btn {
-  flex: 1;
-  display: block;
-  padding: 10px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--hush-text-secondary);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: center;
+.home-auth-btn {
+  width: 100%;
   text-decoration: none;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-.home-auth-choice-btn:hover,
-.home-auth-choice-btn:focus-visible {
-  background: var(--hush-hover);
-  border-color: var(--hush-border-hover);
-  color: var(--hush-text);
-}
-.home-auth-choice-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.home-auth-choice-btn:disabled:hover {
-  background: transparent;
-  color: var(--hush-text-secondary);
 }
 
 /* Home: create/join room tabs - hover tonality on inactive tab */
@@ -5145,15 +5119,15 @@ select:focus-visible {
   margin-bottom: 12px;
 }
 
-.home-auth-choices {
+.home-auth-btns {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 16px;
-  background: var(--hush-elevated);
-  border: 1px solid var(--hush-border);
-  padding: 3px;
-  border-radius: var(--radius-md);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.home-auth-separator {
+  margin: 12px 0;
 }
 
 .home-register-hint {

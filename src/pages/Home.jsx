@@ -11,6 +11,7 @@ import { PinUnlockScreen } from '../components/auth/PinUnlockScreen';
 import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
+import { Button, Separator } from '../components/ui';
 
 const SUBTITLE_WORDS = ['share', 'your', 'screen.', 'keep', 'your'];
 
@@ -549,18 +550,20 @@ export default function Home() {
     // Default: CHOOSE view
     return (
       <>
-        <div className="home-auth-choices">
-          <button
-            type="button"
-            className="home-auth-choice-btn"
+        <div className="home-auth-btns">
+          <Button
+            variant="primary"
+            className="home-auth-btn"
             onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
           >
             Sign in
-          </button>
-          <Link className="home-auth-choice-btn" to="/link-device?mode=new">
+          </Button>
+          <Link className="btn btn-secondary home-auth-btn" to="/link-device?mode=new">
             Link to existing device
           </Link>
         </div>
+
+        <Separator className="home-auth-separator" />
 
         {registrationMode !== 'closed' && (
           <p className="home-register-hint">
