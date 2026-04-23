@@ -278,6 +278,19 @@ describe('RegistrationWizard hardening', () => {
     expect(persisted.mnemonic).toBe(ORIGINAL_MNEMONIC);
   });
 
+  it('shows a "Verify your phrase" heading on the mnemonic confirmation step', () => {
+    seedWizardSessionState({
+      step: 'MNEMONIC_CONFIRM',
+      pastDisplayStep: true,
+      mnemonic: ORIGINAL_MNEMONIC,
+      challengePositions: [0, 4, 8],
+    });
+
+    renderWizard();
+
+    expect(screen.getByText(/verify your phrase/i)).toBeInTheDocument();
+  });
+
   it('hides the in-app back button on the mnemonic confirmation step', () => {
     seedWizardSessionState({
       step: 'MNEMONIC_CONFIRM',

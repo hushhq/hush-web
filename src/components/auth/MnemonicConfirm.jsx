@@ -71,9 +71,12 @@ export function MnemonicConfirm({ words, onConfirm, onStartOver, challengePositi
 
   return (
     <div className="mc-container">
-      <p className="mc-heading">
-        Enter the following words to confirm you have saved your recovery phrase.
-      </p>
+      <div>
+        <p className="rw-heading">Verify your phrase</p>
+        <p className="rw-subheading">
+          Enter the following words to confirm you have saved your recovery phrase.
+        </p>
+      </div>
 
       <div className="mc-challenge-group">
         {positions.map((wordIndex, i) => {

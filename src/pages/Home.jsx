@@ -575,7 +575,7 @@ export default function Home() {
           </p>
         )}
 
-        <p className="home-register-hint" style={{ marginTop: '4px' }}>
+        <p className="home-register-hint">
           <button
             type="button"
             className="home-lost-device-link"

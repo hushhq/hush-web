@@ -680,7 +680,6 @@ function InviteCodeStep({ value, onChange, inviteState, onNext, onCancel }) {
           className="btn btn-primary"
           disabled={!value.trim() || inviteState === 'checking'}
           onClick={onNext}
-          style={{ flex: 1, padding: '10px' }}
         >
           {inviteState === 'checking' ? 'Checking...' : 'Continue'}
         </button>
@@ -780,7 +779,6 @@ function UsernameStep({
           className="btn btn-primary"
           disabled={!username.trim() || usernameState !== 'ok'}
           onClick={onNext}
-          style={{ flex: 1, padding: '10px' }}
         >
           Continue
         </button>
@@ -829,7 +827,6 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
           className="btn btn-primary"
           disabled={!savedConfirmed}
           onClick={onNext}
-          style={{ flex: 1, padding: '10px' }}
         >
           Continue
         </button>

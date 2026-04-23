@@ -188,7 +188,6 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
             className="btn btn-primary"
             type="submit"
             disabled={!confirmOk || isLoading}
-            style={{ flex: 1, padding: '10px' }}
           >
             {isLoading ? 'Saving...' : `Set ${isPin ? 'PIN' : 'passphrase'}`}
           </button>

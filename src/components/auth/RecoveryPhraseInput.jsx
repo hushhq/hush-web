@@ -169,7 +169,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
               className="btn btn-primary"
               disabled={isLoading}
               onClick={() => onSubmit(mnemonicString, true)}
-              style={{ flex: 1, padding: '10px' }}
             >
               {isLoading ? 'Signing in...' : 'Revoke other devices'}
             </button>
@@ -178,7 +177,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
               className="btn btn-secondary"
               disabled={isLoading}
               onClick={() => onSubmit(mnemonicString, false)}
-              style={{ flex: 1, padding: '10px' }}
             >
               Keep other devices
             </button>
@@ -187,7 +185,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
             type="button"
             className="back-link"
             onClick={() => setRevokeStep(false)}
-            style={{ marginTop: '8px' }}
           >
             ← Back
           </button>
@@ -276,7 +273,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
           className="btn btn-primary"
           disabled={!isValid || isLoading}
           onClick={handleSubmit}
-          style={{ flex: 1, padding: '10px' }}
         >
           {isLoading ? 'Signing in...' : 'Sign in'}
         </button>
