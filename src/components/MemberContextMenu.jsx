@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import {
+  DropdownMenuRoot, DropdownMenuTrigger,
+  DropdownMenuContent, DropdownMenuItem,
+} from './ui';
 
 const MENU_WIDTH = 160;
-const MENU_ITEM_HEIGHT = 32;
 
 const ROLE_ORDER = { owner: 3, admin: 2, mod: 1, member: 0 };
 
@@ -10,17 +11,6 @@ const ROLE_ORDER = { owner: 3, admin: 2, mod: 1, member: 0 };
 function rank(role) {
   return ROLE_ORDER[role] ?? 0;
 }
-
-function clampPosition(x, y, itemCount) {
-  const menuHeight = itemCount * MENU_ITEM_HEIGHT + 8;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  return {
-    left: Math.min(x, vw - MENU_WIDTH - 8),
-    top: Math.min(y, vh - menuHeight - 8),
-  };
-}
-
 
 /**
  * Resolves which mod actions should appear in the context menu.
@@ -37,73 +27,62 @@ function getAvailableActions(myRole, targetRole, isTargetSelf) {
   if (rank(myRole) <= rank(targetRole)) return [];
 
   const actions = [
-    { id: 'kick', label: 'Kick', minRank: 1 },
-    { id: 'mute', label: 'Mute', minRank: 1 },
-    { id: 'ban', label: 'Ban', minRank: 2 },
+    { id: 'kick',       label: 'Kick',        minRank: 1 },
+    { id: 'mute',       label: 'Mute',        minRank: 1 },
+    { id: 'ban',        label: 'Ban',         minRank: 2 },
     { id: 'changeRole', label: 'Change Role', minRank: 2 },
   ];
 
   return actions.filter((a) => rank(myRole) >= a.minRank);
 }
 
+const DANGER_ACTIONS = new Set(['kick', 'ban']);
+
 /**
  * Role-gated context menu for mod actions on a member.
  * Only rendered when the calling component determines the actor is mod+.
+ * Dismiss behavior (Escape, outside pointer) is owned by the DropdownMenu primitive.
  *
  * @param {{ x: number, y: number, member: object, myRole: string, onAction: Function, onClose: Function }} props
  */
 export default function MemberContextMenu({ x, y, member, myRole, onAction, onClose }) {
-  const menuRef = useRef(null);
-
   const targetRole = member.role ?? 'member';
-  const isTargetSelf = false; // Caller already filters self-right-click if desired
-  const actions = getAvailableActions(myRole, targetRole, isTargetSelf);
-
-  const pos = clampPosition(x, y, Math.max(actions.length, 1));
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClick, true);
-    return () => document.removeEventListener('mousedown', handleClick, true);
-  }, [onClose]);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  const actions = getAvailableActions(myRole, targetRole, false);
 
   if (actions.length === 0) return null;
 
-  return createPortal(
-    <div
-      ref={menuRef}
-      className="mcc-menu dropdown-menu"
-      role="menu"
-      aria-label="Member actions"
-      style={{ position: 'fixed', left: pos.left, top: pos.top, width: MENU_WIDTH }}
-    >
-      {actions.map((a) => (
-        <button
-          key={a.id}
-          type="button"
-          className={`mcc-item${a.id === 'kick' || a.id === 'ban' ? ' mcc-item--danger' : ''}`}
-          role="menuitem"
-          onClick={() => {
-            onAction(a.id);
-            onClose();
+  return (
+    <DropdownMenuRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DropdownMenuTrigger asChild>
+        <span
+          aria-hidden
+          style={{
+            position: 'fixed',
+            left: x,
+            top: y,
+            width: 0,
+            height: 0,
+            overflow: 'hidden',
+            pointerEvents: 'none',
           }}
-        >
-          {a.label}
-        </button>
-      ))}
-    </div>,
-    document.body,
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={0}
+        aria-label="Member actions"
+        style={{ minWidth: MENU_WIDTH }}
+      >
+        {actions.map((a) => (
+          <DropdownMenuItem
+            key={a.id}
+            danger={DANGER_ACTIONS.has(a.id)}
+            onSelect={() => onAction(a.id)}
+          >
+            {a.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenuRoot>
   );
 }

@@ -1,52 +1,40 @@
-import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import {
+  AlertDialogRoot,
+  AlertDialogContent,
+  AlertDialogActions,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from './ui/AlertDialog';
 
 /**
- * Generic confirmation dialog.
- * Pressing Escape cancels; pressing Enter confirms.
+ * Generic destructive confirmation dialog.
+ * Always rendered open; mount/unmount controls visibility.
+ *
+ * Callback contract:
+ *   onConfirm — fired only on explicit confirm click
+ *   onCancel  — fired on cancel click or Escape key, never on confirm
  */
 export default function ConfirmModal({ title, message, confirmLabel = 'Confirm', onConfirm, onCancel }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onConfirm();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onConfirm, onCancel]);
-
-  return createPortal(
-    <div
-      className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`}
-      onClick={onCancel}
-    >
-      <div
-        className={`modal-content ${isOpen ? 'modal-content-open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
+  return (
+    <AlertDialogRoot open>
+      <AlertDialogContent
+        title={title}
+        description={message}
+        onEscapeKeyDown={onCancel}
       >
-        <div className="modal-title">{title}</div>
-        {message && (
-          <p className="confirm-modal-message">
-            {message}
-          </p>
-        )}
-        <div className="modal-actions confirm-modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm}>
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        <AlertDialogActions>
+          <AlertDialogCancel asChild>
+            <button type="button" className="btn btn-secondary" onClick={onCancel}>
+              Cancel
+            </button>
+          </AlertDialogCancel>
+          <AlertDialogAction asChild>
+            <button type="button" className="btn btn-danger" onClick={onConfirm}>
+              {confirmLabel}
+            </button>
+          </AlertDialogAction>
+        </AlertDialogActions>
+      </AlertDialogContent>
+    </AlertDialogRoot>
   );
 }
