@@ -183,6 +183,30 @@ describe('InstancesSettingsTab - disconnect flow', () => {
     });
   });
 
+  it('confirm and cancel buttons are disabled while disconnect is in flight', async () => {
+    let resolveDisconnect;
+    const disconnectInstance = vi.fn().mockReturnValue(
+      new Promise((resolve) => { resolveDisconnect = resolve; }),
+    );
+    const instanceStates = new Map([
+      ['https://a.example.com', makeState('connected', [{ id: 'g1' }])],
+    ]);
+
+    renderWithCtx(instanceStates, disconnectInstance);
+
+    fireEvent.click(screen.getByRole('button', { name: /^disconnect$/i }));
+    const allDisconnectBtns = screen.getAllByRole('button', { name: /disconnect/i });
+    fireEvent.click(allDisconnectBtns[allDisconnectBtns.length - 1]);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /disconnecting/i })).toBeDisabled();
+    });
+
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
+
+    resolveDisconnect();
+  });
+
   it('cancelling keeps the instance in place', () => {
     const disconnectInstance = vi.fn();
     const instanceStates = new Map([

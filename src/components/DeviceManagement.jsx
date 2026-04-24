@@ -15,6 +15,7 @@ import { getReadableDeviceLabel } from '../lib/deviceLabel.js';
 import { TransparencyVerifier } from '../lib/transparencyVerifier.js';
 import { bytesToHex } from '../lib/identityVault.js';
 import { HOME_INSTANCE_KEY } from '../hooks/useAuth.js';
+import ConfirmModal from './ConfirmModal.jsx';
 
 function formatRelativeTime(dateStr) {
   if (!dateStr) return 'Never';
@@ -43,27 +44,6 @@ function getDeviceStaleness(lastSeenStr) {
   return null;
 }
 
-function RevokeConfirm({ deviceLabel, onConfirm, onCancel, loading }) {
-  return (
-    <div className="dm-confirm-overlay">
-      <div className="dm-confirm-modal">
-        <div className="dm-confirm-title">Revoke device?</div>
-        <div className="dm-confirm-text">
-          Remove <strong>{deviceLabel}</strong> from your account.
-          It will no longer be able to access your account.
-        </div>
-        <div className="dm-confirm-actions">
-          <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Revoking...' : 'Revoke device'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function getDeviceDisplayLabel(device, currentDeviceId) {
   if (device?.label) return device.label;
@@ -134,12 +114,12 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
     try {
       await revokeDeviceKey(token, confirmRevoke.deviceId);
       await verifyTransparencyAfterOp('device_revoke');
-      setConfirmRevoke(null);
       await fetchDevices();
     } catch (err) {
       setError(err.message || 'Failed to revoke device');
     } finally {
       setRevoking(false);
+      setConfirmRevoke(null);
     }
   }, [confirmRevoke, token, fetchDevices, verifyTransparencyAfterOp]);
 
@@ -233,11 +213,14 @@ export default function DeviceManagement({ token, currentDeviceId, identityKeyRe
       </div>
 
       {confirmRevoke && (
-        <RevokeConfirm
-          deviceLabel={confirmRevoke.label}
+        <ConfirmModal
+          title="Revoke device?"
+          message={`Remove ${confirmRevoke.label} from your account. It will no longer be able to access your account.`}
+          confirmLabel="Revoke device"
+          confirmLoadingLabel="Revoking…"
+          loading={revoking}
           onConfirm={handleRevoke}
           onCancel={() => setConfirmRevoke(null)}
-          loading={revoking}
         />
       )}
     </>

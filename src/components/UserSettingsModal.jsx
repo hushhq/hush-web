@@ -17,6 +17,7 @@ import {
 import DeviceManagement from './DeviceManagement.jsx';
 import InstancesSettingsTab from './InstancesSettingsTab.jsx';
 import { Switch, Separator } from './ui/index.js';
+import ConfirmModal from './ConfirmModal.jsx';
 
 const TAB_ACCOUNT = 'account';
 const TAB_APPEARANCE = 'appearance';
@@ -148,36 +149,6 @@ if (typeof window !== 'undefined') {
 }
 
 
-// ─── Logout Confirmation Modal ────────────────────────────
-
-function LogoutConfirmModal({ onConfirm, onCancel, loading }) {
-  return createPortal(
-    <div className="logout-confirm-overlay">
-      <div className="logout-confirm-card">
-        <div className="logout-confirm-title">Sign out and wipe data?</div>
-        <div className="logout-confirm-body">
-          This will permanently delete all local data on this device,
-          including your message history, encryption keys, and session.
-          Messages will become unreadable after signing out.
-        </div>
-        <div className="logout-confirm-warning">
-          You will need your 12-word recovery phrase to sign back in.
-          This action cannot be undone.
-        </div>
-        <div className="logout-confirm-actions">
-          <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
-            Stay signed in
-          </button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Signing out\u2026' : 'Sign out and wipe data'}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 // ─── Account Tab ──────────────────────────────────────────
 
 function AccountTab() {
@@ -295,10 +266,22 @@ function AccountTab() {
       </div>
 
       {showLogoutConfirm && (
-        <LogoutConfirmModal
+        <ConfirmModal
+          title="Sign out and wipe data?"
+          message={
+            <>
+              {'This will permanently delete all local data on this device, including your message history, encryption keys, and session. Messages will become unreadable after signing out. '}
+              <span style={{ color: 'var(--hush-danger)' }}>
+                You will need your 12-word recovery phrase to sign back in. This action cannot be undone.
+              </span>
+            </>
+          }
+          confirmLabel="Sign out and wipe data"
+          confirmLoadingLabel="Signing out\u2026"
+          cancelLabel="Stay signed in"
+          loading={loggingOut}
           onConfirm={handleLogoutConfirm}
           onCancel={() => setShowLogoutConfirm(false)}
-          loading={loggingOut}
         />
       )}
     </>

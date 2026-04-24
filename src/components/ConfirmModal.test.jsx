@@ -50,4 +50,27 @@ describe('ConfirmModal', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it('loading=true disables both buttons', () => {
+    renderModal({ loading: true });
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  });
+
+  it('loading=true shows confirmLoadingLabel when provided', () => {
+    renderModal({ loading: true, confirmLoadingLabel: 'Deleting...' });
+    expect(screen.getByRole('button', { name: 'Deleting...' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+  });
+
+  it('loading=true blocks Escape key', () => {
+    const { onCancel } = renderModal({ loading: true });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('cancelLabel overrides the cancel button text', () => {
+    renderModal({ cancelLabel: 'Stay signed in' });
+    expect(screen.getByRole('button', { name: 'Stay signed in' })).toBeInTheDocument();
+  });
 });

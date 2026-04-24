@@ -3692,54 +3692,7 @@ select:focus-visible {
   padding: 24px 0;
 }
 
-/* Logout confirm modal (inline in UserSettingsModal) */
-.logout-confirm-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 400;
-}
 
-.logout-confirm-card {
-  background: var(--hush-surface);
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  width: 100%;
-  max-width: 400px;
-}
-
-.logout-confirm-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--hush-text);
-  margin-bottom: 12px;
-}
-
-.logout-confirm-body {
-  font-size: 0.85rem;
-  color: var(--hush-text-secondary);
-  margin-bottom: 8px;
-  line-height: 1.6;
-}
-
-.logout-confirm-warning {
-  font-size: 0.85rem;
-  color: var(--hush-danger);
-  margin-bottom: 24px;
-  line-height: 1.6;
-}
-
-.logout-confirm-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
 
 /* Confirm modal message */
 .confirm-modal-message {
@@ -4061,25 +4014,7 @@ select:focus-visible {
   background: var(--hush-btn-danger-hover);
 }
 
-.ist-confirm {
-  margin-top: 8px;
-  padding: 12px 16px;
-  background: var(--hush-black);
-  border: 1px solid var(--hush-danger);
-}
 
-.ist-confirm-text {
-  font-size: 0.85rem;
-  color: var(--hush-text-secondary);
-  margin-bottom: 12px;
-  line-height: 1.6;
-}
-
-.ist-confirm-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
 
 /* ── DeviceManagement ─────────────────────── */
 .dm-table {
@@ -4173,45 +4108,7 @@ select:focus-visible {
   margin-bottom: 12px;
 }
 
-.dm-confirm-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 300;
-}
 
-.dm-confirm-modal {
-  background: var(--hush-surface);
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  width: 100%;
-  max-width: 360px;
-}
-
-.dm-confirm-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--hush-text);
-  margin-bottom: 12px;
-}
-
-.dm-confirm-text {
-  font-size: 0.85rem;
-  color: var(--hush-text-secondary);
-  margin-bottom: 24px;
-}
-
-.dm-confirm-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
 
 .dm-stale-warning {
   display: block;

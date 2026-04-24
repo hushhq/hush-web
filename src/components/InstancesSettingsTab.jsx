@@ -1,5 +1,6 @@
 import { useState, useContext } from 'react';
 import { InstanceContext } from '../contexts/InstanceContext.jsx';
+import ConfirmModal from './ConfirmModal.jsx';
 
 // ── Connection status indicator ──────────────────────────────────────────────
 
@@ -18,46 +19,6 @@ function statusIndicator(state) {
     default:
       return { color: 'var(--hush-danger)', label: 'offline' };
   }
-}
-
-// ── Disconnect confirmation modal ─────────────────────────────────────────────
-
-/**
- * Inline confirmation panel shown within the instance row.
- * Avoids portal complexity - styled inline below the row.
- *
- * @param {{ domain: string, serverCount: number, onConfirm: Function, onCancel: Function, loading: boolean }} props
- */
-function DisconnectConfirm({ domain, serverCount, onConfirm, onCancel, loading }) {
-  const label = serverCount === 1 ? '1 server' : `${serverCount} servers`;
-  return (
-    <div className="ist-confirm">
-      <div className="ist-confirm-text">
-        Disconnect from <strong style={{ color: 'var(--hush-text)' }}>{domain}</strong>?
-        This will leave all {label} on this instance.
-      </div>
-      <div className="ist-confirm-actions">
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={onCancel}
-          disabled={loading}
-          style={{ fontSize: '0.8rem', padding: '7px 14px' }}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="btn btn-danger"
-          onClick={onConfirm}
-          disabled={loading}
-          style={{ fontSize: '0.8rem', padding: '7px 14px' }}
-        >
-          {loading ? 'Disconnecting\u2026' : 'Disconnect'}
-        </button>
-      </div>
-    </div>
-  );
 }
 
 // ── Instance row ─────────────────────────────────────────────────────────────
@@ -79,6 +40,7 @@ function InstanceRow({ instanceUrl, state, onDisconnect }) {
   }
 
   const serverCount = state?.guilds?.length ?? 0;
+  const serverLabel = serverCount === 1 ? '1 server' : `${serverCount} servers`;
   const indicator = statusIndicator(state?.connectionState ?? 'offline');
 
   const handleDisconnectClick = () => setConfirming(true);
@@ -113,7 +75,7 @@ function InstanceRow({ instanceUrl, state, onDisconnect }) {
               : serverCount === 1
                 ? '1 server'
                 : `${serverCount} servers`}
-            {' \u00b7 '}
+            {' · '}
             <span style={{ color: indicator.color }}>{indicator.label}</span>
           </div>
         </div>
@@ -131,12 +93,14 @@ function InstanceRow({ instanceUrl, state, onDisconnect }) {
       </div>
 
       {confirming && (
-        <DisconnectConfirm
-          domain={domain}
-          serverCount={serverCount}
+        <ConfirmModal
+          title={`Disconnect from ${domain}?`}
+          message={`This will leave all ${serverLabel} on this instance.`}
+          confirmLabel="Disconnect"
+          confirmLoadingLabel="Disconnecting…"
+          loading={disconnecting}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
-          loading={disconnecting}
         />
       )}
     </div>
