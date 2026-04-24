@@ -253,7 +253,7 @@ describe('EmptyState', () => {
     );
     const browseBtn = screen.getByRole('button', { name: /browse public servers/i });
     expect(browseBtn).toBeInTheDocument();
-    expect(browseBtn.className).toContain('empty-btn-secondary');
+    expect(browseBtn.className).toContain('btn-secondary');
   });
 
   it('calls onCreateServer when Create button is clicked', () => {

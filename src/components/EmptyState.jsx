@@ -1,6 +1,9 @@
 /**
  * EmptyState - shown in the main content area when the user has no guild memberships.
  *
+ * Rebuilt with Radix Themes primitives for layout, typography, and iconography
+ * so the surface is consistent with the rest of the system.
+ *
  * Renders:
  *   1. Welcome heading
  *   2. "Create a server" primary button (always rendered; disabled when no instance
@@ -15,75 +18,85 @@
  *   onBrowseServers: () => void,
  * }} props
  */
+import { Flex, Text, Heading, Box, Separator } from '@radix-ui/themes';
+import { PlusIcon, GlobeIcon, RocketIcon, ExternalLinkIcon } from '@radix-ui/react-icons';
+import { Button } from './ui';
+
 export default function EmptyState({ instanceStates, onCreateServer, onBrowseServers }) {
   const canCreateServer = _canCreateServer(instanceStates);
 
   return (
-    <div className="empty-container" data-testid="empty-state">
-      <div className="empty-icon" aria-hidden="true">
-        {/* Simple server icon (Lucide-style) */}
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-          <rect x="2" y="2" width="20" height="8" rx="0" />
-          <rect x="2" y="14" width="20" height="8" rx="0" />
-          <line x1="6" y1="6" x2="6.01" y2="6" />
-          <line x1="6" y1="18" x2="6.01" y2="18" />
-        </svg>
-      </div>
+    <Box className="empty-container" data-testid="empty-state">
+      <Flex direction="column" align="center" justify="center" gap="4">
+        <Box className="empty-icon">
+          <RocketIcon width="32" height="32" aria-hidden="true" />
+        </Box>
 
-      <h2 className="empty-heading">Welcome to hush</h2>
+        <Heading as="h2" size="5" align="center" className="empty-heading">
+          Welcome to hush
+        </Heading>
 
-      <p className="empty-description">
-        Your private space for encrypted screen sharing and chat.
-        No servers here yet - find one below or get your own.
-      </p>
+        <Text size="2" color="gray" align="center" className="empty-description">
+          Your private space for encrypted screen sharing and chat.
+          No servers here yet — find one below or get your own.
+        </Text>
 
-      <button
-        type="button"
-        className="empty-btn-primary"
-        onClick={onCreateServer}
-        disabled={!canCreateServer}
-      >
-        Create a server
-      </button>
-
-      {!canCreateServer && (
-        <p className="empty-creation-blocked" data-testid="creation-blocked-text">
-          Server creation is not available on this instance
-        </p>
-      )}
-
-      <button
-        type="button"
-        className="empty-btn-secondary"
-        onClick={onBrowseServers}
-      >
-        Browse public servers
-      </button>
-
-      <p className="empty-invite-hint">
-        Have an invite link? Just click it - you&apos;ll be connected automatically.
-      </p>
-
-      <div className="empty-footer">
-        <a
-          href="https://gethush.live"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="empty-footer-link"
+        <Button
+          variant="primary"
+          className="empty-btn"
+          onClick={onCreateServer}
+          disabled={!canCreateServer}
         >
-          Get a server
-        </a>
-        <span className="empty-footer-dot" aria-hidden="true">·</span>
-        <a
-          href="https://gethush.live/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="empty-footer-link"
+          <PlusIcon width="16" height="16" aria-hidden="true" />
+          Create a server
+        </Button>
+
+        {!canCreateServer && (
+          <Text size="1" color="red" align="center" data-testid="creation-blocked-text">
+            Server creation is not available on this instance
+          </Text>
+        )}
+
+        <Button
+          variant="secondary"
+          className="empty-btn"
+          onClick={onBrowseServers}
         >
-          Self-host
-        </a>
-      </div>
-    </div>
+          <GlobeIcon width="16" height="16" aria-hidden="true" />
+          Browse public servers
+        </Button>
+
+        <Text size="1" color="gray" align="center" className="empty-invite-hint">
+          Have an invite link? Just click it — you&apos;ll be connected automatically.
+        </Text>
+
+        <Separator size="1" className="empty-separator" />
+
+        <Flex align="center" justify="center" gap="2">
+          <a
+            href="https://gethush.live"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="empty-footer-link"
+          >
+            <ExternalLinkIcon width="12" height="12" aria-hidden="true" />
+            Get a server
+          </a>
+          <Text size="1" color="gray" aria-hidden="true">
+            &middot;
+          </Text>
+          <a
+            href="https://gethush.live/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="empty-footer-link"
+          >
+            <ExternalLinkIcon width="12" height="12" aria-hidden="true" />
+            Self-host
+          </a>
+        </Flex>
+      </Flex>
+    </Box>
   );
 }
 

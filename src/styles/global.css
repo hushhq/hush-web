@@ -4218,21 +4218,13 @@ select:focus-visible {
 
 /* ── EmptyState ───────────────────────────── */
 .empty-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   height: 100%;
-  text-align: center;
-  padding: 40px;
-  gap: 12px;
   max-width: 480px;
   margin: 0 auto;
+  padding: 40px 24px;
 }
 
 .empty-icon {
-  width: 20px;
-  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4240,70 +4232,32 @@ select:focus-visible {
 }
 
 .empty-heading {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--hush-text-muted);
+  color: var(--hush-text);
   letter-spacing: -0.01em;
-  margin: 0;
 }
 
 .empty-description {
-  font-size: 13px;
-  color: var(--hush-text-muted);
   max-width: 320px;
-  margin: 0;
   line-height: 1.6;
 }
 
-.empty-btn-primary {
-  background: var(--hush-amber);
-  color: var(--hush-black);
-  font-weight: 500;
-  border: none;
-  border-radius: var(--radius-md);
+.empty-btn {
   padding: 8px 20px;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.empty-btn-primary:hover {
-  background: var(--hush-amber-bright);
 }
 
 .empty-invite-hint {
-  font-size: 12px;
-  color: var(--hush-text-muted);
   max-width: 280px;
-  margin: 0;
   line-height: 1.5;
 }
 
-.empty-btn-secondary {
-  background: transparent;
-  color: var(--hush-text-secondary);
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-md);
-  padding: 8px 20px;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  transition: all var(--duration-fast) var(--ease-out);
-}
-
-.empty-btn-secondary:hover {
-  background: var(--hush-hover);
-}
-
-.empty-footer {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 8px;
+.empty-separator {
+  width: 40px;
 }
 
 .empty-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: var(--hush-text-muted);
   text-decoration: none;
@@ -4312,11 +4266,6 @@ select:focus-visible {
 
 .empty-footer-link:hover {
   color: var(--hush-text);
-}
-
-.empty-footer-dot {
-  color: var(--hush-text-ghost);
-  font-size: 12px;
 }
 
 /* ── SystemMessageRow ─────────────────────── */
