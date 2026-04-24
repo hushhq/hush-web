@@ -558,9 +558,9 @@ export default function Home() {
           >
             Sign in
           </Button>
-          <Link className="btn btn-secondary home-auth-btn" to="/link-device?mode=new">
-            Link to existing device
-          </Link>
+          <Button variant="secondary" className="home-auth-btn" asChild>
+            <Link to="/link-device?mode=new">Link to existing device</Link>
+          </Button>
         </div>
 
         <Separator className="home-auth-separator" />
@@ -577,7 +577,7 @@ export default function Home() {
           )}
           <button
             type="button"
-            className="home-lost-device-link"
+            className="back-link"
             onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
           >
             Lost a device?

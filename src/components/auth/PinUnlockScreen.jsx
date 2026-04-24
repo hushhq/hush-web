@@ -171,7 +171,7 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
 
       <button
         type="button"
-        className="pin-unlock-switch"
+        className="back-link"
         onClick={onSwitchAccount}
       >
         Not you? Sign in

@@ -575,7 +575,9 @@ a[href]:active {
 .rpi-actions .back-link,
 .rw-actions .back-link,
 .mc-actions .back-link,
-.pin-setup-actions .back-link {
+.pin-setup-actions .back-link,
+.home-auth-secondary .back-link,
+.pin-unlock-container .back-link {
   margin-bottom: 0;
 }
 
@@ -6506,25 +6508,6 @@ select:focus-visible {
   text-align: center;
 }
 
-.pin-unlock-switch {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--hush-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  text-decoration: underline;
-  margin-top: 4px;
-  align-self: center;
-  transition: color var(--duration-fast) var(--ease-out);
-}
-
-.pin-unlock-switch:hover,
-.pin-unlock-switch:focus-visible {
-  color: var(--hush-text);
-}
-
 .pin-unlock-countdown {
   font-size: 11px;
   color: var(--hush-amber-dim);
@@ -7034,25 +7017,6 @@ select:focus-visible {
 .post-recovery-actions {
   display: flex;
   gap: 8px;
-}
-
-/* ── home-lost-device-link ──────────────────── */
-/* Subtle text-link button on login CHOOSE view  */
-.home-lost-device-link {
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  color: var(--hush-text-muted);
-  transition: color var(--duration-fast) var(--ease-out);
-}
-
-.home-lost-device-link:hover,
-.home-lost-device-link:focus-visible {
-  color: var(--hush-amber);
-  text-decoration: underline;
 }
 
 /* ── AuthInstanceSelector ───────────────────── */
