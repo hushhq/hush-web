@@ -1,5 +1,5 @@
 import { Flex } from '@radix-ui/themes';
-import { SpeakerLoudIcon } from '@radix-ui/react-icons';
+import VoiceActiveBar from './VoiceActiveBar';
 
 /**
  * Mobile two-stack layout shell.
@@ -29,10 +29,10 @@ export default function MobileShell({
 
       <div className={`mobile-stack-2${mobileStack >= 2 ? ' active' : ''}`}>
         {activeVoiceChannel && !isViewingVoice && (
-          <button type="button" className="voice-active-bar" onClick={onVoiceBarClick}>
-            <SpeakerLoudIcon width="12" height="12" aria-hidden="true" />
-            In Voice: {activeVoiceChannel._displayName ?? activeVoiceChannel.name} - Tap to return
-          </button>
+          <VoiceActiveBar
+            activeVoiceChannel={activeVoiceChannel}
+            onClick={onVoiceBarClick}
+          />
         )}
 
         <Flex className="mobile-content-area" direction="column" flexGrow="1" overflow="hidden" position="relative">

@@ -2151,32 +2151,6 @@ select:focus-visible {
   transition: padding-right var(--duration-fast) var(--ease-out);
 }
 
-.lay-members-toggle {
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  font-family: var(--font-sans);
-  background: none;
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-sm);
-  color: var(--hush-text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.lay-hamburger-btn {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--hush-text-secondary);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-}
-
 /* ── Chat area (Chat.jsx) ──────────────────────── */
 
 .chat-username {

@@ -1,8 +1,8 @@
 import { Flex, Box, Text } from '@radix-ui/themes';
-import { HamburgerMenuIcon } from '@radix-ui/react-icons';
 import SystemChannel from '../../pages/SystemChannel';
 import TextChannel from '../../pages/TextChannel';
 import VoiceChannel from '../../pages/VoiceChannel';
+import ChannelAreaHeader from './ChannelAreaHeader';
 
 /**
  * Shared channel content surface used by both desktop and mobile layouts.
@@ -130,28 +130,12 @@ export default function ChannelContent({
         ) : (
           <>
             {!currentChannel && (
-              <header className="lay-channel-area-header">
-                {isMobile ? (
-                  <button
-                    type="button"
-                    onClick={toggleDrawer}
-                    className="lay-hamburger-btn"
-                    aria-label="Toggle channels"
-                  >
-                    <HamburgerMenuIcon width="20" height="20" aria-hidden="true" />
-                  </button>
-                ) : (
-                  <div />
-                )}
-                <button
-                  type="button"
-                  className="lay-members-toggle"
-                  onClick={() => togglePanel('members')}
-                  aria-pressed={showMembers}
-                >
-                  Members
-                </button>
-              </header>
+              <ChannelAreaHeader
+                isMobile={isMobile}
+                onToggleDrawer={toggleDrawer}
+                onToggleMembers={() => togglePanel('members')}
+                showMembers={showMembers}
+              />
             )}
             <Flex flexGrow="1" overflow="hidden">
               <Box flexGrow="1" />
