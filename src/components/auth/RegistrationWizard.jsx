@@ -3,6 +3,7 @@ import { generateIdentityMnemonic } from '../../lib/bip39Identity';
 import { checkUsernameAvailable, getInviteInfo } from '../../lib/api';
 import { MnemonicGrid } from './MnemonicGrid';
 import { MnemonicConfirm } from './MnemonicConfirm';
+import { Button } from '../ui';
 
 const STEP = {
   INVITE_CODE: 'INVITE_CODE',
@@ -675,14 +676,13 @@ function InviteCodeStep({ value, onChange, inviteState, onNext, onCancel }) {
         <button type="button" className="back-link" onClick={onCancel}>
           ← Cancel
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
+        <Button
+          variant="primary"
           disabled={!value.trim() || inviteState === 'checking'}
           onClick={onNext}
         >
           {inviteState === 'checking' ? 'Checking...' : 'Continue'}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -774,14 +774,13 @@ function UsernameStep({
         <button type="button" className="back-link" onClick={onBack}>
           ← Back
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
+        <Button
+          variant="primary"
           disabled={!username.trim() || usernameState !== 'ok'}
           onClick={onNext}
         >
           Continue
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -822,14 +821,13 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
         <button type="button" className="back-link" onClick={onBack}>
           ← Back
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
+        <Button
+          variant="primary"
           disabled={!savedConfirmed}
           onClick={onNext}
         >
           Continue
-        </button>
+        </Button>
       </div>
     </div>
   );

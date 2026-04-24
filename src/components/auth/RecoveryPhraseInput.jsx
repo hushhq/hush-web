@@ -267,14 +267,13 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
         >
           ← Back
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
+        <Button
+          variant="primary"
           disabled={!isValid || isLoading}
           onClick={handleSubmit}
         >
           {isLoading ? 'Signing in...' : 'Sign in'}
-        </button>
+        </Button>
       </div>
     </div>
   );

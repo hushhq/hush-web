@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Button } from '../ui';
 
 /** Returns inline style for the active/inactive mode-toggle button. */
 function modeBtnStyle(active) {
@@ -184,13 +185,13 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
               Skip for now
             </button>
           )}
-          <button
-            className="btn btn-primary"
+          <Button
+            variant="primary"
             type="submit"
             disabled={!confirmOk || isLoading}
           >
             {isLoading ? 'Saving...' : `Set ${isPin ? 'PIN' : 'passphrase'}`}
-          </button>
+          </Button>
         </div>
       </form>
 

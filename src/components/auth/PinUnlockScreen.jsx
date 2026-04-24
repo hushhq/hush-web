@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Button } from '../ui';
 
 const MAX_ATTEMPTS = 10;
 
@@ -159,13 +160,13 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
           </div>
         )}
 
-        <button
-          className="btn btn-primary"
+        <Button
+          variant="primary"
           type="submit"
           disabled={!pin || pin.length < 4 || isLoading || isDelayed}
         >
           {isLoading ? 'Unlocking...' : 'Unlock'}
-        </button>
+        </Button>
       </form>
 
       <button
