@@ -6,6 +6,7 @@ import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.js
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
+import { Button } from '../components/ui';
 import * as mlsStore from '../lib/mlsStore';
 import {
   exportGuildMetadataKeySnapshot,
@@ -230,9 +231,9 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
       {error && <div className="ld-error">{error}</div>}
 
       <div className="ld-actions">
-        <button type="button" className="btn btn-secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+        <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
           Regenerate
-        </button>
+        </Button>
       </div>
       <LinkDeviceBackLink />
     </div>
@@ -391,9 +392,9 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           </div>
         )}
         <div className="ld-actions">
-          <button type="button" className="btn btn-primary" onClick={() => navigate(unlockResumePath)}>
+          <Button variant="primary" onClick={() => navigate(unlockResumePath)}>
             Unlock to approve
-          </button>
+          </Button>
         </div>
         <LinkDeviceBackLink />
       </div>
@@ -437,9 +438,9 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
             autoCorrect="off"
             spellCheck="false"
           />
-          <button type="submit" className="btn btn-secondary" disabled={isResolving}>
+          <Button type="submit" variant="secondary" disabled={isResolving}>
             {isResolving ? 'Checking…' : 'Resolve code'}
-          </button>
+          </Button>
         </form>
       )}
 
@@ -465,13 +466,13 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
 
       <div className="ld-actions">
         {claim && (
-          <button type="button" className="btn btn-primary" onClick={handleApprove} disabled={isApproving}>
+          <Button variant="primary" onClick={handleApprove} disabled={isApproving}>
             {isApproving ? 'Approving…' : 'Approve link'}
-          </button>
+          </Button>
         )}
-        <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>
+        <Button variant="secondary" onClick={() => navigate('/')}>
           Close
-        </button>
+        </Button>
       </div>
     </div>
   );

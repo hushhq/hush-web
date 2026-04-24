@@ -231,36 +231,19 @@ describe('Home', () => {
     expect(link).toHaveAttribute('href', '/link-device?mode=new');
   });
 
-  it('keeps the encrypted badge static when handshake fails and shows the reachability error separately', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    global.fetch = vi.fn().mockRejectedValue(new TypeError('Load failed'));
-
+  it('shows the Hush logo and sign-in heading on the unauthenticated home screen', () => {
     renderHome();
-
-    expect(screen.getByText(/^end-to-end encrypted$/i)).toBeInTheDocument();
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not reach .*check the instance url and that the server is online/i);
-    consoleErrorSpy.mockRestore();
+    expect(screen.getByRole('img', { name: /hush logo/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /log in to hush/i })).toBeInTheDocument();
   });
 
-  it('shows the encrypted badge even when handshake capabilities are absent', () => {
-    renderHome();
-
-    expect(screen.getByText(/^end-to-end encrypted$/i)).toBeInTheDocument();
-  });
-
-  // ── J.1-03: sign-up entry point ──────────────────────────────────────────
-
-  it('"Don\'t have an account? Sign up" link is visible on the CHOOSE auth view', () => {
-    renderHome();
-    expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
-  });
-
-  it('"Don\'t have an account? Sign up" link navigates to the registration wizard', async () => {
+  it('shows "Welcome to Hush" heading when switching to registration', async () => {
     const user = userEvent.setup();
     renderHome();
 
     await user.click(screen.getByRole('button', { name: /sign up/i }));
 
+    expect(screen.getByRole('heading', { name: /welcome to hush/i })).toBeInTheDocument();
     expect(screen.getByText('Registration Wizard')).toBeInTheDocument();
   });
 

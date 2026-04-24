@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flex, Text, Heading, Separator } from '@radix-ui/themes';
+import { Flex, Text, Heading } from '@radix-ui/themes';
 import { EnterIcon, Link1Icon } from '@radix-ui/react-icons';
 import { APP_VERSION } from '../utils/constants';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,41 +13,8 @@ import { PinUnlockScreen } from '../components/auth/PinUnlockScreen';
 import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button, Tooltip } from '../components/ui';
-
-const SUBTITLE_WORDS = ['share', 'your', 'screen.', 'keep', 'your'];
-
-const _TYPEWRITER_POOL = [
-  'secrets',
-  'aliases',
-  'data',
-  'silence',
-  'whispers',
-  'scrolls',
-  'cookies',
-  'DMs',
-  'chats',
-  'burners',
-  'typing',
-  'thoughts',
-  'flings',
-  'villain arc',
-  'binges',
-];
-
-function _buildShuffledSequence() {
-  const pool = [..._TYPEWRITER_POOL];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-  return ['privacy', ...pool];
-}
-
-const TYPEWRITER_WORDS = _buildShuffledSequence();
-
-/** Width of slot is fixed to first word "privacy." so centering is based on that; longer words overflow to the right */
-const FIRST_TYPEWRITER_WORD = 'privacy.';
+import { Button } from '../components/ui';
+import { HushLogo } from '../components/brand/HushLogo';
 
 const HOME_PAGE_SCROLL_STYLE = {
   height: '100%',
@@ -56,125 +23,6 @@ const HOME_PAGE_SCROLL_STYLE = {
   overflowX: 'hidden',
   WebkitOverflowScrolling: 'touch',
 };
-
-const TYPE_SPEED_MS   = 65;
-const DELETE_SPEED_MS = 40;
-const PAUSE_AFTER_MS  = 1400;
-const PAUSE_BEFORE_MS = 200;
-
-const wordVariants = {
-  hidden: { opacity: 0, y: 8 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
-  },
-};
-
-function TypewriterSlot() {
-  const sequenceRef = useRef(TYPEWRITER_WORDS);
-  const ghostRef = useRef(null);
-  const [slotWidthPx, setSlotWidthPx] = useState(null);
-  const [wordIndex, setWordIndex] = useState(0);
-  const [displayed, setDisplayed] = useState('');
-  const [phase, setPhase] = useState('typing');
-
-  useEffect(() => {
-    if (!ghostRef.current) return;
-    const measure = () => {
-      if (ghostRef.current) {
-        const w = ghostRef.current.getBoundingClientRect().width;
-        setSlotWidthPx(w);
-      }
-    };
-    if (document.fonts?.ready) {
-      document.fonts.ready.then(measure);
-    } else {
-      measure();
-    }
-  }, []);
-
-  useEffect(() => {
-    const word = sequenceRef.current[wordIndex];
-    const fullText = word + '.';
-
-    if (phase === 'typing') {
-      if (displayed.length < fullText.length) {
-        const t = setTimeout(
-          () => setDisplayed(fullText.slice(0, displayed.length + 1)),
-          TYPE_SPEED_MS,
-        );
-        return () => clearTimeout(t);
-      }
-      setPhase('pausing');
-      return;
-    }
-
-    if (phase === 'pausing') {
-      const t = setTimeout(() => setPhase('deleting'), PAUSE_AFTER_MS);
-      return () => clearTimeout(t);
-    }
-
-    if (phase === 'deleting') {
-      if (displayed.length > 0) {
-        const t = setTimeout(
-          () => setDisplayed((d) => d.slice(0, -1)),
-          DELETE_SPEED_MS,
-        );
-        return () => clearTimeout(t);
-      }
-      setPhase('waiting');
-      return;
-    }
-
-    if (phase === 'waiting') {
-      const t = setTimeout(() => {
-        setWordIndex((i) => {
-          const next = i + 1;
-          if (next >= sequenceRef.current.length) {
-            sequenceRef.current = _buildShuffledSequence();
-            return 0;
-          }
-          return next;
-        });
-        setPhase('typing');
-      }, PAUSE_BEFORE_MS);
-      return () => clearTimeout(t);
-    }
-  }, [phase, displayed, wordIndex]);
-
-  return (
-    <span
-      style={{
-        position: 'relative',
-        display: 'inline-block',
-        marginRight: '0.25em',
-        whiteSpace: 'nowrap',
-        minWidth: slotWidthPx ?? `${FIRST_TYPEWRITER_WORD.length}ch`,
-        textAlign: 'left',
-      }}
-    >
-      <span
-        ref={ghostRef}
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          visibility: 'hidden',
-          whiteSpace: 'nowrap',
-          pointerEvents: 'none',
-        }}
-        aria-hidden="true"
-      >
-        {FIRST_TYPEWRITER_WORD}
-      </span>
-      <motion.span style={{ display: 'inline-block', whiteSpace: 'nowrap' }} variants={wordVariants}>
-        {displayed}
-        <span className="typewriter-cursor" aria-hidden="true" />
-      </motion.span>
-    </span>
-  );
-}
 
 /**
  * Auth UI view states. Drives what is shown in the glass card.
@@ -186,6 +34,11 @@ const AUTH_VIEW = {
   PIN_UNLOCK: 'pin_unlock',
   PIN_SETUP: 'pin_setup',
 };
+
+function getAuthHeading(view) {
+  if (view === AUTH_VIEW.REGISTER_WIZARD) return 'Welcome to Hush';
+  return 'Log in to Hush';
+}
 
 function getInstanceLabel(instanceUrl) {
   try {
@@ -211,10 +64,6 @@ function getFriendlyError(err, instanceUrl = '') {
   if (isReachabilityError(err)) {
     return getInstanceUnreachableMessage(instanceUrl);
   }
-  // Session-not-found must be caught before /not found/ and the generic 401
-  // catch-all. "session not found" contains "not found" so ordering matters.
-  // This fires when a revoked device's deleted session hits RequireAuth --
-  // the credentials are valid but the session was deliberately removed.
   if (/session not found|session.*expired/i.test(msg)) {
     return 'Your session has ended. Please sign in again to continue.';
   }
@@ -298,18 +147,6 @@ export default function Home() {
     ? getInstanceUnreachableMessage(selectedInstanceUrl)
     : '';
 
-  const spotlightRef = useRef(null);
-  const rafRef = useRef(null);
-  const posRef = useRef({ x: -1000, y: -1000 });
-  const smoothRef = useRef({ x: -1000, y: -1000 });
-  const wordmarkRef = useRef(null);
-  const subtitleGhostRef = useRef(null);
-  const [subtitleWidthPx, setSubtitleWidthPx] = useState(null);
-  const [dotLeft, setDotLeft] = useState(null);
-  const [spotlightEnabled, setSpotlightEnabled] = useState(
-    () => (typeof window !== 'undefined' ? !window.matchMedia('(pointer: coarse)').matches : false),
-  );
-
   // ── Resume interrupted registration (iOS page discard recovery) ────────────
   useEffect(() => {
     if (authLoading || hasVault || hasSession) return;
@@ -319,11 +156,6 @@ export default function Home() {
   }, [authLoading, hasSession, hasVault]);
 
   // ── Vault state -> authView sync ────────────────────────────────────────────
-  //
-  // Sets the correct UI view based on vault state. Routing decisions (navigate
-  // to guild, /home, invite) are handled by the BootController in App.jsx -
-  // Home.jsx only manages which form/screen to display.
-
   useEffect(() => {
     if (authLoading) return;
 
@@ -342,11 +174,6 @@ export default function Home() {
         setAuthView(AUTH_VIEW.CHOOSE);
       }
     }
-
-    // An unlocked or session-ready state does not require local view changes here.
-    // BootController handles the route transition away from Home when auth is ready.
-  // If PIN setup is still pending post-register, we remain here until the user
-  // completes or skips it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, hasSession, hasVault, needsPinSetup, needsUnlock]);
 
@@ -362,77 +189,6 @@ export default function Home() {
     }, 5000);
     return () => clearTimeout(id);
   }, [authError, clearError, selectedInstanceUrl]);
-
-  // ── Spotlight (cursor follow, desktop only) ─────────────────────────────────
-
-  useEffect(() => {
-    const m = window.matchMedia('(pointer: coarse)');
-    const update = () => setSpotlightEnabled(!m.matches);
-    update();
-    m.addEventListener('change', update);
-    return () => m.removeEventListener('change', update);
-  }, []);
-
-  useEffect(() => {
-    if (!spotlightEnabled) return;
-    const loop = () => {
-      const pos = posRef.current;
-      const s = smoothRef.current;
-      s.x += (pos.x - s.x) * 0.08;
-      s.y += (pos.y - s.y) * 0.08;
-      if (spotlightRef.current) {
-        spotlightRef.current.style.setProperty('--sx', `${s.x}px`);
-        spotlightRef.current.style.setProperty('--sy', `${s.y}px`);
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [spotlightEnabled]);
-
-  useEffect(() => {
-    const el = wordmarkRef.current;
-    if (!el) return;
-    const measure = () => {
-      const textNode = el.firstChild;
-      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
-      const range = document.createRange();
-      range.setStart(textNode, 1);
-      range.setEnd(textNode, 2);
-      const uRect = range.getBoundingClientRect();
-      const parentRect = el.getBoundingClientRect();
-      const uCenter = uRect.left + uRect.width / 2 - parentRect.left;
-      // The home wordmark dot is a 14px circle. Position its left edge slightly
-      // left of the measured "u" center so it reads visually centered above the glyph.
-      setDotLeft(uCenter - 8);
-    };
-    document.fonts.ready.then(measure);
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!subtitleGhostRef.current) return;
-    const measure = () => {
-      if (subtitleGhostRef.current) {
-        const w = subtitleGhostRef.current.getBoundingClientRect().width;
-        setSubtitleWidthPx(w);
-      }
-    };
-    if (document.fonts?.ready) {
-      document.fonts.ready.then(measure);
-    } else {
-      measure();
-    }
-  }, []);
-
-  const handleMouseMove = useCallback((e) => {
-    posRef.current.x = e.clientX;
-    posRef.current.y = e.clientY;
-  }, []);
 
   // ── Auth action handlers ────────────────────────────────────────────────────
 
@@ -451,9 +207,6 @@ export default function Home() {
   }, [unlockVault]);
 
   const handleSwitchAccount = useCallback(() => {
-    // Don't wipe the vault yet - user might press Back.
-    // Vault is only wiped if the recovery phrase login succeeds
-    // (performRecovery will overwrite the vault with the new identity).
     setAuthView(AUTH_VIEW.RECOVERY);
   }, []);
 
@@ -462,7 +215,6 @@ export default function Home() {
     try {
       await setPIN(pin);
     } catch (err) {
-      // Error shown in PinSetupModal.
       throw err;
     } finally {
       setIsPinSetupLoading(false);
@@ -497,16 +249,11 @@ export default function Home() {
 
     if (authView === AUTH_VIEW.PIN_SETUP) {
       return (
-        <>
-          <Heading as="h2" size="4" className="home-section-title">
-            Secure your identity
-          </Heading>
-          <PinSetupModal
-            onSetPin={handlePinSetup}
-            onSkip={handlePinSetupSkip}
-            isLoading={isPinSetupLoading}
-          />
-        </>
+        <PinSetupModal
+          onSetPin={handlePinSetup}
+          onSkip={handlePinSetupSkip}
+          isLoading={isPinSetupLoading}
+        />
       );
     }
 
@@ -531,21 +278,15 @@ export default function Home() {
 
     if (authView === AUTH_VIEW.RECOVERY) {
       return (
-        <>
-          <Heading as="h2" size="4" className="home-section-title">
-            Sign in
-          </Heading>
-          <RecoveryPhraseInput
-            onSubmit={handleRecoverySubmit}
-            onCancel={() => {
-              clearError?.();
-              // If this browser profile already has a local vault, return to unlock.
-              setAuthView(needsUnlock ? AUTH_VIEW.PIN_UNLOCK : AUTH_VIEW.CHOOSE);
-            }}
-            isRecoveryMode={true}
-            isLoading={authLoading}
-          />
-        </>
+        <RecoveryPhraseInput
+          onSubmit={handleRecoverySubmit}
+          onCancel={() => {
+            clearError?.();
+            setAuthView(needsUnlock ? AUTH_VIEW.PIN_UNLOCK : AUTH_VIEW.CHOOSE);
+          }}
+          isRecoveryMode={true}
+          isLoading={authLoading}
+        />
       );
     }
 
@@ -586,141 +327,19 @@ export default function Home() {
   };
 
   return (
-    <div className="home-page" onMouseMove={handleMouseMove} style={HOME_PAGE_SCROLL_STYLE}>
-      {/* Cursor spotlight */}
-      {spotlightEnabled && (
-        <div ref={spotlightRef} className="home-spotlight-wrapper">
-          <div className="home-spotlight" />
-        </div>
-      )}
-
+    <div className="home-page" style={HOME_PAGE_SCROLL_STYLE}>
       <div className="home-container">
-        {/* Logo */}
-        <motion.div
-          className="home-logo"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="home-logo-inner">
-            <div className="home-logo-title" ref={wordmarkRef}>
-              hush
-              <motion.div
-                style={{
-                  position: 'absolute',
-                  top: '20px',
-                  left: dotLeft != null ? `${dotLeft}px` : '38%',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  background: 'var(--hush-amber)',
-                  boxShadow: '0 0 12px var(--hush-amber), 0 0 28px rgba(213, 79, 18, 0.3)',
-                }}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.4, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              />
-            </div>
-            <motion.div
-              className="home-logo-glow"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: [0, 0.7, 0.15], scale: [0.8, 1.2, 1] }}
-              transition={{ duration: 1.2, delay: 0.2, ease: 'easeOut' }}
-            />
-          </div>
+        <div className="home-auth-header">
+          <HushLogo className="home-auth-logo" />
+          <Heading as="h1" size="6" className="home-auth-heading">
+            {getAuthHeading(authView)}
+          </Heading>
+        </div>
 
-          {/* Subtitle */}
-          <motion.div
-            className="home-logo-sub"
-            style={{
-              display: 'inline-block',
-              width: subtitleWidthPx ?? 'auto',
-              textAlign: 'left',
-              overflow: 'visible',
-              position: 'relative',
-              whiteSpace: 'nowrap',
-              marginLeft: '-6px',
-            }}
-            initial="hidden"
-            animate="visible"
-            variants={{
-              hidden: {},
-              visible: {
-                transition: { staggerChildren: 0.08, delayChildren: 0.3 },
-              },
-            }}
-          >
-            <span
-              ref={subtitleGhostRef}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                visibility: 'hidden',
-                whiteSpace: 'nowrap',
-                pointerEvents: 'none',
-              }}
-              aria-hidden="true"
-            >
-              {SUBTITLE_WORDS.map((word, i) => (
-                <span key={i} style={{ display: 'inline-block', marginRight: '0.25em' }}>
-                  {word}
-                </span>
-              ))}
-              <span style={{ display: 'inline-block' }}>{FIRST_TYPEWRITER_WORD}</span>
-            </span>
-            {SUBTITLE_WORDS.map((word, i) => (
-              <motion.span
-                key={i}
-                style={{ display: 'inline-block', marginRight: '0.25em' }}
-                variants={wordVariants}
-              >
-                {word}
-              </motion.span>
-            ))}
-            <TypewriterSlot />
-          </motion.div>
-        </motion.div>
-
-        {/* E2EE badge */}
-        <motion.div
-          className="home-e2ee-badge-wrap"
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1], delay: 0.6 }}
-        >
-          <Tooltip
-            label="Messages are encrypted on your device. The server never sees your content or keys."
-            side="bottom"
-          >
-            <span
-              className="home-e2ee-badge home-e2ee-badge--active"
-              tabIndex={0}
-            >
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              end-to-end encrypted
-            </span>
-          </Tooltip>
-        </motion.div>
-
-        {/* Form card */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
           className="glass home-form-card"
         >
           {renderFormContent()}
