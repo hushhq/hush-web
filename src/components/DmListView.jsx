@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
+import { Flex, Text, Heading, Box, Separator } from '@radix-ui/themes';
+import { PlusIcon } from '@radix-ui/react-icons';
+import { IconButton } from './ui';
 import { searchUsersForDM, createOrFindDM } from '../lib/api';
-import { IconButton, Separator } from './ui';
 
 /**
  * Full-height DM conversation list with search.
@@ -64,25 +66,24 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
   };
 
   return (
-    <div className="dm-list-view">
-      <div className="dm-list-header">
-        <span className="dm-list-title">Direct Messages</span>
+    <Flex direction="column" className="dm-list-view">
+      <Flex justify="between" align="center" className="dm-list-header">
+        <Heading as="h3" size="3" className="dm-list-title">
+          Direct Messages
+        </Heading>
         <IconButton
           aria-label="New message"
           className="dm-list-new-icon-btn"
           onClick={() => setShowSearch((v) => !v)}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <PlusIcon width="16" height="16" aria-hidden="true" />
         </IconButton>
-      </div>
+      </Flex>
 
-      <Separator />
+      <Separator size="1" />
 
       {showSearch && (
-        <div className="dm-list-search">
+        <Box className="dm-list-search">
           <input
             autoFocus
             type="text"
@@ -100,12 +101,16 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
             className="dm-list-search-input"
           />
           {dmError && (
-            <div className="dm-list-error">{dmError}</div>
+            <Text size="1" color="red" className="dm-list-error">
+              {dmError}
+            </Text>
           )}
           {(searchResults.length > 0 || searching) && (
-            <div className="dm-list-search-results">
+            <Box className="dm-list-search-results">
               {searching && (
-                <div className="dm-list-search-status">Searching...</div>
+                <Text size="1" color="gray" className="dm-list-search-status">
+                  Searching...
+                </Text>
               )}
               {searchResults.map((user) => (
                 <button
@@ -117,19 +122,19 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
                   <div className="dm-list-avatar">
                     {(user.displayName || user.username || '?').charAt(0).toUpperCase()}
                   </div>
-                  {user.displayName || user.username}
+                  <Text size="2">{user.displayName || user.username}</Text>
                 </button>
               ))}
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
       )}
 
-      <div className="dm-list-conversations">
+      <Box className="dm-list-conversations">
         {dmGuilds.length === 0 ? (
-          <div className="dm-list-empty">
+          <Text size="2" color="gray" align="center" className="dm-list-empty">
             No conversations yet
-          </div>
+          </Text>
         ) : (
           dmGuilds.map((guild) => {
             const displayName = guild.otherUser?.displayName
@@ -156,7 +161,7 @@ export default function DmListView({ dmGuilds, onSelectDm, getToken, instanceUrl
             );
           })
         )}
-      </div>
-    </div>
+      </Box>
+    </Flex>
   );
 }

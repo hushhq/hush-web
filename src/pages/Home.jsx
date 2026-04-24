@@ -570,19 +570,16 @@ export default function Home() {
         </Flex>
 
         {registrationMode !== 'closed' && (
-          <>
-            <Separator size="1" />
-            <Text align="center" size="2" color="gray" className="home-auth-signup-prompt">
-              Don't have an account?{' '}
-              <button
-                type="button"
-                className="home-auth-signup-link"
-                onClick={() => setAuthView(AUTH_VIEW.REGISTER_WIZARD)}
-              >
-                Sign up
-              </button>
-            </Text>
-          </>
+          <Text align="center" size="2" color="gray" className="home-auth-signup-prompt">
+            Don't have an account?{' '}
+            <button
+              type="button"
+              className="home-auth-signup-link"
+              onClick={() => setAuthView(AUTH_VIEW.REGISTER_WIZARD)}
+            >
+              Sign up
+            </button>
+          </Text>
         )}
       </Flex>
     );
