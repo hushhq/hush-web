@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { Flex, Text } from '@radix-ui/themes';
+import { ArrowLeftIcon, EnterIcon } from '@radix-ui/react-icons';
 import { isMnemonicValid, getEnglishWordlist } from '../../lib/bip39Identity';
 import {
   Button,
@@ -161,7 +163,7 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
   // ── Phrase entry step ─────────────────────────────────────────────────────────
 
   return (
-    <div className="rpi-container">
+    <Flex direction="column" gap="5" className="rpi-container">
       <div className="rpi-grid">
         {words.map((word, i) => (
           <div key={i} className="rpi-field-group">
@@ -215,13 +217,17 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
       </div>
 
       {showValidity && (
-        <div
-          className={isValid ? 'rpi-validity-banner--valid' : 'rpi-validity-banner--invalid'}
+        <Text
+          as="p"
           role="status"
           aria-live="polite"
+          size="2"
+          weight="medium"
+          color={isValid ? 'green' : 'red'}
+          className={isValid ? 'rpi-validity-banner--valid' : 'rpi-validity-banner--invalid'}
         >
           {isValid ? 'Valid phrase' : 'Invalid phrase - check all 12 words'}
-        </div>
+        </Text>
       )}
 
       <div className="rpi-actions">
@@ -230,14 +236,14 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
           className="back-link"
           onClick={onCancel}
         >
-          ← Back
+          <ArrowLeftIcon /> Back
         </button>
         <Button
           variant="primary"
           disabled={!isValid || isLoading}
           onClick={handleSubmit}
         >
-          {isLoading ? 'Signing in...' : 'Sign in'}
+          {isLoading ? 'Signing in...' : <><EnterIcon /> Sign in</>}
         </Button>
       </div>
 
@@ -248,7 +254,7 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
         >
           <AlertDialogActions>
             <AlertDialogCancel asChild>
-              <button type="button" className="back-link">← Back</button>
+              <button type="button" className="back-link"><ArrowLeftIcon /> Back</button>
             </AlertDialogCancel>
             <AlertDialogAction asChild>
               <Button
@@ -271,6 +277,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
           </AlertDialogActions>
         </AlertDialogContent>
       </AlertDialogRoot>
-    </div>
+    </Flex>
   );
 }

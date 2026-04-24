@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Flex, Text, Heading } from '@radix-ui/themes';
+import { ArrowLeftIcon, ArrowRightIcon, Cross1Icon } from '@radix-ui/react-icons';
 import { generateIdentityMnemonic } from '../../lib/bip39Identity';
 import { checkUsernameAvailable, getInviteInfo } from '../../lib/api';
 import { MnemonicGrid } from './MnemonicGrid';
@@ -514,7 +516,7 @@ export function RegistrationWizard({
   const displayedError = (!ignoreExternalError ? error?.message : '') || localError;
 
   return (
-    <div className="rw-container">
+    <Flex direction="column" gap="5" className="rw-container">
       {/* Step indicator dots */}
       <div className="rw-step-indicator" aria-hidden="true">
         {visibleSteps.map((s, i) => (
@@ -526,9 +528,9 @@ export function RegistrationWizard({
       </div>
 
       {displayedError && step !== STEP.SUBMITTING && (
-        <div className="rw-error" role="alert">
+        <Text as="p" role="alert" color="red" size="2" className="rw-error">
           {displayedError}
-        </div>
+        </Text>
       )}
 
       {step === STEP.INVITE_CODE && (
@@ -576,16 +578,18 @@ export function RegistrationWizard({
       )}
 
       {step === STEP.SUBMITTING && (
-        <div className="rw-loading">
-          <div aria-label="Creating account" role="status">Creating your account...</div>
+        <Flex direction="column" align="center" gap="4" className="rw-loading">
+          <Text size="2" color="gray" aria-label="Creating account" role="status">
+            Creating your account...
+          </Text>
           {displayedError && (
-            <div className="rw-error" role="alert">
+            <Text as="p" role="alert" color="red" size="2" className="rw-error">
               {displayedError}
-            </div>
+            </Text>
           )}
-        </div>
+        </Flex>
       )}
-    </div>
+    </Flex>
   );
 }
 
@@ -605,23 +609,15 @@ function InviteCodeStep({ value, onChange, inviteState, onNext, onCancel }) {
       ? 'Invite code is not valid.'
       : null;
 
-  const inviteHintStyle = {
-    fontSize: '0.72rem',
-    marginTop: '4px',
-    color:
-      inviteState === 'ok'
-        ? 'var(--hush-live)'
-        : inviteState === 'invalid'
-        ? 'var(--hush-danger)'
-        : 'var(--hush-text-muted)',
-    fontFamily: 'var(--font-mono)',
-  };
-
   return (
     <div className="rw-inner">
       <div>
-        <p className="rw-heading">Enter invite code</p>
-        <p className="rw-subheading">This server requires an invite to register.</p>
+        <Heading as="h3" size="4" className="rw-heading">
+          Enter invite code
+        </Heading>
+        <Text size="2" color="gray" className="rw-subheading">
+          This server requires an invite to register.
+        </Text>
       </div>
       <div>
         <label htmlFor="invite-code" className="rw-field-label">Invite code</label>
@@ -639,21 +635,29 @@ function InviteCodeStep({ value, onChange, inviteState, onNext, onCancel }) {
           autoFocus
         />
         {inviteHint && (
-          <div style={inviteHintStyle} aria-live="polite">
+          <Text size="1" className="rw-hint" aria-live="polite"
+            color={
+              inviteState === 'ok'
+                ? 'green'
+                : inviteState === 'invalid'
+                ? 'red'
+                : 'gray'
+            }
+          >
             {inviteHint}
-          </div>
+          </Text>
         )}
       </div>
       <div className="rw-actions">
         <button type="button" className="back-link" onClick={onCancel}>
-          ← Cancel
+          <ArrowLeftIcon /> Cancel
         </button>
         <Button
           variant="primary"
           disabled={!value.trim() || inviteState === 'checking'}
           onClick={onNext}
         >
-          {inviteState === 'checking' ? 'Checking...' : 'Continue'}
+          {inviteState === 'checking' ? 'Checking...' : <><ArrowRightIcon /> Continue</>}
         </Button>
       </div>
     </div>
@@ -693,8 +697,12 @@ function UsernameStep({
   return (
     <div className="rw-inner">
       <div>
-        <p className="rw-heading">Choose a username</p>
-        <p className="rw-subheading">Your username is your identity on this server.</p>
+        <Heading as="h3" size="4" className="rw-heading">
+          Choose a username
+        </Heading>
+        <Text size="2" color="gray" className="rw-subheading">
+          Your username is your identity on this server.
+        </Text>
       </div>
       <div>
         <label htmlFor="reg-username" className="rw-field-label">Username</label>
@@ -741,14 +749,14 @@ function UsernameStep({
       </div>
       <div className="rw-actions">
         <button type="button" className="back-link" onClick={onBack}>
-          ← Back
+          <ArrowLeftIcon /> Back
         </button>
         <Button
           variant="primary"
           disabled={!username.trim() || usernameState !== 'ok'}
           onClick={onNext}
         >
-          Continue
+          <ArrowRightIcon /> Continue
         </Button>
       </div>
     </div>
@@ -759,8 +767,12 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
   return (
     <div className="rw-inner">
       <div>
-        <p className="rw-heading">Your recovery phrase</p>
-        <p className="rw-subheading">Write these 12 words down and keep them safe.</p>
+        <Heading as="h3" size="4" className="rw-heading">
+          Your recovery phrase
+        </Heading>
+        <Text size="2" color="gray" className="rw-subheading">
+          Write these 12 words down and keep them safe.
+        </Text>
       </div>
 
       <div className="rw-warning-box">
@@ -768,11 +780,11 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
           <span aria-hidden="true">⚠</span>
           Important: save this before continuing
         </div>
-        <p className="rw-warning-body">
+        <Text size="1" color="gray" className="rw-warning-body">
           This is your recovery phrase. Write it down and store it in a safe place.
           If you lose this phrase and all your devices, your account is permanently
           irrecoverable. Hush cannot help you recover it.
-        </p>
+        </Text>
       </div>
 
       <MnemonicGrid words={words} />
@@ -788,14 +800,14 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
 
       <div className="rw-actions">
         <button type="button" className="back-link" onClick={onBack}>
-          ← Back
+          <ArrowLeftIcon /> Back
         </button>
         <Button
           variant="primary"
           disabled={!savedConfirmed}
           onClick={onNext}
         >
-          Continue
+          <ArrowRightIcon /> Continue
         </Button>
       </div>
     </div>

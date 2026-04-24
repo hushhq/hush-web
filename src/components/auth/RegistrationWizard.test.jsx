@@ -233,7 +233,7 @@ describe('RegistrationWizard hardening', () => {
     expect(screen.getByText(/write these 12 words down and keep them safe/i)).toBeInTheDocument();
     expect(onInstanceLockedChange).toHaveBeenLastCalledWith(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /^← back$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
     expect(await screen.findByText(/choose a username/i)).toBeInTheDocument();
     expect(onInstanceLockedChange).toHaveBeenLastCalledWith(true);
   });
@@ -302,7 +302,7 @@ describe('RegistrationWizard hardening', () => {
     renderWizard();
 
     expect(screen.getByRole('button', { name: /start over/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^← back$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^back$/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/^your recovery phrase$/i)).not.toBeInTheDocument();
   });
 

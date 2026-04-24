@@ -126,7 +126,7 @@ describe('RecoveryPhraseInput — revoke-decision step', () => {
     expect(screen.getByText(/revoke other devices\?/i)).toBeInTheDocument();
 
     // Back button in the revoke step
-    const backBtn = screen.getByRole('button', { name: /← back/i });
+    const backBtn = screen.getByRole('button', { name: /back/i });
     await user.click(backBtn);
 
     // Should be back on phrase entry

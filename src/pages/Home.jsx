@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { Flex, Text, Heading, Separator } from '@radix-ui/themes';
+import { EnterIcon, Link1Icon } from '@radix-ui/react-icons';
 import { APP_VERSION } from '../utils/constants';
 import { useAuth } from '../contexts/AuthContext';
 import { getHandshake } from '../lib/api';
@@ -11,7 +13,7 @@ import { PinUnlockScreen } from '../components/auth/PinUnlockScreen';
 import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button, Separator, Tooltip } from '../components/ui';
+import { Button, Tooltip } from '../components/ui';
 
 const SUBTITLE_WORDS = ['share', 'your', 'screen.', 'keep', 'your'];
 
@@ -496,9 +498,9 @@ export default function Home() {
     if (authView === AUTH_VIEW.PIN_SETUP) {
       return (
         <>
-          <div className="home-pin-setup-header">
-            <div className="home-section-title">Secure your identity</div>
-          </div>
+          <Heading as="h2" size="4" className="home-section-title">
+            Secure your identity
+          </Heading>
           <PinSetupModal
             onSetPin={handlePinSetup}
             onSkip={handlePinSetupSkip}
@@ -530,9 +532,9 @@ export default function Home() {
     if (authView === AUTH_VIEW.RECOVERY) {
       return (
         <>
-          <div className="home-recovery-header">
-            <div className="home-section-title">Sign in</div>
-          </div>
+          <Heading as="h2" size="4" className="home-section-title">
+            Sign in
+          </Heading>
           <RecoveryPhraseInput
             onSubmit={handleRecoverySubmit}
             onCancel={() => {
@@ -549,41 +551,40 @@ export default function Home() {
 
     // Default: CHOOSE view
     return (
-      <>
-        <div className="home-auth-btns">
+      <Flex direction="column" gap="5" className="home-auth-choose">
+        <Flex direction="column" gap="3">
           <Button
             variant="primary"
             className="home-auth-btn"
             onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
           >
+            <EnterIcon />
             Sign in
           </Button>
           <Button variant="secondary" className="home-auth-btn" asChild>
-            <Link to="/link-device?mode=new">Link to existing device</Link>
+            <Link to="/link-device?mode=new">
+              <Link1Icon />
+              Link to existing device
+            </Link>
           </Button>
-        </div>
+        </Flex>
 
-        <Separator className="home-auth-separator" />
-
-        <div className="home-auth-secondary">
-          {registrationMode !== 'closed' && (
-            <Button
-              variant="secondary"
-              className="home-auth-btn"
-              onClick={() => setAuthView(AUTH_VIEW.REGISTER_WIZARD)}
-            >
-              Create an account
-            </Button>
-          )}
-          <button
-            type="button"
-            className="back-link"
-            onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
-          >
-            Lost a device?
-          </button>
-        </div>
-      </>
+        {registrationMode !== 'closed' && (
+          <>
+            <Separator size="1" />
+            <Text align="center" size="2" color="gray" className="home-auth-signup-prompt">
+              Don't have an account?{' '}
+              <button
+                type="button"
+                className="home-auth-signup-link"
+                onClick={() => setAuthView(AUTH_VIEW.REGISTER_WIZARD)}
+              >
+                Sign up
+              </button>
+            </Text>
+          </>
+        )}
+      </Flex>
     );
   };
 
@@ -737,31 +738,28 @@ export default function Home() {
                 compact
               />
               {handshakeError && (
-                <div role="alert" className="home-instance-error">
+                <Text as="p" role="alert" color="red" size="2" className="home-instance-error">
                   {instanceReachabilityMessage}
-                </div>
+                </Text>
               )}
             </>
           )}
 
-          <div className="home-footer">
-            <div>
-              <span style={{ display: 'inline-block' }}>hush is open source and self-hostable.</span>
-              {' '}
-              <span style={{ display: 'inline-block' }}>
-                <a href="https://github.com/hushhq" className="home-footer-link">
-                  github
-                </a>
-                {' · '}
-                <Link to="/roadmap" className="home-footer-link">
-                  roadmap
-                </Link>
-              </span>
-            </div>
-            <div className="home-footer-meta">
-              <span style={{ display: 'inline-block' }}>v{APP_VERSION}</span>
-            </div>
-          </div>
+          <Flex direction="column" align="center" gap="1" className="home-footer">
+            <Text align="center" size="1" color="gray">
+              hush is open source and self-hostable.{` `}
+              <a href="https://github.com/hushhq" className="home-footer-link">
+                github
+              </a>
+              {' · '}
+              <Link to="/roadmap" className="home-footer-link">
+                roadmap
+              </Link>
+            </Text>
+            <Text align="center" size="1" color="gray" className="home-footer-meta">
+              v{APP_VERSION}
+            </Text>
+          </Flex>
         </motion.div>
       </div>
 

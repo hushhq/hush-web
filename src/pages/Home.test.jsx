@@ -199,7 +199,7 @@ describe('Home', () => {
     const user = userEvent.setup();
     const { container } = renderHome();
 
-    await user.click(screen.getByRole('button', { name: /create an account/i }));
+    await user.click(screen.getByRole('button', { name: /sign up/i }));
 
     expect(screen.getByText('Registration Wizard')).toBeInTheDocument();
     expect(container.querySelector('.home-page')).toHaveStyle({
@@ -217,7 +217,7 @@ describe('Home', () => {
     const instanceSelector = screen.getByRole('button', { name: /connection instance:/i });
     expect(instanceSelector).not.toBeDisabled();
 
-    await user.click(screen.getByRole('button', { name: /create an account/i }));
+    await user.click(screen.getByRole('button', { name: /sign up/i }));
     expect(screen.getByText('Registration Wizard')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /lock instance/i }));
@@ -248,21 +248,32 @@ describe('Home', () => {
     expect(screen.getByText(/^end-to-end encrypted$/i)).toBeInTheDocument();
   });
 
-  // ── J.1-03: "Lost a device?" entry point ─────────────────────────────────
+  // ── J.1-03: sign-up entry point ──────────────────────────────────────────
 
-  it('"Lost a device?" button is visible on the CHOOSE auth view', () => {
+  it('"Don\'t have an account? Sign up" link is visible on the CHOOSE auth view', () => {
     renderHome();
-    expect(screen.getByRole('button', { name: /lost a device\?/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign up/i })).toBeInTheDocument();
   });
 
-  it('"Lost a device?" button navigates to the recovery phrase view', async () => {
+  it('"Don\'t have an account? Sign up" link navigates to the registration wizard', async () => {
     const user = userEvent.setup();
     renderHome();
 
-    await user.click(screen.getByRole('button', { name: /lost a device\?/i }));
+    await user.click(screen.getByRole('button', { name: /sign up/i }));
 
-    // RecoveryPhraseInput mock should now be visible
-    expect(screen.getByText('Recovery Phrase Input')).toBeInTheDocument();
+    expect(screen.getByText('Registration Wizard')).toBeInTheDocument();
+  });
+
+  it('hides the "Sign up" link when registration is closed', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ registration_mode: 'closed' }),
+    });
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /sign up/i })).not.toBeInTheDocument();
+    });
   });
 
   it('shows PIN unlock for a known browser profile that needs unlock', () => {

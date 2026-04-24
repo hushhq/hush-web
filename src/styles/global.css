@@ -535,6 +535,8 @@ a[href]:active {
 .home-auth-btn {
   width: 100%;
   text-decoration: none;
+  padding: 12px 16px;
+  font-size: 13px;
 }
 
 /* Home: create/join room tabs - hover tonality on inactive tab */
@@ -553,6 +555,7 @@ a[href]:active {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 0;
   margin-bottom: 16px;
   text-decoration: none;
@@ -576,7 +579,6 @@ a[href]:active {
 .rw-actions .back-link,
 .mc-actions .back-link,
 .pin-setup-actions .back-link,
-.home-auth-secondary .back-link,
 .pin-unlock-container .back-link {
   margin-bottom: 0;
 }
@@ -4964,8 +4966,9 @@ select:focus-visible {
 .home-logo-sub {
   margin-top: 0;
   color: var(--hush-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
+  line-height: 1.5;
 }
 
 .home-e2ee-badge-wrap {
@@ -4976,10 +4979,10 @@ select:focus-visible {
 .home-e2ee-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
+  gap: 6px;
+  padding: 4px 12px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -4996,7 +4999,7 @@ select:focus-visible {
 
 .home-form-card {
   width: 100%;
-  padding: 24px;
+  padding: 32px;
   background: var(--hush-surface);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-xl);
@@ -5004,29 +5007,49 @@ select:focus-visible {
 
 .home-section-title {
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--hush-text);
-  letter-spacing: -0.01em;
-  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+.home-auth-choose {
+  /* Layout and gap are owned by the Radix Flex parent. */
 }
 
 .home-auth-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 4px;
+  /* Layout and gap are owned by the Radix Flex parent. */
 }
 
-.home-auth-separator {
-  margin: 12px 0;
+.home-auth-signup-prompt {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--hush-text-muted);
+  line-height: 1.5;
 }
 
-.home-auth-secondary {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+.home-auth-signup-link {
+  background: none;
+  border: none;
+  color: var(--hush-text);
+  font-size: inherit;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--hush-border-hover);
+  text-underline-offset: 3px;
+  transition: color var(--duration-fast) var(--ease-out), text-decoration-color var(--duration-fast) var(--ease-out);
+}
+
+.home-auth-signup-link:hover,
+.home-auth-signup-link:focus-visible {
+  color: var(--hush-amber);
+  text-decoration-color: var(--hush-amber);
+  outline: none;
 }
 
 @keyframes home-loading-pulse {
@@ -5043,33 +5066,23 @@ select:focus-visible {
 }
 
 .home-instance-error {
-  margin-top: 10px;
   font-size: 0.82rem;
   line-height: 1.45;
-  color: var(--hush-danger);
 }
 
 .home-pin-setup-header {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .home-recovery-header {
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 
 .home-footer {
-  margin-top: 32px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--hush-text-muted);
+  /* Layout owned by Radix Flex parent. */
 }
 
 .home-footer-meta {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--hush-text-ghost);
@@ -6097,9 +6110,7 @@ select:focus-visible {
 
 /* ── RegistrationWizard ───────────────────── */
 .rw-container {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Layout owned by Radix Flex parent. */
 }
 
 .rw-step-indicator {
@@ -6127,23 +6138,24 @@ select:focus-visible {
 
 .rw-heading {
   font-family: var(--font-sans);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--hush-text);
   letter-spacing: -0.01em;
-  margin: 0 0 2px 0;
+  margin: 0 0 4px 0;
 }
 
 .rw-subheading {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--hush-text-secondary);
+  line-height: 1.6;
   margin: 0;
 }
 
 .rw-field-label {
   display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
   color: var(--hush-text-secondary);
   font-weight: 500;
 }
@@ -6154,7 +6166,7 @@ select:focus-visible {
 }
 
 .rw-username-hint {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   margin-top: 4px;
   color: var(--hush-text-muted);
   font-family: var(--font-mono);
@@ -6175,7 +6187,8 @@ select:focus-visible {
 
 .rw-warning-body {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
 .rw-warning-box {
@@ -6194,7 +6207,7 @@ select:focus-visible {
 .rw-warning-title {
   color: var(--hush-amber);
   font-weight: 500;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6205,14 +6218,14 @@ select:focus-visible {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--hush-text-secondary);
 }
 
 .rw-actions {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .rw-error {
@@ -6225,10 +6238,7 @@ select:focus-visible {
 }
 
 .rw-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  /* Layout owned by Radix Flex parent. */
   padding: 24px 0;
   color: var(--hush-text-secondary);
   font-size: 0.85rem;
@@ -6237,18 +6247,16 @@ select:focus-visible {
 .rw-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 /* ── PinSetupModal ────────────────────────── */
 .pin-setup-container {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Layout owned by Radix Flex parent. */
 }
 
 .pin-setup-description {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--hush-text-secondary);
   line-height: 1.6;
   margin: 0;
@@ -6260,8 +6268,8 @@ select:focus-visible {
 
 .pin-setup-field-label {
   display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
   color: var(--hush-text-secondary);
   font-weight: 500;
 }
@@ -6284,8 +6292,8 @@ select:focus-visible {
 .psm-strength-fill--strong { background: var(--hush-live); }
 
 .psm-strength-label {
-  font-size: 0.68rem;
-  margin-top: 3px;
+  font-size: 0.7rem;
+  margin-top: 4px;
   font-family: var(--font-mono);
 }
 
@@ -6330,27 +6338,21 @@ select:focus-visible {
 .pin-setup-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 /* ── PinUnlockScreen ──────────────────────── */
 .pin-unlock-container {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  align-items: center;
+  /* Layout owned by Radix Flex parent. */
 }
 
 .pin-unlock-identity {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  /* Layout owned by Radix Flex parent. */
 }
 
 .pin-unlock-avatar {
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   background: var(--hush-elevated);
   border: 1px solid var(--hush-border-hover);
@@ -6358,29 +6360,30 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   color: var(--hush-text-muted);
   overflow: hidden;
 }
 
 .pin-unlock-username {
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--hush-text);
+  letter-spacing: -0.01em;
 }
 
 .pin-unlock-form {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .pin-unlock-field-label {
   display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
+  margin-bottom: 5px;
+  font-size: 13px;
   color: var(--hush-text-secondary);
   font-weight: 500;
 }
@@ -6758,15 +6761,13 @@ select:focus-visible {
 
 /* ── RecoveryPhraseInput ──────────────────── */
 .rpi-container {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  /* Layout owned by Radix Flex parent. */
 }
 
 .rpi-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 12px;
 }
 
 .rpi-field-group {
@@ -6777,9 +6778,11 @@ select:focus-visible {
 }
 
 .rpi-field-label {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--hush-text-ghost);
   font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .rpi-input-wrap {
@@ -6818,22 +6821,24 @@ select:focus-visible {
 }
 
 .rpi-validity-banner--valid {
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: rgba(52, 211, 153, 0.08);
   border: 1px solid rgba(52, 211, 153, 0.2);
   border-radius: var(--radius-md);
   color: var(--hush-live);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   text-align: center;
 }
 
 .rpi-validity-banner--invalid {
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--hush-danger-ghost);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: var(--radius-md);
   color: var(--hush-danger);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   text-align: center;
 }
 
@@ -6868,7 +6873,7 @@ select:focus-visible {
 
 .rpi-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* ── PostRecoveryWizard ──────────────────────── */

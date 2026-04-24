@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react';
+import { Flex, Text } from '@radix-ui/themes';
+import { CheckIcon } from '@radix-ui/react-icons';
 import { Button, TabsRoot, TabsList, TabsTrigger, TabsContent } from '../ui';
 
 function strengthClass(level) {
@@ -61,11 +63,11 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
   }, [confirmOk, onSetPin, value]);
 
   return (
-    <div className="pin-setup-container">
-      <p className="pin-setup-description">
+    <Flex direction="column" gap="5" className="pin-setup-container">
+      <Text size="2" color="gray" className="pin-setup-description">
         Your {isPin ? 'PIN' : 'passphrase'} encrypts your identity key on this device.
         You will need it to unlock Hush after closing your browser.
-      </p>
+      </Text>
 
       <TabsRoot value={mode} onValueChange={switchMode}>
         <TabsList>
@@ -138,16 +140,16 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
               autoComplete="new-password"
             />
             {mismatch && (
-              <div className="pin-setup-mismatch" role="alert">
+              <Text as="p" role="alert" color="red" size="1" className="pin-setup-mismatch">
                 {isPin ? 'PINs do not match' : 'Passphrases do not match'}
-              </div>
+              </Text>
             )}
           </div>
 
           {error && (
-            <div className="pin-setup-error" role="alert">
+            <Text as="p" role="alert" color="red" size="2" className="pin-setup-error">
               {error}
-            </div>
+            </Text>
           )}
 
           <div className="pin-setup-actions">
@@ -165,17 +167,24 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
               type="submit"
               disabled={!confirmOk || isLoading}
             >
-              {isLoading ? 'Saving...' : `Set ${isPin ? 'PIN' : 'passphrase'}`}
+              {isLoading ? (
+                'Saving...'
+              ) : (
+                <>
+                  <CheckIcon />
+                  {` Set ${isPin ? 'PIN' : 'passphrase'}`}
+                </>
+              )}
             </Button>
           </div>
         </form>
       </TabsRoot>
 
       {onSkip && (
-        <div className="pin-setup-skip-warning">
+        <Text as="p" size="1" color="gray" className="pin-setup-skip-warning">
           Without a PIN, you will need your 12-word recovery phrase every time you open Hush.
-        </div>
+        </Text>
       )}
-    </div>
+    </Flex>
   );
 }

@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Flex, Text } from '@radix-ui/themes';
+import { LockClosedIcon } from '@radix-ui/react-icons';
 import { Button } from '../ui';
 
 const MAX_ATTEMPTS = 10;
@@ -112,24 +114,26 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
     : username?.charAt(0).toUpperCase() ?? '?';
 
   return (
-    <div className="pin-unlock-container">
-      <div className="pin-unlock-identity">
+    <Flex direction="column" gap="5" align="center" className="pin-unlock-container">
+      <Flex direction="column" gap="3" align="center" className="pin-unlock-identity">
         <div className="pin-unlock-avatar" aria-hidden="true">
           {avatarContent}
         </div>
-        <span className="pin-unlock-username">{username}</span>
-      </div>
+        <Text size="4" weight="bold" className="pin-unlock-username">
+          {username}
+        </Text>
+      </Flex>
 
       {errorMessage && (
-        <div className="pin-unlock-error" role="alert">
+        <Text as="p" role="alert" color="red" size="2" className="pin-unlock-error">
           {errorMessage}
-        </div>
+        </Text>
       )}
 
       {attemptCount >= 5 && !errorMessage && (
-        <div className="pin-unlock-warning" role="status">
+        <Text as="p" role="status" color="amber" size="2" className="pin-unlock-warning">
           {MAX_ATTEMPTS - attemptCount} attempt{MAX_ATTEMPTS - attemptCount !== 1 ? 's' : ''} remaining
-        </div>
+        </Text>
       )}
 
       <form className="pin-unlock-form" onSubmit={handleSubmit}>
@@ -155,9 +159,9 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
         </div>
 
         {isDelayed && (
-          <div className="pin-unlock-countdown" aria-live="polite" aria-atomic="true">
+          <Text as="p" aria-live="polite" aria-atomic="true" size="1" color="amber" className="pin-unlock-countdown">
             Wait {delayRemaining}s before retrying
-          </div>
+          </Text>
         )}
 
         <Button
@@ -165,7 +169,7 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
           type="submit"
           disabled={!pin || pin.length < 4 || isLoading || isDelayed}
         >
-          {isLoading ? 'Unlocking...' : 'Unlock'}
+          {isLoading ? 'Unlocking...' : <><LockClosedIcon /> Unlock</>}
         </Button>
       </form>
 
@@ -176,6 +180,6 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
       >
         Not you? Sign in
       </button>
-    </div>
+    </Flex>
   );
 }
