@@ -16,35 +16,7 @@ const STEP = {
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 const USERNAME_CHECK_DEBOUNCE_MS = 500;
 
-/** Returns inline color for username hint based on validation state. */
-function usernameHintStyle(state) {
-  return {
-    fontSize: '0.72rem',
-    marginTop: '4px',
-    color:
-      state === 'ok'
-        ? 'var(--hush-live)'
-        : state === 'taken' || state === 'invalid'
-        ? 'var(--hush-danger)'
-        : 'var(--hush-text-muted)',
-    fontFamily: 'var(--font-mono)',
-  };
-}
 
-/** Returns inline style for a step dot based on active/done state. */
-function stepDotStyle(active, done) {
-  return {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: active
-      ? 'var(--hush-amber)'
-      : done
-      ? 'var(--hush-text-muted)'
-      : 'var(--hush-border)',
-    transition: 'background var(--duration-normal)',
-  };
-}
 
 /** Returns an array of visible step indices (excluding INVITE_CODE when not invite_only). */
 function getVisibleSteps(registrationMode) {
@@ -548,7 +520,7 @@ export function RegistrationWizard({
         {visibleSteps.map((s, i) => (
           <div
             key={s}
-            style={stepDotStyle(i === currentStepIndex, i < currentStepIndex)}
+            className={`rw-step-dot${i === currentStepIndex ? ' rw-step-dot--active' : i < currentStepIndex ? ' rw-step-dot--done' : ''}`}
           />
         ))}
       </div>
@@ -743,10 +715,7 @@ function UsernameStep({
             tabIndex={isError ? 0 : undefined}
             onClick={isError ? onRetry : undefined}
             onKeyDown={isError ? (e) => { if (e.key === 'Enter') onRetry(); } : undefined}
-            style={{
-              ...usernameHintStyle(usernameState),
-              ...(isError ? { cursor: 'pointer', textDecoration: 'underline' } : {}),
-            }}
+            className={`rw-username-hint${usernameState === 'ok' ? ' rw-username-hint--ok' : usernameState === 'taken' || usernameState === 'invalid' ? ' rw-username-hint--error' : ''}${isError ? ' rw-username-hint--retry' : ''}`}
             aria-live="polite"
           >
             {usernameHint}
@@ -756,7 +725,7 @@ function UsernameStep({
       <div>
         <label htmlFor="reg-display-name" className="rw-field-label">
           Display name{' '}
-          <span style={{ color: 'var(--hush-text-ghost)', fontWeight: 400 }}>(optional)</span>
+          <span className="rw-field-optional">(optional)</span>
         </label>
         <input
           id="reg-display-name"
@@ -799,7 +768,7 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
           <span aria-hidden="true">⚠</span>
           Important: save this before continuing
         </div>
-        <p style={{ margin: 0, fontSize: '0.78rem' }}>
+        <p className="rw-warning-body">
           This is your recovery phrase. Write it down and store it in a safe place.
           If you lose this phrase and all your devices, your account is permanently
           irrecoverable. Hush cannot help you recover it.

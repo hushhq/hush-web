@@ -6217,6 +6217,22 @@ select:focus-visible {
   margin-bottom: 4px;
 }
 
+.rw-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hush-border);
+  transition: background var(--duration-normal);
+}
+
+.rw-step-dot--active {
+  background: var(--hush-amber);
+}
+
+.rw-step-dot--done {
+  background: var(--hush-text-muted);
+}
+
 .rw-heading {
   font-family: var(--font-sans);
   font-size: 18px;
@@ -6238,6 +6254,36 @@ select:focus-visible {
   font-size: 12px;
   color: var(--hush-text-secondary);
   font-weight: 500;
+}
+
+.rw-field-optional {
+  color: var(--hush-text-ghost);
+  font-weight: 400;
+}
+
+.rw-username-hint {
+  font-size: 0.72rem;
+  margin-top: 4px;
+  color: var(--hush-text-muted);
+  font-family: var(--font-mono);
+}
+
+.rw-username-hint--ok {
+  color: var(--hush-live);
+}
+
+.rw-username-hint--error {
+  color: var(--hush-danger);
+}
+
+.rw-username-hint--retry {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.rw-warning-body {
+  margin: 0;
+  font-size: 0.78rem;
 }
 
 .rw-warning-box {
@@ -6341,6 +6387,43 @@ select:focus-visible {
   overflow: hidden;
 }
 
+.psm-mode-btn {
+  flex: 1;
+  padding: 8px;
+  font-size: 0.8rem;
+  font-family: var(--font-sans);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: transparent;
+  color: var(--hush-text-muted);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.psm-mode-btn--active {
+  background: var(--hush-elevated);
+  color: var(--hush-text);
+}
+
+.psm-strength-fill {
+  height: 100%;
+  transition: width var(--duration-normal);
+}
+
+.psm-strength-fill--weak { background: var(--hush-danger); }
+.psm-strength-fill--fair { background: var(--hush-amber); }
+.psm-strength-fill--strong { background: var(--hush-live); }
+
+.psm-strength-label {
+  font-size: 0.68rem;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+}
+
+.psm-strength-label--weak { color: var(--hush-danger); }
+.psm-strength-label--fair { color: var(--hush-amber); }
+.psm-strength-label--strong { color: var(--hush-live); }
+
 .pin-setup-mismatch {
   font-size: 11px;
   color: var(--hush-danger);
@@ -6360,6 +6443,10 @@ select:focus-visible {
 .pin-setup-actions {
   display: flex;
   gap: 8px;
+}
+
+.pin-setup-actions .back-link {
+  flex-shrink: 0;
 }
 
 .pin-setup-error {
@@ -6847,6 +6934,11 @@ select:focus-visible {
 
 .rpi-input-wrap {
   position: relative;
+}
+
+.rpi-field-group .input {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
 }
 
 .rpi-dropdown {

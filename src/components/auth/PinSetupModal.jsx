@@ -1,40 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Button } from '../ui';
 
-/** Returns inline style for the active/inactive mode-toggle button. */
-function modeBtnStyle(active) {
-  return {
-    flex: 1,
-    padding: '8px',
-    fontSize: '0.8rem',
-    fontFamily: 'var(--font-sans)',
-    border: 'none',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-    background: active ? 'var(--hush-elevated)' : 'transparent',
-    color: active ? 'var(--hush-text)' : 'var(--hush-text-muted)',
-    transition: 'background var(--duration-fast), color var(--duration-fast)',
-  };
-}
-
-/** Returns inline style for the passphrase strength bar fill. */
-function strengthFillStyle(level) {
-  return {
-    height: '100%',
-    width: `${(level / 4) * 100}%`,
-    background: level < 2 ? 'var(--hush-danger)' : level < 3 ? 'var(--hush-amber)' : 'var(--hush-live)',
-    transition: 'width var(--duration-normal)',
-  };
-}
-
-/** Returns inline style for the passphrase strength label. */
-function strengthLabelStyle(level) {
-  return {
-    fontSize: '0.68rem',
-    marginTop: '3px',
-    color: level < 2 ? 'var(--hush-danger)' : level < 3 ? 'var(--hush-amber)' : 'var(--hush-live)',
-    fontFamily: 'var(--font-mono)',
-  };
+function strengthClass(level) {
+  return level < 2 ? 'weak' : level < 3 ? 'fair' : 'strong';
 }
 
 /**
@@ -102,14 +70,14 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
       <div className="pin-setup-mode-toggle">
         <button
           type="button"
-          style={modeBtnStyle(isPin)}
+          className={`psm-mode-btn${isPin ? ' psm-mode-btn--active' : ''}`}
           onClick={() => switchMode('pin')}
         >
           Use a PIN
         </button>
         <button
           type="button"
-          style={modeBtnStyle(!isPin)}
+          className={`psm-mode-btn${!isPin ? ' psm-mode-btn--active' : ''}`}
           onClick={() => switchMode('passphrase')}
         >
           Use a passphrase
@@ -135,10 +103,10 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
           {!isPin && value.length >= 2 && (
             <>
               <div className="pin-setup-strength-bar">
-                <div style={strengthFillStyle(strength)} />
+                <div className={`psm-strength-fill psm-strength-fill--${strengthClass(strength)}`} style={{ width: `${(strength / 4) * 100}%` }} />
               </div>
               {strength > 0 && (
-                <div style={strengthLabelStyle(strength)}>
+                <div className={`psm-strength-label psm-strength-label--${strengthClass(strength)}`}>
                   {STRENGTH_LABELS[strength]}
                 </div>
               )}
@@ -180,7 +148,6 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
               type="button"
               className="back-link"
               onClick={onSkip}
-              style={{ flexShrink: 0 }}
             >
               Skip for now
             </button>

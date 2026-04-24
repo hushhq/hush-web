@@ -221,7 +221,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
                 autoCapitalize="off"
                 spellCheck="false"
                 autoComplete="off"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}
                 aria-label={`Word ${i + 1} of 12`}
                 aria-autocomplete="list"
                 aria-expanded={activeIndex === i && suggestions.length > 0}
