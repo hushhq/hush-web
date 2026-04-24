@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { isMnemonicValid, getEnglishWordlist } from '../../lib/bip39Identity';
+import { Button } from '../ui';
 
 const WORDLIST_SUGGESTION_LIMIT = 5;
 const AUTOCOMPLETE_MIN_CHARS = 2;
@@ -164,22 +165,20 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
             This will sign out all other devices. They will need to re-link to access your account.
           </p>
           <div className="rpi-revoke-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
+            <Button
+              variant="primary"
               disabled={isLoading}
               onClick={() => onSubmit(mnemonicString, true)}
             >
               {isLoading ? 'Signing in...' : 'Revoke other devices'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               disabled={isLoading}
               onClick={() => onSubmit(mnemonicString, false)}
             >
               Keep other devices
-            </button>
+            </Button>
           </div>
           <button
             type="button"

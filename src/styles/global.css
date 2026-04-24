@@ -5150,6 +5150,13 @@ select:focus-visible {
   animation: home-loading-pulse 1.8s ease-in-out infinite;
 }
 
+.home-instance-error {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--hush-danger);
+}
+
 .home-pin-setup-header {
   margin-bottom: 12px;
 }
@@ -7011,6 +7018,145 @@ select:focus-visible {
 .home-lost-device-link:focus-visible {
   color: var(--hush-amber);
   text-decoration: underline;
+}
+
+/* ── AuthInstanceSelector ───────────────────── */
+
+.ais {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ais--compact {
+  margin-top: 10px;
+  gap: 4px;
+}
+
+.ais__label {
+  font-size: 0.72rem;
+  color: var(--hush-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ais--compact .ais__label {
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ais__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hush-border);
+  background: transparent;
+  color: var(--hush-text);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.ais__trigger:hover {
+  background: var(--hush-hover);
+  border-color: var(--hush-border-hover);
+}
+
+.ais__trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ais__trigger-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.84rem;
+  text-align: left;
+}
+
+.ais__trigger-icon {
+  color: var(--hush-text-muted);
+  flex-shrink: 0;
+}
+
+.ais__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hush-border);
+  background: transparent;
+  color: var(--hush-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.ais__item:hover {
+  background: var(--hush-hover);
+}
+
+.ais__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ais__item--active {
+  border-color: var(--hush-amber);
+  background: color-mix(in srgb, var(--hush-amber) 10%, transparent);
+}
+
+.ais__item--active:hover {
+  background: color-mix(in srgb, var(--hush-amber) 15%, transparent);
+}
+
+.ais__item-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ais__item-name {
+  font-size: 0.84rem;
+}
+
+.ais__item-sub {
+  font-size: 0.72rem;
+  color: var(--hush-text-muted);
+}
+
+.ais__item-badge {
+  color: var(--hush-amber);
+  font-size: 0.76rem;
+  flex-shrink: 0;
+}
+
+.ais__form {
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ais__error {
+  font-size: 0.82rem;
+  color: var(--hush-danger);
+  padding: 0 4px;
 }
 
 /* ── MnemonicGrid ─────────────────────────── */

@@ -1,62 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   DEFAULT_AUTH_INSTANCE_URL,
   getInstanceDisplayName,
 } from '../../lib/authInstanceStore';
-
-const SHELL_STYLE = {
-  marginTop: '14px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-};
-
-const LABEL_STYLE = {
-  fontSize: '0.72rem',
-  color: 'var(--hush-text-muted)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-};
-
-const BUTTON_STYLE = {
-  width: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '10px',
-  padding: '9px 11px',
-  borderRadius: '12px',
-  border: '1px solid var(--hush-border)',
-  background: 'color-mix(in srgb, var(--hush-surface) 82%, transparent)',
-  color: 'var(--hush-text)',
-  cursor: 'pointer',
-};
-
-const PANEL_STYLE = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '8px',
-  padding: '10px',
-  borderRadius: '14px',
-  border: '1px solid var(--hush-border)',
-  background: 'color-mix(in srgb, var(--hush-surface) 92%, transparent)',
-  boxShadow: '0 18px 50px rgba(0, 0, 0, 0.18)',
-};
-
-const LIST_BUTTON_STYLE = {
-  width: '100%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '10px',
-  padding: '9px 11px',
-  borderRadius: '12px',
-  border: '1px solid var(--hush-border)',
-  background: 'transparent',
-  color: 'var(--hush-text)',
-  cursor: 'pointer',
-};
+import {
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from '../ui';
 
 export function AuthInstanceSelector({
   value,
@@ -65,83 +18,19 @@ export function AuthInstanceSelector({
   disabled = false,
   compact = false,
 }) {
-  const rootRef = useRef(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const shellStyle = useMemo(() => {
-    if (!compact) return SHELL_STYLE;
-    return {
-      ...SHELL_STYLE,
-      marginTop: '10px',
-      gap: '4px',
-    };
-  }, [compact]);
-
-  const labelStyle = useMemo(() => {
-    if (!compact) return LABEL_STYLE;
-    return {
-      ...LABEL_STYLE,
-      fontSize: '0.68rem',
-      letterSpacing: '0.05em',
-      textTransform: 'uppercase',
-    };
-  }, [compact]);
-
-  const buttonStyle = useMemo(() => {
-    if (!compact) return BUTTON_STYLE;
-    return {
-      ...BUTTON_STYLE,
-      padding: '7px 10px',
-      borderRadius: '10px',
-      background: 'transparent',
-    };
-  }, [compact]);
-
-  const panelStyle = useMemo(() => {
-    if (!compact) return PANEL_STYLE;
-    return {
-      ...PANEL_STYLE,
-      padding: '8px',
-      borderRadius: '12px',
-      boxShadow: '0 12px 28px rgba(0, 0, 0, 0.16)',
-    };
-  }, [compact]);
-
-  const listButtonStyle = useMemo(() => {
-    if (!compact) return LIST_BUTTON_STYLE;
-    return {
-      ...LIST_BUTTON_STYLE,
-      padding: '8px 10px',
-      borderRadius: '10px',
-    };
-  }, [compact]);
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const handlePointerDown = (event) => {
-      if (!rootRef.current?.contains(event.target)) {
-        setIsOpen(false);
-        setError('');
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isOpen]);
-
   const commitSelection = useCallback(async (candidate) => {
     if (disabled) return;
-
     setIsSaving(true);
     setError('');
     try {
       await onSelect(candidate);
       setDraft('');
-      setIsOpen(false);
+      setOpen(false);
     } catch (err) {
       setError(err?.message || 'Enter a valid instance URL.');
     } finally {
@@ -158,87 +47,84 @@ export function AuthInstanceSelector({
     await commitSelection(draft);
   }, [commitSelection, draft]);
 
+  const handleOpenChange = useCallback((next) => {
+    setOpen(next);
+    if (!next) setError('');
+  }, []);
+
   return (
-    <div ref={rootRef} style={shellStyle}>
-      <div style={labelStyle}>
-        <span>Instance</span>
-      </div>
+    <div className={`ais${compact ? ' ais--compact' : ''}`}>
+      <div className="ais__label">Instance</div>
 
-      <button
-        type="button"
-        style={buttonStyle}
-        onClick={() => setIsOpen((open) => !open)}
-        disabled={disabled}
-        title={value}
-        aria-label={`Connection instance: ${getInstanceDisplayName(value)}`}
-      >
-        <span
-          style={{
-            minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontSize: compact ? '0.84rem' : '0.92rem',
-          }}
+      <DropdownMenuRoot open={open} onOpenChange={handleOpenChange}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="ais__trigger"
+            disabled={disabled}
+            title={value}
+            aria-label={`Connection instance: ${getInstanceDisplayName(value)}`}
+          >
+            <span className="ais__trigger-name">{getInstanceDisplayName(value)}</span>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="ais__trigger-icon"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+            </svg>
+          </button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent
+          align="start"
+          style={{ width: 'var(--radix-dropdown-menu-trigger-width)' }}
         >
-          {getInstanceDisplayName(value)}
-        </span>
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          style={{ color: 'var(--hush-text-muted)', flexShrink: 0 }}
-        >
-          <path d="M12 20h9" />
-          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
-        </svg>
-      </button>
+          <DropdownMenuLabel>Switch instance</DropdownMenuLabel>
 
-      {isOpen && (
-        <div style={panelStyle}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {instances.map((instance) => {
-              const isActive = instance.url === value;
-              const isDefault = instance.url === DEFAULT_AUTH_INSTANCE_URL;
+          {instances.map((instance) => {
+            const isActive = instance.url === value;
+            const isDefault = instance.url === DEFAULT_AUTH_INSTANCE_URL;
 
-              return (
-                <button
-                  key={instance.url}
-                  type="button"
-                  style={{
-                    ...listButtonStyle,
-                    borderColor: isActive ? 'var(--hush-amber)' : 'var(--hush-border)',
-                    background: isActive
-                      ? 'color-mix(in srgb, var(--hush-amber) 10%, transparent)'
-                      : 'transparent',
-                  }}
-                  onClick={() => commitSelection(instance.url)}
-                  disabled={isSaving}
-                >
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '1px' }}>
-                    <span style={{ fontSize: compact ? '0.84rem' : '0.92rem' }}>{getInstanceDisplayName(instance.url)}</span>
-                    <span style={{ fontSize: compact ? '0.72rem' : '0.75rem', color: 'var(--hush-text-muted)' }}>
-                      {isDefault ? 'Pinned default' : instance.lastUsedAt ? `Last used ${new Date(instance.lastUsedAt).toLocaleDateString()}` : 'Saved instance'}
-                    </span>
+            return (
+              <button
+                key={instance.url}
+                type="button"
+                className={`ais__item${isActive ? ' ais__item--active' : ''}`}
+                onClick={() => commitSelection(instance.url)}
+                disabled={isSaving}
+              >
+                <span className="ais__item-body">
+                  <span className="ais__item-name">{getInstanceDisplayName(instance.url)}</span>
+                  <span className="ais__item-sub">
+                    {isDefault
+                      ? 'Pinned default'
+                      : instance.lastUsedAt
+                        ? `Last used ${new Date(instance.lastUsedAt).toLocaleDateString()}`
+                        : 'Saved instance'}
                   </span>
-                  {isActive && <span style={{ color: 'var(--hush-amber)', fontSize: compact ? '0.76rem' : '0.82rem' }}>Current</span>}
-                </button>
-              );
-            })}
-          </div>
+                </span>
+                {isActive && <span className="ais__item-badge">Current</span>}
+              </button>
+            );
+          })}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <DropdownMenuSeparator />
+
+          <form className="ais__form" onSubmit={handleSubmit}>
             <input
               className="input"
               type="text"
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(e) => setDraft(e.target.value)}
               placeholder="Add custom instance"
               autoCapitalize="off"
               autoCorrect="off"
@@ -250,13 +136,9 @@ export function AuthInstanceSelector({
             </button>
           </form>
 
-          {error && (
-            <div style={{ color: 'var(--hush-danger)', fontSize: '0.82rem' }}>
-              {error}
-            </div>
-          )}
-        </div>
-      )}
+          {error && <div className="ais__error">{error}</div>}
+        </DropdownMenuContent>
+      </DropdownMenuRoot>
     </div>
   );
 }

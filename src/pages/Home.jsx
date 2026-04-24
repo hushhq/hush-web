@@ -737,15 +737,7 @@ export default function Home() {
                 compact
               />
               {handshakeError && (
-                <div
-                  role="alert"
-                  style={{
-                    marginTop: '10px',
-                    fontSize: '0.82rem',
-                    lineHeight: 1.45,
-                    color: 'var(--hush-danger)',
-                  }}
-                >
+                <div role="alert" className="home-instance-error">
                   {instanceReachabilityMessage}
                 </div>
               )}
