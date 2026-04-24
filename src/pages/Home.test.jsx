@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Home from './Home';
 import { useAuth } from '../contexts/AuthContext';
+import { TooltipProvider } from '../components/ui';
 
 const mockRegistrationWizardProps = vi.hoisted(() => ({ current: null }));
 
@@ -103,7 +104,9 @@ vi.mock('motion/react', () => {
 function renderHome() {
   return render(
     <MemoryRouter>
-      <Home />
+      <TooltipProvider>
+        <Home />
+      </TooltipProvider>
     </MemoryRouter>,
   );
 }

@@ -11,7 +11,7 @@ import { PinUnlockScreen } from '../components/auth/PinUnlockScreen';
 import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button, Separator } from '../components/ui';
+import { Button, Separator, Tooltip } from '../components/ui';
 
 const SUBTITLE_WORDS = ['share', 'your', 'screen.', 'keep', 'your'];
 
@@ -565,20 +565,16 @@ export default function Home() {
 
         <Separator className="home-auth-separator" />
 
-        {registrationMode !== 'closed' && (
-          <p className="home-register-hint">
-            New here?{' '}
-            <button
-              type="button"
-              className="home-register-link"
+        <div className="home-auth-secondary">
+          {registrationMode !== 'closed' && (
+            <Button
+              variant="secondary"
+              className="home-auth-btn"
               onClick={() => setAuthView(AUTH_VIEW.REGISTER_WIZARD)}
             >
               Create an account
-            </button>
-          </p>
-        )}
-
-        <p className="home-register-hint">
+            </Button>
+          )}
           <button
             type="button"
             className="home-lost-device-link"
@@ -586,7 +582,7 @@ export default function Home() {
           >
             Lost a device?
           </button>
-        </p>
+        </div>
       </>
     );
   };
@@ -695,25 +691,31 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1], delay: 0.6 }}
         >
-          <span
-            className="home-e2ee-badge home-e2ee-badge--active"
+          <Tooltip
+            label="Messages are encrypted on your device. The server never sees your content or keys."
+            side="bottom"
           >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+            <span
+              className="home-e2ee-badge home-e2ee-badge--active"
+              tabIndex={0}
             >
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            end-to-end encrypted
-          </span>
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              end-to-end encrypted
+            </span>
+          </Tooltip>
         </motion.div>
 
         {/* Form card */}

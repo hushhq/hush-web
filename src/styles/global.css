@@ -5130,31 +5130,11 @@ select:focus-visible {
   margin: 12px 0;
 }
 
-.home-register-hint {
-  font-size: 12px;
-  color: var(--hush-text-muted);
-  text-align: center;
-  margin: 0;
-}
-
-.home-register-hint + .home-register-hint {
-  margin-top: 8px;
-}
-
-.home-register-link {
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font: inherit;
-  color: var(--hush-amber-dim);
-  transition: color var(--duration-fast) var(--ease-out);
-}
-
-.home-register-link:hover,
-.home-register-link:focus-visible {
-  color: var(--hush-amber);
-  text-decoration: underline;
+.home-auth-secondary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 @keyframes home-loading-pulse {
