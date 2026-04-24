@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Flex, Text } from '@radix-ui/themes';
+import { GearIcon, DotFilledIcon } from '@radix-ui/react-icons';
+import { IconButton } from './ui';
 import UserSettingsModal from './UserSettingsModal';
 
 /**
@@ -35,18 +38,22 @@ export default function UserPanel({
 
   return (
     <>
-      <div className="user-panel">
-        <div className="user-panel-identity">
+      <Flex className="user-panel" align="center" justify="between">
+        <Flex className="user-panel-identity" align="center" gap="2">
           <div className="user-panel-avatar">{initials}</div>
-          <div className="user-panel-info">
-            <span className="user-panel-name">{displayName}</span>
-            <span className="user-panel-status">Online</span>
-          </div>
-        </div>
-        <div className="user-panel-actions">
+          <Flex direction="column" className="user-panel-info">
+            <Text size="2" weight="medium" className="user-panel-name">
+              {displayName}
+            </Text>
+            <Flex align="center" gap="1" className="user-panel-status">
+              <DotFilledIcon width="8" height="8" color="var(--hush-live)" aria-hidden="true" />
+              <Text size="1" color="gray">Online</Text>
+            </Flex>
+          </Flex>
+        </Flex>
+        <Flex gap="1" className="user-panel-actions">
           {/* Mic toggle */}
-          <button
-            type="button"
+          <IconButton
             className={`user-panel-btn${isMuted ? ' user-panel-btn--danger' : ''}`}
             onClick={onMute}
             title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
@@ -68,11 +75,10 @@ export default function UserPanel({
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             )}
-          </button>
+          </IconButton>
 
           {/* Deafen toggle */}
-          <button
-            type="button"
+          <IconButton
             className={`user-panel-btn${isDeafened ? ' user-panel-btn--danger' : ''}`}
             onClick={onDeafen}
             title={isDeafened ? 'Undeafen' : 'Deafen'}
@@ -90,22 +96,18 @@ export default function UserPanel({
                 <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
               </svg>
             )}
-          </button>
+          </IconButton>
 
           {/* Settings */}
-          <button
-            type="button"
+          <IconButton
             className="user-panel-btn"
             onClick={() => setShowSettings(true)}
             title="User settings"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
-        </div>
-      </div>
+            <GearIcon width="16" height="16" aria-hidden="true" />
+          </IconButton>
+        </Flex>
+      </Flex>
       {showSettings && (
         <UserSettingsModal
           onClose={() => setShowSettings(false)}

@@ -1756,9 +1756,6 @@ select:focus-visible {
 
 /* ── User panel (always at bottom of sidebar) ── */
 .user-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   height: 46px;
   padding: 0 12px;
   border-top: 1px solid var(--hush-border);
@@ -1766,9 +1763,6 @@ select:focus-visible {
 }
 
 .user-panel-identity {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   min-width: 0;
 }
 
@@ -1788,48 +1782,28 @@ select:focus-visible {
 }
 
 .user-panel-info {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
 }
 
 .user-panel-name {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--hush-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .user-panel-status {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--hush-text-ghost);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-shrink: 0;
 }
 
 .user-panel-actions {
-  display: flex;
-  gap: 6px;
   flex-shrink: 0;
 }
 
 .user-panel-btn {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--hush-border);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-color: var(--hush-border);
   background: var(--hush-elevated);
-  color: var(--hush-text-secondary);
-  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
 
 .user-panel-btn:hover:not(:disabled) {
