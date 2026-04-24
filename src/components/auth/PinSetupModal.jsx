@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Button } from '../ui';
+import { Button, TabsRoot, TabsList, TabsTrigger, TabsContent } from '../ui';
 
 function strengthClass(level) {
   return level < 2 ? 'weak' : level < 3 ? 'fair' : 'strong';
@@ -67,100 +67,109 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
         You will need it to unlock Hush after closing your browser.
       </p>
 
-      <div className="pin-setup-mode-toggle">
-        <button
-          type="button"
-          className={`psm-mode-btn${isPin ? ' psm-mode-btn--active' : ''}`}
-          onClick={() => switchMode('pin')}
-        >
-          Use a PIN
-        </button>
-        <button
-          type="button"
-          className={`psm-mode-btn${!isPin ? ' psm-mode-btn--active' : ''}`}
-          onClick={() => switchMode('passphrase')}
-        >
-          Use a passphrase
-        </button>
-      </div>
+      <TabsRoot value={mode} onValueChange={switchMode}>
+        <TabsList>
+          <TabsTrigger value="pin">Use a PIN</TabsTrigger>
+          <TabsTrigger value="passphrase">Use a passphrase</TabsTrigger>
+        </TabsList>
 
-      <form onSubmit={handleSubmit} className="pin-setup-form">
-        <div>
-          <label htmlFor="pin-setup-value" className="pin-setup-field-label">
-            {isPin ? 'PIN (min 4 digits)' : 'Passphrase (min 6 characters)'}
-          </label>
-          <input
-            id="pin-setup-value"
-            className="input"
-            type="password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={isPin ? 'Enter a PIN' : 'Enter a passphrase'}
-            minLength={minLength}
-            inputMode={isPin ? 'numeric' : undefined}
-            autoComplete="new-password"
-          />
-          {!isPin && value.length >= 2 && (
-            <>
-              <div className="pin-setup-strength-bar">
-                <div className={`psm-strength-fill psm-strength-fill--${strengthClass(strength)}`} style={{ width: `${(strength / 4) * 100}%` }} />
-              </div>
-              {strength > 0 && (
-                <div className={`psm-strength-label psm-strength-label--${strengthClass(strength)}`}>
-                  {STRENGTH_LABELS[strength]}
+        <form onSubmit={handleSubmit} className="pin-setup-form">
+          <TabsContent value="pin" className="psm-tab-content">
+            <label htmlFor="psm-pin-value" className="pin-setup-field-label">
+              PIN (min 4 digits)
+            </label>
+            <input
+              id="psm-pin-value"
+              className="input"
+              type="password"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="Enter a PIN"
+              minLength={4}
+              inputMode="numeric"
+              autoComplete="new-password"
+            />
+          </TabsContent>
+
+          <TabsContent value="passphrase" className="psm-tab-content">
+            <label htmlFor="psm-phrase-value" className="pin-setup-field-label">
+              Passphrase (min 6 characters)
+            </label>
+            <input
+              id="psm-phrase-value"
+              className="input"
+              type="password"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="Enter a passphrase"
+              minLength={6}
+              autoComplete="new-password"
+            />
+            {value.length >= 2 && (
+              <>
+                <div className="pin-setup-strength-bar">
+                  <div
+                    className={`psm-strength-fill psm-strength-fill--${strengthClass(strength)}`}
+                    style={{ width: `${(strength / 4) * 100}%` }}
+                  />
                 </div>
-              )}
-            </>
-          )}
-        </div>
+                {strength > 0 && (
+                  <div className={`psm-strength-label psm-strength-label--${strengthClass(strength)}`}>
+                    {STRENGTH_LABELS[strength]}
+                  </div>
+                )}
+              </>
+            )}
+          </TabsContent>
 
-        <div>
-          <label htmlFor="pin-setup-confirm" className="pin-setup-field-label">
-            Confirm {isPin ? 'PIN' : 'passphrase'}
-          </label>
-          <input
-            id="pin-setup-confirm"
-            className="input"
-            type="password"
-            inputMode={isPin ? 'numeric' : undefined}
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder={`Repeat your ${isPin ? 'PIN' : 'passphrase'}`}
-            minLength={minLength}
-            autoComplete="new-password"
-          />
-          {mismatch && (
-            <div className="pin-setup-mismatch" role="alert">
-              {isPin ? 'PINs do not match' : 'Passphrases do not match'}
+          <div>
+            <label htmlFor="pin-setup-confirm" className="pin-setup-field-label">
+              Confirm {isPin ? 'PIN' : 'passphrase'}
+            </label>
+            <input
+              id="pin-setup-confirm"
+              className="input"
+              type="password"
+              inputMode={isPin ? 'numeric' : undefined}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder={`Repeat your ${isPin ? 'PIN' : 'passphrase'}`}
+              minLength={minLength}
+              autoComplete="new-password"
+            />
+            {mismatch && (
+              <div className="pin-setup-mismatch" role="alert">
+                {isPin ? 'PINs do not match' : 'Passphrases do not match'}
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="pin-setup-error" role="alert">
+              {error}
             </div>
           )}
-        </div>
 
-        {error && (
-          <div className="pin-setup-error" role="alert">
-            {error}
-          </div>
-        )}
-
-        <div className="pin-setup-actions">
-          {onSkip && (
-            <button
-              type="button"
-              className="back-link"
-              onClick={onSkip}
+          <div className="pin-setup-actions">
+            {onSkip && (
+              <button
+                type="button"
+                className="back-link"
+                onClick={onSkip}
+              >
+                Skip for now
+              </button>
+            )}
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={!confirmOk || isLoading}
             >
-              Skip for now
-            </button>
-          )}
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={!confirmOk || isLoading}
-          >
-            {isLoading ? 'Saving...' : `Set ${isPin ? 'PIN' : 'passphrase'}`}
-          </Button>
-        </div>
-      </form>
+              {isLoading ? 'Saving...' : `Set ${isPin ? 'PIN' : 'passphrase'}`}
+            </Button>
+          </div>
+        </form>
+      </TabsRoot>
 
       {onSkip && (
         <div className="pin-setup-skip-warning">

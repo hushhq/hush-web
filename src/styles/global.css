@@ -6362,13 +6362,8 @@ select:focus-visible {
   margin: 0;
 }
 
-.pin-setup-mode-toggle {
-  display: flex;
-  gap: 2px;
-  background: var(--hush-surface);
-  border: 1px solid var(--hush-border);
-  padding: 3px;
-  border-radius: var(--radius-md);
+.psm-tab-content {
+  padding-top: 8px;
 }
 
 .pin-setup-field-label {
@@ -6385,24 +6380,6 @@ select:focus-visible {
   background: var(--hush-elevated);
   margin-top: 6px;
   overflow: hidden;
-}
-
-.psm-mode-btn {
-  flex: 1;
-  padding: 8px;
-  font-size: 0.8rem;
-  font-family: var(--font-sans);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  background: transparent;
-  color: var(--hush-text-muted);
-  transition: background var(--duration-fast), color var(--duration-fast);
-}
-
-.psm-mode-btn--active {
-  background: var(--hush-elevated);
-  color: var(--hush-text);
 }
 
 .psm-strength-fill {
