@@ -37,6 +37,8 @@ import { VoiceConnectedPanel } from '../components/Controls';
 import UserPanel from '../components/UserPanel';
 import { useConnectionQuality } from '../hooks/useConnectionQuality';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
+import ServerShell from '../components/layout/ServerShell';
+import ChannelContent from '../components/layout/ChannelContent';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1535,6 +1537,11 @@ export default function ServerLayout() {
   // Used to show the non-blocking warning badge in the sidebar.
   const hasNoTransparencyLog = handshakeData !== null && !handshakeData?.transparency_url;
 
+  const handleTransparencySignOut = useCallback(() => {
+    sessionStorage.clear();
+    window.location.href = '/';
+  }, []);
+
   // ── Render ────────────────────────────────────────────────────────────
 
   // Transparency hard-fail: key mismatch detected - block the app.
@@ -1710,342 +1717,131 @@ export default function ServerLayout() {
     </div>
   );
 
-  return (
-    <div className="lay-container" style={LAYOUT_SCROLL_LOCK_STYLE}>
-      {/* ── Offline banner ── */}
-      {isInstanceOffline && (
-        <div className="lay-offline-banner" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }}>
-          {instanceUrl ? new URL(instanceUrl).host : 'Instance'} is offline - read-only mode
-        </div>
-      )}
+  const memberListEl = (
+    <MemberList
+      members={members}
+      onlineUserIds={onlineUserIds}
+      currentUserId={currentUserId}
+      myRole={myRole}
+      myPermissionLevel={myPermissionLevel}
+      showToast={showToast}
+      onMemberUpdate={handleMemberUpdate}
+      serverId={serverId}
+      onSendMessage={handleSendMessage}
+    />
+  );
 
-      {/* ── Server strip: desktop only (channel sidebar lives inside lay-main below) ── */}
-      {!isMobile && serverListEl}
-      {/* ── Mobile stack navigation ── */}
-      {isMobile && (
-        <>
-          {/* Stack 1: Server strip + channel list (full screen) */}
-          <div className={`mobile-stack-1${mobileStack >= 2 ? ' pushed' : ''}`}>
-            {serverListEl}
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-              {channelSidebarEl}
-            </div>
-          </div>
-
-          {/* Stack 2: Channel content (slides in from right) */}
-          <div className={`mobile-stack-2${mobileStack >= 2 ? ' active' : ''}`}>
-            {/* Voice-in-progress indicator: shown when in voice but viewing another channel */}
-            {activeVoiceChannel && !isViewingVoice && (
-              <button
-                type="button"
-                className="voice-active-bar"
-                onClick={() => handleChannelSelect(activeVoiceChannel)}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12 3a4 4 0 0 1 4 4v5a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4zm7 9a1 1 0 0 1 2 0 9 9 0 0 1-18 0 1 1 0 0 1 2 0 7 7 0 0 0 14 0z"/>
-                </svg>
-                In Voice: {activeVoiceChannel._displayName ?? activeVoiceChannel.name} - Tap to return
-              </button>
-            )}
-
-            {/* Channel content area */}
-            <div className="mobile-content-area">
-              {activeVoiceChannel && (
-                <div style={{ display: isViewingVoice ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0, overflow: 'hidden', position: 'relative', zIndex: 1 }}>
-                  <VoiceChannel
-                    key={activeVoiceChannel.id}
-                    channel={activeVoiceChannel}
-                    serverId={serverId}
-                    getToken={getToken}
-                    wsClient={wsClient}
-                    recipientUserIds={activeVoiceMemberIdsRef.current}
-                    members={members}
-                    onlineUserIds={onlineUserIds}
-                    myRole={myRole}
-                    showToast={showToast}
-                    onMemberUpdate={handleMemberUpdate}
-                    showMembers={false}
-                    showChatPanel={showChatPanel}
-                    showParticipantsPanel={showParticipantsPanel}
-                    onTogglePanel={(name) => name === 'members' ? toggleMemberDrawer() : togglePanel(name)}
-                    onLeave={handleVoiceLeave}
-                    onOrbPhaseChange={handleOrbPhaseChange}
-                    serverParticipants={voiceParticipants.get(activeVoiceChannel.id) ?? []}
-                    voiceMuteStates={voiceMuteStates}
-                    onMobileBack={handleMobileBack}
-                    voiceControlsRef={voiceControlsRef}
-                    onVoiceStateChange={handleVoiceStateChange}
-                    baseUrl={instanceUrl ?? ''}
-                  />
-                </div>
-              )}
-
-              {!isViewingVoice && (
-                loading ? (
-                  <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1 }}>Loading…</div>
-                ) : currentChannel?.type === 'system' ? (
-                  <SystemChannel
-                    channel={currentChannel}
-                    serverId={serverId}
-                    getToken={getToken}
-                    wsClient={wsClient}
-                    members={members}
-                    onToggleDrawer={undefined}
-                    onMobileBack={handleMobileBack}
-                  />
-                ) : currentChannel?.type === 'text' ? (
-                  <TextChannel
-                    channel={currentChannel}
-                    serverId={serverId}
-                    getToken={getToken}
-                    wsClient={wsClient}
-                    members={members}
-                    showMembers={false}
-                    onToggleMembers={isDmView ? undefined : toggleMemberDrawer}
-                    onToggleDrawer={undefined}
-                    onMobileBack={handleMobileBack}
-                    markReadEnabled={isDmView}
-                    onMarkRead={handleMarkRead}
-                    sidebarSlot={null}
-                    baseUrl={instanceUrl ?? ''}
-                    headerTitle={dmPeerName}
-                  />
-                ) : currentChannel && currentChannel.type !== 'voice' ? (
-                  <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1 }}>Unknown channel type</div>
-                ) : (
-                  <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-                    <span style={{ color: 'var(--hush-text-muted)', fontSize: 13 }}>Select a channel</span>
-                  </div>
-                )
-              )}
-            </div>
-
-            {/* Mobile member drawer */}
-            <div
-              className={`mobile-member-overlay${memberDrawerOpen ? ' visible' : ''}`}
-              onClick={closeMemberDrawer}
-              aria-hidden={!memberDrawerOpen}
-            />
-            <div className={`mobile-member-drawer${memberDrawerOpen ? ' open' : ''}`}>
-              <MemberList
-                members={members}
-                onlineUserIds={onlineUserIds}
-                currentUserId={currentUserId}
-                myRole={myRole}
-                myPermissionLevel={myPermissionLevel}
-                showToast={showToast}
-                onMemberUpdate={handleMemberUpdate}
-                serverId={serverId}
-                onSendMessage={handleSendMessage}
-                onCloseDrawer={closeMemberDrawer}
-              />
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── Desktop layout ── */}
-      {!isMobile && <div className="lay-main">
-        <div className="lay-content-row">
-          {/* Channel sidebar — inside lay-main so sidebar+content form one contiguous panel */}
-          <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex', position: 'relative' }}>
-            {channelSidebarEl}
-            <div
-              className="lay-resize-handle"
-              onMouseDown={handleSidebarResize}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize channel list"
-            />
-          </div>
-          <div className="lay-channel-area">
-            {activeVoiceChannel && (
-              <div style={{ display: isViewingVoice ? 'flex' : 'none', flex: 1, flexDirection: 'column', minHeight: 0, overflow: 'hidden', position: 'relative', zIndex: 1 }}>
-                <VoiceChannel
-                  key={activeVoiceChannel.id}
-                  channel={activeVoiceChannel}
-                  serverId={serverId}
-                  getToken={getToken}
-                  wsClient={wsClient}
-                  recipientUserIds={activeVoiceMemberIdsRef.current}
-                  members={members}
-                  onlineUserIds={onlineUserIds}
-                  myRole={myRole}
-                  showToast={showToast}
-                  onMemberUpdate={handleMemberUpdate}
-                  showMembers={showMembers}
-                  showChatPanel={showChatPanel}
-                  showParticipantsPanel={showParticipantsPanel}
-                  onTogglePanel={togglePanel}
-                  onLeave={handleVoiceLeave}
-                  onOrbPhaseChange={handleOrbPhaseChange}
-                  serverParticipants={voiceParticipants.get(activeVoiceChannel.id) ?? []}
-                  voiceMuteStates={voiceMuteStates}
-                  voiceControlsRef={voiceControlsRef}
-                  onVoiceStateChange={handleVoiceStateChange}
-                  baseUrl={instanceUrl ?? ''}
-                />
-              </div>
-            )}
-
-            {!isViewingVoice && (
-              loading ? (
-                <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1 }}>Loading…</div>
-              ) : currentChannel?.type === 'system' ? (
-                <SystemChannel
-                  channel={currentChannel}
-                  serverId={serverId}
-                  getToken={getToken}
-                  wsClient={wsClient}
-                  members={members}
-                  onToggleDrawer={isMobile ? toggleDrawer : undefined}
-                />
-              ) : currentChannel?.type === 'text' ? (
-                <TextChannel
-                  channel={currentChannel}
-                  serverId={serverId}
-                  getToken={getToken}
-                  wsClient={wsClient}
-                  members={members}
-                  showMembers={isDmView ? false : showMembers}
-                  onToggleMembers={isDmView ? undefined : () => togglePanel('members')}
-                  onToggleDrawer={isMobile ? toggleDrawer : undefined}
-                  markReadEnabled={isDmView}
-                  onMarkRead={handleMarkRead}
-                  baseUrl={instanceUrl ?? ''}
-                  headerTitle={dmPeerName}
-                  sidebarSlot={isDmView ? null : (!isMobile ? (
-                    <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`}>
-                      <div className="sidebar-desktop-inner">
-                        <MemberList
-                          members={members}
-                          onlineUserIds={onlineUserIds}
-                          currentUserId={currentUserId}
-                          myRole={myRole}
-                          myPermissionLevel={myPermissionLevel}
-                          showToast={showToast}
-                          onMemberUpdate={handleMemberUpdate}
-                          serverId={serverId}
-                          onSendMessage={handleSendMessage}
-                        />
-                      </div>
-                    </div>
-                  ) : null)}
-                />
-              ) : currentChannel && currentChannel.type !== 'voice' ? (
-                <div className="lay-placeholder" style={{ position: 'relative', zIndex: 1 }}>Unknown channel type</div>
-              ) : (
-                <>
-                  {!currentChannel && (
-                    <header className="lay-channel-area-header">
-                      {isMobile ? (
-                        <button type="button" onClick={toggleDrawer} className="lay-hamburger-btn" aria-label="Toggle channels">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
-                          </svg>
-                        </button>
-                      ) : (
-                        <div />
-                      )}
-                      <button
-                        type="button"
-                        className="lay-members-toggle"
-                        onClick={() => togglePanel('members')}
-                        aria-pressed={showMembers}
-                      >
-                        Members
-                      </button>
-                    </header>
-                  )}
-                  <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                    <div style={{ flex: 1 }} />
-                    {!isMobile && (
-                      <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`}>
-                        <div className="sidebar-desktop-inner">
-                          <MemberList
-                            members={members}
-                            onlineUserIds={onlineUserIds}
-                            currentUserId={currentUserId}
-                            myRole={myRole}
-                            myPermissionLevel={myPermissionLevel}
-                            showToast={showToast}
-                            onMemberUpdate={handleMemberUpdate}
-                            serverId={serverId}
-                            onSendMessage={handleSendMessage}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )
-            )}
-
-            {!loading && (
-              // Show "select a channel" when no channel selected, or "connecting..." only during voice connect phase
-              (!currentChannel && !isViewingVoice) || (isViewingVoice && orbPhase === 'idle')
-            ) && (
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingTop: hasOrbTopHeader ? 48 : 0,
-                paddingBottom: 69,
-                paddingRight: (!isMobile && showMembers) ? 260 : 0,
-                transition: 'padding-right var(--duration-fast) var(--ease-out)',
-                pointerEvents: 'none',
-              }}>
-                <div style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                  <span style={{
-                    color: 'var(--hush-text-muted)',
-                    fontSize: 11,
-                    letterSpacing: '0.18em',
-                    paddingLeft: '0.18em',
-                    textTransform: 'uppercase',
-                    fontFamily: 'var(--font-mono, monospace)',
-                  }}>
-                    {isViewingVoice ? 'connecting...' : 'select channel'}
-                  </span>
-                  <div className={isViewingVoice ? '' : 'empty-state-dot'} style={{
-                    width: 5,
-                    height: 5,
-                    borderRadius: '50%',
-                    background: isViewingVoice ? 'var(--hush-text-muted)' : undefined,
-                  }} />
-                </div>
-              </div>
-            )}
-          </div>
-
-        </div>
-      </div>}
-      {pendingVoiceSwitch && (
-        <ConfirmModal
-          title="Switch voice channel"
-          message={`You are currently connected to "${activeVoiceChannel?.name}". Switch to "${pendingVoiceSwitch.name}"?`}
-          confirmLabel="Switch"
-          onConfirm={handleVoiceSwitchConfirmed}
-          onCancel={() => setPendingVoiceSwitch(null)}
-        />
-      )}
-      {/* ── Transparency log warning badge ── */}
-      {/* Shown when the instance has no transparency log configured.
-          Non-blocking - informational only. Positioned in the bottom-left
-          corner overlapping the server list footer area. */}
-      {hasNoTransparencyLog && authToken && (
-        <div
-          className="transp-no-log-badge"
-          title="Transparency log not configured - key operations cannot be independently verified"
-          aria-label="Transparency log not configured"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 14h2v2h-2v-2zm0-8h2v6h-2V7z" />
-          </svg>
-        </div>
-      )}
-      <Toast toasts={toasts} />
+  const desktopMembersSidebar = !isMobile ? (
+    <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`}>
+      <div className="sidebar-desktop-inner">
+        {memberListEl}
+      </div>
     </div>
+  ) : null;
+
+  const contentEl = (
+    <ChannelContent
+      loading={loading}
+      isViewingVoice={isViewingVoice}
+      activeVoiceChannel={activeVoiceChannel}
+      serverId={serverId}
+      getToken={getToken}
+      wsClient={wsClient}
+      members={members}
+      memberIds={memberIds}
+      onlineUserIds={onlineUserIds}
+      myRole={myRole}
+      showToast={showToast}
+      handleMemberUpdate={handleMemberUpdate}
+      showMembers={showMembers}
+      showChatPanel={showChatPanel}
+      showParticipantsPanel={showParticipantsPanel}
+      togglePanel={togglePanel}
+      toggleMemberDrawer={toggleMemberDrawer}
+      handleVoiceLeave={handleVoiceLeave}
+      handleOrbPhaseChange={handleOrbPhaseChange}
+      voiceParticipants={voiceParticipants}
+      voiceMuteStates={voiceMuteStates}
+      voiceControlsRef={voiceControlsRef}
+      handleVoiceStateChange={handleVoiceStateChange}
+      instanceUrl={instanceUrl}
+      isMobile={isMobile}
+      isDmView={isDmView}
+      currentChannel={currentChannel}
+      dmPeerName={dmPeerName}
+      handleMarkRead={handleMarkRead}
+      handleMobileBack={handleMobileBack}
+      orbPhase={orbPhase}
+      toggleDrawer={toggleDrawer}
+      desktopMembersSidebar={desktopMembersSidebar}
+    />
+  );
+
+  return (
+    <ServerShell
+      transparencyError={transparencyError}
+      onTransparencySignOut={handleTransparencySignOut}
+      serverId={serverId}
+      isInstanceOffline={isInstanceOffline}
+      instanceUrl={instanceUrl}
+      serverListEl={serverListEl}
+      emptyStateEl={
+        <EmptyState
+          instanceStates={instanceStates}
+          onCreateServer={handleOpenGuildCreateModal}
+          onBrowseServers={() => navigate('/explore')}
+        />
+      }
+      guildCreateModal={
+        showGuildCreateModal ? (
+          <GuildCreateModal
+            getToken={getToken}
+            onClose={handleCloseGuildCreateModal}
+            onCreated={handleEmptyStateGuildCreated}
+            activeInstanceUrl={null}
+          />
+        ) : null
+      }
+      hasNoTransparencyLog={hasNoTransparencyLog}
+      authToken={authToken}
+      toastEl={<Toast toasts={toasts} />}
+      isMobile={isMobile}
+      sidebarWidth={sidebarWidth}
+      onSidebarResize={handleSidebarResize}
+      channelSidebarEl={channelSidebarEl}
+      mobileStack={mobileStack}
+      activeVoiceChannel={activeVoiceChannel}
+      isViewingVoice={isViewingVoice}
+      onVoiceBarClick={() => handleChannelSelect(activeVoiceChannel)}
+      memberDrawerOpen={memberDrawerOpen}
+      closeMemberDrawer={closeMemberDrawer}
+      memberDrawerEl={
+        <MemberList
+          members={members}
+          onlineUserIds={onlineUserIds}
+          currentUserId={currentUserId}
+          myRole={myRole}
+          myPermissionLevel={myPermissionLevel}
+          showToast={showToast}
+          onMemberUpdate={handleMemberUpdate}
+          serverId={serverId}
+          onSendMessage={handleSendMessage}
+          onCloseDrawer={closeMemberDrawer}
+        />
+      }
+      pendingVoiceSwitchModal={
+        pendingVoiceSwitch ? (
+          <ConfirmModal
+            title="Switch voice channel"
+            message={`You are currently connected to "${activeVoiceChannel?.name}". Switch to "${pendingVoiceSwitch.name}"?`}
+            confirmLabel="Switch"
+            onConfirm={handleVoiceSwitchConfirmed}
+            onCancel={() => setPendingVoiceSwitch(null)}
+          />
+        ) : null
+      }
+    >
+      {contentEl}
+    </ServerShell>
   );
 }

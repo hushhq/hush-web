@@ -2081,9 +2081,14 @@ select:focus-visible {
   color: var(--hush-text-muted);
   font-size: 13px;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .empty-state-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   background: var(--hush-amber);
   animation: dot-breathe 2.4s ease-in-out infinite;
 }
@@ -2128,6 +2133,22 @@ select:focus-visible {
   background: var(--hush-elevated);
   border-bottom: 1px solid var(--hush-border);
   flex-shrink: 0;
+}
+
+/* Empty-state label floated over the channel area when no channel is active */
+.lay-empty-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  padding-left: 0.18em;
+  text-transform: uppercase;
+  color: var(--hush-text-muted);
+}
+
+/* Overlay that floats above the channel area when no channel is selected */
+.lay-empty-overlay {
+  pointer-events: none;
+  transition: padding-right var(--duration-fast) var(--ease-out);
 }
 
 .lay-members-toggle {
