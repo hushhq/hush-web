@@ -1,4 +1,7 @@
 import { QUALITY_PRESETS, IS_SCREEN_SHARE_SUPPORTED } from '../utils/constants';
+import { Flex, Text } from '@radix-ui/themes';
+import { VideoIcon, DesktopIcon, SwitchIcon, ExitIcon } from '@radix-ui/react-icons';
+import { IconButton } from './ui';
 
 /**
  * Signal strength icon with dynamic bar count and color based on RTT.
@@ -58,80 +61,62 @@ function SignalIcon({ bars = 0, color = 'var(--hush-text-muted)', isReconnecting
  */
 export function VoiceConnectedPanel({ channelName, isScreenSharing, isWebcamOn, signalBars, signalColor, signalReconnecting, rtt, onScreenShare, onSwitchScreen, onWebcam, onDisconnect }) {
   return (
-    <div className="voice-panel">
-      <div className="voice-panel-header">
-        <div className="voice-panel-info">
-          <span className="voice-panel-status">
+    <Flex direction="column" className="voice-panel">
+      <Flex justify="between" align="start" gap="2">
+        <Flex direction="column" gap="1" className="voice-panel-info">
+          <Flex align="center" gap="1">
             <SignalIcon bars={signalBars} color={signalColor} isReconnecting={signalReconnecting} rtt={rtt} />
-            Voice Connected{rtt != null ? ` \u00b7 ${rtt}ms` : ''}
-          </span>
-          <span className="voice-panel-channel">{channelName}</span>
-        </div>
-        <button
-          type="button"
+            <Text size="1" color="green">
+              Voice Connected{rtt != null ? ` \u00b7 ${rtt}ms` : ''}
+            </Text>
+          </Flex>
+          <Text size="2" weight="medium" className="voice-panel-channel">
+            {channelName}
+          </Text>
+        </Flex>
+        <IconButton
           className="voice-panel-btn disconnect"
           onClick={onDisconnect}
           title="Disconnect from voice"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.29 7.76 15.19 6.7 12.77A19.79 19.79 0 0 1 3.63 4.14 2 2 0 0 1 5.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L9.58 9.91" />
-            <line x1="23" y1="1" x2="1" y2="23" />
-          </svg>
-        </button>
-      </div>
-      <div className="voice-panel-controls">
-        {/* Webcam */}
-        <button
-            type="button"
-            className={`voice-panel-btn${isWebcamOn ? ' active' : ''}`}
-            onClick={onWebcam}
-            title={isWebcamOn ? 'Turn off camera' : 'Turn on camera'}
-          >
-            {isWebcamOn ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M23 7l-7 5 7 5V7z" />
-                <rect x="1" y="5" width="15" height="14" rx="2" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
-                <line x1="1" y1="1" x2="23" y2="23" />
-              </svg>
-            )}
-          </button>
-
-          {/* Screen Share */}
-          <button
-            type="button"
-            className={`voice-panel-btn${isScreenSharing ? ' active' : ''}`}
-            onClick={onScreenShare}
-            title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-          >
+          <ExitIcon width="16" height="16" aria-hidden="true" />
+        </IconButton>
+      </Flex>
+      <Flex gap="1" className="voice-panel-controls">
+        <IconButton
+          className={`voice-panel-btn${isWebcamOn ? ' active' : ''}`}
+          onClick={onWebcam}
+          title={isWebcamOn ? 'Turn off camera' : 'Turn on camera'}
+        >
+          {isWebcamOn ? (
+            <VideoIcon width="16" height="16" aria-hidden="true" />
+          ) : (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
+              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
+              <line x1="1" y1="1" x2="23" y2="23" />
             </svg>
-          </button>
-
-          {/* Switch window (only when sharing) */}
-          {isScreenSharing && onSwitchScreen && (
-            <button
-              type="button"
-              className="voice-panel-btn"
-              onClick={onSwitchScreen}
-              title="Switch window"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="16 3 21 3 21 8" />
-                <line x1="4" y1="20" x2="21" y2="3" />
-                <polyline points="21 16 21 21 16 21" />
-                <line x1="15" y1="15" x2="21" y2="21" />
-              </svg>
-            </button>
           )}
-        </div>
-    </div>
+        </IconButton>
+
+        <IconButton
+          className={`voice-panel-btn${isScreenSharing ? ' active' : ''}`}
+          onClick={onScreenShare}
+          title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+        >
+          <DesktopIcon width="16" height="16" aria-hidden="true" />
+        </IconButton>
+
+        {isScreenSharing && onSwitchScreen && (
+          <IconButton
+            className="voice-panel-btn"
+            onClick={onSwitchScreen}
+            title="Switch window"
+          >
+            <SwitchIcon width="16" height="16" aria-hidden="true" />
+          </IconButton>
+        )}
+      </Flex>
+    </Flex>
   );
 }
 

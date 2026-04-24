@@ -1653,55 +1653,25 @@ select:focus-visible {
 }
 
 .voice-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   margin-bottom: 8px;
 }
 
 .voice-panel-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   min-width: 0;
 }
 
 .voice-panel-channel {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--hush-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.voice-panel-status {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--hush-live);
-  display: flex;
-  align-items: center;
-}
-
-.voice-panel-controls {
-  display: flex;
-  gap: 4px;
-}
-
 .voice-panel-btn {
   width: 30px;
   height: 30px;
-  border-radius: var(--radius-md);
   background: var(--hush-elevated);
-  border: 1px solid var(--hush-border);
+  border-color: var(--hush-border);
   color: var(--hush-text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
 
 .voice-panel-btn:hover {
