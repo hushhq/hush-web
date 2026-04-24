@@ -575,21 +575,14 @@ a[href]:active {
 .rpi-actions .back-link,
 .rw-actions .back-link,
 .mc-actions .back-link,
-.pin-setup-actions .back-link,
-.rpi-revoke-step .back-link {
+.pin-setup-actions .back-link {
   margin-bottom: 0;
-}
-
-.rpi-revoke-step .back-link {
-  align-self: center;
 }
 
 /* Auth action rows: primary/secondary buttons fill available space. */
 .rw-actions .btn-primary,
 .mc-actions .btn-primary,
 .rpi-actions .btn-primary,
-.rpi-revoke-actions .btn-primary,
-.rpi-revoke-actions .btn-secondary,
 .pin-setup-actions .btn-primary {
   flex: 1;
   padding: 10px;
@@ -6998,33 +6991,6 @@ select:focus-visible {
   gap: 8px;
 }
 
-/* Explicit revoke-decision step (Yes/No buttons replacing old checkbox) */
-.rpi-revoke-step {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.rpi-revoke-heading {
-  font-family: var(--font-sans);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--hush-text);
-  margin: 0;
-}
-
-.rpi-revoke-desc {
-  font-size: 13px;
-  color: var(--hush-text-secondary);
-  line-height: 1.5;
-  margin: 0;
-}
-
-.rpi-revoke-actions {
-  display: flex;
-  gap: 8px;
-}
-
 /* ── PostRecoveryWizard ──────────────────────── */
 .post-recovery-overlay {
   position: fixed;
@@ -7374,14 +7340,12 @@ select:focus-visible {
   }
 
   .rw-actions,
-  .pin-setup-actions,
-  .rpi-revoke-actions {
+  .pin-setup-actions {
     flex-direction: column;
   }
 
   .rw-actions > *,
-  .pin-setup-actions > *,
-  .rpi-revoke-actions > * {
+  .pin-setup-actions > * {
     width: 100%;
   }
 

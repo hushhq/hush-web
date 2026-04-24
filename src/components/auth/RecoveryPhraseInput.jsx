@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { isMnemonicValid, getEnglishWordlist } from '../../lib/bip39Identity';
-import { Button } from '../ui';
+import {
+  Button,
+  AlertDialogRoot, AlertDialogContent,
+  AlertDialogActions, AlertDialogAction, AlertDialogCancel,
+} from '../ui';
 
 const WORDLIST_SUGGESTION_LIMIT = 5;
 const AUTOCOMPLETE_MIN_CHARS = 2;
@@ -154,44 +158,6 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
     }
   }, [isValid, isRecoveryMode, mnemonicString, onSubmit]);
 
-  // ── Revoke decision step ─────────────────────────────────────────────────────
-
-  if (revokeStep) {
-    return (
-      <div className="rpi-container">
-        <div className="rpi-revoke-step">
-          <h3 className="rpi-revoke-heading">Revoke other devices?</h3>
-          <p className="rpi-revoke-desc">
-            This will sign out all other devices. They will need to re-link to access your account.
-          </p>
-          <div className="rpi-revoke-actions">
-            <Button
-              variant="primary"
-              disabled={isLoading}
-              onClick={() => onSubmit(mnemonicString, true)}
-            >
-              {isLoading ? 'Signing in...' : 'Revoke other devices'}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={isLoading}
-              onClick={() => onSubmit(mnemonicString, false)}
-            >
-              Keep other devices
-            </Button>
-          </div>
-          <button
-            type="button"
-            className="back-link"
-            onClick={() => setRevokeStep(false)}
-          >
-            ← Back
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ── Phrase entry step ─────────────────────────────────────────────────────────
 
   return (
@@ -274,6 +240,37 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
           {isLoading ? 'Signing in...' : 'Sign in'}
         </Button>
       </div>
+
+      <AlertDialogRoot open={revokeStep} onOpenChange={setRevokeStep}>
+        <AlertDialogContent
+          title="Revoke other devices?"
+          description="This will sign out all other devices. They will need to re-link to access your account."
+        >
+          <AlertDialogActions>
+            <AlertDialogCancel asChild>
+              <button type="button" className="back-link">← Back</button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                variant="secondary"
+                disabled={isLoading}
+                onClick={() => onSubmit(mnemonicString, false)}
+              >
+                {isLoading ? 'Signing in...' : 'Keep other devices'}
+              </Button>
+            </AlertDialogAction>
+            <AlertDialogAction asChild>
+              <Button
+                variant="primary"
+                disabled={isLoading}
+                onClick={() => onSubmit(mnemonicString, true)}
+              >
+                {isLoading ? 'Signing in...' : 'Revoke other devices'}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogActions>
+        </AlertDialogContent>
+      </AlertDialogRoot>
     </div>
   );
 }
