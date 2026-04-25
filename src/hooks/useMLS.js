@@ -17,6 +17,7 @@ import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
 import { getTranscriptEntry } from '../lib/transcriptVault';
+import { withChannelMLSMutex, textChannelKey } from '../lib/channelMLSMutex';
 
 /**
  * @param {object} opts
@@ -69,7 +70,11 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
   async function encryptForChannel(plaintext) {
     if (!channelId) throw new Error('[useMLS] channelId is required for encryptForChannel');
     const deps = await buildDeps();
-    const { messageBytes, localId } = await mlsGroup.encryptMessage(deps, channelId, plaintext);
+    // Serialise stateful MLS ops per channel to prevent racing with WS commit
+    // handlers, catchup runs, or the decrypt-retry path.
+    const { messageBytes, localId } = await withChannelMLSMutex(textChannelKey(channelId), () =>
+      mlsGroup.encryptMessage(deps, channelId, plaintext),
+    );
     return { ciphertext: messageBytes, localId };
   }
 
@@ -82,27 +87,32 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
   async function decryptFromChannel(messageBytes) {
     if (!channelId) throw new Error('[useMLS] channelId is required for decryptFromChannel');
     const deps = await buildDeps();
-    try {
-      const result = await mlsGroup.decryptMessage(deps, channelId, messageBytes);
-      if (result.plaintext == null) {
-        throw new Error(`[useMLS] decryptFromChannel: non-application message (type=${result.type})`);
-      }
-      return result.plaintext;
-    } catch (primaryErr) {
+    // Hold the per-channel mutex across the whole decrypt-then-retry chain so
+    // a concurrent WS commit handler, encrypt, or peer decrypt cannot
+    // interleave its own processMessage between our two attempts.
+    return withChannelMLSMutex(textChannelKey(channelId), async () => {
       try {
-        await mlsGroup.catchupCommits(deps, channelId);
-        const retryResult = await mlsGroup.decryptMessage(deps, channelId, messageBytes);
-        if (retryResult.plaintext != null) {
-          return retryResult.plaintext;
+        const result = await mlsGroup.decryptMessage(deps, channelId, messageBytes);
+        if (result.plaintext == null) {
+          throw new Error(`[useMLS] decryptFromChannel: non-application message (type=${result.type})`);
         }
-      } catch {
-        // Fall through to the final failure path.
+        return result.plaintext;
+      } catch (primaryErr) {
+        try {
+          await mlsGroup.catchupCommits(deps, channelId);
+          const retryResult = await mlsGroup.decryptMessage(deps, channelId, messageBytes);
+          if (retryResult.plaintext != null) {
+            return retryResult.plaintext;
+          }
+        } catch {
+          // Fall through to the final failure path.
+        }
+        // Intentionally do not run history-store decrypt here. decryptMessage()
+        // is stateful and uses the global StorageProvider bridge, so running it
+        // against history state would risk corrupting the active MLS store.
+        throw primaryErr;
       }
-      // Intentionally do not run history-store decrypt here. decryptMessage()
-      // is stateful and uses the global StorageProvider bridge, so running it
-      // against history state would risk corrupting the active MLS store.
-      throw primaryErr;
-    }
+    });
   }
 
   /**

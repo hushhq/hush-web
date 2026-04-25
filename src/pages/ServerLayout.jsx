@@ -26,6 +26,7 @@ import { useSidebarResize } from '../hooks/useSidebarResize';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as mlsGroup from '../lib/mlsGroup';
+import { withChannelMLSMutex, textChannelKey } from '../lib/channelMLSMutex';
 import { buildGuildRouteRef, parseGuildRouteRef, slugify } from '../lib/slugify';
 import ConfirmModal from '../components/ConfirmModal';
 import DmListView from '../components/DmListView';
@@ -1021,47 +1022,55 @@ export default function ServerLayout() {
       if (!token) return;
       if (!instanceApi) return;
 
-      try {
-        const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
-        const localEpochBefore = await mlsStoreLib.getGroupEpoch(db, data.channel_id);
-        console.info('[mls] commit event', {
-          channelId: data.channel_id,
-          senderId: data.sender_id,
-          senderDeviceId: data.sender_device_id ?? null,
-          incomingEpoch: data.epoch ?? null,
-          localEpochBefore: localEpochBefore ?? null,
-        });
-        const credential = await mlsStoreLib.getCredential(db);
-        const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
-        const commitBytes = base64ToUint8ArraySL(data.commit_bytes);
-        await mlsGroup.processCommit(deps, data.channel_id, commitBytes);
-        const localEpochAfter = await mlsStoreLib.getGroupEpoch(db, data.channel_id);
-        console.info('[mls] commit applied', {
-          channelId: data.channel_id,
-          incomingEpoch: data.epoch ?? null,
-          localEpochAfter: localEpochAfter ?? null,
-        });
-      } catch (err) {
-        console.warn('[mls] Failed to process commit for channel', data.channel_id, err);
+      // Serialise per-channel: multiple `mls.commit` events for the same
+      // channel can fire back-to-back. Without this, two handlers can both
+      // read epoch=N, both call processCommit, and the second one runs
+      // against state the first one already advanced — producing
+      // WrongEpoch / InvalidSignature / AeadError on subsequent app
+      // messages.
+      await withChannelMLSMutex(textChannelKey(data.channel_id), async () => {
         try {
-          const db2 = await mlsStoreLib.openStore(currentUserId, getDeviceId());
-          const localEpochBeforeCatchup = await mlsStoreLib.getGroupEpoch(db2, data.channel_id);
-          console.info('[mls] starting catchup', {
+          const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
+          const localEpochBefore = await mlsStoreLib.getGroupEpoch(db, data.channel_id);
+          console.info('[mls] commit event', {
             channelId: data.channel_id,
-            localEpochBeforeCatchup: localEpochBeforeCatchup ?? null,
+            senderId: data.sender_id,
+            senderDeviceId: data.sender_device_id ?? null,
+            incomingEpoch: data.epoch ?? null,
+            localEpochBefore: localEpochBefore ?? null,
           });
-          const credential2 = await mlsStoreLib.getCredential(db2);
-          const deps2 = { db: db2, token, credential: credential2, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
-          await mlsGroup.catchupCommits(deps2, data.channel_id);
-          const localEpochAfterCatchup = await mlsStoreLib.getGroupEpoch(db2, data.channel_id);
-          console.info('[mls] catchup finished', {
+          const credential = await mlsStoreLib.getCredential(db);
+          const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
+          const commitBytes = base64ToUint8ArraySL(data.commit_bytes);
+          await mlsGroup.processCommit(deps, data.channel_id, commitBytes);
+          const localEpochAfter = await mlsStoreLib.getGroupEpoch(db, data.channel_id);
+          console.info('[mls] commit applied', {
             channelId: data.channel_id,
-            localEpochAfterCatchup: localEpochAfterCatchup ?? null,
+            incomingEpoch: data.epoch ?? null,
+            localEpochAfter: localEpochAfter ?? null,
           });
-        } catch (catchupErr) {
-          console.warn('[mls] Catchup also failed for channel', data.channel_id, catchupErr);
+        } catch (err) {
+          console.warn('[mls] Failed to process commit for channel', data.channel_id, err);
+          try {
+            const db2 = await mlsStoreLib.openStore(currentUserId, getDeviceId());
+            const localEpochBeforeCatchup = await mlsStoreLib.getGroupEpoch(db2, data.channel_id);
+            console.info('[mls] starting catchup', {
+              channelId: data.channel_id,
+              localEpochBeforeCatchup: localEpochBeforeCatchup ?? null,
+            });
+            const credential2 = await mlsStoreLib.getCredential(db2);
+            const deps2 = { db: db2, token, credential: credential2, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
+            await mlsGroup.catchupCommits(deps2, data.channel_id);
+            const localEpochAfterCatchup = await mlsStoreLib.getGroupEpoch(db2, data.channel_id);
+            console.info('[mls] catchup finished', {
+              channelId: data.channel_id,
+              localEpochAfterCatchup: localEpochAfterCatchup ?? null,
+            });
+          } catch (catchupErr) {
+            console.warn('[mls] Catchup also failed for channel', data.channel_id, catchupErr);
+          }
         }
-      }
+      });
     };
 
     wsClient.on('mls.commit', handler);
@@ -1079,14 +1088,16 @@ export default function ServerLayout() {
       if (!token) return;
       if (!instanceApi) return;
 
-      try {
-        const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
-        const credential = await mlsStoreLib.getCredential(db);
-        const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
-        await mlsGroup.removeMemberFromChannel(deps, data.channel_id, data.requester_id);
-      } catch (err) {
-        console.warn('[mls] Failed to commit remove for', data.requester_id, 'in channel', data.channel_id, err);
-      }
+      await withChannelMLSMutex(textChannelKey(data.channel_id), async () => {
+        try {
+          const db = await mlsStoreLib.openStore(currentUserId, getDeviceId());
+          const credential = await mlsStoreLib.getCredential(db);
+          const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
+          await mlsGroup.removeMemberFromChannel(deps, data.channel_id, data.requester_id);
+        } catch (err) {
+          console.warn('[mls] Failed to commit remove for', data.requester_id, 'in channel', data.channel_id, err);
+        }
+      });
     };
 
     wsClient.on('mls.add_request', handler);
@@ -1130,23 +1141,26 @@ export default function ServerLayout() {
         // Text channel groups (includes voice channels - they have built-in chat)
         for (const chId of chatChannelIds) {
           if ((failures.get(chId) ?? 0) >= MAX_JOIN_RETRIES) continue;
-          const epoch = await mlsStoreLib.getGroupEpoch(db, chId);
-          if (epoch == null) {
-            try {
-              await mlsGroup.joinOrCreateChannelGroup(deps, chId);
-            } catch (err) {
-              failures.set(chId, (failures.get(chId) ?? 0) + 1);
-              console.warn('[mls] Failed to join/create group for channel', chId,
-                `(attempt ${failures.get(chId)}/${MAX_JOIN_RETRIES})`, err);
+          // Per-channel mutex: serialise with WS commit handlers and any
+          // user-driven encrypt/decrypt that may run concurrently.
+          await withChannelMLSMutex(textChannelKey(chId), async () => {
+            const epoch = await mlsStoreLib.getGroupEpoch(db, chId);
+            if (epoch == null) {
+              try {
+                await mlsGroup.joinOrCreateChannelGroup(deps, chId);
+              } catch (err) {
+                failures.set(chId, (failures.get(chId) ?? 0) + 1);
+                console.warn('[mls] Failed to join/create group for channel', chId,
+                  `(attempt ${failures.get(chId)}/${MAX_JOIN_RETRIES})`, err);
+              }
+            } else {
+              try {
+                await mlsGroup.catchupCommits(deps, chId);
+              } catch (err) {
+                console.warn('[mls] Commit catchup failed for channel', chId, err);
+              }
             }
-          } else {
-            // Epoch exists - catch up on any commits missed while page was killed (iOS).
-            try {
-              await mlsGroup.catchupCommits(deps, chId);
-            } catch (err) {
-              console.warn('[mls] Commit catchup failed for channel', chId, err);
-            }
-          }
+          });
         }
       } catch (err) {
         console.warn('[mls] joinMissingGroups failed:', err);
@@ -1173,11 +1187,18 @@ export default function ServerLayout() {
         const deps = { db, token, credential, mlsStore: mlsStoreLib, hushCrypto: hushCryptoLib, api: instanceApi };
         const allEpochs = await mlsStoreLib.listAllGroupEpochs(db);
         for (const { key: channelId } of allEpochs) {
-          try {
-            await mlsGroup.performSelfUpdate(deps, channelId);
-          } catch (err) {
-            console.warn('[mls] Self-update failed for channel', channelId, err);
-          }
+          // performSelfUpdate is a stateful MLS mutation (creates+merges a
+          // commit, advances epoch). Must serialise per channel against WS
+          // commit handlers, catchup, encrypt and decrypt-retry on the same
+          // channel, otherwise it reintroduces the same race class on a
+          // slower timer path.
+          await withChannelMLSMutex(textChannelKey(channelId), async () => {
+            try {
+              await mlsGroup.performSelfUpdate(deps, channelId);
+            } catch (err) {
+              console.warn('[mls] Self-update failed for channel', channelId, err);
+            }
+          });
         }
       } catch (err) {
         console.warn('[mls] Self-update timer failed:', err);
