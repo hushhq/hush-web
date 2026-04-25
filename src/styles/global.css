@@ -37,12 +37,12 @@
   --hush-hover:        rgba(255,255,255,.12);  /* hover states */
   --hush-modal:        rgba(255,255,255,.10);  /* modal/overlay surfaces */
 
-  /* ── Primary Accent (warm cloud white) ── */
-  --hush-amber:        #F0EEE9;
+  /* ── Primary Accent (mauve white) ── */
+  --hush-amber:        #EEEEF0; /* mauve12 dark */
   --hush-amber-bright: #ffffff;
-  --hush-amber-dim:    rgba(240,238,233,.6);
-  --hush-amber-glow:   rgba(240,238,233,.06);
-  --hush-amber-ghost:  rgba(240,238,233,.03);
+  --hush-amber-dim:    rgba(238,238,240,.6);
+  --hush-amber-glow:   rgba(238,238,240,.06);
+  --hush-amber-ghost:  rgba(238,238,240,.03);
   --hush-on-amber:     #000000;
 
   /* ── Borders (3-tier) ── */
@@ -131,12 +131,12 @@
     --hush-hover:        rgba(0,0,0,.06);
     --hush-modal:        #ffffff;
 
-    --hush-amber:        #1a1714;
+    --hush-amber:        #211F26; /* mauve12 light */
     --hush-amber-bright: #000000;
-    --hush-amber-dim:    rgba(20,18,16,.6);
-    --hush-amber-glow:   rgba(20,18,16,.06);
-    --hush-amber-ghost:  rgba(20,18,16,.03);
-    --hush-on-amber:     #F0EEE9;
+    --hush-amber-dim:    rgba(33,31,38,.6);
+    --hush-amber-glow:   rgba(33,31,38,.06);
+    --hush-amber-ghost:  rgba(33,31,38,.03);
+    --hush-on-amber:     #FDFCFD;
 
     --hush-border:       rgba(0,0,0,.15);
     --hush-border-hover: rgba(0,0,0,.22);
@@ -190,12 +190,12 @@
   --hush-hover:        rgba(0,0,0,.06);
   --hush-modal:        #ffffff;
 
-  --hush-amber:        #1a1714;
+  --hush-amber:        #211F26;
   --hush-amber-bright: #000000;
-  --hush-amber-dim:    rgba(20,18,16,.6);
-  --hush-amber-glow:   rgba(20,18,16,.06);
-  --hush-amber-ghost:  rgba(20,18,16,.03);
-  --hush-on-amber:     #F0EEE9;
+  --hush-amber-dim:    rgba(33,31,38,.6);
+  --hush-amber-glow:   rgba(33,31,38,.06);
+  --hush-amber-ghost:  rgba(33,31,38,.03);
+  --hush-on-amber:     #FDFCFD;
 
   --hush-border:       rgba(0,0,0,.15);
   --hush-border-hover: rgba(0,0,0,.22);
@@ -247,11 +247,11 @@
   --hush-hover:        rgba(255,255,255,.12);
   --hush-modal:        rgba(255,255,255,.10);
 
-  --hush-amber:        #F0EEE9;
+  --hush-amber:        #EEEEF0;
   --hush-amber-bright: #ffffff;
-  --hush-amber-dim:    rgba(240,238,233,.6);
-  --hush-amber-glow:   rgba(240,238,233,.06);
-  --hush-amber-ghost:  rgba(240,238,233,.03);
+  --hush-amber-dim:    rgba(238,238,240,.6);
+  --hush-amber-glow:   rgba(238,238,240,.06);
+  --hush-amber-ghost:  rgba(238,238,240,.03);
   --hush-on-amber:     #000000;
 
   --hush-border:       rgba(255,255,255,.12);
@@ -308,11 +308,11 @@
 }
 
 ::selection {
-  background: rgba(240, 238, 233, 0.18);
+  background: rgba(238, 238, 240, 0.18);
   color: inherit;
 }
 ::-moz-selection {
-  background: rgba(240, 238, 233, 0.18);
+  background: rgba(238, 238, 240, 0.18);
   color: inherit;
 }
 
@@ -366,12 +366,12 @@ body::before, body::after {
 body::before {
   width: 600px; height: 400px;
   top: -100px; left: 10%;
-  background: radial-gradient(ellipse, rgba(240,238,233,.07) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(238,238,240,.07) 0%, transparent 70%);
 }
 body::after {
   width: 500px; height: 500px;
   bottom: -150px; right: 5%;
-  background: radial-gradient(ellipse, rgba(240,238,233,.04) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(238,238,240,.04) 0%, transparent 70%);
 }
 
 @media (prefers-color-scheme: light) {
@@ -7452,7 +7452,7 @@ select:focus-visible {
 
 .ui-tabs-trigger[data-state="active"] {
   color: var(--hush-text);
-  border-bottom-color: var(--cloud-dancer);
+  border-bottom-color: var(--hush-amber);
 }
 
 .ui-tabs-content {
@@ -7473,7 +7473,7 @@ select:focus-visible {
 }
 
 .ui-switch-root[data-state="checked"] {
-  background: var(--cloud-dancer);
+  background: var(--hush-amber);
 }
 
 .ui-switch-thumb {
