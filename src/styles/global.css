@@ -30,8 +30,9 @@
 
 :root {
   /* ── Core Surfaces ── */
-  --hush-black:        #000000;          /* void black, page bg */
-  --hush-surface:      rgba(12,10,9,.9); /* panel backgrounds */
+  /* Aliases over Radix mauve dark scale to keep page/panel/elevated reads consistent. */
+  --hush-black:        #111113;          /* mauve1 - page bg */
+  --hush-surface:      #19191b;          /* mauve2 - panel backgrounds */
   --hush-elevated:     rgba(255,255,255,.045); /* elevated surfaces within panels */
   --hush-hover:        rgba(255,255,255,.12);  /* hover states */
   --hush-modal:        rgba(255,255,255,.10);  /* modal/overlay surfaces */
@@ -62,8 +63,8 @@
   --hush-danger-ghost: rgba(239, 68, 68, 0.10);
 
   /* ── Theme-specific (glass, overlays) ── */
-  --hush-glass-bg:         rgba(12,10,9,.9);
-  --hush-video-label-bg:   rgba(12,10,9,.8);
+  --hush-glass-bg:         rgba(25,25,27,.92); /* mauve2 with alpha */
+  --hush-video-label-bg:   rgba(17,17,19,.85); /* mauve1 with alpha */
   --hush-badge-live-bg:    rgba(74,222,128,.08);
   --hush-btn-danger-hover: rgba(239, 68, 68, 0.15);
   --hush-header-block-bg:    rgba(255, 255, 255, 0.03);
@@ -240,8 +241,8 @@
 }
 
 [data-theme="dark"] {
-  --hush-black:        #000000;
-  --hush-surface:      rgba(12,10,9,.9);
+  --hush-black:        #111113;
+  --hush-surface:      #19191b;
   --hush-elevated:     rgba(255,255,255,.045);
   --hush-hover:        rgba(255,255,255,.12);
   --hush-modal:        rgba(255,255,255,.10);
@@ -262,8 +263,8 @@
   --hush-text-muted:     rgba(255,255,255,.48);
   --hush-text-ghost:     rgba(255,255,255,.25);
 
-  --hush-glass-bg:         rgba(12,10,9,.9);
-  --hush-video-label-bg:   rgba(12,10,9,.8);
+  --hush-glass-bg:         rgba(25,25,27,.92);
+  --hush-video-label-bg:   rgba(17,17,19,.85);
   --hush-badge-live-bg:    rgba(74,222,128,.08);
   --hush-btn-danger-hover: rgba(239, 68, 68, 0.15);
   --hush-header-block-bg:    rgba(255, 255, 255, 0.03);
@@ -994,8 +995,8 @@ select:focus-visible {
   height: 100%;
   min-height: 100%;
   flex-shrink: 0;
-  background: var(--mauve2);
-  border: 1px solid var(--mauve6);
+  background: var(--hush-surface);
+  border: 1px solid var(--hush-border);
   border-radius: var(--radius-lg);
   transform: translateX(100%);
   transition: transform var(--duration-normal) var(--ease-out);
@@ -1058,13 +1059,15 @@ select:focus-visible {
   gap: 3px;
   overflow-y: auto;
   flex-shrink: 0;
-  background: var(--mauve1);
+  background: var(--hush-surface);
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-lg);
   scrollbar-width: thin;
-  scrollbar-color: var(--mauve6) transparent;
+  scrollbar-color: var(--hush-border-hover) transparent;
 }
 
 .sl-strip::-webkit-scrollbar { width: 3px; }
-.sl-strip::-webkit-scrollbar-thumb { background: var(--mauve6); border-radius: var(--radius-full); }
+.sl-strip::-webkit-scrollbar-thumb { background: var(--hush-border-hover); border-radius: var(--radius-full); }
 .sl-strip::-webkit-scrollbar-track { background: transparent; }
 
 .sl-guild-btn {
@@ -1080,7 +1083,7 @@ select:focus-visible {
   font-family: var(--font-sans);
   font-size: 10.5px;
   font-weight: 500;
-  color: var(--mauve10);
+  color: var(--hush-text-muted);
   background-size: cover;
   background-position: center;
   border-radius: var(--radius-lg);
@@ -1090,13 +1093,13 @@ select:focus-visible {
 }
 
 .sl-guild-btn:hover {
-  background: var(--mauve3);
-  color: var(--mauve11);
+  background: var(--hush-hover);
+  color: var(--hush-text-secondary);
 }
 
 .sl-guild-btn--active {
-  background: var(--mauve4);
-  color: var(--mauve12);
+  background: var(--hush-elevated);
+  color: var(--hush-text);
 }
 
 .sl-guild-btn--offline {
@@ -1213,8 +1216,8 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--mauve3);
-  color: var(--mauve11);
+  background: var(--hush-elevated);
+  color: var(--hush-text-muted);
   flex-shrink: 0;
   margin-top: auto;
   transition: all var(--duration-fast) var(--ease-out);
@@ -1481,7 +1484,7 @@ select:focus-visible {
   padding: 4px 11px;
   font-family: var(--font-sans);
   font-size: 12.5px;
-  color: var(--mauve10);
+  color: var(--hush-text-muted);
   cursor: pointer;
   border: none;
   background: none;
@@ -1495,18 +1498,18 @@ select:focus-visible {
 }
 
 .cl-channel-item:hover {
-  background: var(--mauve3);
-  color: var(--mauve11);
+  background: var(--hush-hover);
+  color: var(--hush-text-secondary);
 }
 
 .cl-channel-item--active {
-  color: var(--mauve12);
-  background: var(--mauve4);
+  color: var(--hush-text);
+  background: var(--hush-elevated);
 }
 
 .cl-channel-item:focus-visible {
-  background: var(--mauve3);
-  color: var(--mauve11);
+  background: var(--hush-hover);
+  color: var(--hush-text-secondary);
 }
 
 /* Unread channel: primary text color + medium weight */
@@ -2576,7 +2579,7 @@ select:focus-visible {
 /* ── Member List (MemberList.jsx) ───────────────── */
 
 .ml-container {
-  background: var(--mauve2);
+  background: transparent;
   overflow-y: auto;
   padding: 0;
 }
@@ -2616,7 +2619,7 @@ select:focus-visible {
 
 .ml-member-item:hover,
 .ml-member-item:focus-visible {
-  background: var(--mauve3);
+  background: var(--hush-hover);
 }
 
 .ml-avatar {
@@ -7300,15 +7303,17 @@ select:focus-visible {
 
 /* Tooltip */
 .ui-tooltip-content {
-  background: var(--mauve4);
-  border: 1px solid var(--mauve6);
+  background: var(--hush-elevated);
+  border: 1px solid var(--hush-border);
   border-radius: var(--radius-sm);
   padding: 4px 8px;
   font-size: 11px;
-  color: var(--mauve12);
+  color: var(--hush-text);
   z-index: 9000;
   animation: ui-tooltip-in var(--duration-fast) var(--ease-out);
   pointer-events: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 @keyframes ui-tooltip-in {
@@ -7317,7 +7322,7 @@ select:focus-visible {
 }
 
 .ui-tooltip-arrow {
-  fill: var(--mauve4);
+  fill: var(--hush-elevated);
 }
 
 /* ScrollArea */
@@ -7566,6 +7571,6 @@ select:focus-visible {
 }
 
 .ui-menu-sub-trigger[data-state="open"] {
-  background: var(--mauve3);
+  background: var(--hush-hover);
   color: var(--hush-text);
 }

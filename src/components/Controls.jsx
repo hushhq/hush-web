@@ -1,7 +1,71 @@
 import { QUALITY_PRESETS, IS_SCREEN_SHARE_SUPPORTED } from '../utils/constants';
 import { Flex, Text } from '@radix-ui/themes';
-import { VideoIcon, DesktopIcon, SwitchIcon, ExitIcon } from '@radix-ui/react-icons';
+import {
+  VideoIcon,
+  DesktopIcon,
+  SwitchIcon,
+  ExitIcon,
+  SpeakerLoudIcon,
+  SpeakerOffIcon,
+  ChevronDownIcon,
+} from '@radix-ui/react-icons';
 import { IconButton } from './ui';
+
+/**
+ * Renders a glyph with an optional diagonal strikethrough overlay so that on/off
+ * states share the same base shape and only the strike indicates state change.
+ * Avoids the worse UX of swapping between two visually different icons.
+ */
+function StrikableGlyph({ children, off, size = 16 }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', width: size, height: size }} aria-hidden="true">
+      {children}
+      {off && (
+        <svg
+          width={size}
+          height={size}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+        >
+          <line x1="3" y1="3" x2="21" y2="21" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+function MicGlyph({ off, size = 18 }) {
+  return (
+    <StrikableGlyph off={off} size={size}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0" />
+        <line x1="12" y1="19" x2="12" y2="22" />
+        <line x1="8" y1="22" x2="16" y2="22" />
+      </svg>
+    </StrikableGlyph>
+  );
+}
+
+function WebcamGlyph({ off, size = 18 }) {
+  return (
+    <StrikableGlyph off={off} size={size}>
+      <VideoIcon width={size} height={size} />
+    </StrikableGlyph>
+  );
+}
+
+function DeafenGlyph({ off, size = 18 }) {
+  return off ? (
+    <SpeakerOffIcon width={size} height={size} aria-hidden="true" />
+  ) : (
+    <SpeakerLoudIcon width={size} height={size} aria-hidden="true" />
+  );
+}
 
 /**
  * Signal strength icon with dynamic bar count and color based on RTT.
@@ -88,14 +152,7 @@ export function VoiceConnectedPanel({ channelName, isScreenSharing, isWebcamOn, 
           onClick={onWebcam}
           title={isWebcamOn ? 'Turn off camera' : 'Turn on camera'}
         >
-          {isWebcamOn ? (
-            <VideoIcon width="16" height="16" aria-hidden="true" />
-          ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
-              <line x1="1" y1="1" x2="23" y2="23" />
-            </svg>
-          )}
+          <WebcamGlyph off={!isWebcamOn} size={16} />
         </IconButton>
 
         <IconButton
@@ -159,11 +216,7 @@ export default function Controls({
           disabled={!isReady || !IS_SCREEN_SHARE_SUPPORTED || mediaDisabled}
           title={mediaTitle || (isScreenSharing ? 'Stop sharing' : 'Share screen')}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
+          <DesktopIcon width="18" height="18" aria-hidden="true" />
           {isScreenSharing ? 'Stop' : 'Share'}
           {isScreenSharing && (
             <span className="ctrl-quality-tag">{QUALITY_PRESETS[quality]?.label || quality}</span>
@@ -179,12 +232,7 @@ export default function Controls({
           onClick={onOpenQualityOrWindow}
           title="Change quality or window"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="16 3 21 3 21 8" />
-            <line x1="4" y1="20" x2="21" y2="3" />
-            <polyline points="21 16 21 21 16 21" />
-            <line x1="15" y1="15" x2="21" y2="21" />
-          </svg>
+          <SwitchIcon width="16" height="16" aria-hidden="true" />
         </button>
       )}
 
@@ -209,22 +257,7 @@ export default function Controls({
             disabled={!isReady || mediaDisabled}
             title={mediaTitle || (isMicOn ? 'Mute mic' : 'Unmute mic')}
           >
-            {isMicOn ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="1" y1="1" x2="23" y2="23" />
-                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .51-.06 1-.16 1.47" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            )}
+            <MicGlyph off={!isMicOn} />
           </button>
           <button
             type="button"
@@ -237,9 +270,7 @@ export default function Controls({
             disabled={mediaDisabled}
             title="Change microphone"
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            <ChevronDownIcon width="12" height="12" aria-hidden="true" />
           </button>
         </div>
       ) : (
@@ -254,22 +285,7 @@ export default function Controls({
           disabled={!isReady || mediaDisabled}
           title={mediaTitle || (isMicOn ? 'Mute mic' : 'Unmute mic')}
         >
-          {isMicOn ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="1" y1="1" x2="23" y2="23" />
-              <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-              <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .51-.06 1-.16 1.47" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          )}
+          <MicGlyph off={!isMicOn} />
         </button>
       )}
 
@@ -281,18 +297,7 @@ export default function Controls({
           onClick={onDeafen}
           title={isDeafened ? 'Undeafen' : 'Deafen'}
         >
-          {isDeafened ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-              <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-              <line x1="1" y1="1" x2="23" y2="23" />
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-              <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-            </svg>
-          )}
+          <DeafenGlyph off={isDeafened} />
         </button>
       )}
 
@@ -316,17 +321,7 @@ export default function Controls({
             disabled={!isReady || mediaDisabled}
             title={mediaTitle || (isWebcamOn ? 'Turn off camera' : 'Turn on camera')}
           >
-            {isWebcamOn ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M23 7l-7 5 7 5V7z" />
-                <rect x="1" y="5" width="15" height="14" rx="2" />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
-                <line x1="1" y1="1" x2="23" y2="23" />
-              </svg>
-            )}
+            <WebcamGlyph off={!isWebcamOn} />
           </button>
           <button
             type="button"
@@ -339,9 +334,7 @@ export default function Controls({
             disabled={mediaDisabled}
             title="Change webcam"
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            <ChevronDownIcon width="12" height="12" aria-hidden="true" />
           </button>
         </div>
       ) : showWebcam ? (
@@ -356,17 +349,7 @@ export default function Controls({
           disabled={!isReady || mediaDisabled}
           title={mediaTitle || (isWebcamOn ? 'Turn off camera' : 'Turn on camera')}
         >
-          {isWebcamOn ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M23 7l-7 5 7 5V7z" />
-              <rect x="1" y="5" width="15" height="14" rx="2" />
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" />
-              <line x1="1" y1="1" x2="23" y2="23" />
-            </svg>
-          )}
+          <WebcamGlyph off={!isWebcamOn} />
         </button>
       ) : null}
 

@@ -45,6 +45,10 @@ export default function ChannelContent({
   desktopMembersSidebar,
 }) {
   const hasOrbTopHeader = isViewingVoice || !currentChannel;
+  // Back-to-channels affordance is mobile-only: on desktop the channel sidebar
+  // stays visible, so the button has no semantic role and creates a header
+  // control with nothing to navigate back to.
+  const onMobileBack = isMobile ? handleMobileBack : undefined;
 
   return (
     <>
@@ -81,7 +85,7 @@ export default function ChannelContent({
             onOrbPhaseChange={handleOrbPhaseChange}
             serverParticipants={voiceParticipants.get(activeVoiceChannel.id) ?? []}
             voiceMuteStates={voiceMuteStates}
-            onMobileBack={handleMobileBack}
+            onMobileBack={onMobileBack}
             voiceControlsRef={voiceControlsRef}
             onVoiceStateChange={handleVoiceStateChange}
             baseUrl={instanceUrl ?? ''}
@@ -102,7 +106,7 @@ export default function ChannelContent({
             wsClient={wsClient}
             members={members}
             onToggleDrawer={undefined}
-            onMobileBack={handleMobileBack}
+            onMobileBack={onMobileBack}
           />
         ) : currentChannel?.type === 'text' ? (
           <TextChannel
@@ -116,7 +120,7 @@ export default function ChannelContent({
               isDmView ? undefined : isMobile ? toggleMemberDrawer : () => togglePanel('members')
             }
             onToggleDrawer={undefined}
-            onMobileBack={handleMobileBack}
+            onMobileBack={onMobileBack}
             markReadEnabled={isDmView}
             onMarkRead={handleMarkRead}
             sidebarSlot={isMobile ? null : desktopMembersSidebar}
