@@ -125,10 +125,10 @@
 /* Light theme: warm neutral palette. Follows system unless overridden by data-theme. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --hush-black:        #F0EEE9;
-    --hush-surface:      #E8E7E3;
-    --hush-elevated:     #DFDEDA;
-    --hush-hover:        rgba(0,0,0,.09);
+    --hush-black:        #fdfcfd; /* mauve1 light - page bg */
+    --hush-surface:      #faf9fb; /* mauve2 light - panel bg */
+    --hush-elevated:     #f2eff3; /* mauve3 light - elevated within panel */
+    --hush-hover:        rgba(0,0,0,.06);
     --hush-modal:        #ffffff;
 
     --hush-amber:        #1a1714;
@@ -147,8 +147,8 @@
     --hush-text-muted:     rgba(20,18,16,.50);
     --hush-text-ghost:     rgba(20,18,16,.28);
 
-    --hush-glass-bg:         rgba(232,231,227,.95);
-    --hush-video-label-bg:   rgba(26,26,24,.65);
+    --hush-glass-bg:         rgba(250,249,251,.95); /* mauve2 light with alpha */
+    --hush-video-label-bg:   rgba(33,31,38,.78); /* mauve12 light with alpha */
     --hush-badge-live-bg:    rgba(74,222,128,.08);
     --hush-btn-danger-hover: rgba(239, 68, 68, 0.12);
     --hush-header-block-bg:    rgba(0, 0, 0, 0.04);
@@ -184,10 +184,10 @@
 
 /* Explicit theme override (for future in-app setting: system / light / dark) */
 [data-theme="light"] {
-  --hush-black:        #F0EEE9;
-  --hush-surface:      #E8E7E3;
-  --hush-elevated:     #DFDEDA;
-  --hush-hover:        rgba(0,0,0,.09);
+  --hush-black:        #fdfcfd;
+  --hush-surface:      #faf9fb;
+  --hush-elevated:     #f2eff3;
+  --hush-hover:        rgba(0,0,0,.06);
   --hush-modal:        #ffffff;
 
   --hush-amber:        #1a1714;
@@ -206,8 +206,8 @@
   --hush-text-muted:     rgba(20,18,16,.50);
   --hush-text-ghost:     rgba(20,18,16,.28);
 
-  --hush-glass-bg:         rgba(232,231,227,.95);
-  --hush-video-label-bg:   rgba(26,26,24,.65);
+  --hush-glass-bg:         rgba(250,249,251,.95);
+  --hush-video-label-bg:   rgba(33,31,38,.78);
   --hush-badge-live-bg:    rgba(74,222,128,.08);
   --hush-btn-danger-hover: rgba(239, 68, 68, 0.12);
   --hush-header-block-bg:    rgba(0, 0, 0, 0.04);

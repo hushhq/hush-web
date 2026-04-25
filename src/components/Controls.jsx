@@ -1,7 +1,7 @@
 import { QUALITY_PRESETS, IS_SCREEN_SHARE_SUPPORTED } from '../utils/constants';
 import { Flex, Text } from '@radix-ui/themes';
 import {
-  VideoIcon,
+  CameraIcon,
   DesktopIcon,
   SwitchIcon,
   ExitIcon,
@@ -54,7 +54,7 @@ function MicGlyph({ off, size = 18 }) {
 function WebcamGlyph({ off, size = 18 }) {
   return (
     <StrikableGlyph off={off} size={size}>
-      <VideoIcon width={size} height={size} />
+      <CameraIcon width={size} height={size} />
     </StrikableGlyph>
   );
 }
