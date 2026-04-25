@@ -1,7 +1,6 @@
 import { QUALITY_PRESETS, IS_SCREEN_SHARE_SUPPORTED } from '../utils/constants';
 import { Flex, Text } from '@radix-ui/themes';
 import {
-  CameraIcon,
   DesktopIcon,
   SwitchIcon,
   ExitIcon,
@@ -52,9 +51,14 @@ function MicGlyph({ off, size = 18 }) {
 }
 
 function WebcamGlyph({ off, size = 18 }) {
+  // Camcorder-style glyph (rectangular body + lens block). Same shape on/off;
+  // off state overlays a diagonal strikethrough via StrikableGlyph.
   return (
     <StrikableGlyph off={off} size={size}>
-      <CameraIcon width={size} height={size} />
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M23 7l-7 5 7 5V7z" />
+        <rect x="1" y="5" width="15" height="14" rx="2" />
+      </svg>
     </StrikableGlyph>
   );
 }

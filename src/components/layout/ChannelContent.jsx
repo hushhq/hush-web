@@ -1,4 +1,4 @@
-import { Flex, Box, Text } from '@radix-ui/themes';
+import { Flex, Box, Text, Spinner } from '@radix-ui/themes';
 import SystemChannel from '../../pages/SystemChannel';
 import TextChannel from '../../pages/TextChannel';
 import VoiceChannel from '../../pages/VoiceChannel';
@@ -96,7 +96,7 @@ export default function ChannelContent({
       {!isViewingVoice &&
         (loading ? (
           <Flex className="lay-placeholder" align="center" justify="center">
-            Loading…
+            <Spinner size="3" />
           </Flex>
         ) : currentChannel?.type === 'system' ? (
           <SystemChannel

@@ -30,7 +30,7 @@
 
 :root {
   /* ── Core Surfaces ── */
-  /* Aliases over Radix mauve dark scale to keep page/panel/elevated reads consistent. */
+  /* Aliases over the mauve dark scale to keep page/panel/elevated reads consistent. */
   --hush-black:        #111113;          /* mauve1 - page bg */
   --hush-surface:      #19191b;          /* mauve2 - panel backgrounds */
   --hush-elevated:     rgba(255,255,255,.045); /* elevated surfaces within panels */

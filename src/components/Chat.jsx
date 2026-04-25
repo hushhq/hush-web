@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Spinner, Flex } from '@radix-ui/themes';
 import { getDeviceId } from '../hooks/useAuth';
 
 /** Maximum plaintext byte length before encryption (UTF-8 encoded).
@@ -561,13 +562,25 @@ export default function Chat({
           <div className="chat-messages-spacer" />
           {!isChannelTransitioning && hasMoreOlder && (loadMoreLoading || visibleMessages.length > 0) && (
             <div className="chat-load-more-hint">
-              {loadMoreLoading ? 'Loading…' : 'Scroll up for older messages'}
+              {loadMoreLoading ? (
+                <Flex align="center" justify="center" gap="2">
+                  <Spinner size="1" />
+                </Flex>
+              ) : (
+                'Scroll up for older messages'
+              )}
             </div>
           )}
           {isChannelTransitioning || isInitialLoading ? (
-            <div className="chat-empty chat-empty--loading">
-              <div className="chat-empty-text">Loading…</div>
-            </div>
+            <Flex
+              className="chat-empty chat-empty--loading"
+              flexGrow="1"
+              align="center"
+              justify="center"
+              minHeight="100%"
+            >
+              <Spinner size="3" />
+            </Flex>
           ) : !hasMessages ? (
             <div className="chat-empty">
               <div className="chat-empty-icon">
