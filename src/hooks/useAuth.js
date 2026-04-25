@@ -41,7 +41,13 @@ import {
   openHistoryStore,
   importHistorySnapshot,
 } from '../lib/mlsStore';
-import { preDecryptLegacyHistory } from '../lib/legacyHistoryDecrypt';
+import {
+  importAndReprotectTranscriptBlob,
+  loadTranscriptCacheFromDisk,
+  clearTranscriptCache,
+  deleteTranscriptDatabase,
+  setTranscriptCache,
+} from '../lib/transcriptVault';
 import {
   importGuildMetadataKeySnapshot,
   openGuildMetadataKeyStore,
@@ -545,6 +551,7 @@ export function useAuth() {
     identityKeyRef.current = null;
     sessionStorage.removeItem(VAULT_DERIVED_KEY);
     clearInactivityDeadline();
+    clearTranscriptCache();
     setVaultState('locked');
   }, [clearInactivityDeadline]);
 
@@ -802,6 +809,16 @@ export function useAuth() {
     // Mark vault key presence using public key hex (no secret material).
     localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${u.id}`, bytesToHex(publicKey));
     setHasLocalVault(true);
+    // Hydrate the in-memory transcript cache from the per-user encrypted
+    // transcript IDB BEFORE exposing vaultState='unlocked', so any consumer
+    // that mounts as soon as the vault unlocks (Room route gating, Chat
+    // initial loadHistory) sees the inherited rows on first render.
+    try {
+      await loadTranscriptCacheFromDisk({ userId: u.id, rootPrivateKey: privateKey });
+    } catch (err) {
+      console.warn('[useAuth] transcript cache load failed:', err);
+      clearTranscriptCache();
+    }
     setVaultState('unlocked');
     applyVaultTimeout(u.id);
     return { token: jwt, user: u };
@@ -978,25 +995,32 @@ export function useAuth() {
             metadataDb.close();
           }
         }
-
-        // Best-effort: pre-decrypt the user's existing channel history so old
-        // messages can be displayed by the runtime decrypt path's plaintext
-        // cache. Failures here must NOT abort the link flow — auth itself has
-        // already succeeded and the new device must remain usable even if
-        // some legacy messages cannot be recovered.
-        if (historyDb && authResult.token) {
+        // Decrypt the inbound encrypted transcript blob, re-encrypt it under a
+        // freshly-random nonce, and persist it to this device's transcript IDB.
+        // The decryption key is derived from the transferred root identity, so
+        // the OLD device's PIN is never required here. The re-encrypted bytes
+        // are what live at rest locally; the in-memory cache is seeded eagerly
+        // from the SAME rows BEFORE we publish the auth session, so the very
+        // first Chat render after link can already serve inherited transcripts
+        // from the in-memory cache without a fire-and-forget race.
+        if (bundle.transcriptBlob) {
           try {
-            const summary = await preDecryptLegacyHistory({
-              historyDb,
-              activeUserId: authResult.user.id,
-              deviceId,
-              token: authResult.token,
-              baseUrl: authBaseUrl,
+            const importedRows = await importAndReprotectTranscriptBlob({
+              userId: authResult.user.id,
+              rootPrivateKey: bundle.rootPrivateKey,
+              inboundBlob: bundle.transcriptBlob,
             });
-            console.info('[completeDeviceLink] legacy pre-decrypt summary:', summary);
+            // Eager seed: bumps cache generation so any later stale hydrate
+            // won't replace this fresh data.
+            setTranscriptCache(authResult.user.id, importedRows);
           } catch (err) {
-            console.warn('[completeDeviceLink] legacy pre-decrypt failed (link still succeeds):', err);
+            console.warn('[completeDeviceLink] transcript blob import failed (link still succeeds):', err);
+            // Make sure no stale cache from a previous user lingers.
+            clearTranscriptCache();
           }
+        } else {
+          // No inherited blob — guarantee no stale cache from a previous user.
+          clearTranscriptCache();
         }
       }
 
@@ -1117,6 +1141,14 @@ export function useAuth() {
       }
 
       clearPinSetup();
+      // Hydrate transcript cache BEFORE exposing vaultState='unlocked' so
+      // first render after PIN unlock can serve inherited rows.
+      try {
+        await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
+      } catch (loadErr) {
+        console.warn('[useAuth] transcript cache load failed:', loadErr);
+        clearTranscriptCache();
+      }
       setVaultState('unlocked');
       applyVaultTimeout(userId);
     } catch (err) {
@@ -1155,6 +1187,7 @@ export function useAuth() {
     identityKeyRef.current = null;
     sessionStorage.removeItem(VAULT_DERIVED_KEY);
     clearVaultTimeoutEffects();
+    clearTranscriptCache();
     setVaultState('locked');
   }, [clearVaultTimeoutEffects]);
 
@@ -1266,8 +1299,10 @@ export function useAuth() {
           const req = indexedDB.deleteDatabase(`hush-mls-${userId}-${deviceId}`);
           req.onsuccess = req.onerror = req.onblocked = () => resolve();
         }),
+        deleteTranscriptDatabase(userId).catch(() => undefined),
       );
     }
+    clearTranscriptCache();
 
     await Promise.allSettled(deleteTargets);
 

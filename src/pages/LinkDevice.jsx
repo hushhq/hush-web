@@ -8,6 +8,8 @@ import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
 import { Button } from '../components/ui';
 import * as mlsStore from '../lib/mlsStore';
+import { preDecryptForLinkExport } from '../lib/preDecryptForLinkExport';
+import { buildTranscriptBlobForExport } from '../lib/transcriptVault';
 import {
   exportGuildMetadataKeySnapshot,
   openGuildMetadataKeyStore,
@@ -321,6 +323,42 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
     let metadataDb = null;
     try {
       historyDb = await mlsStore.openStore(user.id, getDeviceId());
+      // Best-effort: decrypt every channel message still inside the OLD device's
+      // MLS ratchet window into the active store's localPlaintext cache. The
+      // harvested rows are then sealed into the encrypted transcript blob below
+      // before being placed in the transfer bundle.
+      const baseUrlForApi = claim.instanceUrl || window.location.origin;
+      try {
+        const summary = await preDecryptForLinkExport({
+          activeDb: historyDb,
+          token,
+          baseUrl: baseUrlForApi,
+        });
+        console.info('[LinkDevice] pre-decrypt-for-link-export summary:', summary);
+      } catch (err) {
+        // Pre-decrypt is best-effort; never block the link approval.
+        console.warn('[LinkDevice] pre-decrypt-for-link-export failed:', err);
+      }
+
+      // Seal the harvested + previously-cached plaintexts into an AES-GCM blob
+      // keyed by HKDF(rootPrivateKey). The new device derives the same key
+      // from the same root and re-encrypts under a fresh nonce locally; see
+      // lib/transcriptVault.js. The MLS history snapshot itself no longer
+      // carries plaintext rows (HISTORY_SNAPSHOT_STORES dropped localPlaintext).
+      let transcriptBlob = null;
+      try {
+        const rows = await mlsStore.listAllLocalPlaintexts(historyDb);
+        if (rows.length > 0) {
+          transcriptBlob = await buildTranscriptBlobForExport(
+            identityKeyRef.current.privateKey,
+            rows,
+          );
+        }
+      } catch (err) {
+        console.warn('[LinkDevice] transcript-blob seal failed (link will continue without transcript):', err);
+        transcriptBlob = null;
+      }
+
       const historySnapshot = await mlsStore.exportHistorySnapshot(historyDb);
       metadataDb = await openGuildMetadataKeyStore(user.id, getDeviceId());
       const guildMetadataKeySnapshot = await exportGuildMetadataKeySnapshot(metadataDb);
@@ -333,6 +371,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
         rootPublicKey: identityKeyRef.current.publicKey,
         historySnapshot,
         guildMetadataKeySnapshot,
+        transcriptBlob,
       });
       const certificate = await certifyDevice(
         base64ToBytes(claim.devicePublicKey),

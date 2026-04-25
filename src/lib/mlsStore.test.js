@@ -18,7 +18,6 @@ import {
   preloadGroupState,
   flushStorageCache,
   withReadOnlyHistoryScope,
-  withReadWriteHistoryScope,
   getLocalPlaintext,
   setLocalPlaintext,
 } from './mlsStore';
@@ -596,70 +595,6 @@ describe('mlsStore', () => {
       historyDb.close();
     });
 
-    it('withReadWriteHistoryScope rebinds the bridge so callback writes land in history DB', async () => {
-      const activeDb = await nextDb();
-      const activeBridge = window.mlsStorageBridge;
-      const keyBytes = uniqueKeyBytes();
-
-      // Pre-populate active cache so the scope must save/restore something.
-      activeBridge.writeBytes(STORE_NAME, keyBytes, new Uint8Array([1, 1, 1]));
-
-      storeCounter++;
-      const historyDb = await openHistoryStore(`user-${storeCounter}`, `dev-${storeCounter}`);
-
-      let inScopeBridge = null;
-      await withReadWriteHistoryScope(historyDb, async () => {
-        inScopeBridge = window.mlsStorageBridge;
-        // Inside the scope, writes should land in historyDb. Use the
-        // (now-rebound) global bridge to write a distinct value.
-        inScopeBridge.writeBytes(STORE_NAME, keyBytes, new Uint8Array([9, 9, 9]));
-      });
-
-      // Bridge restored to active after scope.
-      expect(window.mlsStorageBridge).toBe(activeBridge);
-      // Active cache restored to its pre-scope state.
-      const restored = activeBridge.readBytes(STORE_NAME, keyBytes);
-      expect(Array.from(restored)).toEqual([1, 1, 1]);
-
-      // History DB now contains the in-scope write.
-      const hexKey = Array.from(keyBytes)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      const row = await new Promise((resolve, reject) => {
-        const tx = historyDb.transaction(STORE_NAME, 'readonly');
-        const req = tx.objectStore(STORE_NAME).get(hexKey);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-      expect(row).toBeDefined();
-      expect(Array.from(row.value)).toEqual([9, 9, 9]);
-
-      activeDb.close();
-      historyDb.close();
-    });
-
-    it('withReadWriteHistoryScope restores bridge and cache even when callback throws', async () => {
-      const activeDb = await nextDb();
-      const activeBridge = window.mlsStorageBridge;
-      const keyBytes = uniqueKeyBytes();
-      activeBridge.writeBytes(STORE_NAME, keyBytes, new Uint8Array([2, 2, 2]));
-
-      storeCounter++;
-      const historyDb = await openHistoryStore(`user-${storeCounter}`, `dev-${storeCounter}`);
-
-      await expect(
-        withReadWriteHistoryScope(historyDb, async () => {
-          throw new Error('boom');
-        }),
-      ).rejects.toThrow('boom');
-
-      expect(window.mlsStorageBridge).toBe(activeBridge);
-      const restored = activeBridge.readBytes(STORE_NAME, keyBytes);
-      expect(Array.from(restored)).toEqual([2, 2, 2]);
-
-      activeDb.close();
-      historyDb.close();
-    });
   });
 
   describe('localPlaintext', () => {

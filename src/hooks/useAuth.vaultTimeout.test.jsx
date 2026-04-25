@@ -22,6 +22,14 @@ vi.mock('../lib/bip39Identity', () => ({
   }),
 }));
 
+vi.mock('../lib/transcriptVault', () => ({
+  importAndReprotectTranscriptBlob: vi.fn().mockResolvedValue([]),
+  loadTranscriptCacheFromDisk: vi.fn().mockResolvedValue(0),
+  clearTranscriptCache: vi.fn(),
+  deleteTranscriptDatabase: vi.fn().mockResolvedValue(undefined),
+  setTranscriptCache: vi.fn(),
+}));
+
 const vaultBlobs = new Map();
 const vaultConfigs = new Map();
 

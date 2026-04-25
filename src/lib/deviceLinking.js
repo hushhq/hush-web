@@ -12,7 +12,7 @@ import * as ed from '@noble/ed25519';
 const LINKING_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const LINKING_CODE_LENGTH = 8;
 const LINK_QR_ROUTE = '/link-device';
-const LINK_BUNDLE_VERSION = 1;
+const LINK_BUNDLE_VERSION = 2;
 
 /**
  * Encodes raw bytes as a base64 string.
@@ -297,6 +297,10 @@ export function encodeTransferBundle(bundle) {
     rootPublicKey: bytesToBase64(bundle.rootPublicKey),
     historySnapshot: bundle.historySnapshot ?? null,
     guildMetadataKeySnapshot: bundle.guildMetadataKeySnapshot ?? null,
+    // Encrypted transcript-cache blob produced by lib/transcriptVault.js. The
+    // blob is already AES-GCM encrypted under a key derived from the user's
+    // root identity; the relay envelope adds an outer ECDH layer in transit.
+    transcriptBlob: bundle.transcriptBlob ? bytesToBase64(bundle.transcriptBlob) : null,
   };
   return new TextEncoder().encode(JSON.stringify(payload));
 }
@@ -332,5 +336,6 @@ export function decodeTransferBundle(bytes) {
     rootPublicKey: base64ToBytes(parsed.rootPublicKey),
     historySnapshot: parsed.historySnapshot ?? null,
     guildMetadataKeySnapshot: parsed.guildMetadataKeySnapshot ?? null,
+    transcriptBlob: parsed.transcriptBlob ? base64ToBytes(parsed.transcriptBlob) : null,
   };
 }

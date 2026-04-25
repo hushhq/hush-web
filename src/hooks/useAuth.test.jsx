@@ -37,13 +37,12 @@ vi.mock('../lib/api', () => ({
   revokeDeviceKey: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../lib/legacyHistoryDecrypt', () => ({
-  preDecryptLegacyHistory: vi.fn().mockResolvedValue({
-    channels: 0,
-    processed: 0,
-    decrypted: 0,
-    failed: 0,
-  }),
+vi.mock('../lib/transcriptVault', () => ({
+  importAndReprotectTranscriptBlob: vi.fn().mockResolvedValue([]),
+  loadTranscriptCacheFromDisk: vi.fn().mockResolvedValue(0),
+  clearTranscriptCache: vi.fn(),
+  deleteTranscriptDatabase: vi.fn().mockResolvedValue(undefined),
+  setTranscriptCache: vi.fn(),
 }));
 
 vi.mock('../lib/bip39Identity', () => ({
@@ -114,7 +113,7 @@ vi.mock('../lib/identityVault', () => ({
 import * as apiMod from '../lib/api';
 import * as vaultMod from '../lib/identityVault';
 import * as mlsStoreMod from '../lib/mlsStore';
-import * as legacyHistoryDecryptMod from '../lib/legacyHistoryDecrypt';
+import * as transcriptVaultMod from '../lib/transcriptVault';
 import {
   setInstanceToken,
   getInstanceToken,
@@ -173,12 +172,6 @@ beforeEach(() => {
   vi.mocked(vaultMod.openVaultStore).mockClear();
   vi.mocked(vaultMod.getVaultConfig).mockReturnValue(null);
   vi.mocked(vaultMod.setVaultConfig).mockClear();
-  vi.mocked(legacyHistoryDecryptMod.preDecryptLegacyHistory).mockResolvedValue({
-    channels: 0,
-    processed: 0,
-    decrypted: 0,
-    failed: 0,
-  });
 });
 
 afterEach(() => {
@@ -259,6 +252,30 @@ describe('useAuth - performChallengeResponse', () => {
     expect(storedHex).toBeTruthy();
     expect(typeof storedHex).toBe('string');
     expect(storedHex.length).toBe(64);
+  });
+
+  it('hydrates the transcript cache BEFORE exposing vaultState=unlocked', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let observedStateAtLoad = null;
+    vi.mocked(transcriptVaultMod.loadTranscriptCacheFromDisk).mockImplementationOnce(async () => {
+      observedStateAtLoad = result.current.vaultState;
+      return 0;
+    });
+
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+
+    // The hydrate callback fires while vaultState is still NOT 'unlocked' —
+    // i.e. before the route gating in Room.jsx flips and Chat.jsx mounts.
+    expect(observedStateAtLoad).not.toBe('unlocked');
+    // After the call returns, the vault is unlocked as usual.
+    expect(result.current.vaultState).toBe('unlocked');
   });
 });
 
@@ -361,7 +378,7 @@ describe('useAuth - performRegister', () => {
 });
 
 describe('useAuth - completeDeviceLink', () => {
-  it('does not publish auth session until legacy pre-decrypt finishes', async () => {
+  it('imports the history snapshot, publishes the auth session, and requires PIN setup', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -369,47 +386,112 @@ describe('useAuth - completeDeviceLink', () => {
     const openHistoryStoreSpy = vi.spyOn(mlsStoreMod, 'openHistoryStore').mockResolvedValue(historyDb);
     const importHistorySnapshotSpy = vi.spyOn(mlsStoreMod, 'importHistorySnapshot').mockResolvedValue(undefined);
 
-    let resolvePreDecrypt;
-    const preDecryptStarted = new Promise((resolve) => {
-      resolvePreDecrypt = resolve;
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: { stores: { localPlaintext: [] } },
+      instanceUrl: 'https://chat.example.com',
+    };
+
+    await act(async () => {
+      await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
     });
-    vi.mocked(legacyHistoryDecryptMod.preDecryptLegacyHistory).mockImplementation(async () => {
-      resolvePreDecrypt();
-      await new Promise((resolve) => {
-        resolvePreDecrypt = resolve;
-      });
-      return { channels: 1, processed: 1, decrypted: 1, failed: 0 };
+
+    expect(openHistoryStoreSpy).toHaveBeenCalledWith('user-1', expect.any(String));
+    expect(importHistorySnapshotSpy).toHaveBeenCalledWith(historyDb, bundle.historySnapshot);
+    expect(historyDb.close).toHaveBeenCalledTimes(1);
+    expect(result.current.token).toBe('jwt-test');
+    expect(result.current.user?.id).toBe('user-1');
+    expect(result.current.needsPinSetup).toBe(true);
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+
+    openHistoryStoreSpy.mockRestore();
+    importHistorySnapshotSpy.mockRestore();
+  });
+
+  it('decrypts, re-protects, AND eagerly seeds the transcript cache before publishing the session', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const historyDb = { close: vi.fn() };
+    const openHistoryStoreSpy = vi.spyOn(mlsStoreMod, 'openHistoryStore').mockResolvedValue(historyDb);
+    const importHistorySnapshotSpy = vi.spyOn(mlsStoreMod, 'importHistorySnapshot').mockResolvedValue(undefined);
+
+    const importedRows = [
+      { messageId: 'm1', plaintext: 'inherited hi', senderId: 'alice', timestamp: 1 },
+    ];
+    vi.mocked(transcriptVaultMod.importAndReprotectTranscriptBlob).mockClear();
+    vi.mocked(transcriptVaultMod.setTranscriptCache).mockClear();
+    vi.mocked(transcriptVaultMod.importAndReprotectTranscriptBlob).mockResolvedValue(importedRows);
+
+    // Track session publication via sessionStorage.setItem so we can assert
+    // that the cache was seeded BEFORE the session was published.
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+
+    const transcriptBlob = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 99]);
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: { stores: {} },
+      transcriptBlob,
+      instanceUrl: 'https://chat.example.com',
+    };
+
+    await act(async () => {
+      await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
     });
+
+    expect(transcriptVaultMod.importAndReprotectTranscriptBlob).toHaveBeenCalledWith({
+      userId: 'user-1',
+      rootPrivateKey: bundle.rootPrivateKey,
+      inboundBlob: transcriptBlob,
+    });
+    expect(transcriptVaultMod.setTranscriptCache).toHaveBeenCalledWith('user-1', importedRows);
+
+    // Assert ordering: setTranscriptCache invoked BEFORE the JWT was written to
+    // sessionStorage (which is the observable side-effect of session publish).
+    const seedOrder = vi.mocked(transcriptVaultMod.setTranscriptCache).mock.invocationCallOrder[0];
+    const jwtSetItemCall = setItemSpy.mock.calls.findIndex((call) => (
+      typeof call[0] === 'string' && call[0].startsWith('hush_jwt') && call[1] === 'jwt-test'
+    ));
+    expect(jwtSetItemCall).toBeGreaterThanOrEqual(0);
+    const jwtSetOrder = setItemSpy.mock.invocationCallOrder[jwtSetItemCall];
+    expect(seedOrder).toBeLessThan(jwtSetOrder);
+
+    expect(result.current.token).toBe('jwt-test');
+    expect(result.current.user?.id).toBe('user-1');
+
+    setItemSpy.mockRestore();
+    openHistoryStoreSpy.mockRestore();
+    importHistorySnapshotSpy.mockRestore();
+  });
+
+  it('still completes link when transcript import throws', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const historyDb = { close: vi.fn() };
+    const openHistoryStoreSpy = vi.spyOn(mlsStoreMod, 'openHistoryStore').mockResolvedValue(historyDb);
+    const importHistorySnapshotSpy = vi.spyOn(mlsStoreMod, 'importHistorySnapshot').mockResolvedValue(undefined);
+
+    vi.mocked(transcriptVaultMod.importAndReprotectTranscriptBlob)
+      .mockRejectedValueOnce(new Error('decrypt failed'));
 
     const bundle = {
       rootPrivateKey: new Uint8Array(32).fill(1),
       rootPublicKey: new Uint8Array(32).fill(2),
       historySnapshot: { stores: {} },
+      transcriptBlob: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 99]),
       instanceUrl: 'https://chat.example.com',
     };
 
     await act(async () => {
-      const linkPromise = result.current.completeDeviceLink(bundle, 'https://chat.example.com');
-      await preDecryptStarted;
-
-      expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBeNull();
-      expect(result.current.token).toBeNull();
-      expect(result.current.user).toBeNull();
-
-      resolvePreDecrypt();
-      await linkPromise;
+      await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
     });
 
-    expect(openHistoryStoreSpy).toHaveBeenCalledWith('user-1', expect.any(String));
-    expect(importHistorySnapshotSpy).toHaveBeenCalledWith(historyDb, { stores: {} });
-    expect(legacyHistoryDecryptMod.preDecryptLegacyHistory).toHaveBeenCalledWith(expect.objectContaining({
-      activeUserId: 'user-1',
-      token: 'jwt-test',
-      baseUrl: 'https://chat.example.com',
-    }));
     expect(result.current.token).toBe('jwt-test');
     expect(result.current.user?.id).toBe('user-1');
-    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+    expect(result.current.needsPinSetup).toBe(true);
 
     openHistoryStoreSpy.mockRestore();
     importHistorySnapshotSpy.mockRestore();
@@ -495,6 +577,28 @@ describe('useAuth - unlockVault', () => {
 
     expect(caught?.code).toBe('WRONG_PIN');
     expect(result.current.vaultState).toBe('locked');
+  });
+
+  it('hydrates the transcript cache BEFORE flipping vaultState back to unlocked', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+
+    let observedStateAtLoad = null;
+    let observedTranscriptCallCount = 0;
+    vi.mocked(transcriptVaultMod.loadTranscriptCacheFromDisk).mockImplementationOnce(async () => {
+      observedTranscriptCallCount = vi.mocked(transcriptVaultMod.loadTranscriptCacheFromDisk).mock.calls.length;
+      observedStateAtLoad = result.current.vaultState;
+      return 0;
+    });
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+
+    expect(observedTranscriptCallCount).toBeGreaterThan(0);
+    expect(observedStateAtLoad).not.toBe('unlocked');
+    expect(result.current.vaultState).toBe('unlocked');
   });
 });
 

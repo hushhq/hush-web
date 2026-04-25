@@ -16,6 +16,7 @@ import * as mlsGroupLib from '../lib/mlsGroup';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
+import { getTranscriptEntry } from '../lib/transcriptVault';
 
 /**
  * @param {object} opts
@@ -126,6 +127,18 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
             ...(row.senderId ? { senderId: row.senderId } : {}),
           };
         }
+      }
+      // Encrypted-transcript fallback. The transcript cache is populated from
+      // the per-user transcript IDB blob at vault unlock; entries here come
+      // from the inherited transcript transferred during device link or from
+      // a previous unlock on this device. The cache is cleared on lock.
+      const transcriptRow = getTranscriptEntry(messageId);
+      if (transcriptRow) {
+        return {
+          content: transcriptRow.plaintext,
+          timestamp: transcriptRow.timestamp,
+          ...(transcriptRow.senderId ? { senderId: transcriptRow.senderId } : {}),
+        };
       }
       if (typeof getHistoryStore === 'function') {
         const historyDb = await getHistoryStore();

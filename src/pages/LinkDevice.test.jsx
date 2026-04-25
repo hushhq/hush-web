@@ -23,6 +23,11 @@ const {
   mockBase64ToBytes,
   mockEncodeTransferBundle,
   mockEncryptRelayPayload,
+  mockPreDecryptForLinkExport,
+  mockOpenGuildMetadataKeyStore,
+  mockExportGuildMetadataKeySnapshot,
+  mockListAllLocalPlaintexts,
+  mockBuildTranscriptBlobForExport,
 } = vi.hoisted(() => ({
   authState: { current: null },
   mockQrToDataUrl: vi.fn(),
@@ -42,6 +47,11 @@ const {
   mockBase64ToBytes: vi.fn(),
   mockEncodeTransferBundle: vi.fn(),
   mockEncryptRelayPayload: vi.fn(),
+  mockPreDecryptForLinkExport: vi.fn(),
+  mockOpenGuildMetadataKeyStore: vi.fn(),
+  mockExportGuildMetadataKeySnapshot: vi.fn(),
+  mockListAllLocalPlaintexts: vi.fn(),
+  mockBuildTranscriptBlobForExport: vi.fn(),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -76,6 +86,20 @@ vi.mock('../lib/api', () => ({
 vi.mock('../lib/mlsStore', () => ({
   openStore: (...args) => mockOpenStore(...args),
   exportHistorySnapshot: (...args) => mockExportHistorySnapshot(...args),
+  listAllLocalPlaintexts: (...args) => mockListAllLocalPlaintexts(...args),
+}));
+
+vi.mock('../lib/preDecryptForLinkExport', () => ({
+  preDecryptForLinkExport: (...args) => mockPreDecryptForLinkExport(...args),
+}));
+
+vi.mock('../lib/transcriptVault', () => ({
+  buildTranscriptBlobForExport: (...args) => mockBuildTranscriptBlobForExport(...args),
+}));
+
+vi.mock('../lib/guildMetadataKeyStore', () => ({
+  openGuildMetadataKeyStore: (...args) => mockOpenGuildMetadataKeyStore(...args),
+  exportGuildMetadataKeySnapshot: (...args) => mockExportGuildMetadataKeySnapshot(...args),
 }));
 
 vi.mock('../lib/deviceLinking', () => ({
@@ -135,6 +159,13 @@ describe('LinkDevice', () => {
       authInstanceSelectionState.current = value;
       return value;
     });
+    mockPreDecryptForLinkExport.mockResolvedValue({
+      channels: 0, processed: 0, decrypted: 0, failed: 0, skipped: 0,
+    });
+    mockOpenGuildMetadataKeyStore.mockResolvedValue({ close: vi.fn() });
+    mockExportGuildMetadataKeySnapshot.mockResolvedValue({ stores: {} });
+    mockListAllLocalPlaintexts.mockResolvedValue([]);
+    mockBuildTranscriptBlobForExport.mockResolvedValue(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
   });
 
   afterEach(() => {
@@ -440,5 +471,263 @@ describe('LinkDevice', () => {
       });
     });
     expect(historyDb.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs preDecryptForLinkExport before exportHistorySnapshot during approval', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array([1, 2, 3]),
+          publicKey: new Uint8Array([4, 5, 6]),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+
+    expect(mockPreDecryptForLinkExport).toHaveBeenCalledWith(expect.objectContaining({
+      activeDb: historyDb,
+      token: 'jwt-token',
+      baseUrl: 'https://app.gethush.live',
+    }));
+    expect(mockExportHistorySnapshot).toHaveBeenCalled();
+    const preDecryptOrder = mockPreDecryptForLinkExport.mock.invocationCallOrder[0];
+    const exportOrder = mockExportHistorySnapshot.mock.invocationCallOrder[0];
+    expect(preDecryptOrder).toBeLessThan(exportOrder);
+  });
+
+  it('seals harvested local plaintexts into an encrypted transcript blob and includes it in the transfer bundle', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+    const harvestedRows = [
+      { messageId: 'm1', plaintext: 'hi', senderId: 'alice', timestamp: 1 },
+      { messageId: 'm2', plaintext: 'bye', senderId: 'bob', timestamp: 2 },
+    ];
+    const sealedBlob = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 99, 100]);
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array(32).fill(7),
+          publicKey: new Uint8Array(32).fill(8),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    mockListAllLocalPlaintexts.mockResolvedValue(harvestedRows);
+    mockBuildTranscriptBlobForExport.mockResolvedValue(sealedBlob);
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+
+    expect(mockListAllLocalPlaintexts).toHaveBeenCalledWith(historyDb);
+    expect(mockBuildTranscriptBlobForExport).toHaveBeenCalledWith(
+      authState.current.identityKeyRef.current.privateKey,
+      harvestedRows,
+    );
+    expect(mockEncodeTransferBundle).toHaveBeenCalledWith(expect.objectContaining({
+      transcriptBlob: sealedBlob,
+    }));
+  });
+
+  it('falls back to a null transcriptBlob when there are no plaintext rows to seal', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array(32).fill(1),
+          publicKey: new Uint8Array(32).fill(2),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    mockListAllLocalPlaintexts.mockResolvedValue([]); // explicit: nothing to seal
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+
+    expect(mockBuildTranscriptBlobForExport).not.toHaveBeenCalled();
+    expect(mockEncodeTransferBundle).toHaveBeenCalledWith(expect.objectContaining({
+      transcriptBlob: null,
+    }));
+  });
+
+  it('still completes link approval if preDecryptForLinkExport throws', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array([1, 2, 3]),
+          publicKey: new Uint8Array([4, 5, 6]),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    mockPreDecryptForLinkExport.mockRejectedValueOnce(new Error('boom'));
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+    expect(mockExportHistorySnapshot).toHaveBeenCalled();
   });
 });

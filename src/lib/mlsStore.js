@@ -50,10 +50,14 @@ const STORAGE_PROVIDER_STORES = [
   'mls_tree_sync',
 ];
 
+// localPlaintext is intentionally NOT part of the MLS history snapshot.
+// Cross-device transfer of decrypted message plaintexts goes through the
+// transcriptVault's encrypted blob (see lib/transcriptVault.js); shipping
+// plaintext rows in the snapshot would put naked transcript data on the
+// wire (modulo the relay envelope) and at rest on the new device.
 const HISTORY_SNAPSHOT_STORES = [
   STORE_CREDENTIAL,
   ...STORAGE_PROVIDER_STORES,
-  'localPlaintext',
   'groupEpoch',
 ];
 
@@ -484,61 +488,6 @@ export async function withReadOnlyHistoryScope(historyDb, fn) {
 }
 
 /**
- * Runs a callback with the global StorageProvider bridge AND cache temporarily
- * pointed at a history DB, including stateful WASM writes. Both the read side
- * (cache) and the write side (window.mlsStorageBridge) are swapped so that
- * `processMessage` and similar stateful entry points target the history DB
- * for the duration of the callback.
- *
- * Why this is safe in its intended use, and only there:
- *
- * The MLS storage bridge is a process-wide singleton. Mutating it concurrently
- * with normal active-store traffic would race and could write ratchet state
- * into the wrong DB. This helper is therefore restricted to a single call site:
- * the link-time legacy pre-decrypt step in `useAuth.completeDeviceLink`. That
- * caller now runs the scope BEFORE it publishes authenticated app state
- * (`setToken` / `setUser`), so no authenticated route tree, WebSocket
- * subscription, or MLS-aware surface can start concurrent MLS work while the
- * bridge is rebound to history.
- *
- * Do NOT introduce additional callers without first establishing equivalent
- * exclusivity guarantees, or replacing the singleton bridge with a per-DB
- * instance contract.
- *
- * The helper:
- *   1. Captures the current `window.mlsStorageBridge` and the current cache.
- *   2. Clears the cache, rebinds the bridge to `historyDb`, preloads the
- *      history DB's StorageProvider state into the cache.
- *   3. Awaits the callback. Any WASM writes during the callback land in
- *      `historyDb` because the bridge captures it in closure.
- *   4. Flushes the (possibly mutated) cache back to `historyDb`.
- *   5. Restores the original cache and bridge before returning.
- *
- * @param {IDBDatabase} historyDb - Opened history store DB
- * @param {(db: IDBDatabase) => Promise<T>} fn - Stateful callback
- * @returns {Promise<T>}
- * @template T
- */
-export async function withReadWriteHistoryScope(historyDb, fn) {
-  const savedBridge = (typeof window !== 'undefined') ? window.mlsStorageBridge : null;
-  const savedCache = new Map(storageCache);
-  storageCache.clear();
-  initStorageBridge(historyDb);
-  try {
-    await preloadGroupState(historyDb);
-    const result = await fn(historyDb);
-    await flushStorageCache(historyDb);
-    return result;
-  } finally {
-    storageCache.clear();
-    for (const [k, v] of savedCache) storageCache.set(k, v);
-    if (typeof window !== 'undefined' && savedBridge) {
-      window.mlsStorageBridge = savedBridge;
-    }
-  }
-}
-
-/**
  * Exports the subset of MLS state needed to decrypt pre-link history on a new
  * device. KeyPackages and last-resort material are intentionally excluded
  * because the imported store is read-only history fallback, not an active
@@ -778,6 +727,25 @@ export async function setLocalPlaintext(db, messageId, payload) {
   };
   if (payload.senderId) row.senderId = payload.senderId;
   await put(db, 'localPlaintext', messageId, row);
+}
+
+/**
+ * Read every entry in the localPlaintext store. Used by the link-export
+ * pipeline to harvest all rows for the encrypted transcript blob.
+ *
+ * @param {IDBDatabase} db
+ * @returns {Promise<Array<{ messageId: string, plaintext: string, senderId?: string, timestamp: number }>>}
+ */
+export async function listAllLocalPlaintexts(db) {
+  const rows = await getAll(db, 'localPlaintext');
+  return rows
+    .filter((r) => r && typeof r.plaintext === 'string')
+    .map((r) => ({
+      messageId: r.key,
+      plaintext: r.plaintext,
+      timestamp: r.timestamp ?? 0,
+      ...(r.senderId ? { senderId: r.senderId } : {}),
+    }));
 }
 
 // ---------------------------------------------------------------------------
