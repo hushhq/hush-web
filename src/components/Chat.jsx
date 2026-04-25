@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Spinner, Flex } from '@radix-ui/themes';
+import { PaperPlaneIcon } from '@radix-ui/react-icons';
 import { getDeviceId } from '../hooks/useAuth';
 
 /** Maximum plaintext byte length before encryption (UTF-8 encoded).
@@ -697,10 +698,12 @@ export default function Chat({
             disabled={!inputText.trim() || isSending || inputByteLength > MAX_PLAINTEXT_BYTES}
             aria-label="Send message"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
+            <PaperPlaneIcon
+              width="16"
+              height="16"
+              aria-hidden="true"
+              style={{ transform: 'rotate(-45deg)' }}
+            />
           </button>
         </div>
       </div>
