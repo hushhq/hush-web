@@ -1,20 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
+import jsQR from 'jsqr';
 import { Button } from './ui';
 
 /**
  * Live camera-based QR scanner.
  *
- * Uses the browser's built-in `BarcodeDetector` API (Chromium-family +
- * Safari 16+). When unavailable, the component renders nothing and
- * notifies the caller via `onUnavailable` so the host UI can show a
- * fallback message and keep the manual code-entry path.
+ * Decoding strategy (ordered, with graceful fallback):
  *
- * Lifecycle:
- *   - on mount: requests environment-facing camera, attaches stream to a
- *     `<video>` element, polls frames with `requestAnimationFrame` and
- *     decodes any QR code found
- *   - on a successful decode: calls `onResult(rawText)` and stops
- *   - on unmount or `Cancel`: stops all media tracks and the rAF loop
+ *   1. Browser-native `BarcodeDetector` (Chromium-family, Safari 16.4+
+ *      with the shape-detection flag). Fast and battery-friendly because
+ *      decoding happens off the JS thread.
+ *   2. Pure-JS `jsQR` over a Canvas2D `getImageData` snapshot of the
+ *      `<video>` frame. Used on Firefox, Brave (anti-fingerprinting
+ *      blocks the native API), Safari without the experimental flag,
+ *      and any other browser that does not expose `BarcodeDetector`.
+ *
+ * Either path runs against the same `requestAnimationFrame` loop and
+ * the same `getUserMedia({ video: { facingMode: 'environment' } })`
+ * stream. On a successful decode the loop stops and `onResult(rawText)`
+ * fires. On unmount or `Cancel` all media tracks are released.
+ *
+ * The component only reports `onUnavailable` when neither path can run
+ * at all (no `mediaDevices` AND no `BarcodeDetector` AND `jsQR` cannot
+ * be loaded). In practice `jsQR` is bundled, so the real failure modes
+ * are: no camera stream, or `getUserMedia` permission denied — both
+ * surfaced through `onError`.
  *
  * @param {{
  *   onResult: (rawText: string) => void,
@@ -25,26 +35,58 @@ import { Button } from './ui';
  */
 export default function QRCodeScanner({ onResult, onCancel, onError, onUnavailable }) {
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
-  const [hasCamera, setHasCamera] = useState(true);
+  const [hasMediaDevices, setHasMediaDevices] = useState(true);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !('BarcodeDetector' in window)) {
-      setHasCamera(false);
+    if (typeof window === 'undefined' || !navigator?.mediaDevices?.getUserMedia) {
+      setHasMediaDevices(false);
       onUnavailable?.();
       return undefined;
     }
 
     let cancelled = false;
-    let detector;
-    try {
-      detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-    } catch (err) {
-      setHasCamera(false);
-      onUnavailable?.();
-      return undefined;
+
+    // Prefer the native BarcodeDetector; fall back to jsQR otherwise.
+    let nativeDetector = null;
+    if ('BarcodeDetector' in window) {
+      try {
+        nativeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      } catch {
+        nativeDetector = null;
+      }
     }
+
+    const decodeNative = async (videoEl) => {
+      const codes = await nativeDetector.detect(videoEl);
+      if (codes && codes.length > 0 && codes[0]?.rawValue) {
+        return codes[0].rawValue;
+      }
+      return null;
+    };
+
+    const decodeJsQR = (videoEl) => {
+      const w = videoEl.videoWidth;
+      const h = videoEl.videoHeight;
+      if (!w || !h) return null;
+      let canvas = canvasRef.current;
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvasRef.current = canvas;
+      }
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.drawImage(videoEl, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const result = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert',
+      });
+      return result?.data ?? null;
+    };
 
     const start = async () => {
       try {
@@ -64,9 +106,11 @@ export default function QRCodeScanner({ onResult, onCancel, onError, onUnavailab
         const tick = async () => {
           if (cancelled || !videoRef.current) return;
           try {
-            const codes = await detector.detect(videoRef.current);
-            if (codes && codes.length > 0 && codes[0]?.rawValue) {
-              onResult(codes[0].rawValue);
+            const decoded = nativeDetector
+              ? await decodeNative(videoRef.current)
+              : decodeJsQR(videoRef.current);
+            if (decoded) {
+              onResult(decoded);
               return;
             }
           } catch {
@@ -91,6 +135,9 @@ export default function QRCodeScanner({ onResult, onCancel, onError, onUnavailab
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      if (videoRef.current) {
+        try { videoRef.current.srcObject = null; } catch { /* ignore */ }
+      }
     };
     // onResult/onCancel/onError/onUnavailable are stable refs from the
     // parent (it should pass useCallbacks). Re-running on identity change
@@ -98,7 +145,7 @@ export default function QRCodeScanner({ onResult, onCancel, onError, onUnavailab
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!hasCamera) return null;
+  if (!hasMediaDevices) return null;
 
   return (
     <div className="ld-scanner">
