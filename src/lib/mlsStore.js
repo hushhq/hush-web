@@ -484,6 +484,61 @@ export async function withReadOnlyHistoryScope(historyDb, fn) {
 }
 
 /**
+ * Runs a callback with the global StorageProvider bridge AND cache temporarily
+ * pointed at a history DB, including stateful WASM writes. Both the read side
+ * (cache) and the write side (window.mlsStorageBridge) are swapped so that
+ * `processMessage` and similar stateful entry points target the history DB
+ * for the duration of the callback.
+ *
+ * Why this is safe in its intended use, and only there:
+ *
+ * The MLS storage bridge is a process-wide singleton. Mutating it concurrently
+ * with normal active-store traffic would race and could write ratchet state
+ * into the wrong DB. This helper is therefore restricted to a single call site:
+ * the link-time legacy pre-decrypt step in `useAuth.completeDeviceLink`. That
+ * caller now runs the scope BEFORE it publishes authenticated app state
+ * (`setToken` / `setUser`), so no authenticated route tree, WebSocket
+ * subscription, or MLS-aware surface can start concurrent MLS work while the
+ * bridge is rebound to history.
+ *
+ * Do NOT introduce additional callers without first establishing equivalent
+ * exclusivity guarantees, or replacing the singleton bridge with a per-DB
+ * instance contract.
+ *
+ * The helper:
+ *   1. Captures the current `window.mlsStorageBridge` and the current cache.
+ *   2. Clears the cache, rebinds the bridge to `historyDb`, preloads the
+ *      history DB's StorageProvider state into the cache.
+ *   3. Awaits the callback. Any WASM writes during the callback land in
+ *      `historyDb` because the bridge captures it in closure.
+ *   4. Flushes the (possibly mutated) cache back to `historyDb`.
+ *   5. Restores the original cache and bridge before returning.
+ *
+ * @param {IDBDatabase} historyDb - Opened history store DB
+ * @param {(db: IDBDatabase) => Promise<T>} fn - Stateful callback
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withReadWriteHistoryScope(historyDb, fn) {
+  const savedBridge = (typeof window !== 'undefined') ? window.mlsStorageBridge : null;
+  const savedCache = new Map(storageCache);
+  storageCache.clear();
+  initStorageBridge(historyDb);
+  try {
+    await preloadGroupState(historyDb);
+    const result = await fn(historyDb);
+    await flushStorageCache(historyDb);
+    return result;
+  } finally {
+    storageCache.clear();
+    for (const [k, v] of savedCache) storageCache.set(k, v);
+    if (typeof window !== 'undefined' && savedBridge) {
+      window.mlsStorageBridge = savedBridge;
+    }
+  }
+}
+
+/**
  * Exports the subset of MLS state needed to decrypt pre-link history on a new
  * device. KeyPackages and last-resort material are intentionally excluded
  * because the imported store is read-only history fallback, not an active
@@ -685,30 +740,44 @@ export async function setLastResort(db, payload) {
 
 /**
  * Retrieve a cached plaintext entry for a message.
- * Used to recover own sent messages (which are MLS-encrypted for others, not self).
+ *
+ * Originally used only to recover own sent messages (MLS-encrypted for others,
+ * not self). The schema was extended with an optional `senderId` so the same
+ * cache can also hold plaintexts pre-decrypted at link time on a new linked
+ * device, where the sender is not necessarily the current user.
  *
  * @param {IDBDatabase} db
  * @param {string} messageId - Server-assigned message UUID
- * @returns {Promise<{ plaintext: string, timestamp: number }|null>}
+ * @returns {Promise<{ plaintext: string, timestamp: number, senderId?: string }|null>}
  */
 export async function getLocalPlaintext(db, messageId) {
   const row = await get(db, 'localPlaintext', messageId);
   if (!row?.plaintext) return null;
-  return { plaintext: row.plaintext, timestamp: row.timestamp ?? 0 };
+  return {
+    plaintext: row.plaintext,
+    timestamp: row.timestamp ?? 0,
+    ...(row.senderId ? { senderId: row.senderId } : {}),
+  };
 }
 
 /**
- * Store a plaintext entry for a self-sent message.
+ * Store a plaintext entry for a self-sent message OR a pre-decrypted legacy
+ * message. `senderId` is optional and only set for non-self entries written
+ * by the link-time legacy pre-decrypt path; existing self-send writes omit
+ * it because the sender is implicitly the current user.
+ *
  * @param {IDBDatabase} db
  * @param {string} messageId
- * @param {{ plaintext: string, timestamp: number }} payload
+ * @param {{ plaintext: string, timestamp: number, senderId?: string }} payload
  * @returns {Promise<void>}
  */
 export async function setLocalPlaintext(db, messageId, payload) {
-  await put(db, 'localPlaintext', messageId, {
+  const row = {
     plaintext: payload.plaintext,
     timestamp: payload.timestamp ?? Date.now(),
-  });
+  };
+  if (payload.senderId) row.senderId = payload.senderId;
+  await put(db, 'localPlaintext', messageId, row);
 }
 
 // ---------------------------------------------------------------------------

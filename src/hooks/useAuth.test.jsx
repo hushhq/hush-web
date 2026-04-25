@@ -37,6 +37,15 @@ vi.mock('../lib/api', () => ({
   revokeDeviceKey: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../lib/legacyHistoryDecrypt', () => ({
+  preDecryptLegacyHistory: vi.fn().mockResolvedValue({
+    channels: 0,
+    processed: 0,
+    decrypted: 0,
+    failed: 0,
+  }),
+}));
+
 vi.mock('../lib/bip39Identity', () => ({
   mnemonicToIdentityKey: vi.fn().mockResolvedValue({
     privateKey: new Uint8Array(32).fill(1),
@@ -104,6 +113,8 @@ vi.mock('../lib/identityVault', () => ({
 
 import * as apiMod from '../lib/api';
 import * as vaultMod from '../lib/identityVault';
+import * as mlsStoreMod from '../lib/mlsStore';
+import * as legacyHistoryDecryptMod from '../lib/legacyHistoryDecrypt';
 import {
   setInstanceToken,
   getInstanceToken,
@@ -162,6 +173,12 @@ beforeEach(() => {
   vi.mocked(vaultMod.openVaultStore).mockClear();
   vi.mocked(vaultMod.getVaultConfig).mockReturnValue(null);
   vi.mocked(vaultMod.setVaultConfig).mockClear();
+  vi.mocked(legacyHistoryDecryptMod.preDecryptLegacyHistory).mockResolvedValue({
+    channels: 0,
+    processed: 0,
+    decrypted: 0,
+    failed: 0,
+  });
 });
 
 afterEach(() => {
@@ -340,6 +357,62 @@ describe('useAuth - performRegister', () => {
 
     // jsdom sets window.location.origin to 'http://localhost' by default.
     expect(localStorage.getItem(HOME_INSTANCE_KEY)).toBe(window.location.origin);
+  });
+});
+
+describe('useAuth - completeDeviceLink', () => {
+  it('does not publish auth session until legacy pre-decrypt finishes', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const historyDb = { close: vi.fn() };
+    const openHistoryStoreSpy = vi.spyOn(mlsStoreMod, 'openHistoryStore').mockResolvedValue(historyDb);
+    const importHistorySnapshotSpy = vi.spyOn(mlsStoreMod, 'importHistorySnapshot').mockResolvedValue(undefined);
+
+    let resolvePreDecrypt;
+    const preDecryptStarted = new Promise((resolve) => {
+      resolvePreDecrypt = resolve;
+    });
+    vi.mocked(legacyHistoryDecryptMod.preDecryptLegacyHistory).mockImplementation(async () => {
+      resolvePreDecrypt();
+      await new Promise((resolve) => {
+        resolvePreDecrypt = resolve;
+      });
+      return { channels: 1, processed: 1, decrypted: 1, failed: 0 };
+    });
+
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: { stores: {} },
+      instanceUrl: 'https://chat.example.com',
+    };
+
+    await act(async () => {
+      const linkPromise = result.current.completeDeviceLink(bundle, 'https://chat.example.com');
+      await preDecryptStarted;
+
+      expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBeNull();
+      expect(result.current.token).toBeNull();
+      expect(result.current.user).toBeNull();
+
+      resolvePreDecrypt();
+      await linkPromise;
+    });
+
+    expect(openHistoryStoreSpy).toHaveBeenCalledWith('user-1', expect.any(String));
+    expect(importHistorySnapshotSpy).toHaveBeenCalledWith(historyDb, { stores: {} });
+    expect(legacyHistoryDecryptMod.preDecryptLegacyHistory).toHaveBeenCalledWith(expect.objectContaining({
+      activeUserId: 'user-1',
+      token: 'jwt-test',
+      baseUrl: 'https://chat.example.com',
+    }));
+    expect(result.current.token).toBe('jwt-test');
+    expect(result.current.user?.id).toBe('user-1');
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+
+    openHistoryStoreSpy.mockRestore();
+    importHistorySnapshotSpy.mockRestore();
   });
 });
 

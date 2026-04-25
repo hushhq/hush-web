@@ -41,6 +41,7 @@ import {
   openHistoryStore,
   importHistorySnapshot,
 } from '../lib/mlsStore';
+import { preDecryptLegacyHistory } from '../lib/legacyHistoryDecrypt';
 import {
   importGuildMetadataKeySnapshot,
   openGuildMetadataKeyStore,
@@ -720,6 +721,25 @@ export function useAuth() {
    * @param {{ token: string, user?: object, guestId?: string, expiresAt?: string }} data
    * @param {string} [baseUrl]
    */
+  const publishAuthenticatedSession = useCallback((jwt, user, baseUrl = '') => {
+    clearGuestTimers();
+    setIsGuest(false);
+    setGuestExpiresAt(null);
+    sessionStorage.setItem(baseUrl ? jwtKeyForInstance(baseUrl) : JWT_KEY, jwt);
+    setToken(jwt);
+    setUser(user);
+  }, [clearGuestTimers]);
+
+  const prepareAuthenticatedSession = useCallback(async (data, baseUrl = '') => {
+    const { token: jwt, user: u } = data;
+    if (!jwt) throw new Error('invalid auth response');
+    if (!u?.id) throw new Error('invalid auth response');
+
+    const deviceId = getDeviceId();
+    await uploadKeyPackagesAfterAuth(jwt, u.id, deviceId, {}, baseUrl);
+    return { token: jwt, user: u };
+  }, []);
+
   const finishAuth = useCallback(async (data, baseUrl = '') => {
     const { token: jwt, user: u } = data;
     if (!jwt) throw new Error('invalid auth response');
@@ -747,16 +767,10 @@ export function useAuth() {
       return { token: jwt, user: guestUser };
     }
 
-    if (!u?.id) throw new Error('invalid auth response');
-
-    const deviceId = getDeviceId();
-    await uploadKeyPackagesAfterAuth(jwt, u.id, deviceId, {}, baseUrl);
-
-    sessionStorage.setItem(baseUrl ? jwtKeyForInstance(baseUrl) : JWT_KEY, jwt);
-    setToken(jwt);
-    setUser(u);
-    return { token: jwt, user: u };
-  }, [startGuestExpiryTimers, clearPinSetup]);
+    const result = await prepareAuthenticatedSession(data, baseUrl);
+    publishAuthenticatedSession(result.token, result.user, baseUrl);
+    return result;
+  }, [startGuestExpiryTimers, clearPinSetup, prepareAuthenticatedSession, publishAuthenticatedSession]);
 
   // ── Challenge-response login ───────────────────────────────────────────────
 
@@ -783,14 +797,14 @@ export function useAuth() {
     // Keep private key in memory for vault lock/unlock, not in any storage.
     identityKeyRef.current = { privateKey, publicKey };
 
-    const { user: u } = await finishAuth(data, baseUrl);
+    const { token: jwt, user: u } = await finishAuth(data, baseUrl);
 
     // Mark vault key presence using public key hex (no secret material).
     localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${u.id}`, bytesToHex(publicKey));
     setHasLocalVault(true);
     setVaultState('unlocked');
     applyVaultTimeout(u.id);
-    return { user: u };
+    return { token: jwt, user: u };
   }, [finishAuth, applyVaultTimeout]);
 
   // ── Register ───────────────────────────────────────────────────────────────
@@ -936,11 +950,24 @@ export function useAuth() {
         throw new Error('invalid device link bundle');
       }
 
-      const authResult = await performChallengeResponse(bundle.rootPrivateKey, bundle.rootPublicKey, baseUrl);
+      const authBaseUrl = bundle.instanceUrl || baseUrl || '';
+      const deviceId = getDeviceId();
+      const publicKeyBase64 = toBase64(bundle.rootPublicKey);
+
+      const { nonce } = await requestChallenge(publicKeyBase64, authBaseUrl);
+      const nonceBytes = hexToBytes(nonce);
+      const signature = await signChallenge(nonceBytes, bundle.rootPrivateKey);
+      const signatureBase64 = toBase64(signature);
+      const data = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, authBaseUrl);
+
+      // Keep private key in memory for vault lock/unlock, not in any storage.
+      identityKeyRef.current = { privateKey: bundle.rootPrivateKey, publicKey: bundle.rootPublicKey };
+
+      const authResult = await prepareAuthenticatedSession(data, authBaseUrl);
 
       if (authResult?.user?.id) {
         if (bundle.historySnapshot) {
-          historyDb = await openHistoryStore(authResult.user.id, getDeviceId());
+          historyDb = await openHistoryStore(authResult.user.id, deviceId);
           await importHistorySnapshot(historyDb, bundle.historySnapshot);
         }
         if (bundle.guildMetadataKeySnapshot) {
@@ -951,9 +978,33 @@ export function useAuth() {
             metadataDb.close();
           }
         }
+
+        // Best-effort: pre-decrypt the user's existing channel history so old
+        // messages can be displayed by the runtime decrypt path's plaintext
+        // cache. Failures here must NOT abort the link flow — auth itself has
+        // already succeeded and the new device must remain usable even if
+        // some legacy messages cannot be recovered.
+        if (historyDb && authResult.token) {
+          try {
+            const summary = await preDecryptLegacyHistory({
+              historyDb,
+              activeUserId: authResult.user.id,
+              deviceId,
+              token: authResult.token,
+              baseUrl: authBaseUrl,
+            });
+            console.info('[completeDeviceLink] legacy pre-decrypt summary:', summary);
+          } catch (err) {
+            console.warn('[completeDeviceLink] legacy pre-decrypt failed (link still succeeds):', err);
+          }
+        }
       }
 
+      publishAuthenticatedSession(authResult.token, authResult.user, authBaseUrl);
+      localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${authResult.user.id}`, bytesToHex(bundle.rootPublicKey));
       setHasLocalVault(true);
+      setVaultState('unlocked');
+      applyVaultTimeout(authResult.user.id);
       requirePinSetup();
       return authResult;
     } catch (err) {
@@ -973,7 +1024,7 @@ export function useAuth() {
       }
       setLoading(false);
     }
-  }, [performChallengeResponse, requirePinSetup]);
+  }, [applyVaultTimeout, prepareAuthenticatedSession, publishAuthenticatedSession, requirePinSetup]);
 
   // ── Guest auth ─────────────────────────────────────────────────────────────
 

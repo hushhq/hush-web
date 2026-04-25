@@ -18,6 +18,9 @@ import {
   preloadGroupState,
   flushStorageCache,
   withReadOnlyHistoryScope,
+  withReadWriteHistoryScope,
+  getLocalPlaintext,
+  setLocalPlaintext,
 } from './mlsStore';
 
 // Each test group uses a unique user+device pair to isolate DB instances.
@@ -591,6 +594,105 @@ describe('mlsStore', () => {
 
       activeDb.close();
       historyDb.close();
+    });
+
+    it('withReadWriteHistoryScope rebinds the bridge so callback writes land in history DB', async () => {
+      const activeDb = await nextDb();
+      const activeBridge = window.mlsStorageBridge;
+      const keyBytes = uniqueKeyBytes();
+
+      // Pre-populate active cache so the scope must save/restore something.
+      activeBridge.writeBytes(STORE_NAME, keyBytes, new Uint8Array([1, 1, 1]));
+
+      storeCounter++;
+      const historyDb = await openHistoryStore(`user-${storeCounter}`, `dev-${storeCounter}`);
+
+      let inScopeBridge = null;
+      await withReadWriteHistoryScope(historyDb, async () => {
+        inScopeBridge = window.mlsStorageBridge;
+        // Inside the scope, writes should land in historyDb. Use the
+        // (now-rebound) global bridge to write a distinct value.
+        inScopeBridge.writeBytes(STORE_NAME, keyBytes, new Uint8Array([9, 9, 9]));
+      });
+
+      // Bridge restored to active after scope.
+      expect(window.mlsStorageBridge).toBe(activeBridge);
+      // Active cache restored to its pre-scope state.
+      const restored = activeBridge.readBytes(STORE_NAME, keyBytes);
+      expect(Array.from(restored)).toEqual([1, 1, 1]);
+
+      // History DB now contains the in-scope write.
+      const hexKey = Array.from(keyBytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      const row = await new Promise((resolve, reject) => {
+        const tx = historyDb.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get(hexKey);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      expect(row).toBeDefined();
+      expect(Array.from(row.value)).toEqual([9, 9, 9]);
+
+      activeDb.close();
+      historyDb.close();
+    });
+
+    it('withReadWriteHistoryScope restores bridge and cache even when callback throws', async () => {
+      const activeDb = await nextDb();
+      const activeBridge = window.mlsStorageBridge;
+      const keyBytes = uniqueKeyBytes();
+      activeBridge.writeBytes(STORE_NAME, keyBytes, new Uint8Array([2, 2, 2]));
+
+      storeCounter++;
+      const historyDb = await openHistoryStore(`user-${storeCounter}`, `dev-${storeCounter}`);
+
+      await expect(
+        withReadWriteHistoryScope(historyDb, async () => {
+          throw new Error('boom');
+        }),
+      ).rejects.toThrow('boom');
+
+      expect(window.mlsStorageBridge).toBe(activeBridge);
+      const restored = activeBridge.readBytes(STORE_NAME, keyBytes);
+      expect(Array.from(restored)).toEqual([2, 2, 2]);
+
+      activeDb.close();
+      historyDb.close();
+    });
+  });
+
+  describe('localPlaintext', () => {
+    it('round-trips plaintext + timestamp without senderId for self-send entries', async () => {
+      const db = await nextDb();
+      await setLocalPlaintext(db, 'msg-1', { plaintext: 'hello', timestamp: 1000 });
+      const row = await getLocalPlaintext(db, 'msg-1');
+      expect(row).toEqual({ plaintext: 'hello', timestamp: 1000 });
+      expect(row.senderId).toBeUndefined();
+      db.close();
+    });
+
+    it('round-trips senderId when provided by the link-time pre-decrypt path', async () => {
+      const db = await nextDb();
+      await setLocalPlaintext(db, 'msg-2', {
+        plaintext: 'older message',
+        timestamp: 2000,
+        senderId: 'user-abc',
+      });
+      const row = await getLocalPlaintext(db, 'msg-2');
+      expect(row).toEqual({
+        plaintext: 'older message',
+        timestamp: 2000,
+        senderId: 'user-abc',
+      });
+      db.close();
+    });
+
+    it('returns null for missing entries', async () => {
+      const db = await nextDb();
+      const row = await getLocalPlaintext(db, 'never-written');
+      expect(row).toBeNull();
+      db.close();
     });
   });
 });

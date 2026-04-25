@@ -105,7 +105,12 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
   }
 
   /**
-   * Retrieve a cached plaintext entry for a self-sent message.
+   * Retrieve a cached plaintext entry for a self-sent or pre-decrypted
+   * legacy message. The link-time legacy pre-decrypt path writes entries
+   * with an explicit `senderId`; legacy self-send entries do not, in which
+   * case the sender field is undefined and the caller falls back to the
+   * server-provided sender on the message row.
+   *
    * @param {string} messageId
    * @returns {Promise<{ content: string, senderId?: string, timestamp: number }|null>}
    */
@@ -115,7 +120,11 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
       if (db) {
         const row = await mlsStore.getLocalPlaintext(db, messageId);
         if (row) {
-          return { content: row.plaintext, timestamp: row.timestamp };
+          return {
+            content: row.plaintext,
+            timestamp: row.timestamp,
+            ...(row.senderId ? { senderId: row.senderId } : {}),
+          };
         }
       }
       if (typeof getHistoryStore === 'function') {
@@ -123,7 +132,11 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
         if (!historyDb) return null;
         const historyRow = await mlsStore.getLocalPlaintext(historyDb, messageId);
         if (historyRow) {
-          return { content: historyRow.plaintext, timestamp: historyRow.timestamp };
+          return {
+            content: historyRow.plaintext,
+            timestamp: historyRow.timestamp,
+            ...(historyRow.senderId ? { senderId: historyRow.senderId } : {}),
+          };
         }
       }
       return null;

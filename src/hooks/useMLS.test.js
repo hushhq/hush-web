@@ -291,6 +291,46 @@ describe('useMLS', () => {
       const result = await getCachedMessage('msg-123');
       expect(result).toBeNull();
     });
+
+    it('surfaces senderId when present (link-time pre-decrypt entries)', async () => {
+      mockDeps.mlsStore.getLocalPlaintext.mockResolvedValue({
+        plaintext: 'old peer message',
+        timestamp: 1700000000,
+        senderId: 'peer-uuid',
+      });
+
+      const { getCachedMessage } = useMLS({
+        getStore,
+        getToken,
+        channelId: 'ch-1',
+        _deps: mockDeps,
+      });
+
+      const result = await getCachedMessage('msg-pre-decrypted');
+      expect(result).toEqual({
+        content: 'old peer message',
+        timestamp: 1700000000,
+        senderId: 'peer-uuid',
+      });
+    });
+
+    it('omits senderId when the cached row has none (legacy self-send entries)', async () => {
+      mockDeps.mlsStore.getLocalPlaintext.mockResolvedValue({
+        plaintext: 'own send',
+        timestamp: 1700000000,
+      });
+
+      const { getCachedMessage } = useMLS({
+        getStore,
+        getToken,
+        channelId: 'ch-1',
+        _deps: mockDeps,
+      });
+
+      const result = await getCachedMessage('msg-own');
+      expect(result).toEqual({ content: 'own send', timestamp: 1700000000 });
+      expect(result.senderId).toBeUndefined();
+    });
   });
 
   describe('setCachedMessage', () => {
