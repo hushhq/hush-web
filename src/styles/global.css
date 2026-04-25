@@ -6477,6 +6477,36 @@ select:focus-visible {
   border-radius: var(--radius-md);
   background: var(--hush-elevated);
   border: 1px solid var(--hush-border);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ld-code-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.ld-scanner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+}
+
+.ld-scanner-video {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: var(--hush-elevated);
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-md);
+  align-self: center;
 }
 
 .ld-timer,

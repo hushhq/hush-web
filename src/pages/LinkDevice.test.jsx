@@ -194,6 +194,8 @@ describe('LinkDevice', () => {
 
     expect(await screen.findByAltText(/device link qr code/i)).toBeInTheDocument();
     expect(screen.getByText('ABCD1234')).toBeInTheDocument();
+    // Copy-to-clipboard affordance is rendered alongside the fallback code.
+    expect(screen.getByRole('button', { name: /copy device link code/i })).toBeInTheDocument();
     expect(mockCreateDeviceLinkRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         deviceId: 'device-1',
@@ -729,5 +731,56 @@ describe('LinkDevice', () => {
       expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
     });
     expect(mockExportHistorySnapshot).toHaveBeenCalled();
+  });
+
+  it('copies the fallback code to the clipboard when the Copy button is clicked', async () => {
+    const user = userEvent.setup();
+    mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' }, publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-1',
+      secret: 'secret-1',
+      code: 'ABCD1234',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult.mockResolvedValue({ status: 'pending' });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText }, configurable: true,
+    });
+
+    renderLinkDevice('/link-device?mode=new');
+    await screen.findByText('ABCD1234');
+    await user.click(screen.getByRole('button', { name: /copy device link code/i }));
+
+    expect(writeText).toHaveBeenCalledWith('ABCD1234');
+    expect(await screen.findByRole('button', { name: /copy device link code/i })).toHaveTextContent(/copied/i);
+  });
+
+  it('renders the Scan-QR button on the approve view (manual code path is preserved)', async () => {
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: { privateKey: new Uint8Array([1]), publicKey: new Uint8Array([2]) },
+      },
+    };
+    renderLinkDevice('/link-device');
+    expect(await screen.findByRole('button', { name: /scan qr code with camera/i })).toBeInTheDocument();
+    // Manual entry input still present.
+    expect(screen.getByLabelText(/link code/i)).toBeInTheDocument();
   });
 });

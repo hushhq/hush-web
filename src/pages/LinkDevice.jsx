@@ -7,6 +7,7 @@ import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode'
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
 import { Button } from '../components/ui';
+import QRCodeScanner from '../components/QRCodeScanner';
 import * as mlsStore from '../lib/mlsStore';
 import { preDecryptForLinkExport } from '../lib/preDecryptForLinkExport';
 import { buildTranscriptBlobForExport } from '../lib/transcriptVault';
@@ -38,6 +39,27 @@ const POLL_INITIAL_MS = 2000;
 const POLL_BACKOFF_MULTIPLIER = 1.5;
 const POLL_MAX_MS = 15000;
 
+/**
+ * Pull the encoded QR payload from a scanned string. Accepts either the
+ * full approval URL produced by `buildLinkApprovalUrl` (with `?payload=…`)
+ * or the bare base64 payload itself.
+ *
+ * @param {string} raw
+ * @returns {string|null}
+ */
+function extractQRPayload(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const trimmed = raw.trim();
+  try {
+    const url = new URL(trimmed);
+    const param = url.searchParams.get('payload');
+    if (param) return param;
+  } catch {
+    // Not a URL — fall through.
+  }
+  return trimmed;
+}
+
 function formatCountdown(expiresAt, now = Date.now()) {
   const remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
   const minutes = Math.floor(remaining / 60);
@@ -62,6 +84,18 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
   const { completeDeviceLink, loading: authLoading } = useAuth();
   const [requestState, setRequestState] = useState(null);
   const [error, setError] = useState('');
+  const [codeCopied, setCodeCopied] = useState(false);
+  const handleCopyCode = useCallback(async () => {
+    if (!requestState?.code) return;
+    try {
+      await navigator.clipboard.writeText(requestState.code);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 1500);
+    } catch {
+      // Clipboard may be denied (HTTP, permission); fail silently — user
+      // can still copy by hand from the displayed value.
+    }
+  }, [requestState?.code]);
   const [status, setStatus] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -211,7 +245,16 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
             <div className="ld-empty-box">QR unavailable. Use the fallback code below.</div>
           )}
           <div className="ld-code-label">Desktop fallback code</div>
-          <div className="ld-code-value">{requestState.code}</div>
+          <div className="ld-code-row">
+            <div className="ld-code-value">{requestState.code}</div>
+            <Button
+              variant="secondary"
+              onClick={handleCopyCode}
+              aria-label="Copy device link code"
+            >
+              {codeCopied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
           <div className="ld-timer">Expires in {formatCountdown(requestState.expiresAt, now)}</div>
           <div className="ld-waiting">
             <span className="ld-pulse">Waiting for approval<span className="ld-dots" /></span>
@@ -310,6 +353,39 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
     }
     await resolveRequest({ code: code.trim().toUpperCase() });
   }, [code, resolveRequest]);
+
+  // ── QR camera scanner ──────────────────────────────────────────────────
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+  const [scannerUnavailable, setScannerUnavailable] = useState(false);
+  const handleScannerResult = useCallback((rawText) => {
+    setShowScanner(false);
+    const payload = extractQRPayload(rawText);
+    if (!payload) {
+      setError('Could not read QR code.');
+      return;
+    }
+    let decoded;
+    try {
+      decoded = decodeQRPayload(payload);
+    } catch {
+      setError('Invalid QR code.');
+      return;
+    }
+    resolveRequest({ requestId: decoded.requestId, secret: decoded.secret });
+  }, [resolveRequest]);
+  const handleScannerCancel = useCallback(() => {
+    setShowScanner(false);
+    setScannerError('');
+  }, []);
+  const handleScannerError = useCallback((msg) => {
+    setShowScanner(false);
+    setScannerError(msg);
+  }, []);
+  const handleScannerUnavailable = useCallback(() => {
+    setShowScanner(false);
+    setScannerUnavailable(true);
+  }, []);
 
   const handleApprove = useCallback(async () => {
     if (!claim || !token || !user?.id || !identityKeyRef.current?.privateKey || !identityKeyRef.current?.publicKey) {
@@ -478,7 +554,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
         Scan the QR from your phone camera or enter the fallback code shown on the new device.
       </p>
 
-      {!claim && (
+      {!claim && !showScanner && (
         <form className="ld-code-form" onSubmit={handleResolveCode}>
           <label htmlFor="device-link-code" className="ld-code-label">Link code</label>
           <input
@@ -494,7 +570,30 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           <Button type="submit" variant="secondary" disabled={isResolving}>
             {isResolving ? 'Checking…' : 'Resolve code'}
           </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => { setScannerError(''); setShowScanner(true); }}
+            aria-label="Scan QR code with camera"
+          >
+            Scan QR with camera
+          </Button>
+          {scannerError && <div className="ld-error">{scannerError}</div>}
+          {scannerUnavailable && (
+            <div className="ld-status">
+              Camera scanning is not supported in this browser. Use the manual code instead.
+            </div>
+          )}
         </form>
+      )}
+
+      {!claim && showScanner && (
+        <QRCodeScanner
+          onResult={handleScannerResult}
+          onCancel={handleScannerCancel}
+          onError={handleScannerError}
+          onUnavailable={handleScannerUnavailable}
+        />
       )}
 
       {claim && (
