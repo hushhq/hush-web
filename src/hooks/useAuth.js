@@ -1004,12 +1004,21 @@ export function useAuth() {
         // first Chat render after link can already serve inherited transcripts
         // from the in-memory cache without a fire-and-forget race.
         if (bundle.transcriptBlob) {
+          console.info(
+            '[completeDeviceLink] inbound transcript blob present',
+            { byteLength: bundle.transcriptBlob.byteLength },
+          );
           try {
             const importedRows = await importAndReprotectTranscriptBlob({
               userId: authResult.user.id,
               rootPrivateKey: bundle.rootPrivateKey,
               inboundBlob: bundle.transcriptBlob,
             });
+            const sampleIds = importedRows.slice(0, 3).map((r) => r.messageId);
+            console.info(
+              '[completeDeviceLink] transcript blob imported + re-protected',
+              { rowCount: importedRows.length, firstIds: sampleIds },
+            );
             // Eager seed: bumps cache generation so any later stale hydrate
             // won't replace this fresh data.
             setTranscriptCache(authResult.user.id, importedRows);
@@ -1019,6 +1028,7 @@ export function useAuth() {
             clearTranscriptCache();
           }
         } else {
+          console.warn('[completeDeviceLink] no transcript blob in inbound bundle — old device exported nothing');
           // No inherited blob — guarantee no stale cache from a previous user.
           clearTranscriptCache();
         }

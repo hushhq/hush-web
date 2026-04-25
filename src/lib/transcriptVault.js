@@ -273,6 +273,20 @@ export function setTranscriptCache(userId, rows) {
   _state.loaded = true;
   _state.userId = userId ?? null;
   bumpTranscriptGeneration();
+  // Diagnostic: expose runtime status on window for live debugging. Lets us
+  // confirm in the console whether the inherited transcript actually landed
+  // in memory after a device link.
+  if (typeof window !== 'undefined') {
+    try {
+      window.__hushTranscriptCacheStatus = () => getTranscriptCacheStatus();
+      window.__hushTranscriptCacheHas = (messageId) => Boolean(getTranscriptEntry(messageId));
+    } catch { /* ignore */ }
+  }
+  console.info('[transcriptVault] cache populated', {
+    userId: _state.userId,
+    size: _state.cache.size,
+    generation: _state.generation,
+  });
 }
 
 /**

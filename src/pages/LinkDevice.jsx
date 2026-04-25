@@ -348,11 +348,25 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       let transcriptBlob = null;
       try {
         const rows = await mlsStore.listAllLocalPlaintexts(historyDb);
+        // Diagnostic: number of local plaintext rows the OLD device is about to
+        // seal into the transcript blob. If this is 0 or unexpectedly small,
+        // the linked device cannot recover what is missing here.
+        const sampleIds = rows.slice(0, 3).map((r) => r.messageId);
+        console.info(
+          '[LinkDevice] transcript-blob seal: harvested rows from active localPlaintext',
+          { rowCount: rows.length, firstIds: sampleIds },
+        );
         if (rows.length > 0) {
           transcriptBlob = await buildTranscriptBlobForExport(
             identityKeyRef.current.privateKey,
             rows,
           );
+          console.info(
+            '[LinkDevice] transcript-blob seal: produced encrypted blob',
+            { byteLength: transcriptBlob.byteLength, rowCount: rows.length },
+          );
+        } else {
+          console.warn('[LinkDevice] transcript-blob seal: zero rows — new device will inherit no plaintext history');
         }
       } catch (err) {
         console.warn('[LinkDevice] transcript-blob seal failed (link will continue without transcript):', err);
