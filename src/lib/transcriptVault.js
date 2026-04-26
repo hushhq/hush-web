@@ -1,3 +1,5 @@
+import { gunzipBytes, gzipBytes } from './compression';
+
 /**
  * Transcript vault.
  *
@@ -63,9 +65,10 @@ const TRANSCRIPT_DB_PREFIX = 'hush-transcript-';
 const TRANSCRIPT_STORE = 'transcript';
 const TRANSCRIPT_ROW_KEY = 'blob';
 const TRANSCRIPT_DB_VERSION = 1;
-const TRANSCRIPT_PAYLOAD_VERSION = 1;
+const TRANSCRIPT_PAYLOAD_VERSION = 2;
 const TRANSCRIPT_HKDF_INFO = new TextEncoder().encode('hush-transcript-cache-v1');
 const NONCE_LENGTH = 12;
+const TRANSCRIPT_PAYLOAD_GZIP_PREFIX = new Uint8Array([0x48, 0x54, 0x32, 0x00]); // "HT2\0"
 
 // ---------------------------------------------------------------------------
 // Key derivation
@@ -118,7 +121,13 @@ export async function deriveTranscriptKey(rootPrivateKey) {
 export async function encryptTranscriptBlob(key, rows) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const payload = JSON.stringify({ v: TRANSCRIPT_PAYLOAD_VERSION, rows: safeRows });
-  const plaintext = new TextEncoder().encode(payload);
+  const payloadBytes = new TextEncoder().encode(payload);
+  const compressedPayload = await gzipBytes(payloadBytes);
+  const plaintext = new Uint8Array(
+    TRANSCRIPT_PAYLOAD_GZIP_PREFIX.byteLength + compressedPayload.byteLength,
+  );
+  plaintext.set(TRANSCRIPT_PAYLOAD_GZIP_PREFIX, 0);
+  plaintext.set(compressedPayload, TRANSCRIPT_PAYLOAD_GZIP_PREFIX.byteLength);
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_LENGTH));
   const ciphertextBuf = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: nonce },
@@ -150,7 +159,17 @@ export async function decryptTranscriptBlob(key, blob) {
     key,
     ciphertext,
   );
-  const text = new TextDecoder().decode(new Uint8Array(plaintextBuf));
+  const plaintext = new Uint8Array(plaintextBuf);
+  let text;
+  const hasGzipPrefix = plaintext.byteLength > TRANSCRIPT_PAYLOAD_GZIP_PREFIX.byteLength
+    && TRANSCRIPT_PAYLOAD_GZIP_PREFIX.every((byte, index) => plaintext[index] === byte);
+  if (hasGzipPrefix) {
+    const decompressed = await gunzipBytes(plaintext.slice(TRANSCRIPT_PAYLOAD_GZIP_PREFIX.byteLength));
+    text = new TextDecoder().decode(decompressed);
+  } else {
+    // Backward compatibility: v1 blobs stored raw JSON plaintext.
+    text = new TextDecoder().decode(plaintext);
+  }
   const parsed = JSON.parse(text);
   if (!parsed || !Array.isArray(parsed.rows)) return [];
   return parsed.rows;

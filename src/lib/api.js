@@ -680,6 +680,9 @@ export async function verifyDeviceLinkRequest(token, body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('verify device link request', targetUrl, err);
   }
+  if (res.status === 413) {
+    throw new Error('Device link payload is too large for the server to accept.');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `verifyDeviceLinkRequest ${res.status}`);
 }

@@ -8,6 +8,7 @@
  *   - Transfer bundle serialisation helpers
  */
 import * as ed from '@noble/ed25519';
+import { gunzipBytes, gzipBytes, isGzipBytes, supportsGzipCompression } from './compression';
 
 const LINKING_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const LINKING_CODE_LENGTH = 8;
@@ -285,7 +286,7 @@ export function generateLinkingCode() {
  * }} bundle
  * @returns {Uint8Array}
  */
-export function encodeTransferBundle(bundle) {
+export async function encodeTransferBundle(bundle) {
   const payload = {
     v: LINK_BUNDLE_VERSION,
     userId: bundle.userId,
@@ -302,7 +303,14 @@ export function encodeTransferBundle(bundle) {
     // root identity; the relay envelope adds an outer ECDH layer in transit.
     transcriptBlob: bundle.transcriptBlob ? bytesToBase64(bundle.transcriptBlob) : null,
   };
-  return new TextEncoder().encode(JSON.stringify(payload));
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(payload));
+  if (!supportsGzipCompression()) {
+    return jsonBytes;
+  }
+  // Compress the whole transfer bundle before relay encryption. This shrinks
+  // the history snapshot + metadata snapshot significantly on normal clients,
+  // while decodeTransferBundle still accepts legacy uncompressed JSON.
+  return gzipBytes(jsonBytes);
 }
 
 /**
@@ -322,8 +330,9 @@ export function encodeTransferBundle(bundle) {
  *   guildMetadataKeySnapshot: object|null,
  * }}
  */
-export function decodeTransferBundle(bytes) {
-  const text = new TextDecoder().decode(bytes);
+export async function decodeTransferBundle(bytes) {
+  const decodedBytes = isGzipBytes(bytes) ? await gunzipBytes(bytes) : bytes;
+  const text = new TextDecoder().decode(decodedBytes);
   const parsed = JSON.parse(text);
   return {
     version: parsed.v ?? 1,

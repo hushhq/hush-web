@@ -191,7 +191,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
 
         setStatus('Finalizing linked device…');
         const relayBytes = await decryptRelayPayload(result, requestState.sessionPrivateKey);
-        const bundle = decodeTransferBundle(relayBytes);
+        const bundle = await decodeTransferBundle(relayBytes);
         await completeDeviceLink(bundle);
         onLinked();
       } catch (err) {
@@ -452,7 +452,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       const historySnapshot = await mlsStore.exportHistorySnapshot(historyDb);
       metadataDb = await openGuildMetadataKeyStore(user.id, getDeviceId());
       const guildMetadataKeySnapshot = await exportGuildMetadataKeySnapshot(metadataDb);
-      const transferBundle = encodeTransferBundle({
+      const transferBundle = await encodeTransferBundle({
         userId: user.id,
         username: user.username,
         displayName: user.displayName,

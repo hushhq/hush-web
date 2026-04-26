@@ -66,6 +66,24 @@ describe('transcriptVault — encrypt/decrypt round-trip', () => {
     expect(rows).toEqual(SAMPLE_ROWS);
   });
 
+  it('compresses repetitive transcript payloads before encryption', async () => {
+    const key = await deriveTranscriptKey(ROOT_KEY_A);
+    const repetitiveRows = Array.from({ length: 200 }, (_, index) => ({
+      messageId: `m-${index}`,
+      plaintext: 'hello world '.repeat(80),
+      senderId: 'alice',
+      timestamp: index,
+    }));
+    const rawPayloadBytes = new TextEncoder().encode(JSON.stringify({ v: 2, rows: repetitiveRows }));
+
+    const blob = await encryptTranscriptBlob(key, repetitiveRows);
+    // nonce + ciphertext should stay materially below the raw JSON payload for
+    // repetitive human text, otherwise the device-link 413 problem remains.
+    expect(blob.byteLength).toBeLessThan(rawPayloadBytes.byteLength / 2);
+    const rows = await decryptTranscriptBlob(key, blob);
+    expect(rows).toEqual(repetitiveRows);
+  });
+
   it('round-trips an empty rows array', async () => {
     const key = await deriveTranscriptKey(ROOT_KEY_A);
     const blob = await encryptTranscriptBlob(key, []);
@@ -90,6 +108,20 @@ describe('transcriptVault — encrypt/decrypt round-trip', () => {
   it('rejects a blob shorter than the nonce', async () => {
     const key = await deriveTranscriptKey(ROOT_KEY_A);
     await expect(decryptTranscriptBlob(key, new Uint8Array(5))).rejects.toThrow(/invalid/);
+  });
+
+  it('decrypts legacy v1 blobs that stored raw JSON plaintext', async () => {
+    const key = await deriveTranscriptKey(ROOT_KEY_A);
+    const payload = new TextEncoder().encode(JSON.stringify({ v: 1, rows: SAMPLE_ROWS }));
+    const nonce = new Uint8Array(12).fill(7);
+    const ciphertextBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, payload);
+    const ciphertext = new Uint8Array(ciphertextBuf);
+    const legacyBlob = new Uint8Array(nonce.byteLength + ciphertext.byteLength);
+    legacyBlob.set(nonce, 0);
+    legacyBlob.set(ciphertext, nonce.byteLength);
+
+    const rows = await decryptTranscriptBlob(key, legacyBlob);
+    expect(rows).toEqual(SAMPLE_ROWS);
   });
 });
 

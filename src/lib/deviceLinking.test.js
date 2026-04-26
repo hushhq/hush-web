@@ -92,7 +92,7 @@ describe('blind relay encryption', () => {
 describe('transfer bundle serialisation', () => {
   it('round-trips root keys and history snapshot metadata', async () => {
     const identity = await createDeviceIdentity();
-    const bytes = encodeTransferBundle({
+    const bytes = await encodeTransferBundle({
       userId: 'user-1',
       username: 'alice',
       displayName: 'Alice',
@@ -111,7 +111,7 @@ describe('transfer bundle serialisation', () => {
       },
     });
 
-    const decoded = decodeTransferBundle(bytes);
+    const decoded = await decodeTransferBundle(bytes);
 
     expect(decoded.userId).toBe('user-1');
     expect(decoded.username).toBe('alice');
@@ -129,6 +129,27 @@ describe('transfer bundle serialisation', () => {
       version: 1,
       keys: [{ guildId: 'guild-1', keyBytes: [9, 8, 7] }],
     });
+  });
+
+  it('decodes legacy uncompressed transfer bundle bytes', async () => {
+    const identity = await createDeviceIdentity();
+    const legacyBytes = new TextEncoder().encode(JSON.stringify({
+      v: 2,
+      userId: 'user-legacy',
+      username: 'alice',
+      displayName: 'Alice',
+      instanceUrl: 'https://app.gethush.live',
+      exportedAt: '2026-04-26T00:00:00.000Z',
+      rootPrivateKey: btoa(String.fromCharCode(...identity.privateKey)),
+      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
+      historySnapshot: { version: 1, stores: {} },
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: null,
+    }));
+
+    const decoded = await decodeTransferBundle(legacyBytes);
+    expect(decoded.userId).toBe('user-legacy');
+    expect(decoded.rootPrivateKey).toEqual(identity.privateKey);
   });
 });
 
