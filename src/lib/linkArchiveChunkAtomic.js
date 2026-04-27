@@ -245,7 +245,7 @@ function concatRecords(parts) {
  * starts with `createParseAccumulator()`, feeds chunks one at a time
  * via `consumeChunk`, and reads `finalize()` after the END record.
  */
-export function createParseAccumulator() {
+export function createParseAccumulator(options = {}) {
   return {
     historySnapshot: null,
     guildMetadataKeySnapshot: null,
@@ -260,6 +260,17 @@ export function createParseAccumulator() {
     sawMetadata: false,
     sawEnd: false,
     runningPlaintextHashes: /** @type {Uint8Array[]} */ ([]),
+    // Optional async consumer that receives TRANS_PART payload bytes
+    // as they arrive. When set, the accumulator does NOT retain the
+    // bytes in `transcriptParts`; finalizeAccumulator returns
+    // `transcriptBlob: null` and the caller is responsible for
+    // finishing the stream consumer (typically a framed-transcript
+    // decoder) to obtain the actual rows. This is what enables
+    // bounded-memory NEW-device transcript import.
+    transcriptStreamConsumer: typeof options.transcriptStreamConsumer === 'function'
+      ? options.transcriptStreamConsumer
+      : null,
+    transcriptStreamedBytes: 0,
   };
 }
 
@@ -334,9 +345,19 @@ export async function consumeChunk(gzippedPlaintext, acc, expectedPlaintextSha25
         break;
       }
       case RECORD_TRANS_PART: {
-        // Copy the slice — the underlying chunk buffer goes out of
-        // scope after this function returns.
-        acc.transcriptParts.push(new Uint8Array(payload));
+        if (acc.transcriptStreamConsumer) {
+          // Hand the bytes straight to the consumer. We still copy so
+          // the consumer's reference outlives this chunk's plaintext
+          // buffer, but the bytes are NOT retained on the accumulator —
+          // peak transcript memory is bounded by whatever the consumer
+          // chooses to hold.
+          await acc.transcriptStreamConsumer(new Uint8Array(payload));
+          acc.transcriptStreamedBytes += payload.byteLength;
+        } else {
+          // Copy the slice — the underlying chunk buffer goes out of
+          // scope after this function returns.
+          acc.transcriptParts.push(new Uint8Array(payload));
+        }
         break;
       }
       case RECORD_HIST_PART: {
@@ -405,7 +426,15 @@ export async function finalizeAccumulator(acc, expectedArchiveSha256 = null) {
   }
 
   let transcriptBlob = null;
-  if (acc.transcriptByteLen > 0) {
+  if (acc.transcriptStreamConsumer) {
+    // Streaming-consumer mode: bytes were forwarded to the sink as
+    // they arrived. Verify the streamed total matches META's
+    // declaration. The caller takes responsibility for finishing
+    // the consumer to retrieve any decoded rows.
+    if (acc.transcriptStreamedBytes !== Math.max(0, acc.transcriptByteLen)) {
+      throw new Error(`[linkArchiveChunkAtomic] transcript stream byte mismatch: declared ${acc.transcriptByteLen}, streamed ${acc.transcriptStreamedBytes}`);
+    }
+  } else if (acc.transcriptByteLen > 0) {
     let total = 0;
     for (const p of acc.transcriptParts) total += p.byteLength;
     if (total !== acc.transcriptByteLen) {

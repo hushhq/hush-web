@@ -43,6 +43,7 @@ import {
 } from '../lib/mlsStore';
 import {
   importAndReprotectTranscriptBlob,
+  importAndReprotectTranscriptRows,
   loadTranscriptCacheFromDisk,
   clearTranscriptCache,
   deleteTranscriptDatabase,
@@ -1003,7 +1004,41 @@ export function useAuth() {
         // from the SAME rows BEFORE we publish the auth session, so the very
         // first Chat render after link can already serve inherited transcripts
         // from the in-memory cache without a fire-and-forget race.
-        if (bundle.transcriptBlob) {
+        if (bundle.transcriptPersistedAtRest) {
+          // Streaming-importer path (slice 11): downloadArchiveSession
+          // already wrote V3 frames to the per-user IDB and seeded the
+          // in-memory cache via beginTranscriptCacheStream /
+          // appendTranscriptCacheRows / finalizeTranscriptCacheStream.
+          // Nothing more to do here — explicitly do NOT call
+          // clearTranscriptCache or setTranscriptCache, which would
+          // wipe out the cache state the importer just installed.
+          console.info('[completeDeviceLink] transcript already persisted at rest by streaming importer');
+        } else if (Array.isArray(bundle.transcriptRows)) {
+          // Streaming-import path: the NEW-device pipeline decoded
+          // the V3 framed transcript wire format frame-by-frame and
+          // handed us the rows directly. Skip the whole-blob decrypt
+          // and re-encrypt straight to the at-rest V2 blob.
+          console.info(
+            '[completeDeviceLink] inbound transcript rows present (streamed)',
+            { rowCount: bundle.transcriptRows.length },
+          );
+          try {
+            const importedRows = await importAndReprotectTranscriptRows({
+              userId: authResult.user.id,
+              rootPrivateKey: bundle.rootPrivateKey,
+              rows: bundle.transcriptRows,
+            });
+            const sampleIds = importedRows.slice(0, 3).map((r) => r.messageId);
+            console.info(
+              '[completeDeviceLink] streamed transcript rows imported + re-protected',
+              { rowCount: importedRows.length, firstIds: sampleIds },
+            );
+            setTranscriptCache(authResult.user.id, importedRows);
+          } catch (err) {
+            console.warn('[completeDeviceLink] streamed transcript rows import failed (link still succeeds):', err);
+            clearTranscriptCache();
+          }
+        } else if (bundle.transcriptBlob) {
           console.info(
             '[completeDeviceLink] inbound transcript blob present',
             { byteLength: bundle.transcriptBlob.byteLength },

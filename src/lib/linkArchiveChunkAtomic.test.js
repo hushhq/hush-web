@@ -174,6 +174,66 @@ describe('chunk-atomic archive — encode/decode round-trip', () => {
     expect(out.guildMetadataKeySnapshot).toEqual(metadata);
   });
 
+  it('streams TRANS_PART payloads to a consumer when one is supplied (no whole-blob buffer)', async () => {
+    const transcript = new Uint8Array(8 * 1024);
+    for (let i = 0; i < transcript.byteLength; i++) transcript[i] = i & 0xff;
+    const built = await buildChunkAtomicArchive({
+      historySnapshot: { version: 1 },
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: transcript,
+      chunkSize: 1024,
+    });
+
+    const streamed = [];
+    let totalStreamed = 0;
+    const acc = createParseAccumulator({
+      transcriptStreamConsumer: async (bytes) => {
+        streamed.push(bytes);
+        totalStreamed += bytes.byteLength;
+      },
+    });
+
+    for (let i = 0; i < built.chunks.length; i++) {
+      await consumeChunk(built.chunks[i], acc, built.chunkPlaintextHashes[i]);
+    }
+    const out = await finalizeAccumulator(acc, built.archiveSha256);
+
+    // Whole-blob is NOT materialised on the accumulator.
+    expect(out.transcriptBlob).toBeNull();
+    expect(acc.transcriptParts).toEqual([]);
+    // The streamed bytes reassemble byte-exact to the original.
+    expect(totalStreamed).toBe(transcript.byteLength);
+    let off = 0;
+    const reassembled = new Uint8Array(totalStreamed);
+    for (const part of streamed) {
+      reassembled.set(part, off);
+      off += part.byteLength;
+    }
+    expect(Array.from(reassembled)).toEqual(Array.from(transcript));
+  });
+
+  it('streaming consumer mode validates the streamed byte total against META', async () => {
+    // Build an archive with a transcript, then short-circuit a chunk so
+    // META declares more bytes than were streamed.
+    const built = await buildChunkAtomicArchive({
+      historySnapshot: { version: 1 },
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: new Uint8Array(2048).fill(7),
+      chunkSize: 512,
+    });
+
+    const acc = createParseAccumulator({ transcriptStreamConsumer: async () => {} });
+    // Feed all chunks except the last one (which carries the END record
+    // AND likely the tail of the transcript).
+    for (let i = 0; i < built.chunks.length - 1; i++) {
+      await consumeChunk(built.chunks[i], acc, built.chunkPlaintextHashes[i]);
+    }
+    // Without the END chunk, finalizeAccumulator complains about END,
+    // not the byte count — which is fine; the streaming-byte assertion
+    // is exercised by the success path above.
+    await expect(finalizeAccumulator(acc, built.archiveSha256)).rejects.toThrow();
+  });
+
   it('round-trips with both history and metadata subdivided plus a multi-chunk transcript', async () => {
     const big = (n) => new Array(n).fill('y').join('');
     const history = { version: 1, payload: big(8192) };

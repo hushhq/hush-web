@@ -53,6 +53,12 @@ import {
   finalizeAccumulator,
 } from './linkArchiveChunkAtomic';
 import {
+  deriveTranscriptKey,
+  createFramedTranscriptStreamDecoder,
+  createStreamingTranscriptImporter,
+  openTranscriptStore,
+} from './transcriptVault';
+import {
   initExport,
   markChunkConfirmed,
   setExportProgress,
@@ -433,7 +439,7 @@ export async function resumeUploadArchiveSession({ token, baseUrl, rootPrivateKe
  * }} args
  * @returns {Promise<{ historySnapshot: object|null, guildMetadataKeySnapshot: object|null, transcriptBlob: Uint8Array|null }>}
  */
-export async function downloadArchiveSession({ archive, sessionPrivateKey, baseUrl }) {
+export async function downloadArchiveSession({ archive, sessionPrivateKey, baseUrl, rootPrivateKey = null, userId = null }) {
   const manifest = await fetchManifest(archive.id, archive.downloadToken, baseUrl);
 
   // Re-verify manifest hash binding to the descriptor that came over the
@@ -481,7 +487,43 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
   const isChunkAtomic = archive.format === CHUNK_ATOMIC_FORMAT;
   let parsed;
   if (isChunkAtomic) {
-    const acc = createParseAccumulator();
+    // Streaming-transcript path. When the caller hands us the unlocked
+    // root private key (NEW-device link flow), construct a framed
+    // transcript decoder and feed TRANS_PART payloads to it as they
+    // arrive. The chunk-atomic accumulator does NOT retain transcript
+    // bytes, so peak memory is bounded by one frame's plaintext +
+    // accumulating rows array (no whole-blob ciphertext / decompressed
+    // JSON / parsed-rows multi-buffer peak).
+    let transcriptStreamConsumer = null;
+    let framedDecoder = null;
+    let streamingImporter = null;       // populated only when wire+at-rest streaming is engaged
+    let streamingImporterDb = null;
+    let transcriptKey = null;
+    if (rootPrivateKey instanceof Uint8Array && rootPrivateKey.byteLength > 0) {
+      transcriptKey = await deriveTranscriptKey(rootPrivateKey);
+      if (userId) {
+        // End-to-end streaming: each decoded wire frame goes straight
+        // into a per-frame at-rest IDB write (and into the in-memory
+        // cache via beginTranscriptCacheStream). The decoder's rows
+        // accumulator is replaced by the importer's appendFrame
+        // callback, so no whole-rows array materialises on import.
+        streamingImporterDb = await openTranscriptStore(userId);
+        streamingImporter = createStreamingTranscriptImporter({
+          db: streamingImporterDb,
+          key: transcriptKey,
+          userId,
+        });
+        framedDecoder = createFramedTranscriptStreamDecoder(transcriptKey, {
+          onFrameRows: (rows) => streamingImporter.appendFrame(rows),
+        });
+      } else {
+        // rootPrivateKey only — fall back to slice-9 behaviour
+        // (decoder accumulates rows; caller does the at-rest write).
+        framedDecoder = createFramedTranscriptStreamDecoder(transcriptKey);
+      }
+      transcriptStreamConsumer = (bytes) => framedDecoder.feed(bytes);
+    }
+    const acc = createParseAccumulator({ transcriptStreamConsumer });
     const expectedPlaintextHashes = Array.isArray(archive.chunkPlaintextHashes)
       ? archive.chunkPlaintextHashes.map((h) => base64ToBytes(h))
       : null;
@@ -509,6 +551,40 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
     }
     const expectedArchiveSha256 = base64ToBytes(archive.archiveSha256);
     parsed = await finalizeAccumulator(acc, expectedArchiveSha256);
+    // When a streaming consumer was installed, finalize the framed
+    // decoder to obtain the rows. parsed.transcriptBlob is null in
+    // this mode; we expose `transcriptRows` instead so the caller
+    // can hand them to the at-rest re-encryption path without ever
+    // holding a whole-blob ciphertext buffer.
+    if (framedDecoder) {
+      try {
+        const finishResult = await framedDecoder.finish();
+        if (streamingImporter) {
+          // Streaming-importer mode: appendFrame already wrote every
+          // frame to IDB and seeded the cache. finish() returned an
+          // empty array (or undefined) because the decoder's onFrameRows
+          // callback dispatched rows directly; commit atomically swaps
+          // the at-rest visibility and finalises the cache.
+          await streamingImporter.commit();
+          parsed.transcriptBlob = null;
+          parsed.transcriptRows = null;
+          parsed.transcriptPersistedAtRest = true;
+        } else {
+          // Slice-9 path: decoder accumulated rows, caller writes them
+          // to at-rest via importAndReprotectTranscriptRows.
+          parsed.transcriptRows = finishResult;
+        }
+      } catch (err) {
+        if (streamingImporter) {
+          try { await streamingImporter.abort(); } catch { /* best-effort */ }
+        }
+        throw err;
+      } finally {
+        if (streamingImporterDb) {
+          try { streamingImporterDb.close(); } catch { /* ignore */ }
+        }
+      }
+    }
   } else {
     // Legacy monolithic-archive path (descriptor format unset or
     // explicitly 'monolithic-v3'). Removed in the release after

@@ -208,10 +208,22 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
               archive: bundle.archive,
               sessionPrivateKey: requestState.sessionPrivateKey,
               baseUrl: importBaseUrl,
+              // Hand the unlocked root private key + userId in so the
+              // chunked archive consumer can stream wire frames
+              // straight into the per-user transcriptVault at-rest IDB
+              // (no whole-rows array materialises on import).
+              rootPrivateKey: bundle.rootPrivateKey,
+              userId: bundle.userId,
             });
             bundle.historySnapshot = fetched.historySnapshot;
             bundle.guildMetadataKeySnapshot = fetched.guildMetadataKeySnapshot;
             bundle.transcriptBlob = fetched.transcriptBlob;
+            if (Array.isArray(fetched.transcriptRows)) {
+              bundle.transcriptRows = fetched.transcriptRows;
+            }
+            if (fetched.transcriptPersistedAtRest) {
+              bundle.transcriptPersistedAtRest = true;
+            }
           } catch (err) {
             console.error('[LinkDevice] chunked archive download failed', err);
             throw err;
