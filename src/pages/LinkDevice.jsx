@@ -234,7 +234,11 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         if (cancelled) return;
         // Network-level errors (fetch rejected) trigger connection-loss banner.
         // Keep the same interval and retry.
-        if (err instanceof TypeError || (err.name && err.name === 'AbortError')) {
+        const rawMessage = err?.message || '';
+        const isRetryableNetworkError = err instanceof TypeError
+          || (err.name && err.name === 'AbortError')
+          || rawMessage.includes('Could not reach ');
+        if (isRetryableNetworkError) {
           setConnectionLost(true);
           scheduleNext();
           return;

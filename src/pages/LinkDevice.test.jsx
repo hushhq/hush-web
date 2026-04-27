@@ -318,6 +318,39 @@ describe('LinkDevice', () => {
     });
   });
 
+  it('keeps polling when the API layer wraps a poll network failure', async () => {
+    mockCreateDeviceIdentity.mockResolvedValue({
+      publicKeyBase64: 'device-public-key',
+    });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-1',
+      secret: 'secret-1',
+      code: 'ABCD1234',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult
+      .mockRejectedValueOnce(
+        new Error('consume device link result failed. Could not reach https://app.gethush.live/api/auth/link-result.'),
+      )
+      .mockResolvedValue({ status: 'pending' });
+
+    renderLinkDevice('/link-device?mode=new');
+
+    expect(await screen.findByAltText(/device link qr code/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/connection lost\. retrying/i)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(mockConsumeDeviceLinkResult).toHaveBeenCalledTimes(2);
+    }, { timeout: 3000 });
+  });
+
   it('shows friendly error when ApproveLinkView resolveRequest fails with expired/claimed message', async () => {
     const user = userEvent.setup();
     authState.current = {
