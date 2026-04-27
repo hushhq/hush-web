@@ -34,7 +34,8 @@ import {
   encryptRelayPayload,
   base64ToBytes,
 } from '../lib/deviceLinking';
-import { downloadArchiveSession, uploadArchiveSession } from '../lib/linkArchiveSession';
+import { downloadArchiveSession, uploadArchiveSession, resumeUploadArchiveSession } from '../lib/linkArchiveSession';
+import { sweepStaleExports, findResumableExport, deleteExport } from '../lib/linkArchiveExportStore';
 import { deleteArchive } from '../lib/linkArchiveTransport';
 
 const POLL_INITIAL_MS = 2000;
@@ -365,6 +366,39 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
     return () => clearInterval(timer);
   }, []);
 
+  // Hygiene: sweep abandoned upload-export records on mount so their
+  // ciphertext bytes do not accumulate indefinitely in IDB. Records
+  // whose hardDeadlineAt has passed (matches the server's 7-day
+  // deadline) and records already in a terminal status are removed.
+  // Best-effort: failures here never block the link flow.
+  useEffect(() => {
+    sweepStaleExports().catch((err) => {
+      console.warn('[LinkDevice] sweepStaleExports failed', err);
+    });
+  }, []);
+
+  // Resumable-export detection. Looks for an in-progress export
+  // whose baseUrl matches the resolved claim's target instance.
+  // Selection rule when multiple records exist: most recent
+  // `createdAt` for that baseUrl wins (see `findResumableExport`).
+  // Gates on vault unlocked + claim resolved so a locked-vault user
+  // never even sees the resume offer (we cannot unwrap the bearer
+  // without rootPrivateKey).
+  const [resumableExport, setResumableExport] = useState(null);
+  const [isResuming, setIsResuming] = useState(false);
+  useEffect(() => {
+    if (!claim || !hasUnlockedIdentity) { setResumableExport(null); return; }
+    const baseUrlForApi = claim.instanceUrl || window.location.origin;
+    let cancelled = false;
+    findResumableExport(baseUrlForApi).then((rec) => {
+      if (!cancelled) setResumableExport(rec ?? null);
+    }).catch((err) => {
+      console.warn('[LinkDevice] findResumableExport failed', err);
+      if (!cancelled) setResumableExport(null);
+    });
+    return () => { cancelled = true; };
+  }, [claim, hasUnlockedIdentity]);
+
   const resolveRequest = useCallback(async (body) => {
     if (!token) return;
     setError('');
@@ -513,6 +547,11 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           historySnapshot,
           guildMetadataKeySnapshot,
           transcriptBlob,
+          // Pass the unlocked vault root key so the upload session can
+          // persist a durable export record (vault-key-wrapped) for
+          // resume across reload / browser restart. See
+          // lib/linkArchiveExportStore.js.
+          rootPrivateKey: identityKeyRef.current.privateKey,
         });
         console.info('[LinkDevice] archive uploaded', {
           archiveId: archiveDescriptor.id,
@@ -597,6 +636,97 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       setIsApproving(false);
     }
   }, [claim, identityKeyRef, token, user?.displayName, user?.id, user?.username]);
+
+  // Resume an in-flight export. Skips the snapshot-rebuild + upload
+  // path entirely; the persisted record already contains the
+  // ciphertexts the server is missing. Retransmits gaps and finishes
+  // the link with the same encodeTransferBundle / relay / verify
+  // path the fresh approve uses.
+  const handleResume = useCallback(async () => {
+    if (!claim || !token || !user?.id || !identityKeyRef.current?.privateKey || !identityKeyRef.current?.publicKey) {
+      return;
+    }
+    if (!resumableExport) return;
+    setError('');
+    setStatus('Resuming previous upload…');
+    setIsResuming(true);
+    try {
+      const baseUrlForApi = claim.instanceUrl || window.location.origin;
+      const archiveDescriptor = await resumeUploadArchiveSession({
+        token,
+        baseUrl: baseUrlForApi,
+        rootPrivateKey: identityKeyRef.current.privateKey,
+        exportRecord: resumableExport,
+      });
+      const archivePayload = {
+        id: archiveDescriptor.id,
+        downloadToken: archiveDescriptor.downloadToken,
+        totalChunks: archiveDescriptor.totalChunks,
+        totalBytes: archiveDescriptor.totalBytes,
+        chunkSize: archiveDescriptor.chunkSize,
+        manifestHash: archiveDescriptor.manifestHash,
+        archiveSha256: archiveDescriptor.archiveSha256,
+        format: archiveDescriptor.format,
+        chunkPlaintextHashes: archiveDescriptor.chunkPlaintextHashes,
+        ephPub: archiveDescriptor.ephPub,
+        nonceBase: archiveDescriptor.nonceBase,
+        transcriptBlobOmitted: archiveDescriptor.transcriptBlobOmitted,
+      };
+      const transferBundle = await encodeTransferBundle({
+        userId: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        instanceUrl: claim.instanceUrl || window.location.origin,
+        rootPrivateKey: identityKeyRef.current.privateKey,
+        rootPublicKey: identityKeyRef.current.publicKey,
+        archive: archivePayload,
+      });
+      const certificate = await certifyDevice(
+        base64ToBytes(claim.devicePublicKey),
+        identityKeyRef.current.privateKey,
+      );
+      const relayEnvelope = await encryptRelayPayload(transferBundle, claim.sessionPublicKey);
+      try {
+        await verifyDeviceLinkRequest(token, {
+          claimToken: claim.claimToken,
+          certificate: bytesToBase64(certificate),
+          signingDeviceId: getDeviceId(),
+          ...relayEnvelope,
+        });
+      } catch (err) {
+        try {
+          await deleteArchive(archiveDescriptor.id, {
+            uploadToken: archiveDescriptor.uploadToken,
+          }, baseUrlForApi);
+        } catch {
+          // ignore
+        }
+        throw err;
+      }
+      setResumableExport(null);
+      setStatus('Device linked. Return to the new device to finish setup.');
+    } catch (err) {
+      const rawMessage = err.message || '';
+      setError(rawMessage || 'Failed to resume the previous upload.');
+    } finally {
+      setIsResuming(false);
+    }
+  }, [claim, identityKeyRef, resumableExport, token, user?.displayName, user?.id, user?.username]);
+
+  // Discard a resumable export so the user can start a fresh upload.
+  // Removes the local persisted ciphertexts + wrapped bearer; the
+  // server-side archive will be reaped by either the slice-6
+  // supersede grace at the next /link-archive-init or the supervised
+  // purger at expires_at.
+  const handleDiscardResume = useCallback(async () => {
+    if (!resumableExport) return;
+    try {
+      await deleteExport(resumableExport.archiveId);
+    } catch (err) {
+      console.warn('[LinkDevice] deleteExport on discard failed', err);
+    }
+    setResumableExport(null);
+  }, [resumableExport]);
 
   if (loading) {
     return (
@@ -715,11 +845,36 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       {status && <div className="ld-status">{status}</div>}
       {error && <div className="ld-error">{error}</div>}
 
+      {claim && resumableExport && !isApproving && !isResuming && (
+        <div className="ld-status" data-testid="ld-resume-banner">
+          <p>
+            A previous device-link upload was interrupted. Resume it
+            to finish the same archive, or discard it to start a
+            fresh upload.
+          </p>
+          <div className="ld-actions">
+            <Button variant="primary" onClick={handleResume}>
+              Resume upload
+            </Button>
+            <Button variant="secondary" onClick={handleDiscardResume}>
+              Discard and start fresh
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="ld-actions">
-        {claim && (
-          <Button variant="primary" onClick={handleApprove} disabled={isApproving}>
+        {claim && !resumableExport && (
+          <Button
+            variant="primary"
+            onClick={handleApprove}
+            disabled={isApproving || isResuming}
+          >
             {isApproving ? 'Approving…' : 'Approve link'}
           </Button>
+        )}
+        {claim && resumableExport && isResuming && (
+          <Button variant="primary" disabled>Resuming…</Button>
         )}
         <Button variant="secondary" onClick={() => navigate('/')}>
           Close

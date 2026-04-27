@@ -52,6 +52,16 @@ import {
   createParseAccumulator,
   finalizeAccumulator,
 } from './linkArchiveChunkAtomic';
+import {
+  initExport,
+  markChunkConfirmed,
+  setExportProgress,
+  markExportTerminal,
+  deleteExport,
+  unwrapUploadToken,
+  unwrapDownloadToken,
+  listMissingChunks,
+} from './linkArchiveExportStore';
 
 const UPLOAD_CONCURRENCY = 4;
 const DOWNLOAD_CONCURRENCY = 4;
@@ -113,6 +123,7 @@ export async function uploadArchiveSession({
   historySnapshot,
   guildMetadataKeySnapshot,
   transcriptBlob,
+  rootPrivateKey = null,
 }) {
   // 1. Build the chunk-atomic archive. Each chunk is independently
   // AEAD-decryptable, gunzippable, and parseable; the NEW device can
@@ -156,6 +167,39 @@ export async function uploadArchiveSession({
   const backendKind = init.backendKind || 'postgres_bytea';
   const totalChunks = ciphertexts.length;
 
+  // Persist a durable export record so a tab close / reload can resume
+  // the same archive instead of allocating a fresh one. Failure to
+  // persist is best-effort: the upload still proceeds in volatile
+  // memory; we just lose resume on this attempt. (Typical failure mode
+  // is "no rootPrivateKey was passed" — an opt-in: callers that want
+  // resume must pass the unlocked vault root key.)
+  let exportPersisted = false;
+  if (rootPrivateKey instanceof Uint8Array && rootPrivateKey.byteLength > 0) {
+    try {
+      await initExport({
+        rootPrivateKey,
+        archiveId: init.archiveId,
+        uploadToken: init.uploadToken,
+        downloadToken: init.downloadToken,
+        baseUrl,
+        backendKind,
+        totalChunks,
+        totalBytes,
+        chunkSize: LINK_ARCHIVE_CHUNK_SIZE,
+        manifestHash,
+        archiveSha256,
+        chunkSha256s: chunkHashes,
+        ciphertextChunks: ciphertexts,
+        ephPub: ephPublicKeyBytes,
+        nonceBase,
+        chunkPlaintextHashes: built.chunkPlaintextHashes,
+      });
+      exportPersisted = true;
+    } catch (err) {
+      console.warn('[linkArchive] export persistence init failed; resume disabled for this attempt', err);
+    }
+  }
+
   // putViaWindow uploads one ciphertext via the URL provided by the
   // server's window response. Branches on backendKind: postgres_bytea
   // talks to the in-API endpoint with X-Upload-Token + X-Chunk-Sha256
@@ -168,6 +212,10 @@ export async function uploadArchiveSession({
       await uploadChunkViaPresign(entry, ciphertexts[idx], chunkHashes[idx]);
     }
     await confirmChunk(init.archiveId, init.uploadToken, idx, chunkHashes[idx], ciphertexts[idx].byteLength, token, baseUrl);
+    if (exportPersisted) {
+      try { await markChunkConfirmed(init.archiveId, idx); }
+      catch (err) { console.warn('[linkArchive] markChunkConfirmed failed', err); }
+    }
   }
 
   try {
@@ -208,8 +256,17 @@ export async function uploadArchiveSession({
       }
     }
   } catch (err) {
+    if (exportPersisted) {
+      try { await markExportTerminal(init.archiveId, err?.message ?? String(err)); }
+      catch (cleanupErr) { console.warn('[linkArchive] markExportTerminal failed', cleanupErr); }
+    }
     // Caller is expected to fire deleteArchive on failure; surface the error.
     throw err;
+  }
+
+  if (exportPersisted) {
+    try { await deleteExport(init.archiveId); }
+    catch (err) { console.warn('[linkArchive] deleteExport on success failed', err); }
   }
 
   return {
@@ -229,6 +286,130 @@ export async function uploadArchiveSession({
     chunkPlaintextHashes: built.chunkPlaintextHashes.map((h) => bytesToBase64(h)),
     format: CHUNK_ATOMIC_FORMAT,
     transcriptBlobOmitted,
+  };
+}
+
+/**
+ * Resume a previously-interrupted OLD-device upload. The caller hands
+ * over the persisted export record (typically from
+ * `findResumableExport`) plus the current JWT and the unlocked vault
+ * root key. Behaviour:
+ *
+ *   1. Unwrap the upload bearer using the root-key-derived wrap key.
+ *   2. Probe server progress by calling /link-archive-finalize. The
+ *      server returns either { status: 'ok' } (everything already
+ *      uploaded — finalize succeeded), or { status: 'missing', missing }
+ *      with the indices the server has not yet seen.
+ *   3. For every missing index, mint a fresh upload window (server
+ *      caps each window at linkArchiveWindowSize), retransmit the
+ *      ciphertext from persisted state, and confirm. The server
+ *      rejects 4xx if the archive has been GC'd or the token is
+ *      invalid; on rejection we mark terminal + delete + throw.
+ *   4. Re-finalize. Both retransmit and finalize are idempotent.
+ *   5. Delete the export record.
+ *   6. Return the same descriptor shape as `uploadArchiveSession` so
+ *      the caller can carry on with /link-verify.
+ *
+ * @param {{
+ *   token: string,
+ *   baseUrl: string,
+ *   rootPrivateKey: Uint8Array,
+ *   exportRecord: object,
+ * }} args
+ * @returns {Promise<object>} archive descriptor (same shape as uploadArchiveSession)
+ */
+export async function resumeUploadArchiveSession({ token, baseUrl, rootPrivateKey, exportRecord }) {
+  if (!exportRecord || !exportRecord.archiveId) {
+    throw new Error('[linkArchive] resumeUploadArchiveSession: invalid exportRecord');
+  }
+  const archiveId = exportRecord.archiveId;
+  const uploadToken = await unwrapUploadToken(rootPrivateKey, exportRecord.uploadTokenWrapped);
+  const downloadToken = exportRecord.downloadTokenWrapped
+    ? await unwrapDownloadToken(rootPrivateKey, exportRecord.downloadTokenWrapped)
+    : null;
+  const backendKind = exportRecord.backendKind;
+  const totalChunks = exportRecord.totalChunks;
+  const ciphertextChunks = exportRecord.ciphertextChunks.map((c) => (c instanceof Uint8Array ? c : new Uint8Array(c)));
+  const chunkSha256s = exportRecord.chunkSha256s.map((c) => (c instanceof Uint8Array ? c : new Uint8Array(c)));
+
+  async function putAt(entry, idx) {
+    if (backendKind === 'postgres_bytea') {
+      await uploadChunk(archiveId, uploadToken, idx, ciphertextChunks[idx], chunkSha256s[idx], baseUrl);
+    } else {
+      await uploadChunkViaPresign(entry, ciphertextChunks[idx], chunkSha256s[idx]);
+    }
+    await confirmChunk(archiveId, uploadToken, idx, chunkSha256s[idx], ciphertextChunks[idx].byteLength, token, baseUrl);
+    try { await markChunkConfirmed(archiveId, idx); } catch { /* tolerate */ }
+  }
+
+  // Probe the server to discover which chunks the OLD device thought
+  // it had uploaded but the server never saw, plus any chunks that
+  // were uploaded after the local checkpoint stopped getting refreshed.
+  let result;
+  try {
+    result = await finalizeArchive(archiveId, uploadToken, token, baseUrl);
+  } catch (err) {
+    // Treat 404 / 410 (archive gone) as terminal — the local export is
+    // useless without a live server-side counterpart.
+    if (err?.status === 404 || err?.status === 410) {
+      await markExportTerminal(archiveId, `server archive gone (${err.status})`);
+      await deleteExport(archiveId);
+    }
+    throw err;
+  }
+
+  if (result.status === 'missing') {
+    // Server is authoritative: only the indices it reports as missing
+    // are retransmitted. Already-confirmed chunks are not re-uploaded.
+    // Update the local progress bitmap to mirror server truth so a
+    // second crash mid-resume does not re-process the chunks the
+    // server already accepted before this resume started.
+    const missingSet = new Set(result.missing);
+    let bitmap = new Uint8Array(Math.ceil(totalChunks / 8));
+    for (let i = 0; i < totalChunks; i++) {
+      if (!missingSet.has(i)) {
+        bitmap[i >>> 3] |= 1 << (i & 7);
+      }
+    }
+    await setExportProgress(archiveId, bitmap);
+
+    const missing = result.missing.slice();
+    let cursor = 0;
+    while (cursor < missing.length) {
+      const slice = missing.slice(cursor, cursor + 8); // matches server window cap
+      const from = slice[0];
+      const to = slice[slice.length - 1] + 1;
+      const win = await requestUploadWindow(archiveId, uploadToken, from, to, token, baseUrl);
+      const tasks = win.urls
+        .filter((entry) => slice.includes(entry.idx))
+        .map((entry) => async () => { await putAt(entry, entry.idx); });
+      await runWithConcurrency(tasks, UPLOAD_CONCURRENCY);
+      cursor += slice.length;
+    }
+    result = await finalizeArchive(archiveId, uploadToken, token, baseUrl);
+    if (result.status !== 'ok') {
+      const msg = `[linkArchive] resume finalize failed (${result.status})`;
+      await markExportTerminal(archiveId, msg);
+      throw new Error(msg);
+    }
+  }
+
+  await deleteExport(archiveId);
+
+  return {
+    id: archiveId,
+    downloadToken,
+    uploadToken,
+    totalChunks,
+    totalBytes: exportRecord.totalBytes,
+    chunkSize: exportRecord.chunkSize,
+    manifestHash: bytesToBase64(exportRecord.manifestHash),
+    archiveSha256: bytesToBase64(exportRecord.archiveSha256),
+    ephPub: bytesToBase64(exportRecord.ephPub),
+    nonceBase: bytesToBase64(exportRecord.nonceBase),
+    chunkPlaintextHashes: exportRecord.chunkPlaintextHashes.map((h) => bytesToBase64(h)),
+    format: CHUNK_ATOMIC_FORMAT,
+    transcriptBlobOmitted: false,
   };
 }
 

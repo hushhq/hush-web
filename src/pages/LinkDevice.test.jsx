@@ -33,6 +33,10 @@ const {
   mockUploadArchiveSession,
   mockDownloadArchiveSession,
   mockDeleteArchive,
+  mockResumeUploadArchiveSession,
+  mockSweepStaleExports,
+  mockFindResumableExport,
+  mockDeleteExport,
 } = vi.hoisted(() => ({
   authState: { current: null },
   mockQrToDataUrl: vi.fn(),
@@ -62,6 +66,10 @@ const {
   mockUploadArchiveSession: vi.fn(),
   mockDownloadArchiveSession: vi.fn(),
   mockDeleteArchive: vi.fn(),
+  mockResumeUploadArchiveSession: vi.fn(),
+  mockSweepStaleExports: vi.fn(),
+  mockFindResumableExport: vi.fn(),
+  mockDeleteExport: vi.fn(),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -134,10 +142,17 @@ vi.mock('../lib/deviceLinking', () => ({
 vi.mock('../lib/linkArchiveSession', () => ({
   uploadArchiveSession: (...args) => mockUploadArchiveSession(...args),
   downloadArchiveSession: (...args) => mockDownloadArchiveSession(...args),
+  resumeUploadArchiveSession: (...args) => mockResumeUploadArchiveSession(...args),
 }));
 
 vi.mock('../lib/linkArchiveTransport', () => ({
   deleteArchive: (...args) => mockDeleteArchive(...args),
+}));
+
+vi.mock('../lib/linkArchiveExportStore', () => ({
+  sweepStaleExports: (...args) => mockSweepStaleExports(...args),
+  findResumableExport: (...args) => mockFindResumableExport(...args),
+  deleteExport: (...args) => mockDeleteExport(...args),
 }));
 
 vi.mock('qrcode', () => ({
@@ -207,6 +222,24 @@ describe('LinkDevice', () => {
       transcriptBlob: null,
     });
     mockDeleteArchive.mockResolvedValue(undefined);
+    mockResumeUploadArchiveSession.mockResolvedValue({
+      id: 'arch-resume',
+      uploadToken: 'utok-resume',
+      downloadToken: 'dtok-resume',
+      totalChunks: 1,
+      totalBytes: 16,
+      chunkSize: 4 * 1024 * 1024,
+      manifestHash: 'bWFuaWZlc3Q=',
+      archiveSha256: 'YXJjaGl2ZQ==',
+      format: 'chunk-atomic-v1',
+      chunkPlaintextHashes: ['Y2h1bmstaGFzaA=='],
+      ephPub: 'ZXBocHViYnl0ZXM=',
+      nonceBase: 'bm9uY2ViYXNl',
+      transcriptBlobOmitted: false,
+    });
+    mockSweepStaleExports.mockResolvedValue(0);
+    mockFindResumableExport.mockResolvedValue(null);
+    mockDeleteExport.mockResolvedValue(undefined);
     mockDecryptRelayPayload.mockResolvedValue(new Uint8Array([1, 2, 3]));
     mockDecodeTransferBundle.mockResolvedValue({
       version: 3,
@@ -952,5 +985,183 @@ describe('LinkDevice', () => {
     expect(await screen.findByRole('button', { name: /scan qr code with camera/i })).toBeInTheDocument();
     // Manual entry input still present.
     expect(screen.getByLabelText(/link code/i)).toBeInTheDocument();
+  });
+
+  // ── Resume / discard UX (durable OLD-device upload resume) ────────────
+  describe('resumable export UX', () => {
+    function unlockedAuth() {
+      return {
+        completeDeviceLink: vi.fn(),
+        loading: false,
+        isAuthenticated: true,
+        hasSession: true,
+        hasVault: true,
+        isVaultUnlocked: true,
+        needsUnlock: false,
+        vaultState: 'unlocked',
+        token: 'jwt-token',
+        user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+        identityKeyRef: {
+          current: {
+            privateKey: new Uint8Array([1, 2, 3]),
+            publicKey: new Uint8Array([4, 5, 6]),
+          },
+        },
+      };
+    }
+    function lockedAuth() {
+      return {
+        completeDeviceLink: vi.fn(),
+        loading: false,
+        isAuthenticated: true,
+        hasSession: true,
+        hasVault: true,
+        isVaultUnlocked: false,
+        needsUnlock: true,
+        vaultState: 'locked',
+        token: null,
+        user: null,
+        identityKeyRef: { current: null },
+      };
+    }
+    function setupClaimResolution() {
+      mockResolveDeviceLinkRequest.mockResolvedValue({
+        claimToken: 'claim-1',
+        deviceId: 'device-2',
+        devicePublicKey: 'device-public-key',
+        sessionPublicKey: 'session-public-key',
+        instanceUrl: 'https://app.gethush.live',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+      mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+      mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+      mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+      mockBytesToBase64.mockReturnValue('certificate-base64');
+      mockEncryptRelayPayload.mockResolvedValue({
+        relayCiphertext: 'ciphertext',
+        relayIv: 'relay-iv',
+        relayPublicKey: 'relay-public-key',
+      });
+      mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    }
+
+    const sampleResumable = {
+      archiveId: 'arch-prior',
+      baseUrl: 'https://app.gethush.live',
+      backendKind: 's3',
+      totalChunks: 1,
+      status: 'in_progress',
+    };
+
+    it('detects a resumable export and shows the resume/discard banner', async () => {
+      authState.current = unlockedAuth();
+      setupClaimResolution();
+      mockFindResumableExport.mockResolvedValue(sampleResumable);
+
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+
+      // Resume banner appears with both choices, no auto-resume.
+      expect(await screen.findByTestId('ld-resume-banner')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /resume upload/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /discard and start fresh/i })).toBeInTheDocument();
+      // Approve-link button is hidden until the user makes a choice.
+      expect(screen.queryByRole('button', { name: /approve link/i })).not.toBeInTheDocument();
+      // Resume must NOT have been called automatically.
+      expect(mockResumeUploadArchiveSession).not.toHaveBeenCalled();
+    });
+
+    it('resume button calls resumeUploadArchiveSession and continues the link flow', async () => {
+      authState.current = unlockedAuth();
+      setupClaimResolution();
+      mockFindResumableExport.mockResolvedValue(sampleResumable);
+
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+      await screen.findByTestId('ld-resume-banner');
+
+      await user.click(screen.getByRole('button', { name: /resume upload/i }));
+
+      await waitFor(() => {
+        expect(mockResumeUploadArchiveSession).toHaveBeenCalledTimes(1);
+      });
+      const args = mockResumeUploadArchiveSession.mock.calls[0][0];
+      expect(args.exportRecord).toEqual(sampleResumable);
+      expect(args.token).toBe('jwt-token');
+      expect(args.baseUrl).toBe('https://app.gethush.live');
+      // Fresh upload path is NOT taken when resume is chosen.
+      expect(mockUploadArchiveSession).not.toHaveBeenCalled();
+      // Link verification happens with the resumed descriptor.
+      await waitFor(() => {
+        expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith('jwt-token', expect.objectContaining({
+          claimToken: 'claim-1',
+        }));
+      });
+    });
+
+    it('discard button removes the local export record and reveals the fresh-upload approve button', async () => {
+      authState.current = unlockedAuth();
+      setupClaimResolution();
+      mockFindResumableExport.mockResolvedValue(sampleResumable);
+
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+      await screen.findByTestId('ld-resume-banner');
+
+      await user.click(screen.getByRole('button', { name: /discard and start fresh/i }));
+
+      await waitFor(() => {
+        expect(mockDeleteExport).toHaveBeenCalledWith('arch-prior');
+      });
+      // Banner gone; normal approve-link button reappears.
+      await waitFor(() => {
+        expect(screen.queryByTestId('ld-resume-banner')).not.toBeInTheDocument();
+      });
+      expect(screen.getByRole('button', { name: /approve link/i })).toBeInTheDocument();
+      // Resume mechanic was NOT triggered.
+      expect(mockResumeUploadArchiveSession).not.toHaveBeenCalled();
+    });
+
+    it('locked vault: resume detection is skipped and the unlock prompt is shown', async () => {
+      authState.current = lockedAuth();
+      mockFindResumableExport.mockResolvedValue(sampleResumable);
+
+      renderLinkDevice('/link-device');
+
+      // Locked-vault view should appear, no resume detection should fire.
+      expect(await screen.findByRole('button', { name: /unlock to approve/i })).toBeInTheDocument();
+      expect(mockFindResumableExport).not.toHaveBeenCalled();
+      expect(mockResumeUploadArchiveSession).not.toHaveBeenCalled();
+    });
+
+    it('preserves the fresh-upload flow when no resumable export exists', async () => {
+      authState.current = unlockedAuth();
+      setupClaimResolution();
+      mockOpenStore.mockResolvedValue({ close: vi.fn() });
+      mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+      mockFindResumableExport.mockResolvedValue(null);
+
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+
+      // Banner not shown; normal approve button is.
+      expect(await screen.findByRole('button', { name: /approve link/i })).toBeInTheDocument();
+      expect(screen.queryByTestId('ld-resume-banner')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+      await waitFor(() => {
+        expect(mockUploadArchiveSession).toHaveBeenCalledTimes(1);
+      });
+      expect(mockResumeUploadArchiveSession).not.toHaveBeenCalled();
+    });
   });
 });
