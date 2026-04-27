@@ -12,11 +12,22 @@
  *
  *     [type:u8][len:u32 LE][payload:len]
  *
- *   type 0x01  META          payload = JSON.stringify({ transcriptBlobBytes: int })
- *   type 0x02  HISTORY       payload = JSON.stringify(historySnapshot)
- *   type 0x03  METADATA_KEYS payload = JSON.stringify(guildMetadataKeySnapshot)
+ *   type 0x01  META          payload = JSON.stringify({ transcriptBlobBytes: int,
+ *                                                          historyBytes?: int,
+ *                                                          metadataBytes?: int })
+ *   type 0x02  HISTORY       payload = JSON.stringify(historySnapshot)             — used when the snapshot fits in one record
+ *   type 0x03  METADATA_KEYS payload = JSON.stringify(guildMetadataKeySnapshot)    — used when the snapshot fits in one record
  *   type 0x04  TRANS_PART    payload = contiguous slice of transcriptBlob bytes
+ *   type 0x05  HIST_PART     payload = contiguous slice of JSON.stringify(historySnapshot) bytes — used when the snapshot needs subdivision
+ *   type 0x06  METADATA_PART payload = contiguous slice of JSON.stringify(guildMetadataKeySnapshot) bytes — used when the snapshot needs subdivision
  *   type 0xFF  END           payload = empty
+ *
+ * The OLD device picks single-record vs subdivided emission per
+ * snapshot independently. When subdivision is used, META declares the
+ * total byte length of the JSON-encoded snapshot (`historyBytes` /
+ * `metadataBytes`); the NEW device concatenates all *_PART records in
+ * arrival order and JSON.parses the result. Receivers must accept
+ * either form for forward compatibility.
  *
  * OLD device packs records left-to-right; a new chunk is started when
  * the next record would exceed `chunkSize`. Records cannot straddle a
@@ -39,6 +50,8 @@ const RECORD_META = 0x01;
 const RECORD_HISTORY = 0x02;
 const RECORD_METADATA_KEYS = 0x03;
 const RECORD_TRANS_PART = 0x04;
+const RECORD_HIST_PART = 0x05;
+const RECORD_METADATA_PART = 0x06;
 const RECORD_END = 0xff;
 
 const RECORD_HEADER_LEN = 5; // u8 type + u32 len
@@ -102,34 +115,41 @@ export async function buildChunkAtomicArchive({
 
   const encoder = new TextEncoder();
   const transcriptBytes = transcriptBlob ?? new Uint8Array(0);
+  const partMax = chunkSize - RECORD_HEADER_LEN;
 
-  const metaPayload = encoder.encode(JSON.stringify({
-    transcriptBlobBytes: transcriptBytes.byteLength,
-  }));
   const historyPayload = encoder.encode(JSON.stringify(historySnapshot ?? null));
   const metadataPayload = encoder.encode(JSON.stringify(guildMetadataKeySnapshot ?? null));
+
+  const historyFitsInOne = historyPayload.byteLength + RECORD_HEADER_LEN <= chunkSize;
+  const metadataFitsInOne = metadataPayload.byteLength + RECORD_HEADER_LEN <= chunkSize;
+
+  // META declares total JSON-encoded byte counts only when the
+  // corresponding snapshot needed subdivision; legacy single-record
+  // emissions omit those fields so older parsers stay compatible.
+  const metaShape = { transcriptBlobBytes: transcriptBytes.byteLength };
+  if (!historyFitsInOne) metaShape.historyBytes = historyPayload.byteLength;
+  if (!metadataFitsInOne) metaShape.metadataBytes = metadataPayload.byteLength;
+  const metaPayload = encoder.encode(JSON.stringify(metaShape));
 
   const records = [];
   records.push({ type: RECORD_META, payload: metaPayload });
 
-  if (historyPayload.byteLength + RECORD_HEADER_LEN > chunkSize) {
-    throw new Error('[linkArchiveChunkAtomic] history snapshot exceeds chunk size; subdivide path not yet supported');
+  if (historyFitsInOne) {
+    records.push({ type: RECORD_HISTORY, payload: historyPayload });
+  } else {
+    appendPartRecords(records, RECORD_HIST_PART, historyPayload, partMax);
   }
-  records.push({ type: RECORD_HISTORY, payload: historyPayload });
 
-  if (metadataPayload.byteLength + RECORD_HEADER_LEN > chunkSize) {
-    throw new Error('[linkArchiveChunkAtomic] metadata snapshot exceeds chunk size; subdivide path not yet supported');
+  if (metadataFitsInOne) {
+    records.push({ type: RECORD_METADATA_KEYS, payload: metadataPayload });
+  } else {
+    appendPartRecords(records, RECORD_METADATA_PART, metadataPayload, partMax);
   }
-  records.push({ type: RECORD_METADATA_KEYS, payload: metadataPayload });
 
   // Subdivide transcriptBlob into TRANS_PART records. Each part fits
   // alone in a chunk so it can be packed together with other small
   // records or stand on its own.
-  const transPartMax = chunkSize - RECORD_HEADER_LEN;
-  for (let off = 0; off < transcriptBytes.byteLength; off += transPartMax) {
-    const end = Math.min(off + transPartMax, transcriptBytes.byteLength);
-    records.push({ type: RECORD_TRANS_PART, payload: transcriptBytes.subarray(off, end) });
-  }
+  appendPartRecords(records, RECORD_TRANS_PART, transcriptBytes, partMax);
   records.push({ type: RECORD_END, payload: new Uint8Array(0) });
 
   // Pack records into chunks. Greedy: open chunk, append records
@@ -172,6 +192,38 @@ export async function buildChunkAtomicArchive({
   };
 }
 
+// assembleJsonFromParts concatenates HIST_PART / METADATA_PART payloads
+// into a single byte buffer, verifies the total length against the
+// META-declared byte count, and JSON.parses the UTF-8 decoding.
+// `label` is included in error messages so the caller can tell history
+// from metadata.
+function assembleJsonFromParts(parts, declaredBytes, label) {
+  let total = 0;
+  for (const p of parts) total += p.byteLength;
+  if (total !== declaredBytes) {
+    throw new Error(`[linkArchiveChunkAtomic] ${label} byte mismatch: declared ${declaredBytes}, parts sum ${total}`);
+  }
+  if (declaredBytes === 0) return null;
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) {
+    buf.set(p, off);
+    off += p.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(buf));
+}
+
+// appendPartRecords subdivides `payload` into pieces no larger than
+// `partMax` bytes each and appends one record per piece using `type`
+// as the record header. Empty payloads yield zero records, which is
+// what the receiver expects (e.g. transcripts of length 0).
+function appendPartRecords(records, type, payload, partMax) {
+  for (let off = 0; off < payload.byteLength; off += partMax) {
+    const end = Math.min(off + partMax, payload.byteLength);
+    records.push({ type, payload: payload.subarray(off, end) });
+  }
+}
+
 function concatRecords(parts) {
   let total = 0;
   for (const p of parts) total += p.byteLength;
@@ -198,7 +250,11 @@ export function createParseAccumulator() {
     historySnapshot: null,
     guildMetadataKeySnapshot: null,
     transcriptParts: /** @type {Uint8Array[]} */ ([]),
+    historyParts: /** @type {Uint8Array[]} */ ([]),
+    metadataParts: /** @type {Uint8Array[]} */ ([]),
     transcriptByteLen: -1,
+    historyByteLen: -1,    // -1 = META did not declare; expect single HISTORY record
+    metadataByteLen: -1,   // -1 = META did not declare; expect single METADATA_KEYS record
     sawMeta: false,
     sawHistory: false,
     sawMetadata: false,
@@ -250,6 +306,18 @@ export async function consumeChunk(gzippedPlaintext, acc, expectedPlaintextSha25
           throw new Error('[linkArchiveChunkAtomic] META.transcriptBlobBytes invalid');
         }
         acc.transcriptByteLen = meta.transcriptBlobBytes;
+        if (meta.historyBytes != null) {
+          if (!Number.isInteger(meta.historyBytes) || meta.historyBytes < 0) {
+            throw new Error('[linkArchiveChunkAtomic] META.historyBytes invalid');
+          }
+          acc.historyByteLen = meta.historyBytes;
+        }
+        if (meta.metadataBytes != null) {
+          if (!Number.isInteger(meta.metadataBytes) || meta.metadataBytes < 0) {
+            throw new Error('[linkArchiveChunkAtomic] META.metadataBytes invalid');
+          }
+          acc.metadataByteLen = meta.metadataBytes;
+        }
         acc.sawMeta = true;
         break;
       }
@@ -269,6 +337,20 @@ export async function consumeChunk(gzippedPlaintext, acc, expectedPlaintextSha25
         // Copy the slice — the underlying chunk buffer goes out of
         // scope after this function returns.
         acc.transcriptParts.push(new Uint8Array(payload));
+        break;
+      }
+      case RECORD_HIST_PART: {
+        if (acc.sawHistory) {
+          throw new Error('[linkArchiveChunkAtomic] HIST_PART after HISTORY record');
+        }
+        acc.historyParts.push(new Uint8Array(payload));
+        break;
+      }
+      case RECORD_METADATA_PART: {
+        if (acc.sawMetadata) {
+          throw new Error('[linkArchiveChunkAtomic] METADATA_PART after METADATA_KEYS record');
+        }
+        acc.metadataParts.push(new Uint8Array(payload));
         break;
       }
       case RECORD_END: {
@@ -297,8 +379,30 @@ export async function consumeChunk(gzippedPlaintext, acc, expectedPlaintextSha25
 export async function finalizeAccumulator(acc, expectedArchiveSha256 = null) {
   if (!acc.sawEnd) throw new Error('[linkArchiveChunkAtomic] END record never seen');
   if (!acc.sawMeta) throw new Error('[linkArchiveChunkAtomic] META record never seen');
-  if (!acc.sawHistory) throw new Error('[linkArchiveChunkAtomic] HISTORY record never seen');
-  if (!acc.sawMetadata) throw new Error('[linkArchiveChunkAtomic] METADATA_KEYS record never seen');
+
+  // History: either single HISTORY record (legacy) or HIST_PART parts
+  // declared by META.historyBytes. Receivers accept both.
+  if (!acc.sawHistory) {
+    if (acc.historyByteLen < 0) {
+      throw new Error('[linkArchiveChunkAtomic] HISTORY record never seen and META.historyBytes not declared');
+    }
+    acc.historySnapshot = assembleJsonFromParts(
+      acc.historyParts, acc.historyByteLen, 'historySnapshot',
+    );
+  } else if (acc.historyParts.length > 0) {
+    throw new Error('[linkArchiveChunkAtomic] mixed HISTORY and HIST_PART records');
+  }
+
+  if (!acc.sawMetadata) {
+    if (acc.metadataByteLen < 0) {
+      throw new Error('[linkArchiveChunkAtomic] METADATA_KEYS record never seen and META.metadataBytes not declared');
+    }
+    acc.guildMetadataKeySnapshot = assembleJsonFromParts(
+      acc.metadataParts, acc.metadataByteLen, 'guildMetadataKeySnapshot',
+    );
+  } else if (acc.metadataParts.length > 0) {
+    throw new Error('[linkArchiveChunkAtomic] mixed METADATA_KEYS and METADATA_PART records');
+  }
 
   let transcriptBlob = null;
   if (acc.transcriptByteLen > 0) {
@@ -345,6 +449,8 @@ export const _internals = {
   RECORD_HISTORY,
   RECORD_METADATA_KEYS,
   RECORD_TRANS_PART,
+  RECORD_HIST_PART,
+  RECORD_METADATA_PART,
   RECORD_END,
   encodeRecord,
   readU32LE,

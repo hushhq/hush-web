@@ -120,4 +120,82 @@ describe('chunk-atomic archive — encode/decode round-trip', () => {
   it('publishes the canonical format identifier', () => {
     expect(CHUNK_ATOMIC_FORMAT).toBe('chunk-atomic-v1');
   });
+
+  it('subdivides a history snapshot that does not fit in a single chunk', async () => {
+    // Build a history snapshot whose JSON encoding clearly exceeds
+    // chunkSize - RECORD_HEADER_LEN, forcing the OLD device down the
+    // HIST_PART subdivision path.
+    const bigArray = new Array(2000).fill('xxxxxxxxxxxxxxxxxxxx');
+    const history = { version: 1, stores: { huge: bigArray } };
+    const metadata = { version: 1, keys: [] };
+
+    const built = await buildChunkAtomicArchive({
+      historySnapshot: history,
+      guildMetadataKeySnapshot: metadata,
+      transcriptBlob: null,
+      chunkSize: 1024,
+    });
+    expect(built.chunks.length).toBeGreaterThan(1);
+
+    const acc = createParseAccumulator();
+    for (let i = 0; i < built.chunks.length; i++) {
+      await consumeChunk(built.chunks[i], acc, built.chunkPlaintextHashes[i]);
+    }
+    const out = await finalizeAccumulator(acc, built.archiveSha256);
+    expect(out.historySnapshot).toEqual(history);
+    expect(out.guildMetadataKeySnapshot).toEqual(metadata);
+    expect(out.transcriptBlob).toBeNull();
+  });
+
+  it('subdivides a guildMetadataKeySnapshot that does not fit in a single chunk', async () => {
+    const history = { version: 1, stores: {} };
+    const keys = [];
+    for (let i = 0; i < 200; i++) {
+      keys.push({
+        guildId: `guild-${i}`,
+        keyBytes: Array.from({ length: 64 }, (_, j) => (i + j) & 0xff),
+      });
+    }
+    const metadata = { version: 1, keys };
+
+    const built = await buildChunkAtomicArchive({
+      historySnapshot: history,
+      guildMetadataKeySnapshot: metadata,
+      transcriptBlob: null,
+      chunkSize: 1024,
+    });
+    expect(built.chunks.length).toBeGreaterThan(1);
+
+    const acc = createParseAccumulator();
+    for (let i = 0; i < built.chunks.length; i++) {
+      await consumeChunk(built.chunks[i], acc, built.chunkPlaintextHashes[i]);
+    }
+    const out = await finalizeAccumulator(acc, built.archiveSha256);
+    expect(out.guildMetadataKeySnapshot).toEqual(metadata);
+  });
+
+  it('round-trips with both history and metadata subdivided plus a multi-chunk transcript', async () => {
+    const big = (n) => new Array(n).fill('y').join('');
+    const history = { version: 1, payload: big(8192) };
+    const metadata = { version: 1, payload: big(4096) };
+    const transcript = new Uint8Array(6000);
+    for (let i = 0; i < transcript.byteLength; i++) transcript[i] = i & 0xff;
+
+    const built = await buildChunkAtomicArchive({
+      historySnapshot: history,
+      guildMetadataKeySnapshot: metadata,
+      transcriptBlob: transcript,
+      chunkSize: 1024,
+    });
+    expect(built.chunks.length).toBeGreaterThan(2);
+
+    const acc = createParseAccumulator();
+    for (let i = 0; i < built.chunks.length; i++) {
+      await consumeChunk(built.chunks[i], acc, built.chunkPlaintextHashes[i]);
+    }
+    const out = await finalizeAccumulator(acc, built.archiveSha256);
+    expect(out.historySnapshot).toEqual(history);
+    expect(out.guildMetadataKeySnapshot).toEqual(metadata);
+    expect(Array.from(out.transcriptBlob)).toEqual(Array.from(transcript));
+  });
 });
