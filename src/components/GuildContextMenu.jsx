@@ -1,16 +1,16 @@
 import {
   DropdownMenuRoot, DropdownMenuTrigger,
   DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
-  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from './ui';
 
-/** Duration options for notification muting. */
-const MUTE_DURATIONS = [
-  { label: '1 hour',   ms: 60 * 60 * 1000 },
-  { label: '8 hours',  ms: 8 * 60 * 60 * 1000 },
-  { label: '24 hours', ms: 24 * 60 * 60 * 1000 },
-  { label: 'Forever',  ms: null },
-];
+// "Mute notifications" was a dead-end control: handleMute in
+// ServerList wrote `hush_muted_<guildId>` to localStorage, but no
+// reader ever consulted that key, so it had zero effect on
+// notifications anywhere in the app. Removed pending real
+// notification routing. The onMute prop is preserved on the
+// component signature for callers that still pass it but is
+// not surfaced as a UI control until the underlying behaviour
+// exists. See ans15.md.
 
 /**
  * Context menu for guild icon right-click or long-press actions.
@@ -84,16 +84,7 @@ export default function GuildContextMenu({
         >
           Copy invite link
         </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Mute notifications</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {MUTE_DURATIONS.map(({ label, ms }) => (
-              <DropdownMenuItem key={label} onSelect={() => onMute?.(guild, ms)}>
-                {label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {/* "Mute notifications" intentionally removed — see top-of-file note. */}
         {userPermissionLevel >= 2 && (
           <DropdownMenuItem onSelect={() => onSettings?.(guild)}>
             Server settings

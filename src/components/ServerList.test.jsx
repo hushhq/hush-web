@@ -281,7 +281,9 @@ describe('ServerList - multi-instance mode via InstanceContext', () => {
     expect(screen.getByText('Mark as read')).toBeInTheDocument();
     expect(screen.getByText('Copy invite link')).toBeInTheDocument();
     expect(screen.getByText('Instance info')).toBeInTheDocument();
-    expect(screen.getByText('Mute notifications')).toBeInTheDocument();
+    // "Mute notifications" was removed in slice 15 (it was a no-op
+    // localStorage write that no consumer read).
+    expect(screen.queryByText('Mute notifications')).not.toBeInTheDocument();
   });
 
   it('closes context menu on Escape key', () => {

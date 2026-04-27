@@ -77,9 +77,9 @@ describe('GuildContextMenu - actions', () => {
     expect(screen.getByRole('menuitem', { name: /copy invite link/i })).toBeInTheDocument();
   });
 
-  it('renders Mute notifications action', () => {
+  it('does NOT render Mute notifications (control was a no-op; removed in slice 15)', () => {
     renderMenu();
-    expect(screen.getByRole('menuitem', { name: /mute notifications/i })).toBeInTheDocument();
+    expect(screen.queryByText(/mute notifications/i)).not.toBeInTheDocument();
   });
 
   it('renders Instance info action', () => {
@@ -184,70 +184,10 @@ describe('GuildContextMenu - Settings visibility', () => {
   });
 });
 
-describe('GuildContextMenu - Mute submenu', () => {
-  beforeEach(() => {
-    cleanup();
-  });
-
-  it('Mute notifications is rendered as a sub-menu trigger', () => {
-    renderMenu();
-    expect(screen.getByRole('menuitem', { name: /mute notifications/i })).toBeInTheDocument();
-  });
-
-  it('all four duration options appear after opening the sub-menu', () => {
-    renderMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: /mute notifications/i }));
-
-    expect(screen.getByRole('menuitem', { name: /^1 hour$/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /^8 hours$/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /^24 hours$/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /^forever$/i })).toBeInTheDocument();
-  });
-
-  it('clicking 1 hour calls onMute with the correct ms duration and closes exactly once', () => {
-    const onMute = vi.fn();
-    const onClose = vi.fn();
-    renderMenu({ onMute, onClose });
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /mute notifications/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /^1 hour$/i }));
-
-    expect(onMute).toHaveBeenCalledWith(GUILD, 60 * 60 * 1000);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('clicking Forever calls onMute with null duration and closes exactly once', () => {
-    const onMute = vi.fn();
-    const onClose = vi.fn();
-    renderMenu({ onMute, onClose });
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /mute notifications/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /^forever$/i }));
-
-    expect(onMute).toHaveBeenCalledWith(GUILD, null);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('clicking 8 hours calls onMute with correct ms duration', () => {
-    const onMute = vi.fn();
-    renderMenu({ onMute });
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /mute notifications/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /^8 hours$/i }));
-
-    expect(onMute).toHaveBeenCalledWith(GUILD, 8 * 60 * 60 * 1000);
-  });
-
-  it('clicking 24 hours calls onMute with correct ms duration', () => {
-    const onMute = vi.fn();
-    renderMenu({ onMute });
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /mute notifications/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /^24 hours$/i }));
-
-    expect(onMute).toHaveBeenCalledWith(GUILD, 24 * 60 * 60 * 1000);
-  });
-});
+// "Mute submenu" tests removed in slice 15: the mute control was a
+// no-op (it wrote `hush_muted_<guildId>` to localStorage but no
+// reader ever consulted that key). The control itself was removed
+// from the menu pending real notification routing. See ans15.md.
 
 describe('GuildContextMenu - dismiss behaviors', () => {
   beforeEach(() => {
