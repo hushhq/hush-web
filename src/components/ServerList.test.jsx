@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
   createGuildInvite: vi.fn(() => Promise.resolve({ code: 'invite-123' })),
   searchUsersForDM: vi.fn(),
   createOrFindDM: vi.fn(),
+  leaveGuild: vi.fn(() => Promise.resolve()),
 }));
 
 // UserSettingsModal requires matchMedia - mock the whole component
@@ -278,12 +279,13 @@ describe('ServerList - multi-instance mode via InstanceContext', () => {
     fireEvent.contextMenu(guildBtn, { clientX: 100, clientY: 200 });
     expect(screen.getByRole('menu')).toBeInTheDocument();
     expect(screen.getByText('Leave server')).toBeInTheDocument();
-    expect(screen.getByText('Mark as read')).toBeInTheDocument();
     expect(screen.getByText('Copy invite link')).toBeInTheDocument();
     expect(screen.getByText('Instance info')).toBeInTheDocument();
-    // "Mute notifications" was removed in slice 15 (it was a no-op
-    // localStorage write that no consumer read).
+    // "Mute notifications" was removed in slice 15 (no-op localStorage
+    // write nobody read). "Mark as read" was removed in slice 16
+    // (handler was empty Phase-U scaffolding).
     expect(screen.queryByText('Mute notifications')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mark as read')).not.toBeInTheDocument();
   });
 
   it('closes context menu on Escape key', () => {
@@ -343,6 +345,65 @@ describe('ServerList - multi-instance mode via InstanceContext', () => {
     expect(
       gammaBtn.compareDocumentPosition(alphaBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it('right-click "Leave server" calls leaveGuild API after confirm', async () => {
+    const apiModule = await import('../lib/api');
+    apiModule.leaveGuild.mockClear();
+    apiModule.leaveGuild.mockResolvedValueOnce(undefined);
+
+    const ctxValue = {
+      mergedGuilds: [{ id: 'g1', name: 'Alpha Guild', instanceUrl: 'https://a.example.com' }],
+      instanceStates: new Map([
+        ['https://a.example.com', { connectionState: 'connected' }],
+      ]),
+      getTokenForInstance: vi.fn(() => 'instance-jwt'),
+      guildOrder: [],
+      setGuildOrder: vi.fn(),
+    };
+
+    renderWithInstanceCtx(ctxValue);
+    fireEvent.contextMenu(screen.getByLabelText('Alpha Guild'), { clientX: 0, clientY: 0 });
+    fireEvent.click(screen.getByText('Leave server'));
+
+    // ConfirmModal must appear with the guild name in the prompt.
+    const confirmBtn = await screen.findByRole('button', { name: /^Leave server$/i });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(apiModule.leaveGuild).toHaveBeenCalledWith(
+        'instance-jwt',
+        'g1',
+        'https://a.example.com',
+      );
+    });
+  });
+
+  it('right-click leave surfaces server error (e.g. owner cannot leave) inline', async () => {
+    const apiModule = await import('../lib/api');
+    apiModule.leaveGuild.mockClear();
+    apiModule.leaveGuild.mockRejectedValueOnce(
+      new Error('guild owner cannot leave; transfer ownership first'),
+    );
+
+    const ctxValue = {
+      mergedGuilds: [{ id: 'g1', name: 'Alpha Guild', instanceUrl: 'https://a.example.com' }],
+      instanceStates: new Map([
+        ['https://a.example.com', { connectionState: 'connected' }],
+      ]),
+      getTokenForInstance: vi.fn(() => 'instance-jwt'),
+      guildOrder: [],
+      setGuildOrder: vi.fn(),
+    };
+
+    renderWithInstanceCtx(ctxValue);
+    fireEvent.contextMenu(screen.getByLabelText('Alpha Guild'), { clientX: 0, clientY: 0 });
+    fireEvent.click(screen.getByText('Leave server'));
+    fireEvent.click(await screen.findByRole('button', { name: /^Leave server$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/guild owner cannot leave/i)).toBeInTheDocument();
+    });
   });
 
   it('blocks cross-instance invite link copying from the context menu', async () => {

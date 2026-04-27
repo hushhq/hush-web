@@ -292,28 +292,11 @@ function AccountTab() {
 
 function AppearanceTab() {
   const [mode, setMode] = useState(getStoredThemeMode);
-  const [darkTheme, setDarkTheme] = useState(getStoredDarkTheme);
-  const [lightTheme, setLightTheme] = useState(getStoredLightTheme);
 
   const handleModeChange = (newMode) => {
     setMode(newMode);
     applyThemeMode(newMode);
   };
-
-  const handleDarkThemeChange = (key) => {
-    setDarkTheme(key);
-    localStorage.setItem(DARK_THEME_KEY, key);
-    applyThemeMode(mode);
-  };
-
-  const handleLightThemeChange = (key) => {
-    setLightTheme(key);
-    localStorage.setItem(LIGHT_THEME_KEY, key);
-    applyThemeMode(mode);
-  };
-
-  const showDarkPicker = mode === 'dark' || mode === 'system';
-  const showLightPicker = mode === 'light' || mode === 'system';
 
   return (
     <>
@@ -341,46 +324,15 @@ function AppearanceTab() {
           {mode === 'system'
             ? 'Follows your operating system preference.'
             : mode === 'dark'
-              ? 'Always use the selected dark theme.'
-              : 'Always use the selected light theme.'}
+              ? 'Always use the dark theme.'
+              : 'Always use the light theme.'}
         </div>
       </div>
 
-      {showDarkPicker && (
-        <div className="settings-field-row">
-          <label className="settings-field-label">Dark theme</label>
-          <div className="settings-mode-group">
-            {DARK_THEMES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                className={`settings-mode-btn${darkTheme === t.key ? ' settings-mode-btn--active' : ''}`}
-                onClick={() => handleDarkThemeChange(t.key)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {showLightPicker && (
-        <div className="settings-field-row">
-          <label className="settings-field-label">Light theme</label>
-          <div className="settings-mode-group">
-            {LIGHT_THEMES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                className={`settings-mode-btn${lightTheme === t.key ? ' settings-mode-btn--active' : ''}`}
-                onClick={() => handleLightThemeChange(t.key)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Per-mode theme variant pickers were dropped in slice 16: each
+          variant list shipped with a single option, so the picker was
+          a UI no-op that read as a real choice. They will return once
+          additional themes exist. See ans16.md. */}
     </>
   );
 }

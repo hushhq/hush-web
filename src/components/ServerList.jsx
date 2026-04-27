@@ -17,6 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import GuildCreateModal from './GuildCreateModal';
 import GuildContextMenu from './GuildContextMenu';
+import ConfirmModal from './ConfirmModal';
 import { decryptGuildMetadata, fromBase64, importMetadataKey } from '../lib/guildMetadata';
 import {
   buildGuildInviteLink,
@@ -24,7 +25,7 @@ import {
   isCrossInstanceInviteLink,
 } from '../lib/inviteLinks';
 import { InstanceContext } from '../contexts/InstanceContext.jsx';
-import { createGuildInvite, searchUsersForDM, createOrFindDM } from '../lib/api';
+import { createGuildInvite, searchUsersForDM, createOrFindDM, leaveGuild } from '../lib/api';
 
 // Icon size and strip width are now defined in CSS (.sl-guild-btn, .sl-strip).
 // These constants are kept for any remaining inline fallback usage.
@@ -496,14 +497,48 @@ export default function ServerList({
 
   const handleContextMenuClose = useCallback(() => setContextMenu(null), []);
 
-  const handleMute = useCallback((guild, durationMs) => {
-    const key = `hush_muted_${guild.id}`;
-    if (durationMs === null) {
-      localStorage.setItem(key, 'forever');
-    } else {
-      localStorage.setItem(key, String(Date.now() + durationMs));
-    }
+  /**
+   * Right-click "Leave server" target. `null` while no leave is pending.
+   * Holds the guild + transient submission state so the ConfirmModal can
+   * surface a server-side error (e.g. owners cannot leave) inline.
+   */
+  const [leaveTarget, setLeaveTarget] = useState(null);
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
+
+  const handleLeaveRequest = useCallback((guild) => {
+    setLeaveError('');
+    setLeaveSubmitting(false);
+    setLeaveTarget(guild);
+    setContextMenu(null);
   }, []);
+
+  const handleLeaveCancel = useCallback(() => {
+    if (leaveSubmitting) return;
+    setLeaveTarget(null);
+    setLeaveError('');
+  }, [leaveSubmitting]);
+
+  const handleLeaveConfirm = useCallback(async () => {
+    if (!leaveTarget || leaveSubmitting) return;
+    setLeaveSubmitting(true);
+    setLeaveError('');
+    try {
+      const token = leaveTarget.instanceUrl && getTokenForInstance
+        ? getTokenForInstance(leaveTarget.instanceUrl)
+        : getToken();
+      if (!token) {
+        throw new Error('not authenticated');
+      }
+      await leaveGuild(token, leaveTarget.id, leaveTarget.instanceUrl ?? '');
+      // Server emits `member_left` over WS; ServerLayout reacts to that.
+      setLeaveTarget(null);
+    } catch (err) {
+      setLeaveError(err?.message || 'Failed to leave server');
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  }, [leaveTarget, leaveSubmitting, getToken, getTokenForInstance]);
 
   const handleCopyInvite = useCallback(async (guild) => {
     try {
@@ -534,10 +569,6 @@ export default function ServerList({
       // Clipboard API not available in this environment - silently skip.
     }
   }, [getMetadataKey, getToken, getTokenForInstance, metadataCache]);
-
-  const handleMarkRead = useCallback((_guild) => {
-    // Phase U scaffolding - unread tracking wired in a later plan.
-  }, []);
 
   const handleInstanceInfo = useCallback((guild, url) => {
     const state = instanceStates.get(url);
@@ -668,15 +699,27 @@ export default function ServerList({
           connectionState={contextMenuState}
           userPermissionLevel={userPermissionLevel}
           onClose={handleContextMenuClose}
-          onLeave={(guild) => {
-            console.info('[ServerList] Leave guild:', guild.id);
-            handleContextMenuClose();
-          }}
-          onMute={handleMute}
+          onLeave={handleLeaveRequest}
           onCopyInvite={handleCopyInvite}
-          onMarkRead={handleMarkRead}
           onSettings={(guild) => { onGuildSelect?.(guild); onGuildSettings?.(); }}
           onInstanceInfo={handleInstanceInfo}
+        />
+      )}
+
+      {leaveTarget && (
+        <ConfirmModal
+          title="Leave server?"
+          message={
+            leaveError
+              ? `Failed to leave: ${leaveError}`
+              : `Leave "${getGuildDisplayName(leaveTarget)}"? You will need a new invite to rejoin.`
+          }
+          confirmLabel="Leave server"
+          confirmLoadingLabel="Leaving…"
+          cancelLabel={leaveError ? 'Close' : 'Cancel'}
+          loading={leaveSubmitting}
+          onConfirm={handleLeaveConfirm}
+          onCancel={handleLeaveCancel}
         />
       )}
     </div>

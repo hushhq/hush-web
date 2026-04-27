@@ -3,14 +3,14 @@ import {
   DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from './ui';
 
-// "Mute notifications" was a dead-end control: handleMute in
-// ServerList wrote `hush_muted_<guildId>` to localStorage, but no
-// reader ever consulted that key, so it had zero effect on
-// notifications anywhere in the app. Removed pending real
-// notification routing. The onMute prop is preserved on the
-// component signature for callers that still pass it but is
-// not surfaced as a UI control until the underlying behaviour
-// exists. See ans15.md.
+// Two right-click controls were removed in slice 16 because their
+// underlying behaviour does not exist yet:
+//   - "Mute notifications" — wrote `hush_muted_<guildId>` to
+//     localStorage but no reader consulted it (slice 15 dropped
+//     the submenu; slice 16 drops the residual onMute plumbing).
+//   - "Mark as read" — handler was empty Phase-U scaffolding.
+// They will return when the corresponding subsystems (notification
+// routing, unread tracking) actually ship. See ans16.md.
 
 /**
  * Context menu for guild icon right-click or long-press actions.
@@ -26,9 +26,7 @@ import {
  *   userPermissionLevel: number,
  *   onClose: () => void,
  *   onLeave: (guild: object) => void,
- *   onMute: (guild: object, duration: number|null) => void,
  *   onCopyInvite: (guild: object) => void,
- *   onMarkRead: (guild: object) => void,
  *   onSettings: (guild: object) => void,
  *   onInstanceInfo: (guild: object, instanceUrl: string) => void,
  * }} props
@@ -41,9 +39,7 @@ export default function GuildContextMenu({
   userPermissionLevel = 0,
   onClose,
   onLeave,
-  onMute,
   onCopyInvite,
-  onMarkRead,
   onSettings,
   onInstanceInfo,
 }) {
@@ -75,16 +71,13 @@ export default function GuildContextMenu({
           {isOffline && <span className="gcm-context-offline-tag">offline</span>}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => onMarkRead?.(guild)}>
-          Mark as read
-        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => onCopyInvite?.(guild)}
           disabled={isOffline}
         >
           Copy invite link
         </DropdownMenuItem>
-        {/* "Mute notifications" intentionally removed — see top-of-file note. */}
+        {/* "Mark as read" and "Mute notifications" intentionally removed — see top-of-file note. */}
         {userPermissionLevel >= 2 && (
           <DropdownMenuItem onSelect={() => onSettings?.(guild)}>
             Server settings

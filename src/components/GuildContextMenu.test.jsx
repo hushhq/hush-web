@@ -20,9 +20,7 @@ function renderMenu(props = {}) {
     userPermissionLevel: 0,
     onClose: vi.fn(),
     onLeave: vi.fn(),
-    onMute: vi.fn(),
     onCopyInvite: vi.fn(),
-    onMarkRead: vi.fn(),
     onSettings: vi.fn(),
     onInstanceInfo: vi.fn(),
   };
@@ -67,9 +65,9 @@ describe('GuildContextMenu - actions', () => {
     cleanup();
   });
 
-  it('renders Mark as read action', () => {
+  it('does NOT render Mark as read (control had no-op handler; removed in slice 16)', () => {
     renderMenu();
-    expect(screen.getByRole('menuitem', { name: /mark as read/i })).toBeInTheDocument();
+    expect(screen.queryByText(/mark as read/i)).not.toBeInTheDocument();
   });
 
   it('renders Copy invite link action', () => {
@@ -90,17 +88,6 @@ describe('GuildContextMenu - actions', () => {
   it('renders Leave server action', () => {
     renderMenu();
     expect(screen.getByRole('menuitem', { name: /leave server/i })).toBeInTheDocument();
-  });
-
-  it('Mark as read calls onMarkRead and closes exactly once', () => {
-    const onMarkRead = vi.fn();
-    const onClose = vi.fn();
-    renderMenu({ onMarkRead, onClose });
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /mark as read/i }));
-
-    expect(onMarkRead).toHaveBeenCalledWith(GUILD);
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('Copy invite link calls onCopyInvite and closes exactly once', () => {
