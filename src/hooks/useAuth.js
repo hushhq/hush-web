@@ -23,7 +23,6 @@ import {
 import {
   encryptVault,
   decryptVaultAndExportKey,
-  decryptVaultWithRawKey,
   openVaultStore,
   saveEncryptedKey,
   loadEncryptedKey,
@@ -647,36 +646,28 @@ export function useAuth() {
     const config = getEffectiveVaultConfig(userId);
     const timeout = config?.timeout ?? 'browser_close';
 
-    if (timeout === 'browser_close') {
-      // Mark session alive in sessionStorage; on next page load without this
-      // flag (browser closed), vault stays locked. The derived key persists
-      // in sessionStorage so auto-unlock works on refresh.
-      sessionStorage.setItem(VAULT_SESSION_FLAG, '1');
+    // The wrapping key is no longer persisted to browser storage (ans23 / F3),
+    // so every full-page reload re-locks the vault by construction. The
+    // remaining policy choice is what to do with the in-memory key while
+    // the page stays open: keep it (browser_close / never), drop it on
+    // unload (refresh), or drop it after idle (numeric).
+    if (timeout === 'browser_close' || timeout === 'never') {
       return;
     }
 
     if (timeout === 'refresh') {
-      // Session flag is set so we can detect browser-close vs refresh, but
-      // the derived key is cleared on beforeunload so the vault re-locks on
-      // every page refresh. This is the "lock on refresh" UX.
-      sessionStorage.setItem(VAULT_SESSION_FLAG, '1');
+      // Drop in-memory identity on page unload so a same-process navigation
+      // re-locks. The previous beforeunload handler that wiped the persisted
+      // wrapping key from sessionStorage is no longer needed.
       const handler = () => {
-        sessionStorage.removeItem(VAULT_DERIVED_KEY);
+        identityKeyRef.current = null;
       };
       window.addEventListener('beforeunload', handler);
       beforeUnloadRef.current = handler;
       return;
     }
 
-    if (timeout === 'never') {
-      // Derived key stays in sessionStorage indefinitely (until tab closes
-      // or explicit logout). No session flag needed - auto-unlock always.
-      sessionStorage.setItem(VAULT_SESSION_FLAG, '1');
-      return;
-    }
-
     if (typeof timeout === 'number' && timeout > 0) {
-      sessionStorage.setItem(VAULT_SESSION_FLAG, '1');
       const timeoutMs = timeout * 60 * 1000;
       const resetTimer = () => {
         if (document.visibilityState === 'hidden') return;
@@ -1150,12 +1141,15 @@ export function useAuth() {
         throw new Error('vault is empty');
       }
 
-      const { privateKey, rawKeyHex } = await decryptVaultAndExportKey(blob, pin);
+      const { privateKey } = await decryptVaultAndExportKey(blob, pin);
 
-      // Persist the derived AES key in sessionStorage so page refresh can
-      // auto-unlock the vault without re-entering the PIN. The key is
-      // cleared according to the vault timeout policy (see applyVaultTimeout).
-      sessionStorage.setItem(VAULT_DERIVED_KEY, rawKeyHex);
+      // The derived wrapping key is intentionally NOT persisted to any
+      // browser storage. Persisting it (formerly in sessionStorage) made
+      // any same-origin script execution able to decrypt the vault — that
+      // failure mode worsens dramatically inside Electron renderers, so
+      // ans23 closed it for both web and the eventual desktop wrapper.
+      // The trade-off: a hard tab refresh now re-prompts for PIN
+      // because the wrapping key only lives in memory.
 
       // Derive public key from stored hex marker. If localStorage was evicted
       // (iOS non-Safari), fall back to IDB backup.
@@ -1394,7 +1388,6 @@ export function useAuth() {
 
   useEffect(() => {
     const stored = getLocalToken();
-    const sessionAlive = sessionStorage.getItem(VAULT_SESSION_FLAG) === '1';
 
     if (!stored) {
       clearPinSetup();
@@ -1517,44 +1510,25 @@ export function useAuth() {
 
           if (vaultPublicKeyHex) {
             setHasLocalVault(true);
-            // Vault exists. Check if we can auto-unlock using the derived AES
-            // key stored in sessionStorage from a previous PIN entry. This
-            // avoids re-prompting for PIN on every page refresh.
-            const storedDerivedKey = sessionStorage.getItem(VAULT_DERIVED_KEY);
+            // The wrapping key is no longer cached in browser storage
+            // (see ans23 / F3). Any leftover entry from a previous
+            // install is purged here so it cannot be read by anything
+            // running on this origin.
+            sessionStorage.removeItem(VAULT_DERIVED_KEY);
 
-            if (sessionAlive && storedDerivedKey) {
-              // Session is alive (not a browser restart) and we have the
-              // derived key - attempt auto-unlock.
-              try {
-                const db = await openVaultStore(u.id);
-                const blob = await loadEncryptedKey(db);
-                db.close();
+            // Trigger one-shot migration of the legacy global vault
+            // timeout key into the per-user config. This used to run
+            // when applyVaultTimeout fired on auto-unlock; now that
+            // auto-unlock is gone, we still need the migration to land
+            // on first authenticated startup so the user's existing
+            // timeout preference is preserved.
+            getEffectiveVaultConfig(u.id);
 
-                if (blob && !cancelled) {
-                  const privateKey = await decryptVaultWithRawKey(blob, storedDerivedKey);
-                  if (cancelled) return;
-                  const publicKey = vaultPublicKeyHex ? hexToBytes(vaultPublicKeyHex) : null;
-                  identityKeyRef.current = { privateKey, publicKey };
-                  clearPinSetup();
-                  setVaultState('unlocked');
-                  applyVaultTimeout(u.id);
-                } else if (!cancelled) {
-                  // Vault blob missing - PIN was never set. Clear stale marker.
-                  sessionStorage.removeItem(VAULT_DERIVED_KEY);
-                  localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
-                  setHasLocalVault(false);
-                  setVaultState('unlocked');
-                }
-              } catch {
-                // Derived key invalid or vault corrupt - fall back to PIN.
-                if (!cancelled) {
-                  sessionStorage.removeItem(VAULT_DERIVED_KEY);
-                  clearPinSetup();
-                  setVaultState('locked');
-                }
-              }
-            } else {
-              // No derived key or session flag absent - verify the vault blob
+            // Always require PIN re-entry: verify the vault blob actually
+            // exists before showing the PIN screen. The vault marker
+            // (public key hex) is written during registration, but the
+            {
+              // No derived key persistence by design - verify the vault blob
               // actually exists before showing PIN screen. The vault marker
               // (public key hex) is written during registration, but the
               // encrypted blob is only created when the user sets a PIN. If

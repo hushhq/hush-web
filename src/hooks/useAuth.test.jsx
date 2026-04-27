@@ -801,17 +801,18 @@ describe('useAuth - session rehydration', () => {
     expect(result.current.needsPinSetup).toBe(true);
   });
 
-  it('auto-unlocks vault when JWT, session flag, AND derived key all exist (refresh)', async () => {
-    // Soft refresh: JWT valid, session alive, and the derived AES key from a
-    // prior PIN entry is in sessionStorage. The vault should auto-decrypt
-    // without showing the PIN screen.
+  it('does not auto-unlock vault from leftover sessionStorage wrapping key (ans23 / F3)', async () => {
+    // ans23 removed the at-rest persistence of the vault wrapping key.
+    // Even when an old install left `hush_vault_derived_key` in
+    // sessionStorage, the hook must NOT auto-decrypt the vault — the
+    // user must re-enter their PIN. The leftover key must be purged so
+    // a same-origin script cannot read it.
     sessionStorage.setItem(JWT_KEY, 'valid-jwt');
     sessionStorage.setItem('hush_vault_session_alive', '1');
     sessionStorage.setItem('hush_vault_derived_key', 'aabbccdd');
     localStorage.setItem('hush_vault_user_user-43', 'aabb');
 
-    // Populate the vault blob so loadEncryptedKey returns something.
-    const fakeBlob = new Uint8Array(44); // 12-byte nonce + 32-byte key
+    const fakeBlob = new Uint8Array(44);
     fakeBlob.set(new Uint8Array(32).fill(1), 12);
     _vaultBlobs.set('user-43', fakeBlob);
 
@@ -822,17 +823,15 @@ describe('useAuth - session rehydration', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.vaultState).toBe('unlocked');
+    expect(result.current.vaultState).toBe('locked');
     expect(result.current.hasVault).toBe(true);
-    expect(result.current.isVaultUnlocked).toBe(true);
-    expect(result.current.needsUnlock).toBe(false);
-    expect(vaultMod.decryptVaultWithRawKey).toHaveBeenCalledWith(fakeBlob, 'aabbccdd');
+    expect(result.current.isVaultUnlocked).toBe(false);
+    expect(result.current.needsUnlock).toBe(true);
+    expect(sessionStorage.getItem('hush_vault_derived_key')).toBeNull();
   });
 
   it('migrates the legacy global vault timeout key into the per-user config on startup', async () => {
     sessionStorage.setItem(JWT_KEY, 'valid-jwt');
-    sessionStorage.setItem('hush_vault_session_alive', '1');
-    sessionStorage.setItem('hush_vault_derived_key', 'aabbccdd');
     localStorage.setItem('hush_vault_timeout', '15m');
     localStorage.setItem('hush_vault_user_user-43', 'aabb');
 
@@ -847,12 +846,16 @@ describe('useAuth - session rehydration', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
+    // Migration runs on authenticated startup independent of unlock state
+    // (ans23: auto-unlock from sessionStorage is removed, but we still
+    // want the legacy preference to land on the per-user config).
     expect(vaultMod.setVaultConfig).toHaveBeenCalledWith(
       'user-43',
       { timeout: 15, pinType: 'pin' },
     );
     expect(localStorage.getItem('hush_vault_timeout')).toBeNull();
-    expect(result.current.vaultState).toBe('unlocked');
+    // Vault remains locked until PIN is entered.
+    expect(result.current.vaultState).toBe('locked');
   });
 
   it('sets vaultState=locked when JWT and session flag exist but derived key is absent (vault blob exists)', async () => {

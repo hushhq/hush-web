@@ -42,25 +42,45 @@ describe('createWsClient - initial connection', () => {
     delete global.WebSocket;
   });
 
-  it('connects with token in URL when getToken returns token', () => {
+  it('never embeds the token in the WebSocket URL (ans23 / F4)', () => new Promise((resolve) => {
+    // ans23 removed token-in-URL auth so JWTs do not land in nginx
+    // access logs. The token must travel only inside the first frame.
     const getToken = vi.fn(() => 'jwt-123');
     const client = createWsClient({ url: 'ws://localhost/ws', getToken });
     client.connect();
-    expect(MockWs).toHaveBeenCalledWith('ws://localhost/ws?token=jwt-123');
-    expect(getToken).toHaveBeenCalled();
-  });
+    expect(MockWs).toHaveBeenCalledWith('ws://localhost/ws');
+    expect(MockWs.mock.calls[0][0]).not.toContain('token=');
+    setTimeout(() => {
+      const calls = MockWs.mock.results[0].value.send.mock.calls;
+      const authCall = calls.find((c) => JSON.parse(c[0]).type === 'auth');
+      expect(authCall).toBeDefined();
+      expect(JSON.parse(authCall[0])).toEqual({ type: 'auth', token: 'jwt-123' });
+      resolve();
+    }, 10);
+  }));
 
-  it('sends auth message when no token in URL', () => new Promise((resolve) => {
-    const getToken = vi.fn().mockReturnValueOnce(null).mockReturnValue('late-token');
+  it('sends auth message on every open (no URL token path)', () => new Promise((resolve) => {
+    const getToken = vi.fn().mockReturnValue('only-token');
     const client = createWsClient({ url: 'ws://localhost/ws', getToken });
     client.connect();
     expect(MockWs).toHaveBeenCalledWith('ws://localhost/ws');
     setTimeout(() => {
-      expect(MockWs.mock.results[0].value.send).toHaveBeenCalled();
       const calls = MockWs.mock.results[0].value.send.mock.calls;
       const authCall = calls.find((c) => JSON.parse(c[0]).type === 'auth');
       expect(authCall).toBeDefined();
-      expect(JSON.parse(authCall[0])).toEqual({ type: 'auth', token: 'late-token' });
+      expect(JSON.parse(authCall[0])).toEqual({ type: 'auth', token: 'only-token' });
+      resolve();
+    }, 10);
+  }));
+
+  it('closes the socket when getToken returns no token at open time', () => new Promise((resolve) => {
+    const getToken = vi.fn(() => null);
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    client.connect();
+    setTimeout(() => {
+      expect(MockWs.mock.results[0].value.close).toHaveBeenCalled();
+      const sent = MockWs.mock.results[0].value.send.mock.calls;
+      expect(sent.length).toBe(0);
       resolve();
     }, 10);
   }));
@@ -91,8 +111,13 @@ describe('createWsClient - initial connection', () => {
     client.connect();
     setTimeout(() => {
       client.send('subscribe', { channel_id: 'ch1' });
-      const sent = MockWs.mock.results[0].value.send.mock.calls[0][0];
-      expect(JSON.parse(sent)).toEqual({ type: 'subscribe', channel_id: 'ch1' });
+      const calls = MockWs.mock.results[0].value.send.mock.calls;
+      // Auth frame ships first under the new auth model; locate the
+      // subscribe frame explicitly so the assertion is robust against
+      // the auth message ordering.
+      const subscribeCall = calls.find((c) => JSON.parse(c[0]).type === 'subscribe');
+      expect(subscribeCall).toBeDefined();
+      expect(JSON.parse(subscribeCall[0])).toEqual({ type: 'subscribe', channel_id: 'ch1' });
       resolve();
     }, 10);
   }));
@@ -172,8 +197,10 @@ describe('createWsClient - reconnect chain', () => {
     expect(onReconnected).toHaveBeenCalledOnce();
   });
 
-  it('embeds fresh token in URL on reconnect', async () => {
-    // Return different tokens on each call to simulate token refresh.
+  it('sends a fresh auth frame (not a URL token) on reconnect', async () => {
+    // Token rotation across reconnects must travel inside the auth
+    // frame; the URL must remain the bare path so JWTs do not land in
+    // server access logs (ans23 / F4).
     const getToken = vi.fn().mockReturnValueOnce('tok-1').mockReturnValue('tok-2');
     const client = createWsClient({ url: 'ws://localhost/ws', getToken });
 
@@ -183,7 +210,15 @@ describe('createWsClient - reconnect chain', () => {
     vi.advanceTimersByTime(1100);
 
     const secondUrl = MockWs.mock.calls[1]?.[0];
-    expect(secondUrl).toContain('token=tok-2');
+    expect(secondUrl).toBe('ws://localhost/ws');
+    MockWs.captured.onopen();
+
+    // Find the auth frame on the reconnected socket. mock.results[1]
+    // is the second WebSocket instance.
+    const calls = MockWs.mock.results[1].value.send.mock.calls;
+    const authCall = calls.find((c) => JSON.parse(c[0]).type === 'auth');
+    expect(authCall).toBeDefined();
+    expect(JSON.parse(authCall[0])).toEqual({ type: 'auth', token: 'tok-2' });
   });
 
   it('calls onReconnected hook after reconnect and before emitting "reconnected"', async () => {

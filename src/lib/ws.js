@@ -104,22 +104,28 @@ export function createWsClient(opts) {
     // readyState 1 === OPEN, 0 === CONNECTING. Avoid global WebSocket reference.
     if (socket && (socket.readyState === 1 || socket.readyState === 0)) return;
     lastPongTime = Date.now();
-    // Always embed a fresh token in the URL so the reconnected session is
-    // immediately authenticated without a separate message round-trip.
-    const token = getToken();
-    const urlWithToken = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
-    const ws = new WebSocket(urlWithToken);
+    // Auth via first WebSocket frame, never the URL query string. Embedding
+    // the JWT in the URL would cause it to land in nginx access logs and any
+    // referer-style propagation; ans23 closed that path. The server already
+    // supports first-message auth (internal/ws/handler.go authFromFirstMessage).
+    const ws = new WebSocket(wsUrl);
     socket = ws;
-    authSent = !!token;
+    authSent = false;
     const isReconnect = reconnectAttempt > 0 || reconnecting;
 
     ws.onopen = async () => {
       reconnectAttempt = 0;
 
-      // Send auth message as fallback when token was not available at connect time.
-      if (!authSent && getToken()) {
+      // Send the auth frame on every connect/reconnect. If no token is
+      // available (signed-out tab racing the reconnect), close cleanly so
+      // the server tears the upgrade down rather than dangling unauth'd.
+      const token = getToken();
+      if (token) {
         authSent = true;
-        ws.send(JSON.stringify({ type: 'auth', token: getToken() }));
+        ws.send(JSON.stringify({ type: 'auth', token }));
+      } else {
+        ws.close();
+        return;
       }
 
       startPing();
