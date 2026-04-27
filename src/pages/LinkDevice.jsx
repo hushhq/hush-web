@@ -211,7 +211,18 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
             bundle.historySnapshot = fetched.historySnapshot;
             bundle.guildMetadataKeySnapshot = fetched.guildMetadataKeySnapshot;
             bundle.transcriptBlob = fetched.transcriptBlob;
-            // Best-effort cleanup of server-side staging.
+          } catch (err) {
+            console.error('[LinkDevice] chunked archive download failed', err);
+            throw err;
+          } finally {
+            // Best-effort cleanup of server-side staging on EVERY exit
+            // path — success and failure alike. On failure this frees
+            // the per-user concurrent-archive quota slot so the next
+            // device-link retry is not blocked by a stale `available`
+            // archive (the server purger only reaps after the hard
+            // deadline). On success this releases bytes the NEW device
+            // already imported. The DELETE is idempotent and always
+            // best-effort: the link is never blocked on this call.
             try {
               await deleteArchive(bundle.archive.id, {
                 downloadToken: bundle.archive.downloadToken,
@@ -219,9 +230,6 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
             } catch {
               // Server purger reaps; never block the link on cleanup.
             }
-          } catch (err) {
-            console.error('[LinkDevice] chunked archive download failed', err);
-            throw err;
           }
         }
 

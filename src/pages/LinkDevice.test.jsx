@@ -16,6 +16,8 @@ const {
   mockBuildLinkApprovalUrl,
   mockChooseInstance,
   authInstanceSelectionState,
+  mockDecodeTransferBundle,
+  mockDecryptRelayPayload,
   mockOpenStore,
   mockExportHistorySnapshot,
   mockBytesToBase64,
@@ -43,6 +45,8 @@ const {
   mockBuildLinkApprovalUrl: vi.fn(),
   mockChooseInstance: vi.fn(),
   authInstanceSelectionState: { current: 'https://chat.example.com' },
+  mockDecodeTransferBundle: vi.fn(),
+  mockDecryptRelayPayload: vi.fn(),
   mockOpenStore: vi.fn(),
   mockExportHistorySnapshot: vi.fn(),
   mockBytesToBase64: vi.fn(),
@@ -119,8 +123,8 @@ vi.mock('../lib/deviceLinking', () => ({
     secret: encoded === 'valid-payload' ? 'secret-from-qr' : '',
     expiresAt: '2026-03-29T00:05:00.000Z',
   })),
-  decodeTransferBundle: vi.fn(),
-  decryptRelayPayload: vi.fn(),
+  decodeTransferBundle: (...args) => mockDecodeTransferBundle(...args),
+  decryptRelayPayload: (...args) => mockDecryptRelayPayload(...args),
   encodeTransferBundle: (...args) => mockEncodeTransferBundle(...args),
   encryptRelayPayload: (...args) => mockEncryptRelayPayload(...args),
   base64ToBytes: (...args) => mockBase64ToBytes(...args),
@@ -203,6 +207,21 @@ describe('LinkDevice', () => {
       transcriptBlob: null,
     });
     mockDeleteArchive.mockResolvedValue(undefined);
+    mockDecryptRelayPayload.mockResolvedValue(new Uint8Array([1, 2, 3]));
+    mockDecodeTransferBundle.mockResolvedValue({
+      version: 3,
+      userId: 'user-1',
+      username: 'alice',
+      displayName: 'Alice',
+      instanceUrl: 'https://app.gethush.live',
+      exportedAt: new Date().toISOString(),
+      rootPrivateKey: new Uint8Array([1, 2, 3]),
+      rootPublicKey: new Uint8Array([4, 5, 6]),
+      archive: null,
+      historySnapshot: null,
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: null,
+    });
   });
 
   afterEach(() => {
@@ -351,6 +370,77 @@ describe('LinkDevice', () => {
     await waitFor(() => {
       expect(mockConsumeDeviceLinkResult).toHaveBeenCalledTimes(2);
     }, { timeout: 3000 });
+  });
+
+  it('cleans up the archive when new-device import fails', async () => {
+    const completeDeviceLink = vi.fn();
+    authState.current = {
+      ...authState.current,
+      completeDeviceLink,
+    };
+    mockCreateDeviceIdentity.mockResolvedValue({
+      publicKeyBase64: 'device-public-key',
+    });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-1',
+      secret: 'secret-1',
+      code: 'ABCD1234',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+      deviceId: 'device-2',
+      instanceUrl: 'https://app.gethush.live',
+    });
+    mockDecodeTransferBundle.mockResolvedValue({
+      version: 3,
+      userId: 'user-1',
+      username: 'alice',
+      displayName: 'Alice',
+      instanceUrl: 'https://app.gethush.live',
+      exportedAt: new Date().toISOString(),
+      rootPrivateKey: new Uint8Array([1, 2, 3]),
+      rootPublicKey: new Uint8Array([4, 5, 6]),
+      archive: {
+        id: 'arch-import-fail',
+        downloadToken: 'dtok-import-fail',
+        totalChunks: 1,
+        totalBytes: 16,
+        chunkSize: 4 * 1024 * 1024,
+        manifestHash: 'bWFuaWZlc3Q=',
+        archiveSha256: 'YXJjaGl2ZQ==',
+        format: 'chunk-atomic-v1',
+        chunkPlaintextHashes: ['Y2h1bmstaGFzaA=='],
+        ephPub: 'ZXBocHViYnl0ZXM=',
+        nonceBase: 'bm9uY2ViYXNl',
+        transcriptBlobOmitted: false,
+      },
+      historySnapshot: null,
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: null,
+    });
+    mockDownloadArchiveSession.mockRejectedValueOnce(new Error('boom'));
+
+    renderLinkDevice('/link-device?mode=new');
+
+    expect(await screen.findByAltText(/device link qr code/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockDeleteArchive).toHaveBeenCalledWith(
+        'arch-import-fail',
+        { downloadToken: 'dtok-import-fail' },
+        'https://app.gethush.live',
+      );
+    });
+    expect(completeDeviceLink).not.toHaveBeenCalled();
+    expect(await screen.findByText(/boom/i)).toBeInTheDocument();
   });
 
   it('shows friendly error when ApproveLinkView resolveRequest fails with expired/claimed message', async () => {
