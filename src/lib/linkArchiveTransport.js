@@ -324,14 +324,18 @@ export async function downloadChunkViaWindow(entry) {
  *
  * @param {string} archiveId
  * @param {string} uploadToken
+ * @param {string} jwt
  * @param {string} baseUrl
  * @returns {Promise<{ status: 'ok' } | { status: 'missing', missing: number[] }>}
  */
-export async function finalizeArchive(archiveId, uploadToken, baseUrl = '') {
+export async function finalizeArchive(archiveId, uploadToken, jwt, baseUrl = '') {
   const url = `${archiveBaseUrl(baseUrl)}/api/auth/link-archive-finalize/${archiveId}`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'X-Upload-Token': uploadToken },
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      'X-Upload-Token': uploadToken,
+    },
   });
   if (res.status === 200) return { status: 'ok' };
   const body = await readJson(res);

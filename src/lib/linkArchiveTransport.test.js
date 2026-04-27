@@ -129,13 +129,16 @@ describe('linkArchiveTransport — finalize', () => {
 
   it('returns ok on 200', async () => {
     fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 200, json: { status: 'ok' } }));
-    const r = await finalizeArchive('a', 'u', '');
+    const r = await finalizeArchive('a', 'u', 'jwt', '');
     expect(r).toEqual({ status: 'ok' });
+    const [, init] = fetchSpy.mock.calls[0];
+    expect(init.headers.Authorization).toBe('Bearer jwt');
+    expect(init.headers['X-Upload-Token']).toBe('u');
   });
 
   it('returns missing list on 409', async () => {
     fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 409, json: { error: 'archive incomplete', missing: [2, 5] } }));
-    const r = await finalizeArchive('a', 'u', '');
+    const r = await finalizeArchive('a', 'u', 'jwt', '');
     expect(r).toEqual({ status: 'missing', missing: [2, 5] });
   });
 });

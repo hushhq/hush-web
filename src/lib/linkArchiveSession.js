@@ -172,7 +172,7 @@ export async function uploadArchiveSession({
     }
 
     // 5. Finalize, retransmit any missing chunks once.
-    let finalizeResult = await finalizeArchive(init.archiveId, init.uploadToken, baseUrl);
+    let finalizeResult = await finalizeArchive(init.archiveId, init.uploadToken, token, baseUrl);
     if (finalizeResult.status === 'missing') {
       const missing = finalizeResult.missing;
       // Mint a window covering exactly the missing indices (capped to
@@ -189,7 +189,7 @@ export async function uploadArchiveSession({
         await runWithConcurrency(tasks, UPLOAD_CONCURRENCY);
         cursor += slice.length;
       }
-      finalizeResult = await finalizeArchive(init.archiveId, init.uploadToken, baseUrl);
+      finalizeResult = await finalizeArchive(init.archiveId, init.uploadToken, token, baseUrl);
       if (finalizeResult.status !== 'ok') {
         throw new Error('[linkArchive] finalize failed after retransmit');
       }
