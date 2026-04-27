@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
+import { CopyIcon, CheckIcon } from '@radix-ui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.jsx';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
@@ -164,6 +165,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
     if (!requestState?.requestId || !requestState?.secret || !requestState?.sessionPrivateKey) return undefined;
 
     let cancelled = false;
+    let inFinalize = false;
     const expiresAtMs = new Date(requestState.expiresAt).getTime();
     let currentInterval = POLL_INITIAL_MS;
     let timerId = null;
@@ -192,6 +194,14 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           return;
         }
 
+        // Past the polling stage. Errors that fire during the
+        // finalize phase below are NOT poll-loop network blips and
+        // must NOT trigger the "Connection lost. Retrying..." banner
+        // — the flow is progressing forward, just doing crypto + a
+        // chunked archive download. The downloadArchiveSession
+        // transport already retries transient fetch errors
+        // internally; anything that surfaces here is a real error.
+        inFinalize = true;
         setStatus('Finalizing linked device…');
         const relayBytes = await decryptRelayPayload(result, requestState.sessionPrivateKey);
         const bundle = await decodeTransferBundle(relayBytes);
@@ -253,17 +263,24 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         onLinked();
       } catch (err) {
         if (cancelled) return;
-        // Network-level errors (fetch rejected) trigger connection-loss banner.
-        // Keep the same interval and retry.
         const rawMessage = err?.message || '';
         const isRetryableNetworkError = err instanceof TypeError
           || (err.name && err.name === 'AbortError')
           || rawMessage.includes('Could not reach ');
-        if (isRetryableNetworkError) {
+        // Only the polling phase's transient network errors should
+        // surface as "Connection lost. Retrying..." — once we are in
+        // the finalize phase, any error is a real failure (or has
+        // already been retried internally by the transport layer)
+        // and the banner must NOT appear, even if the underlying
+        // exception happens to be a TypeError.
+        if (!inFinalize && isRetryableNetworkError) {
           setConnectionLost(true);
           scheduleNext();
           return;
         }
+        // Make sure a stale poll-phase banner doesn't linger across
+        // a finalize-phase failure.
+        setConnectionLost(false);
         setError(err.message || 'Failed to finalize the device link.');
       }
     };
@@ -312,8 +329,11 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
               variant="secondary"
               onClick={handleCopyCode}
               aria-label="Copy device link code"
+              data-state={codeCopied ? 'copied' : 'idle'}
             >
-              {codeCopied ? 'Copied' : 'Copy'}
+              {codeCopied
+                ? (<><CheckIcon aria-hidden="true" /> Copied</>)
+                : (<><CopyIcon aria-hidden="true" /> Copy</>)}
             </Button>
           </div>
           <div className="ld-timer">Expires in {formatCountdown(requestState.expiresAt, now)}</div>
@@ -840,8 +860,8 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       {claim && (
         <div className="ld-claim-summary">
           <div className="ld-summary-row">
-            <span>Device ID</span>
-            <strong>{claim.deviceId}</strong>
+            <span>Device</span>
+            <strong>{claim.label?.trim() ? claim.label : claim.deviceId}</strong>
           </div>
           <div className="ld-summary-row">
             <span>Expires</span>

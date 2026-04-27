@@ -1164,4 +1164,130 @@ describe('LinkDevice', () => {
       expect(mockResumeUploadArchiveSession).not.toHaveBeenCalled();
     });
   });
+
+  // ── Connection-lost banner phase isolation (slice-12 P2 fix) ──────────
+  describe('connection-lost banner', () => {
+    it('does not appear during a successful finalize phase even if the flow is in progress', async () => {
+      mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+      mockCreateSessionKeyPair.mockResolvedValue({
+        privateKey: { type: 'private-key' },
+        publicKeyBase64: 'session-public-key',
+      });
+      mockCreateDeviceLinkRequest.mockResolvedValue({
+        requestId: 'req-1',
+        secret: 'secret-1',
+        code: 'ABCD1234',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+      mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+      mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+      // Polling succeeds with a non-pending result (the OLD device approved).
+      mockConsumeDeviceLinkResult.mockResolvedValue({
+        relayCiphertext: 'c', relayIv: 'iv', relayPublicKey: 'pk',
+      });
+      // Finalize phase succeeds.
+      mockDecryptRelayPayload.mockResolvedValue(new Uint8Array([1, 2, 3]));
+      mockDecodeTransferBundle.mockResolvedValue({
+        version: 3,
+        userId: 'user-1', username: 'alice', displayName: 'Alice',
+        instanceUrl: 'https://app.gethush.live',
+        rootPrivateKey: new Uint8Array([1, 2, 3]),
+        rootPublicKey: new Uint8Array([4, 5, 6]),
+        archive: null,
+        historySnapshot: null, guildMetadataKeySnapshot: null, transcriptBlob: null,
+      });
+
+      renderLinkDevice('/link-device?mode=new');
+      await screen.findByText('ABCD1234');
+      // The successful flow must NEVER surface the "Connection lost" banner.
+      // Wait long enough for the poll loop + finalize to run.
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByText(/connection lost\. retrying/i)).not.toBeInTheDocument();
+    });
+
+  });
+
+  // ── Human-readable device label in approval (slice-12 P3) ─────────────
+  describe('approval UI device labelling', () => {
+    function unlockedAuth() {
+      return {
+        completeDeviceLink: vi.fn(), loading: false, isAuthenticated: true,
+        hasSession: true, hasVault: true, isVaultUnlocked: true, needsUnlock: false,
+        vaultState: 'unlocked', token: 'jwt-token',
+        user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+        identityKeyRef: { current: { privateKey: new Uint8Array([1]), publicKey: new Uint8Array([2]) } },
+      };
+    }
+
+    it('shows the human-readable label from the resolved claim, not the raw deviceId', async () => {
+      authState.current = unlockedAuth();
+      mockResolveDeviceLinkRequest.mockResolvedValue({
+        claimToken: 'claim-1',
+        deviceId: '11111111-2222-3333-4444-555555555555',
+        devicePublicKey: 'device-public-key',
+        sessionPublicKey: 'session-public-key',
+        instanceUrl: 'https://app.gethush.live',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        label: 'Chrome on iOS',
+      });
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+      // Readable label visible.
+      expect(await screen.findByText('Chrome on iOS')).toBeInTheDocument();
+      // Raw deviceId NOT visible.
+      expect(screen.queryByText('11111111-2222-3333-4444-555555555555')).not.toBeInTheDocument();
+    });
+
+    it('falls back to the deviceId when the claim has no label', async () => {
+      authState.current = unlockedAuth();
+      mockResolveDeviceLinkRequest.mockResolvedValue({
+        claimToken: 'claim-1',
+        deviceId: 'device-2',
+        devicePublicKey: 'device-public-key',
+        sessionPublicKey: 'session-public-key',
+        instanceUrl: 'https://app.gethush.live',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+      expect(await screen.findByText('device-2')).toBeInTheDocument();
+    });
+  });
+
+  // ── Copy button success state (slice-12 P4) ───────────────────────────
+  describe('copy code button', () => {
+    it('exposes idle/copied data-state for the copy button (icon + success state)', async () => {
+      mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+      mockCreateSessionKeyPair.mockResolvedValue({
+        privateKey: { type: 'private-key' },
+        publicKeyBase64: 'session-public-key',
+      });
+      mockCreateDeviceLinkRequest.mockResolvedValue({
+        requestId: 'req-1', secret: 'secret-1', code: 'ABCD1234',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+      mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+      mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+      mockConsumeDeviceLinkResult.mockResolvedValue({ status: 'pending' });
+
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device?mode=new');
+      await screen.findByText('ABCD1234');
+
+      const btn = await screen.findByRole('button', { name: /copy device link code/i });
+      expect(btn).toHaveAttribute('data-state', 'idle');
+      await user.click(btn);
+      await waitFor(() => {
+        expect(btn).toHaveAttribute('data-state', 'copied');
+      });
+      expect(btn).toHaveTextContent(/copied/i);
+    });
+  });
 });
