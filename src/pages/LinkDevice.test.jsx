@@ -962,7 +962,11 @@ describe('LinkDevice', () => {
     await user.click(screen.getByRole('button', { name: /copy device link code/i }));
 
     expect(writeText).toHaveBeenCalledWith('ABCD1234');
-    expect(await screen.findByRole('button', { name: /copy device link code/i })).toHaveTextContent(/copied/i);
+    // Icons-only button: success state surfaces via data-state, not text.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /copy device link code/i }))
+        .toHaveAttribute('data-state', 'copied');
+    });
   });
 
   it('renders the Scan-QR button on the approve view (manual code path is preserved)', async () => {
@@ -1287,7 +1291,6 @@ describe('LinkDevice', () => {
       await waitFor(() => {
         expect(btn).toHaveAttribute('data-state', 'copied');
       });
-      expect(btn).toHaveTextContent(/copied/i);
     });
   });
 });

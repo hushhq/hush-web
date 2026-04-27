@@ -1271,3 +1271,52 @@ describe('useAuth - performRecovery', () => {
     expect(localStorage.getItem('hush_post_recovery_wizard')).toBeNull();
   });
 });
+
+describe('useAuth - forced logout on revoked-device signal', () => {
+  it('lands in vaultState=locked + hasVault=true when an encrypted vault still exists on disk', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    // Sanity: performChallengeResponse stored the vault marker.
+    expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'device_revoked' },
+      }));
+    });
+
+    // Server session is gone:
+    expect(result.current.token).toBeNull();
+    expect(result.current.user).toBeNull();
+    expect(result.current.isAuthenticated).toBe(false);
+    // But the vault marker is still on disk and the UX semantic
+    // reflects that — the browser is a known profile, not a
+    // brand-new one.
+    expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    expect(result.current.vaultState).toBe('locked');
+    expect(result.current.hasVault).toBe(true);
+  });
+
+  it('lands in vaultState=none when no vault marker is present', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'device_revoked' },
+      }));
+    });
+
+    expect(result.current.token).toBeNull();
+    expect(result.current.user).toBeNull();
+    expect(result.current.vaultState).toBe('none');
+    expect(result.current.hasVault).toBe(false);
+  });
+});

@@ -604,3 +604,47 @@ describe('getChannelMessages', () => {
     expect(url).not.toContain('after=');
   });
 });
+
+// ── Slice-13 device-revoke fix: 401 'device revoked' fires window event
+describe('fetchWithAuth — device revocation surface', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('dispatches hush_auth_invalid on a 401 response whose body is "device revoked"', async () => {
+    const body = { error: 'device revoked' };
+    const mockFetch = vi.fn().mockResolvedValue({
+      status: 401, ok: false,
+      clone() { return this; },
+      json: () => Promise.resolve(body),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const events = [];
+    const handler = (e) => events.push(e?.detail?.reason || null);
+    window.addEventListener('hush_auth_invalid', handler);
+
+    const res = await fetchWithAuth('jwt', '/api/auth/me');
+    expect(res.status).toBe(401);
+    expect(events).toContain('device_revoked');
+
+    window.removeEventListener('hush_auth_invalid', handler);
+  });
+
+  it('does not dispatch hush_auth_invalid on a generic 401 (e.g. expired session)', async () => {
+    const body = { error: 'session not found or expired' };
+    const mockFetch = vi.fn().mockResolvedValue({
+      status: 401, ok: false,
+      clone() { return this; },
+      json: () => Promise.resolve(body),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const events = [];
+    const handler = (e) => events.push(e?.detail?.reason || null);
+    window.addEventListener('hush_auth_invalid', handler);
+
+    await fetchWithAuth('jwt', '/api/auth/me');
+    expect(events).toEqual([]);
+
+    window.removeEventListener('hush_auth_invalid', handler);
+  });
+});

@@ -161,11 +161,31 @@ export function createWsClient(opts) {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       socket = null;
       authSent = false;
       stopPing();
-      emit('close', {});
+      const code = event?.code ?? 0;
+      const reason = event?.reason ?? '';
+      emit('close', { code, reason });
+      // Server-side hard reject due to device revocation. The hub
+      // closes the WS with policy-violation (1008) + reason=
+      // "device revoked"; reconnect attempts would also be rejected
+      // at HTTP upgrade with 401, so do NOT schedule a reconnect.
+      // Surface the event so the auth layer can clear the session
+      // and the user is forced out of the UI.
+      if (code === 1008 && /device revoked/i.test(reason)) {
+        intentionalClose = true;
+        emit('auth_invalid', { reason: 'device_revoked' });
+        if (typeof window !== 'undefined') {
+          try {
+            window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+              detail: { reason: 'device_revoked' },
+            }));
+          } catch { /* ignore */ }
+        }
+        return;
+      }
       scheduleReconnect();
     };
 

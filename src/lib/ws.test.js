@@ -456,3 +456,56 @@ describe('createWsClient - network recovery', () => {
     expect(onlineCalls2).toBe(onlineCalls1);
   });
 });
+
+// ── Slice-13 device-revoke fix: WS close 1008 + "device revoked" ─────
+describe('createWsClient - device revoke close handling', () => {
+  let MockWs;
+
+  beforeEach(() => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+  });
+
+  afterEach(() => {
+    delete global.WebSocket;
+  });
+
+  it('emits auth_invalid + window event and does NOT reconnect on 1008/device revoked close', () => {
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const authInvalid = vi.fn();
+    client.on('auth_invalid', authInvalid);
+
+    const winEvents = [];
+    const winHandler = (e) => winEvents.push(e?.detail?.reason || null);
+    window.addEventListener('hush_auth_invalid', winHandler);
+
+    client.connect();
+    expect(MockWs).toHaveBeenCalledTimes(1);
+    // Server closes with policy-violation 1008 + "device revoked".
+    MockWs.captured.onclose({ code: 1008, reason: 'device revoked' });
+
+    expect(authInvalid).toHaveBeenCalledTimes(1);
+    expect(authInvalid.mock.calls[0][0]).toEqual({ reason: 'device_revoked' });
+    expect(winEvents).toContain('device_revoked');
+
+    // Reconnect must NOT have been scheduled — no second WebSocket
+    // construction even after the reconnect base delay would have
+    // elapsed in real time.
+    expect(MockWs).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener('hush_auth_invalid', winHandler);
+  });
+
+  it('does reconnect on a normal (non-revoke) close', () => {
+    vi.useFakeTimers();
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    client.connect();
+    MockWs.captured.onclose({ code: 1006, reason: '' });
+    // Advance the reconnect delay; default RECONNECT_BASE_MS in lib/ws.
+    vi.advanceTimersByTime(60_000);
+    expect(MockWs.mock.calls.length).toBeGreaterThan(1);
+    vi.useRealTimers();
+  });
+});

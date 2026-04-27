@@ -46,9 +46,17 @@ function getDeviceStaleness(lastSeenStr) {
 
 
 function getDeviceDisplayLabel(device, currentDeviceId) {
-  if (device?.label) return device.label;
+  const label = typeof device?.label === 'string' ? device.label.trim() : '';
+  if (label) return label;
   if (device?.deviceId === currentDeviceId) return getReadableDeviceLabel();
-  return device?.deviceId || 'Unknown device';
+  // Last-resort fallback: never surface a raw UUID to the user. Show
+  // a short identifying suffix so two unlabeled rows can still be
+  // distinguished, but the visible string stays human-readable.
+  if (device?.deviceId) {
+    const suffix = device.deviceId.replace(/-/g, '').slice(0, 6);
+    return `Unknown device (${suffix})`;
+  }
+  return 'Unknown device';
 }
 
 function getHomeInstanceUrl() {

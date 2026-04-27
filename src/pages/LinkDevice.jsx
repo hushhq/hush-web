@@ -332,8 +332,8 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
               data-state={codeCopied ? 'copied' : 'idle'}
             >
               {codeCopied
-                ? (<><CheckIcon aria-hidden="true" /> Copied</>)
-                : (<><CopyIcon aria-hidden="true" /> Copy</>)}
+                ? <CheckIcon aria-hidden="true" />
+                : <CopyIcon aria-hidden="true" />}
             </Button>
           </div>
           <div className="ld-timer">Expires in {formatCountdown(requestState.expiresAt, now)}</div>

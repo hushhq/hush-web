@@ -1674,6 +1674,60 @@ export function useAuth() {
     return () => { try { bc?.close(); } catch { /* noop */ } };
   }, [clearPinSetup, clearVaultTimeoutEffects]);
 
+  // ── Forced logout on device revocation ───────────────────────────────────
+  // The server returns 401 "device revoked" on any authenticated HTTP call
+  // and closes any active WS with policy-violation 1008 + "device revoked".
+  // Both surfaces dispatch a window 'hush_auth_invalid' event (api.js +
+  // ws.js). React to it by tearing the *session* down so the UI is forced
+  // out of the authenticated view — but preserve the local encrypted
+  // vault marker on disk. The browser is still a known profile; what's
+  // gone is the trusted server session + the in-memory derived key.
+  // Surface the right post-revocation UX (locked-vault sign-in) instead
+  // of pretending the browser is brand-new.
+  useEffect(() => {
+    function handleAuthInvalid() {
+      console.warn('[useAuth] forced logout due to revoked-device signal');
+      // 1. Drop in-memory identity + derived key so no further crypto
+      //    can run with the old session's secrets.
+      identityKeyRef.current = null;
+      sessionStorage.removeItem(VAULT_DERIVED_KEY);
+      clearVaultTimeoutEffects();
+      clearTranscriptCache();
+      // 2. Clear the server session (token + session-alive flag).
+      clearSession();
+      setToken(null);
+      setUser(null);
+      // 3. Detect whether any encrypted vault still exists on this
+      //    browser. The marker key is `hush_vault_user_<userId>`; we
+      //    don't know the user id at this point (user state is being
+      //    cleared in the same render), so scan localStorage.
+      let vaultStillOnDisk = false;
+      try {
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(VAULT_USER_KEY_PREFIX)) {
+            vaultStillOnDisk = true;
+            break;
+          }
+        }
+      } catch { /* localStorage may be unavailable in some test envs */ }
+      // 4. If a vault is still on disk, surface the "known profile,
+      //    sign in to unlock" semantic. Otherwise fall through to the
+      //    brand-new-browser state.
+      if (vaultStillOnDisk) {
+        setHasLocalVault(true);
+        setVaultState('locked');
+      } else {
+        setHasLocalVault(false);
+        setVaultState('none');
+      }
+      clearPinSetup();
+    }
+    if (typeof window === 'undefined') return undefined;
+    window.addEventListener('hush_auth_invalid', handleAuthInvalid);
+    return () => window.removeEventListener('hush_auth_invalid', handleAuthInvalid);
+  }, [clearPinSetup, clearVaultTimeoutEffects]);
+
   return {
     user,
     token,
