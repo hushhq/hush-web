@@ -37,6 +37,21 @@ import {
   fetchManifest,
 } from './linkArchiveTransport';
 import { base64ToBytes, bytesToBase64 } from './deviceLinking';
+import {
+  initCheckpoint,
+  loadCheckpoint,
+  markChunkCommitted,
+  markCheckpointComplete,
+  deleteCheckpoint,
+  _internals as checkpointInternals,
+} from './linkArchiveCheckpointStore';
+import {
+  CHUNK_ATOMIC_FORMAT,
+  buildChunkAtomicArchive,
+  consumeChunk as consumeChunkAtomicChunk,
+  createParseAccumulator,
+  finalizeAccumulator,
+} from './linkArchiveChunkAtomic';
 
 const UPLOAD_CONCURRENCY = 4;
 const DOWNLOAD_CONCURRENCY = 4;
@@ -99,33 +114,31 @@ export async function uploadArchiveSession({
   guildMetadataKeySnapshot,
   transcriptBlob,
 }) {
-  // 1. Plaintext archive (gzipped JSON).
-  let plaintext = await buildArchivePlaintext({
+  // 1. Build the chunk-atomic archive. Each chunk is independently
+  // AEAD-decryptable, gunzippable, and parseable; the NEW device can
+  // process one chunk at a time without buffering the whole archive.
+  // No degraded path: an archive that exceeds the operator-configured
+  // staging cap is rejected at /link-archive-init by the server (503
+  // + Retry-After). The OLD device never silently drops user state.
+  const built = await buildChunkAtomicArchive({
     historySnapshot,
     guildMetadataKeySnapshot,
     transcriptBlob,
+    chunkSize: LINK_ARCHIVE_CHUNK_SIZE,
   });
-  let transcriptBlobOmitted = false;
-  if (plaintext.byteLength > LINK_ARCHIVE_CHUNK_SIZE * 64) {
-    // Degraded path: keep small parts, drop the transcript blob.
-    transcriptBlobOmitted = true;
-    plaintext = await buildArchivePlaintext({
-      historySnapshot,
-      guildMetadataKeySnapshot,
-      transcriptBlob: null,
-    });
-    if (plaintext.byteLength > LINK_ARCHIVE_CHUNK_SIZE * 64) {
-      throw new Error('[linkArchive] archive exceeds MVP cap even without transcript');
-    }
-  }
+  const transcriptBlobOmitted = false;
 
-  const archiveSha256 = await sha256(plaintext);
+  // archiveSha256 carries the chunk-atomic-v1 binding: it is
+  // sha256(concat(per-chunk-plaintext-sha256)) so the NEW device can
+  // verify it incrementally as it decrypts + gunzips chunks one at a
+  // time, without holding the full plaintext in memory.
+  const archiveSha256 = built.archiveSha256;
 
-  // 2. Split + encrypt.
-  const slices = splitArchive(plaintext, LINK_ARCHIVE_CHUNK_SIZE);
+  // 2. Encrypt the per-chunk gzip outputs. Each ciphertext_i =
+  // AES-GCM(gzip(plaintext_chunk_i)) — chunk-atomic at every layer.
   const { key, ephPublicKeyBytes } = await deriveArchiveKey(sessionPublicKeyBase64);
   const nonceBase = crypto.getRandomValues(new Uint8Array(LINK_ARCHIVE_NONCE_BASE_LEN));
-  const { ciphertexts, chunkHashes } = await encryptArchiveSlices(slices, key, nonceBase);
+  const { ciphertexts, chunkHashes } = await encryptArchiveSlices(built.chunks, key, nonceBase);
   const manifestHash = await computeManifestHash(chunkHashes);
 
   const totalBytes = ciphertexts.reduce((sum, c) => sum + c.byteLength, 0);
@@ -210,6 +223,11 @@ export async function uploadArchiveSession({
     archiveSha256: bytesToBase64(archiveSha256),
     ephPub: bytesToBase64(ephPublicKeyBytes),
     nonceBase: bytesToBase64(nonceBase),
+    // Per-chunk plaintext SHA-256, base64. Carried in the small relay
+    // envelope so the NEW device can verify each chunk's plaintext
+    // hash incrementally rather than buffering the whole archive.
+    chunkPlaintextHashes: built.chunkPlaintextHashes.map((h) => bytesToBase64(h)),
+    format: CHUNK_ATOMIC_FORMAT,
     transcriptBlobOmitted,
   };
 }
@@ -253,6 +271,19 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
   const nonceBase = base64ToBytes(archive.nonceBase);
   const key = await deriveArchiveKeyForImport(ephPubBytes, sessionPrivateKey);
 
+  // Durable per-archive checkpoint. On reload the NEW device picks up
+  // here and skips chunks already committed.
+  let checkpoint = await loadCheckpoint(archive.id);
+  if (!checkpoint || checkpoint.totalChunks !== archive.totalChunks) {
+    checkpoint = await initCheckpoint({
+      archiveId: archive.id,
+      role: 'import',
+      instanceUrl: baseUrl,
+      totalChunks: archive.totalChunks,
+      status: 'in_progress',
+    });
+  }
+
   const slices = new Array(archive.totalChunks);
   // Walk download windows. The server caps each window at its
   // window-size constant; the client makes as many round trips as
@@ -261,28 +292,83 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
   // octet-stream bytes, so the same downloadChunkViaWindow helper
   // works for both.
   const windowSize = 8;
-  for (let from = 0; from < archive.totalChunks; from += windowSize) {
-    const to = Math.min(from + windowSize, archive.totalChunks);
-    const window = await requestDownloadWindow(archive.id, archive.downloadToken, from, to, baseUrl);
-    const tasks = window.urls.map((entry) => async () => {
-      const ciphertext = await downloadChunkViaWindow(entry);
-      slices[entry.idx] = await decryptArchiveChunk(ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx);
-    });
-    await runWithConcurrency(tasks, DOWNLOAD_CONCURRENCY);
-  }
+  // Branch on archive descriptor format. The chunk-atomic-v1 path
+  // processes each chunk independently (decrypt → gunzip → parse →
+  // commit) and never buffers the whole archive ciphertext. The
+  // legacy monolithic path stays in place for one release window so
+  // OLD devices that still ship the v3 descriptor can still link.
+  const isChunkAtomic = archive.format === CHUNK_ATOMIC_FORMAT;
+  let parsed;
+  if (isChunkAtomic) {
+    const acc = createParseAccumulator();
+    const expectedPlaintextHashes = Array.isArray(archive.chunkPlaintextHashes)
+      ? archive.chunkPlaintextHashes.map((h) => base64ToBytes(h))
+      : null;
 
-  const expectedArchiveSha256 = base64ToBytes(archive.archiveSha256);
-  let totalLen = 0;
-  for (const slice of slices) totalLen += slice.byteLength;
-  const plaintext = new Uint8Array(totalLen);
-  let offset = 0;
-  for (const slice of slices) {
-    plaintext.set(slice, offset);
-    offset += slice.byteLength;
+    // Sequential per-chunk processing keeps memory bounded: only one
+    // chunk's ciphertext + plaintext is in flight at a time. Window
+    // requests still batch network round trips.
+    for (let from = 0; from < archive.totalChunks; from += windowSize) {
+      const to = Math.min(from + windowSize, archive.totalChunks);
+      const window = await requestDownloadWindow(archive.id, archive.downloadToken, from, to, baseUrl);
+      // Process chunks in increasing index order to honour record-
+      // ordering invariants (META first, END last).
+      const sortedEntries = [...window.urls].sort((a, b) => a.idx - b.idx);
+      for (const entry of sortedEntries) {
+        const ciphertext = await downloadChunkViaWindow(entry);
+        const gzippedPlaintext = await decryptArchiveChunk(
+          ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx,
+        );
+        const expected = expectedPlaintextHashes ? expectedPlaintextHashes[entry.idx] : null;
+        await consumeChunkAtomicChunk(gzippedPlaintext, acc, expected);
+        const result = await markChunkCommitted(archive.id, entry.idx);
+        checkpoint.chunkProgress = checkpointInternals.setBit(checkpoint.chunkProgress, entry.idx);
+        checkpoint.highestContiguous = result.highestContiguous;
+      }
+    }
+    const expectedArchiveSha256 = base64ToBytes(archive.archiveSha256);
+    parsed = await finalizeAccumulator(acc, expectedArchiveSha256);
+  } else {
+    // Legacy monolithic-archive path (descriptor format unset or
+    // explicitly 'monolithic-v3'). Removed in the release after
+    // every still-running OLD device has been upgraded.
+    for (let from = 0; from < archive.totalChunks; from += windowSize) {
+      const to = Math.min(from + windowSize, archive.totalChunks);
+      const window = await requestDownloadWindow(archive.id, archive.downloadToken, from, to, baseUrl);
+      const tasks = window.urls.map((entry) => async () => {
+        const ciphertext = await downloadChunkViaWindow(entry);
+        slices[entry.idx] = await decryptArchiveChunk(ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx);
+        const result = await markChunkCommitted(archive.id, entry.idx);
+        checkpoint.chunkProgress = checkpointInternals.setBit(checkpoint.chunkProgress, entry.idx);
+        checkpoint.highestContiguous = result.highestContiguous;
+      });
+      await runWithConcurrency(tasks, DOWNLOAD_CONCURRENCY);
+    }
+
+    const expectedArchiveSha256 = base64ToBytes(archive.archiveSha256);
+    let totalLen = 0;
+    for (const slice of slices) totalLen += slice.byteLength;
+    const plaintext = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const slice of slices) {
+      plaintext.set(slice, offset);
+      offset += slice.byteLength;
+    }
+    const actualHash = await sha256(plaintext);
+    if (!constantTimeEqual(actualHash, expectedArchiveSha256)) {
+      throw new Error('[linkArchive] reassembled plaintext sha256 mismatch');
+    }
+    parsed = await parseArchivePlaintext(plaintext);
   }
-  const actualHash = await sha256(plaintext);
-  if (!constantTimeEqual(actualHash, expectedArchiveSha256)) {
-    throw new Error('[linkArchive] reassembled plaintext sha256 mismatch');
+  // Mark the durable checkpoint complete and remove it. Failures
+  // here are non-fatal — the next link will overwrite the row by
+  // archiveId, and the row otherwise gets cleaned up the next time
+  // the user starts an import.
+  try {
+    await markCheckpointComplete(archive.id);
+    await deleteCheckpoint(archive.id);
+  } catch {
+    // ignore checkpoint cleanup errors
   }
-  return parseArchivePlaintext(plaintext);
+  return parsed;
 }
