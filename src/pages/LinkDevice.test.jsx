@@ -191,6 +191,8 @@ describe('LinkDevice', () => {
       chunkSize: 4 * 1024 * 1024,
       manifestHash: 'bWFuaWZlc3Q=',
       archiveSha256: 'YXJjaGl2ZQ==',
+      format: 'chunk-atomic-v1',
+      chunkPlaintextHashes: ['Y2h1bmstaGFzaA=='],
       ephPub: 'ZXBocHViYnl0ZXM=',
       nonceBase: 'bm9uY2ViYXNl',
       transcriptBlobOmitted: false,
@@ -682,7 +684,12 @@ describe('LinkDevice', () => {
       transcriptBlob: sealedBlob,
     }));
     expect(mockEncodeTransferBundle).toHaveBeenCalledWith(expect.objectContaining({
-      archive: expect.objectContaining({ id: 'arch-test', downloadToken: 'dtok-test' }),
+      archive: expect.objectContaining({
+        id: 'arch-test',
+        downloadToken: 'dtok-test',
+        format: 'chunk-atomic-v1',
+        chunkPlaintextHashes: ['Y2h1bmstaGFzaA=='],
+      }),
     }));
   });
 

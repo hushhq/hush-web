@@ -525,6 +525,8 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
         chunkSize: archiveDescriptor.chunkSize,
         manifestHash: archiveDescriptor.manifestHash,
         archiveSha256: archiveDescriptor.archiveSha256,
+        format: archiveDescriptor.format,
+        chunkPlaintextHashes: archiveDescriptor.chunkPlaintextHashes,
         ephPub: archiveDescriptor.ephPub,
         nonceBase: archiveDescriptor.nonceBase,
         transcriptBlobOmitted: archiveDescriptor.transcriptBlobOmitted,
