@@ -13,7 +13,7 @@ import { gunzipBytes, gzipBytes, isGzipBytes, supportsGzipCompression } from './
 const LINKING_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const LINKING_CODE_LENGTH = 8;
 const LINK_QR_ROUTE = '/link-device';
-const LINK_BUNDLE_VERSION = 2;
+const LINK_BUNDLE_VERSION = 3;
 
 /**
  * Encodes raw bytes as a base64 string.
@@ -273,6 +273,13 @@ export function generateLinkingCode() {
 /**
  * Serialises a transfer bundle into UTF-8 JSON bytes.
  *
+ * v3 bundles carry the small relay envelope only: identity + an optional
+ * archive descriptor. History snapshot, metadata snapshot, and transcript
+ * blob have moved into the chunked archive plane and are no longer inline.
+ * Legacy v2 bundles with inline history are still accepted by
+ * `decodeTransferBundle` so that an OLD device that has not yet been
+ * upgraded continues to work for one release cycle.
+ *
  * @param {{
  *   userId: string,
  *   username?: string,
@@ -280,8 +287,18 @@ export function generateLinkingCode() {
  *   instanceUrl?: string,
  *   rootPrivateKey: Uint8Array,
  *   rootPublicKey: Uint8Array,
- *   historySnapshot?: object,
- *   guildMetadataKeySnapshot?: object,
+ *   archive?: {
+ *     id: string,
+ *     downloadToken: string,
+ *     totalChunks: number,
+ *     totalBytes: number,
+ *     chunkSize: number,
+ *     manifestHash: string,
+ *     archiveSha256: string,
+ *     ephPub: string,
+ *     nonceBase: string,
+ *     transcriptBlobOmitted: boolean,
+ *   } | null,
  *   exportedAt?: string,
  * }} bundle
  * @returns {Uint8Array}
@@ -296,12 +313,7 @@ export async function encodeTransferBundle(bundle) {
     exportedAt: bundle.exportedAt ?? new Date().toISOString(),
     rootPrivateKey: bytesToBase64(bundle.rootPrivateKey),
     rootPublicKey: bytesToBase64(bundle.rootPublicKey),
-    historySnapshot: bundle.historySnapshot ?? null,
-    guildMetadataKeySnapshot: bundle.guildMetadataKeySnapshot ?? null,
-    // Encrypted transcript-cache blob produced by lib/transcriptVault.js. The
-    // blob is already AES-GCM encrypted under a key derived from the user's
-    // root identity; the relay envelope adds an outer ECDH layer in transit.
-    transcriptBlob: bundle.transcriptBlob ? bytesToBase64(bundle.transcriptBlob) : null,
+    archive: bundle.archive ?? null,
   };
   const jsonBytes = new TextEncoder().encode(JSON.stringify(payload));
   if (!supportsGzipCompression()) {
@@ -343,6 +355,10 @@ export async function decodeTransferBundle(bytes) {
     exportedAt: parsed.exportedAt ?? '',
     rootPrivateKey: base64ToBytes(parsed.rootPrivateKey),
     rootPublicKey: base64ToBytes(parsed.rootPublicKey),
+    // v3: archive descriptor for chunked-transfer plane. v2 and earlier
+    // ship history/metadata/transcript inline. The new device's
+    // completeDeviceLink prefers `archive` when present.
+    archive: parsed.archive ?? null,
     historySnapshot: parsed.historySnapshot ?? null,
     guildMetadataKeySnapshot: parsed.guildMetadataKeySnapshot ?? null,
     transcriptBlob: parsed.transcriptBlob ? base64ToBytes(parsed.transcriptBlob) : null,

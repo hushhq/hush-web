@@ -34,6 +34,8 @@ import {
   encryptRelayPayload,
   base64ToBytes,
 } from '../lib/deviceLinking';
+import { downloadArchiveSession, uploadArchiveSession } from '../lib/linkArchiveSession';
+import { deleteArchive } from '../lib/linkArchiveTransport';
 
 const POLL_INITIAL_MS = 2000;
 const POLL_BACKOFF_MULTIPLIER = 1.5;
@@ -192,7 +194,41 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         setStatus('Finalizing linked device…');
         const relayBytes = await decryptRelayPayload(result, requestState.sessionPrivateKey);
         const bundle = await decodeTransferBundle(relayBytes);
+
+        // v3 chunked-archive bundle: pull the bulk archive over the chunked
+        // transport, decrypt + reassemble, and patch its decoded contents
+        // back onto the bundle so completeDeviceLink can keep using the
+        // historySnapshot / guildMetadataKeySnapshot / transcriptBlob path.
+        if (bundle.archive) {
+          setStatus('Importing message history…');
+          const importBaseUrl = bundle.instanceUrl || requestState.instanceUrl || window.location.origin;
+          try {
+            const fetched = await downloadArchiveSession({
+              archive: bundle.archive,
+              sessionPrivateKey: requestState.sessionPrivateKey,
+              baseUrl: importBaseUrl,
+            });
+            bundle.historySnapshot = fetched.historySnapshot;
+            bundle.guildMetadataKeySnapshot = fetched.guildMetadataKeySnapshot;
+            bundle.transcriptBlob = fetched.transcriptBlob;
+            // Best-effort cleanup of server-side staging.
+            try {
+              await deleteArchive(bundle.archive.id, {
+                downloadToken: bundle.archive.downloadToken,
+              }, importBaseUrl);
+            } catch {
+              // Server purger reaps; never block the link on cleanup.
+            }
+          } catch (err) {
+            console.error('[LinkDevice] chunked archive download failed', err);
+            throw err;
+          }
+        }
+
         await completeDeviceLink(bundle);
+        if (bundle.archive?.transcriptBlobOmitted) {
+          setStatus('Linked. Local message history was too large to transfer.');
+        }
         onLinked();
       } catch (err) {
         if (cancelled) return;
@@ -452,6 +488,44 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       const historySnapshot = await mlsStore.exportHistorySnapshot(historyDb);
       metadataDb = await openGuildMetadataKeyStore(user.id, getDeviceId());
       const guildMetadataKeySnapshot = await exportGuildMetadataKeySnapshot(metadataDb);
+
+      // Chunked archive upload: history snapshot + metadata snapshot +
+      // transcript blob ride a separate bulk plane so /link-verify stays
+      // small. The archive descriptor is what flows in the relay envelope.
+      let archiveDescriptor = null;
+      try {
+        archiveDescriptor = await uploadArchiveSession({
+          token,
+          sessionPublicKeyBase64: claim.sessionPublicKey,
+          baseUrl: baseUrlForApi,
+          historySnapshot,
+          guildMetadataKeySnapshot,
+          transcriptBlob,
+        });
+        console.info('[LinkDevice] archive uploaded', {
+          archiveId: archiveDescriptor.id,
+          totalChunks: archiveDescriptor.totalChunks,
+          totalBytes: archiveDescriptor.totalBytes,
+          transcriptBlobOmitted: archiveDescriptor.transcriptBlobOmitted,
+        });
+      } catch (err) {
+        console.error('[LinkDevice] chunked archive upload failed', err);
+        throw err;
+      }
+
+      const archivePayload = {
+        id: archiveDescriptor.id,
+        downloadToken: archiveDescriptor.downloadToken,
+        totalChunks: archiveDescriptor.totalChunks,
+        totalBytes: archiveDescriptor.totalBytes,
+        chunkSize: archiveDescriptor.chunkSize,
+        manifestHash: archiveDescriptor.manifestHash,
+        archiveSha256: archiveDescriptor.archiveSha256,
+        ephPub: archiveDescriptor.ephPub,
+        nonceBase: archiveDescriptor.nonceBase,
+        transcriptBlobOmitted: archiveDescriptor.transcriptBlobOmitted,
+      };
+
       const transferBundle = await encodeTransferBundle({
         userId: user.id,
         username: user.username,
@@ -459,9 +533,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
         instanceUrl: claim.instanceUrl || window.location.origin,
         rootPrivateKey: identityKeyRef.current.privateKey,
         rootPublicKey: identityKeyRef.current.publicKey,
-        historySnapshot,
-        guildMetadataKeySnapshot,
-        transcriptBlob,
+        archive: archivePayload,
       });
       const certificate = await certifyDevice(
         base64ToBytes(claim.devicePublicKey),
@@ -469,12 +541,25 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       );
       const relayEnvelope = await encryptRelayPayload(transferBundle, claim.sessionPublicKey);
 
-      await verifyDeviceLinkRequest(token, {
-        claimToken: claim.claimToken,
-        certificate: bytesToBase64(certificate),
-        signingDeviceId: getDeviceId(),
-        ...relayEnvelope,
-      });
+      try {
+        await verifyDeviceLinkRequest(token, {
+          claimToken: claim.claimToken,
+          certificate: bytesToBase64(certificate),
+          signingDeviceId: getDeviceId(),
+          ...relayEnvelope,
+        });
+      } catch (err) {
+        // Verify failed after a successful archive upload. Best-effort cleanup
+        // so server storage is released; purger reaps if this also fails.
+        try {
+          await deleteArchive(archiveDescriptor.id, {
+            uploadToken: archiveDescriptor.uploadToken,
+          }, baseUrlForApi);
+        } catch {
+          // ignore
+        }
+        throw err;
+      }
 
       setStatus('Device linked. Return to the new device to finish setup.');
     } catch (err) {

@@ -28,6 +28,9 @@ const {
   mockExportGuildMetadataKeySnapshot,
   mockListAllLocalPlaintexts,
   mockBuildTranscriptBlobForExport,
+  mockUploadArchiveSession,
+  mockDownloadArchiveSession,
+  mockDeleteArchive,
 } = vi.hoisted(() => ({
   authState: { current: null },
   mockQrToDataUrl: vi.fn(),
@@ -52,6 +55,9 @@ const {
   mockExportGuildMetadataKeySnapshot: vi.fn(),
   mockListAllLocalPlaintexts: vi.fn(),
   mockBuildTranscriptBlobForExport: vi.fn(),
+  mockUploadArchiveSession: vi.fn(),
+  mockDownloadArchiveSession: vi.fn(),
+  mockDeleteArchive: vi.fn(),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -118,6 +124,16 @@ vi.mock('../lib/deviceLinking', () => ({
   encodeTransferBundle: (...args) => mockEncodeTransferBundle(...args),
   encryptRelayPayload: (...args) => mockEncryptRelayPayload(...args),
   base64ToBytes: (...args) => mockBase64ToBytes(...args),
+  importSessionPublicKey: vi.fn(),
+}));
+
+vi.mock('../lib/linkArchiveSession', () => ({
+  uploadArchiveSession: (...args) => mockUploadArchiveSession(...args),
+  downloadArchiveSession: (...args) => mockDownloadArchiveSession(...args),
+}));
+
+vi.mock('../lib/linkArchiveTransport', () => ({
+  deleteArchive: (...args) => mockDeleteArchive(...args),
 }));
 
 vi.mock('qrcode', () => ({
@@ -166,6 +182,25 @@ describe('LinkDevice', () => {
     mockExportGuildMetadataKeySnapshot.mockResolvedValue({ stores: {} });
     mockListAllLocalPlaintexts.mockResolvedValue([]);
     mockBuildTranscriptBlobForExport.mockResolvedValue(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
+    mockUploadArchiveSession.mockResolvedValue({
+      id: 'arch-test',
+      uploadToken: 'utok-test',
+      downloadToken: 'dtok-test',
+      totalChunks: 1,
+      totalBytes: 16,
+      chunkSize: 4 * 1024 * 1024,
+      manifestHash: 'bWFuaWZlc3Q=',
+      archiveSha256: 'YXJjaGl2ZQ==',
+      ephPub: 'ZXBocHViYnl0ZXM=',
+      nonceBase: 'bm9uY2ViYXNl',
+      transcriptBlobOmitted: false,
+    });
+    mockDownloadArchiveSession.mockResolvedValue({
+      historySnapshot: { version: 1, stores: {} },
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: null,
+    });
+    mockDeleteArchive.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -608,8 +643,13 @@ describe('LinkDevice', () => {
       authState.current.identityKeyRef.current.privateKey,
       harvestedRows,
     );
-    expect(mockEncodeTransferBundle).toHaveBeenCalledWith(expect.objectContaining({
+    // v3: transcriptBlob now ships through the chunked archive plane,
+    // not inline in the small relay envelope.
+    expect(mockUploadArchiveSession).toHaveBeenCalledWith(expect.objectContaining({
       transcriptBlob: sealedBlob,
+    }));
+    expect(mockEncodeTransferBundle).toHaveBeenCalledWith(expect.objectContaining({
+      archive: expect.objectContaining({ id: 'arch-test', downloadToken: 'dtok-test' }),
     }));
   });
 
@@ -670,7 +710,7 @@ describe('LinkDevice', () => {
     });
 
     expect(mockBuildTranscriptBlobForExport).not.toHaveBeenCalled();
-    expect(mockEncodeTransferBundle).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockUploadArchiveSession).toHaveBeenCalledWith(expect.objectContaining({
       transcriptBlob: null,
     }));
   });

@@ -90,8 +90,20 @@ describe('blind relay encryption', () => {
 });
 
 describe('transfer bundle serialisation', () => {
-  it('round-trips root keys and history snapshot metadata', async () => {
+  it('round-trips root keys and the archive descriptor', async () => {
     const identity = await createDeviceIdentity();
+    const archive = {
+      id: 'arch-1',
+      downloadToken: 'dtok',
+      totalChunks: 2,
+      totalBytes: 8200,
+      chunkSize: 4096,
+      manifestHash: 'bWFuaWZlc3RoYXNo',
+      archiveSha256: 'YXJjaGl2ZXNoYTI1Ng==',
+      ephPub: 'ZXBocHViYnl0ZXM=',
+      nonceBase: 'bm9uY2ViYXNl',
+      transcriptBlobOmitted: false,
+    };
     const bytes = await encodeTransferBundle({
       userId: 'user-1',
       username: 'alice',
@@ -99,16 +111,7 @@ describe('transfer bundle serialisation', () => {
       instanceUrl: 'https://app.gethush.live',
       rootPrivateKey: identity.privateKey,
       rootPublicKey: identity.publicKey,
-      historySnapshot: {
-        version: 1,
-        stores: {
-          credential: [{ key: 'credential', signingPublicKey: [1, 2, 3] }],
-        },
-      },
-      guildMetadataKeySnapshot: {
-        version: 1,
-        keys: [{ guildId: 'guild-1', keyBytes: [9, 8, 7] }],
-      },
+      archive,
     });
 
     const decoded = await decodeTransferBundle(bytes);
@@ -119,16 +122,11 @@ describe('transfer bundle serialisation', () => {
     expect(decoded.instanceUrl).toBe('https://app.gethush.live');
     expect(decoded.rootPrivateKey).toEqual(identity.privateKey);
     expect(decoded.rootPublicKey).toEqual(identity.publicKey);
-    expect(decoded.historySnapshot).toEqual({
-      version: 1,
-      stores: {
-        credential: [{ key: 'credential', signingPublicKey: [1, 2, 3] }],
-      },
-    });
-    expect(decoded.guildMetadataKeySnapshot).toEqual({
-      version: 1,
-      keys: [{ guildId: 'guild-1', keyBytes: [9, 8, 7] }],
-    });
+    expect(decoded.archive).toEqual(archive);
+    // v3 small bundle no longer carries inline snapshots.
+    expect(decoded.historySnapshot).toBeNull();
+    expect(decoded.guildMetadataKeySnapshot).toBeNull();
+    expect(decoded.transcriptBlob).toBeNull();
   });
 
   it('decodes legacy uncompressed transfer bundle bytes', async () => {
