@@ -11,7 +11,7 @@ import { Button } from '../components/ui';
 import QRCodeScanner from '../components/QRCodeScanner';
 import * as mlsStore from '../lib/mlsStore';
 import { preDecryptForLinkExport } from '../lib/preDecryptForLinkExport';
-import { buildTranscriptBlobForExport } from '../lib/transcriptVault';
+import { buildTranscriptBlobForExport, listTranscriptCacheEntries } from '../lib/transcriptVault';
 import {
   exportGuildMetadataKeySnapshot,
   openGuildMetadataKeyStore,
@@ -571,23 +571,56 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       // carries plaintext rows (HISTORY_SNAPSHOT_STORES dropped localPlaintext).
       let transcriptBlob = null;
       try {
-        const rows = await mlsStore.listAllLocalPlaintexts(historyDb);
-        // Diagnostic: number of local plaintext rows the OLD device is about to
-        // seal into the transcript blob. If this is 0 or unexpectedly small,
-        // the linked device cannot recover what is missing here.
-        const sampleIds = rows.slice(0, 3).map((r) => r.messageId);
+        const localPlaintextRows = await mlsStore.listAllLocalPlaintexts(historyDb);
+
+        // Pull the in-memory transcriptVault cache too. Real-world OLD
+        // devices commonly have plaintext rows that were decrypted into
+        // the runtime cache (e.g. via the on-receive ratchet path) but
+        // never copied back to mlsStore.localPlaintext. Sealing only the
+        // mls store leaves those rows out of the transfer bundle; the
+        // NEW device then has nothing to import and chat surfaces empty
+        // until/unless MLS can re-decrypt — which fails with
+        // TooDistantInThePast outside the ratchet window.
+        let transcriptCacheRows = [];
+        try {
+          transcriptCacheRows = listTranscriptCacheEntries();
+        } catch (err) {
+          console.warn('[LinkDevice] transcript-blob seal: transcript cache read failed; falling back to localPlaintext only', err);
+          transcriptCacheRows = [];
+        }
+
+        // Merge by messageId, preferring localPlaintext rows when both
+        // sources cover the same id. localPlaintext is the authoritative
+        // record (committed during MLS receive); the runtime cache is a
+        // best-effort mirror that may carry slightly different shape.
+        const mergedById = new Map();
+        for (const row of transcriptCacheRows) {
+          if (row?.messageId) mergedById.set(row.messageId, row);
+        }
+        for (const row of localPlaintextRows) {
+          if (row?.messageId) mergedById.set(row.messageId, row);
+        }
+        const mergedRows = Array.from(mergedById.values());
+
+        const sampleIds = mergedRows.slice(0, 3).map((r) => r.messageId);
         console.info(
-          '[LinkDevice] transcript-blob seal: harvested rows from active localPlaintext',
-          { rowCount: rows.length, firstIds: sampleIds },
+          '[LinkDevice] transcript-blob seal: harvested rows for export',
+          {
+            localPlaintextRowCount: localPlaintextRows.length,
+            transcriptCacheRowCount: transcriptCacheRows.length,
+            mergedRowCount: mergedRows.length,
+            firstIds: sampleIds,
+          },
         );
-        if (rows.length > 0) {
+
+        if (mergedRows.length > 0) {
           transcriptBlob = await buildTranscriptBlobForExport(
             identityKeyRef.current.privateKey,
-            rows,
+            mergedRows,
           );
           console.info(
             '[LinkDevice] transcript-blob seal: produced encrypted blob',
-            { byteLength: transcriptBlob.byteLength, rowCount: rows.length },
+            { byteLength: transcriptBlob.byteLength, rowCount: mergedRows.length },
           );
         } else {
           console.warn('[LinkDevice] transcript-blob seal: zero rows — new device will inherit no plaintext history');

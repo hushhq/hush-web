@@ -16,6 +16,7 @@ import {
   getTranscriptEntry,
   clearTranscriptCache,
   getTranscriptCacheStatus,
+  listTranscriptCacheEntries,
   buildTranscriptBlobForExport,
   importAndReprotectTranscriptBlob,
   loadTranscriptCacheFromDisk,
@@ -203,6 +204,38 @@ describe('transcriptVault — in-memory cache', () => {
     setTranscriptCache('user-x', [SAMPLE_ROWS[0]]);
     expect(getTranscriptCacheStatus().size).toBe(1);
     expect(getTranscriptEntry('m2')).toBeNull();
+  });
+
+  it('listTranscriptCacheEntries returns an empty array when the cache is empty', () => {
+    expect(listTranscriptCacheEntries()).toEqual([]);
+  });
+
+  it('listTranscriptCacheEntries returns one entry per cached row', () => {
+    setTranscriptCache('user-x', SAMPLE_ROWS);
+    const rows = listTranscriptCacheEntries();
+    expect(rows).toHaveLength(SAMPLE_ROWS.length);
+    const ids = rows.map((row) => row.messageId).sort();
+    expect(ids).toEqual(['m1', 'm2', 'm3']);
+  });
+
+  it('listTranscriptCacheEntries returns copies, not internal mutable references', () => {
+    setTranscriptCache('user-x', SAMPLE_ROWS);
+
+    // Mutating the returned array must not change the cache contents.
+    const firstSnapshot = listTranscriptCacheEntries();
+    firstSnapshot.length = 0;
+    firstSnapshot.push({ messageId: 'm9', plaintext: 'forged', timestamp: 9 });
+    expect(getTranscriptCacheStatus().size).toBe(SAMPLE_ROWS.length);
+    expect(getTranscriptEntry('m1')).toEqual(SAMPLE_ROWS[0]);
+    expect(getTranscriptEntry('m9')).toBeNull();
+
+    // Mutating a returned row must not change the cached row.
+    const secondSnapshot = listTranscriptCacheEntries();
+    const target = secondSnapshot.find((row) => row.messageId === 'm1');
+    target.plaintext = 'TAMPERED';
+    target.senderId = 'mallory';
+    expect(getTranscriptEntry('m1').plaintext).toBe('hello');
+    expect(getTranscriptEntry('m1').senderId).toBe('alice');
   });
 });
 

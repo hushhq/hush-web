@@ -30,6 +30,7 @@ const {
   mockExportGuildMetadataKeySnapshot,
   mockListAllLocalPlaintexts,
   mockBuildTranscriptBlobForExport,
+  mockListTranscriptCacheEntries,
   mockUploadArchiveSession,
   mockDownloadArchiveSession,
   mockDeleteArchive,
@@ -63,6 +64,7 @@ const {
   mockExportGuildMetadataKeySnapshot: vi.fn(),
   mockListAllLocalPlaintexts: vi.fn(),
   mockBuildTranscriptBlobForExport: vi.fn(),
+  mockListTranscriptCacheEntries: vi.fn(),
   mockUploadArchiveSession: vi.fn(),
   mockDownloadArchiveSession: vi.fn(),
   mockDeleteArchive: vi.fn(),
@@ -113,6 +115,7 @@ vi.mock('../lib/preDecryptForLinkExport', () => ({
 
 vi.mock('../lib/transcriptVault', () => ({
   buildTranscriptBlobForExport: (...args) => mockBuildTranscriptBlobForExport(...args),
+  listTranscriptCacheEntries: (...args) => mockListTranscriptCacheEntries(...args),
 }));
 
 vi.mock('../lib/guildMetadataKeyStore', () => ({
@@ -200,6 +203,7 @@ describe('LinkDevice', () => {
     mockOpenGuildMetadataKeyStore.mockResolvedValue({ close: vi.fn() });
     mockExportGuildMetadataKeySnapshot.mockResolvedValue({ stores: {} });
     mockListAllLocalPlaintexts.mockResolvedValue([]);
+    mockListTranscriptCacheEntries.mockReturnValue([]);
     mockBuildTranscriptBlobForExport.mockResolvedValue(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
     mockUploadArchiveSession.mockResolvedValue({
       id: 'arch-test',
@@ -1045,6 +1049,219 @@ describe('LinkDevice', () => {
     expect(mockUploadArchiveSession).toHaveBeenCalledWith(expect.objectContaining({
       transcriptBlob: null,
     }));
+  });
+
+  it('exports transcript cache rows when localPlaintext is empty', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+    const cacheRows = [
+      { messageId: 'cache-1', plaintext: 'hello', senderId: 'alice', timestamp: 100 },
+      { messageId: 'cache-2', plaintext: 'world', senderId: 'bob', timestamp: 200 },
+    ];
+    const sealedBlob = new Uint8Array([1, 2, 3, 4, 5]);
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array(32).fill(7),
+          publicKey: new Uint8Array(32).fill(8),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    mockListAllLocalPlaintexts.mockResolvedValue([]);
+    mockListTranscriptCacheEntries.mockReturnValue(cacheRows);
+    mockBuildTranscriptBlobForExport.mockResolvedValue(sealedBlob);
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+
+    expect(mockBuildTranscriptBlobForExport).toHaveBeenCalledTimes(1);
+    const sealedRows = mockBuildTranscriptBlobForExport.mock.calls[0][1];
+    const sealedIds = sealedRows.map((row) => row.messageId).sort();
+    expect(sealedIds).toEqual(['cache-1', 'cache-2']);
+    expect(mockUploadArchiveSession).toHaveBeenCalledWith(expect.objectContaining({
+      transcriptBlob: sealedBlob,
+    }));
+  });
+
+  it('deduplicates by messageId and prefers localPlaintext over the transcript cache', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+    const localPlaintextRows = [
+      { messageId: 'shared-1', plaintext: 'authoritative', senderId: 'alice', timestamp: 1000 },
+      { messageId: 'local-only', plaintext: 'mls-only', senderId: 'alice', timestamp: 1100 },
+    ];
+    const cacheRows = [
+      { messageId: 'shared-1', plaintext: 'STALE', senderId: 'alice', timestamp: 1 },
+      { messageId: 'cache-only', plaintext: 'cache-only-text', senderId: 'bob', timestamp: 1200 },
+    ];
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array(32).fill(7),
+          publicKey: new Uint8Array(32).fill(8),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    mockListAllLocalPlaintexts.mockResolvedValue(localPlaintextRows);
+    mockListTranscriptCacheEntries.mockReturnValue(cacheRows);
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+
+    expect(mockBuildTranscriptBlobForExport).toHaveBeenCalledTimes(1);
+    const sealedRows = mockBuildTranscriptBlobForExport.mock.calls[0][1];
+    expect(sealedRows).toHaveLength(3);
+    const byId = new Map(sealedRows.map((row) => [row.messageId, row]));
+    expect(byId.get('shared-1').plaintext).toBe('authoritative');
+    expect(byId.get('local-only').plaintext).toBe('mls-only');
+    expect(byId.get('cache-only').plaintext).toBe('cache-only-text');
+  });
+
+  it('falls back to localPlaintext rows when the transcript cache read throws', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+    const localPlaintextRows = [
+      { messageId: 'm1', plaintext: 'kept', senderId: 'alice', timestamp: 1 },
+    ];
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array(32).fill(7),
+          publicKey: new Uint8Array(32).fill(8),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://app.gethush.live',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+    mockListAllLocalPlaintexts.mockResolvedValue(localPlaintextRows);
+    mockListTranscriptCacheEntries.mockImplementation(() => {
+      throw new Error('cache offline');
+    });
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+
+    expect(mockBuildTranscriptBlobForExport).toHaveBeenCalledTimes(1);
+    const sealedRows = mockBuildTranscriptBlobForExport.mock.calls[0][1];
+    expect(sealedRows).toEqual(localPlaintextRows);
   });
 
   it('still completes link approval if preDecryptForLinkExport throws', async () => {

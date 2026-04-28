@@ -950,6 +950,32 @@ export function clearTranscriptCache() {
 }
 
 /**
+ * Read-only snapshot of the in-memory transcript cache, used by the OLD
+ * device's link-export path so plaintext rows that were decrypted into
+ * the runtime cache (but not into MLS `localPlaintext`) are still sealed
+ * into the transfer bundle. Returns a freshly-allocated array of
+ * shallow-cloned rows: callers must not mutate the cache through the
+ * returned references, and the cache must not change shape if a caller
+ * later mutates the returned rows.
+ *
+ * @returns {Array<{messageId: string, plaintext: string, senderId?: string, timestamp: number}>}
+ */
+export function listTranscriptCacheEntries() {
+  const out = [];
+  for (const row of _state.cache.values()) {
+    if (!row?.messageId) continue;
+    const copy = {
+      messageId: row.messageId,
+      plaintext: row.plaintext,
+      timestamp: row.timestamp,
+    };
+    if (row.senderId !== undefined) copy.senderId = row.senderId;
+    out.push(copy);
+  }
+  return out;
+}
+
+/**
  * @returns {{loaded: boolean, userId: string|null, size: number, generation: number}}
  */
 export function getTranscriptCacheStatus() {
