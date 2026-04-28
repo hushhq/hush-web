@@ -431,6 +431,64 @@ html[data-desktop] body {
   overscroll-behavior: none;
 }
 
+/* ── Desktop shell layout (Electron only) ──────────
+   Make the authenticated app fill the BrowserWindow edge-to-edge so the
+   OS window owns the outer shell. Strip the web-style outer padding,
+   gap, border and radius from the top-level columns; the OS clips the
+   actual window corners and provides the outer chrome.
+
+   Column separation switches from "two card panels with a gap" to a
+   single 1 px hairline between the server strip and the main panel. The
+   sidebar-shell hairline between channel sidebar and channel area is
+   already provided by `.lay-content-row .sidebar-shell` above.
+
+   Safe-area top padding on the server strip keeps its first guild
+   button clear of the native window controls (macOS traffic lights,
+   Windows `titleBarOverlay`). The header inside the channel area is
+   marked non-draggable so its controls remain clickable underneath the
+   invisible drag-region overlay.
+
+   Browser/PWA visual behaviour is untouched — every rule below is gated
+   on `html[data-desktop]`. */
+
+html[data-desktop] {
+  /* Matches the height of `.electron-drag-region` and clears the macOS
+     traffic-lights gutter. Per-platform overrides below tune for
+     Windows `titleBarOverlay` (~40 px) and Linux (native frame owns
+     the titlebar above the renderer, so no in-renderer gutter). */
+  --desktop-titlebar-safe-top: 32px;
+}
+
+html[data-desktop="win32"] {
+  --desktop-titlebar-safe-top: 40px;
+}
+
+html[data-desktop="linux"] {
+  --desktop-titlebar-safe-top: 0px;
+}
+
+html[data-desktop] .lay-container {
+  padding: 0;
+  gap: 0;
+  background: var(--hush-surface);
+}
+
+html[data-desktop] .sl-strip,
+html[data-desktop] .lay-main {
+  border: none;
+  border-radius: 0;
+}
+
+html[data-desktop] .sl-strip {
+  border-right: 1px solid var(--hush-border);
+  padding-top: calc(var(--desktop-titlebar-safe-top) + 8px);
+}
+
+html[data-desktop] .lay-channel-area-header {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* ── Glass (translucent) ───────────────────────── */
 
 .glass {
