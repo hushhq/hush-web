@@ -6469,10 +6469,15 @@ select:focus-visible {
   background: var(--hush-black);
 }
 
-.ld-container {
-  min-height: 100dvh;
-  padding-top: clamp(28px, 7vh, 80px);
-  padding-bottom: 32px;
+/* `.ld-container` keeps no own min-height or vertical padding. Vertical
+   positioning is owned by the parent `.home-page` flex layout
+   (display:flex; align-items:center; justify-content:center) so the card
+   actually centres in the viewport rather than anchoring to the top.
+   The desktop override below nudges the card down by the height of the
+   invisible drag region so it reads as centred in the *usable* window
+   area, not in the raw viewport. */
+html[data-desktop] .ld-container {
+  padding-top: 32px;
 }
 
 .ld-card {
@@ -6863,10 +6868,6 @@ select:focus-visible {
 }
 
 @media (max-width: 640px) {
-  .ld-container {
-    padding-top: 24px;
-  }
-
   .ld-card {
     max-width: none;
   }
