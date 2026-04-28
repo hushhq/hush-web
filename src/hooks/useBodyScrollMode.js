@@ -34,7 +34,13 @@ export function useBodyScrollMode(mode) {
       dataMode: body.dataset.hushScrollMode ?? null,
     };
 
-    const isLocked = mode === BODY_SCROLL_MODE.LOCKED;
+    // The Electron shell is viewport-locked. Force LOCKED regardless of the
+    // caller's intent so that route-owned scroll modes never accidentally
+    // unlock the BrowserWindow's top-level overflow. Internal panes keep
+    // their own overflow behaviour — this rule only governs html / body.
+    const isDesktop = typeof window !== 'undefined'
+      && window.hushDesktop?.isDesktop === true;
+    const isLocked = isDesktop || mode === BODY_SCROLL_MODE.LOCKED;
     const overflowY = isLocked ? 'hidden' : 'auto';
     const overscrollBehavior = isLocked ? 'none' : 'auto';
 

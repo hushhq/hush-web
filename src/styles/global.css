@@ -389,6 +389,48 @@ body::after {
   background: radial-gradient(ellipse, rgba(210,200,188,.18) 0%, transparent 65%);
 }
 
+/* ── Electron desktop shell ────────────────────────
+   `<html data-desktop="<platform>">` is set by `useDesktopShell` while the
+   app runs inside the Electron renderer. Two consequences:
+
+   1. Drag region — the invisible top-edge gutter that lets the user drag
+      the BrowserWindow from empty space above the application content.
+      Mounted only on macOS (`hiddenInset`) and Windows (`hidden` +
+      `titleBarOverlay`) — Linux uses a native frame whose own titlebar
+      already provides drag, so the React component renders nothing there.
+
+      Native window controls (macOS traffic lights, Windows caption buttons)
+      are drawn by the OS above the BrowserWindow's web layer and remain
+      clickable through this overlay. Interactive elements that visually
+      fall under the top 32 px (rare in this app) can opt out by setting
+      `-webkit-app-region: no-drag` on themselves.
+
+   2. Shell scroll lock — the BrowserWindow's top-level page never scrolls.
+      Internal panes (chat panes, side bars, lists) keep their own
+      `overflow-y: auto` and continue to scroll locally; only the document
+      root and body are clamped. */
+
+.electron-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 1;
+  background: transparent;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+html[data-desktop],
+html[data-desktop] body {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* ── Glass (translucent) ───────────────────────── */
 
 .glass {

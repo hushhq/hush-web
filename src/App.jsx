@@ -4,8 +4,10 @@ import { AuthProvider } from './contexts/AuthContext';
 import { InstanceProvider, useInstanceContext } from './contexts/InstanceContext';
 import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
+import { ElectronDragRegion } from './components/desktop/ElectronDragRegion.jsx';
 import { applyThemeMode, getStoredThemeMode } from './components/UserSettingsModal';
 import { useSingleTab } from './hooks/useSingleTab';
+import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
 import { PostRecoveryWizard } from './components/PostRecoveryWizard';
 
@@ -249,6 +251,7 @@ function BlockedTabOverlay({ blockedFlow, takeOver }) {
 // ── App root ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  useDesktopShell();
   const location = useLocation();
   const { isBlockedTab, takeOver } = useSingleTab();
   const blockedFlow = location.pathname === '/link-device'
@@ -267,6 +270,7 @@ export default function App() {
         <BootProvider>
           <FaviconThemeSync />
           <AppBackground />
+          <ElectronDragRegion />
           <AppContent />
         </BootProvider>
       </InstanceProvider>
