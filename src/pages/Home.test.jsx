@@ -247,6 +247,27 @@ describe('Home', () => {
     expect(screen.getByText('Registration Wizard')).toBeInTheDocument();
   });
 
+  it('renders the auth-card footer with capitalised "Hush" copy', () => {
+    renderHome();
+    const footer = document.querySelector('.home-footer');
+    expect(footer).not.toBeNull();
+    expect(footer.textContent).toMatch(/Hush is open source and self-hostable\./);
+    // Ensure the lower-cased variant is gone.
+    expect(footer.textContent).not.toMatch(/^hush is open source/);
+  });
+
+  it('renders the Sign up link without a default underline (no inline text-decoration)', () => {
+    renderHome();
+    const signup = screen.getByRole('button', { name: /sign up/i });
+    // Class hook for the underline-on-hover styling lives on the button.
+    expect(signup.classList.contains('home-auth-signup-link')).toBe(true);
+    // The default class should NOT carry an inline `text-decoration: underline`
+    // override; the hover/focus rule supplies it. (Class-based contract: the
+    // computed style cannot be inspected reliably in jsdom, but the inline
+    // style attribute should remain empty here.)
+    expect(signup.getAttribute('style') || '').not.toMatch(/text-decoration:\s*underline/i);
+  });
+
   it('hides the "Sign up" link when registration is closed', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

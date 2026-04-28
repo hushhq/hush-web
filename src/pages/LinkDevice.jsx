@@ -309,14 +309,6 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
     ? 'QR unavailable. Use the fallback code below.'
     : 'Generating link request…';
 
-  const statusLabel = hasActiveRequest
-    ? 'Waiting for approval'
-    : isExpired
-    ? 'Link expired'
-    : error
-    ? 'Link unavailable'
-    : 'Preparing link…';
-
   return (
     <div className="glass home-form-card ld-card ld-new-card">
       <div className="home-section-title">Link this device</div>
@@ -346,13 +338,6 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
             </div>
           )}
         </div>
-        <div className="ld-qr-status">
-          <span
-            className={`ld-pulse-dot${hasActiveRequest ? ' is-active' : ''}`}
-            aria-hidden="true"
-          />
-          <span className="ld-qr-status-text">{statusLabel}</span>
-        </div>
         <div className="ld-qr-timer" aria-live="polite">
           {hasActiveRequest
             ? `Expires in ${formatCountdown(requestState.expiresAt, now)}`
@@ -374,8 +359,8 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         >
           {hasCode ? requestState.code : '——————'}
         </div>
-        <Button
-          variant="secondary"
+        <button
+          type="button"
           onClick={handleCopyCode}
           aria-label="Copy device link code"
           data-state={codeCopied ? 'copied' : 'idle'}
@@ -385,7 +370,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           {codeCopied
             ? <CheckIcon aria-hidden="true" />
             : <CopyIcon aria-hidden="true" />}
-        </Button>
+        </button>
       </div>
 
       <div className="ld-instance-row">
@@ -402,6 +387,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
       {error && <div className="ld-error">{error}</div>}
 
       <div className="ld-footer">
+        <LinkDeviceBackLink />
         <Button
           variant="secondary"
           className="ld-footer-regen"
@@ -409,7 +395,6 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         >
           Regenerate
         </Button>
-        <LinkDeviceBackLink />
       </div>
     </div>
   );

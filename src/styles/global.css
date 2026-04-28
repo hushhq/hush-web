@@ -4868,15 +4868,17 @@ select:focus-visible {
   font-weight: 600;
   cursor: pointer;
   padding: 0;
-  text-decoration: underline;
-  text-decoration-color: var(--hush-border-hover);
+  text-decoration: none;
   text-underline-offset: 3px;
-  transition: color var(--duration-fast) var(--ease-out), text-decoration-color var(--duration-fast) var(--ease-out);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    text-decoration-color var(--duration-fast) var(--ease-out);
 }
 
 .home-auth-signup-link:hover,
 .home-auth-signup-link:focus-visible {
   color: var(--hush-amber);
+  text-decoration: underline;
   text-decoration-color: var(--hush-amber);
   outline: none;
 }
@@ -4908,7 +4910,17 @@ select:focus-visible {
 }
 
 .home-footer {
-  /* Layout owned by Radix Flex parent. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hush-border);
+}
+
+.home-footer-text {
+  color: var(--hush-text-muted);
 }
 
 .home-footer-meta {
@@ -6053,8 +6065,11 @@ select:focus-visible {
 
 .rw-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hush-border);
 }
 
 .rw-error {
@@ -6548,14 +6563,53 @@ select:focus-visible {
 }
 
 .ld-code-block {
+  position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 8px;
+  align-items: center;
   width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--hush-elevated);
+  border: 1px solid var(--hush-border);
+  transition: border-color var(--duration-fast, 200ms) var(--ease-out, ease-out);
+}
+
+.ld-code-block:focus-within {
+  border-color: var(--hush-border-hover);
 }
 
 .ld-code-copy {
   flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--hush-text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    color var(--duration-fast, 200ms) var(--ease-out, ease-out),
+    background var(--duration-fast, 200ms) var(--ease-out, ease-out);
+}
+
+.ld-code-copy:hover:not(:disabled),
+.ld-code-copy:focus-visible {
+  color: var(--hush-amber);
+  background: var(--hush-amber-glow);
+  outline: none;
+}
+
+.ld-code-copy:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.ld-code-copy[data-state="copied"] {
+  color: var(--hush-amber);
 }
 
 .ld-instance-row {
@@ -6625,15 +6679,15 @@ select:focus-visible {
   letter-spacing: 0.14em;
   color: var(--hush-amber);
   text-align: center;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  background: var(--hush-elevated);
-  border: 1px solid var(--hush-border);
   flex: 1;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  /* Inline copy icon sits in the right-edge slot. Match its width on the
+     left so the visual midline of the code text stays the midline of the
+     cell — keeps the code optically centred regardless of icon presence. */
+  padding-left: 28px;
   transition: color var(--duration-fast, 200ms) var(--ease-out, ease-out);
 }
 
@@ -6890,7 +6944,11 @@ select:focus-visible {
 
 .rpi-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hush-border);
 }
 
 /* ── PostRecoveryWizard ──────────────────────── */

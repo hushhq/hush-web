@@ -328,16 +328,15 @@ describe('LinkDevice', () => {
     expect(card.querySelector('.home-section-title')?.textContent).toMatch(/Link this device/i);
     // 2. subtitle
     expect(card.querySelector('.ld-subtitle')).not.toBeNull();
-    // 3. QR block: frame (with image), status (active pulse dot + label), timer (countdown)
+    // 3. QR block: frame (with image), timer (countdown). Status microcopy
+    // is intentionally absent — countdown carries the active signal.
     const qrBlock = card.querySelector('.ld-qr-block');
     expect(qrBlock).not.toBeNull();
     expect(qrBlock.dataset.state).toBe('active');
     expect(qrBlock.querySelector('.ld-qr-frame')?.contains(qrImage)).toBe(true);
-    const status = qrBlock.querySelector('.ld-qr-status');
-    expect(status).not.toBeNull();
-    expect(status.querySelector('.ld-pulse-dot.is-active')).not.toBeNull();
-    expect(status.textContent).toMatch(/Waiting for approval/i);
     expect(qrBlock.querySelector('.ld-qr-timer')?.textContent).toMatch(/Expires in /);
+    expect(qrBlock.textContent).not.toMatch(/Waiting for approval/i);
+    expect(qrBlock.textContent).not.toMatch(/Preparing link/i);
     // 4. divider with "or use fallback code"
     const divider = card.querySelector('.ld-divider');
     expect(divider).not.toBeNull();
@@ -355,11 +354,18 @@ describe('LinkDevice', () => {
     const instanceRow = card.querySelector('.ld-instance-row');
     expect(instanceRow).not.toBeNull();
     expect(instanceRow.querySelector('.ais')).not.toBeNull();
-    // 7. footer: Regenerate + Back link, side-by-side
+    // 7. footer: Back (left) + Regenerate (right), side-by-side. Back must
+    // be the first child so it lands at the bottom-left edge.
     const footer = card.querySelector('.ld-footer');
     expect(footer).not.toBeNull();
     expect(footer.contains(screen.getByRole('button', { name: /regenerate/i }))).toBe(true);
     expect(footer.querySelector('.ld-back-link')).not.toBeNull();
+    expect(footer.firstElementChild?.classList.contains('ld-back-link')).toBe(true);
+
+    // The copy icon lives INSIDE the code cell, not as a sibling button.
+    expect(codeBlock.contains(copyBtn)).toBe(true);
+    // It is a plain icon-button (not a Hush Button with the .btn chrome).
+    expect(copyBtn?.classList.contains('btn')).toBe(false);
   });
 
   it('keeps all seven regions in place during the generating/loading state (no collapse)', async () => {
@@ -386,11 +392,10 @@ describe('LinkDevice', () => {
     expect(qrBlock.dataset.state).toBe('pending');
     expect(qrBlock.querySelector('.ld-qr-frame')).not.toBeNull();
     expect(qrBlock.querySelector('.ld-qr-placeholder')).not.toBeNull();
-    expect(qrBlock.querySelector('.ld-qr-status')).not.toBeNull();
-    // Pulse dot is NOT active in loading state — geometry slot still occupied.
-    expect(qrBlock.querySelector('.ld-pulse-dot')).not.toBeNull();
-    expect(qrBlock.querySelector('.ld-pulse-dot.is-active')).toBeNull();
     expect(qrBlock.querySelector('.ld-qr-timer')).not.toBeNull();
+    // No "Preparing link…" / "Waiting for approval" microcopy in either state.
+    expect(qrBlock.textContent).not.toMatch(/Preparing link/i);
+    expect(qrBlock.textContent).not.toMatch(/Waiting for approval/i);
     expect(card.querySelector('.ld-divider')).not.toBeNull();
     // Code block exists with placeholder; copy button disabled (no code yet).
     const codeBlock = card.querySelector('.ld-code-block');
@@ -445,7 +450,6 @@ describe('LinkDevice', () => {
     });
     expect(card.querySelector('.ld-qr-frame')).not.toBeNull();
     expect(card.querySelector('.ld-qr-placeholder')).not.toBeNull();
-    expect(card.querySelector('.ld-qr-status')).not.toBeNull();
     expect(card.querySelector('.ld-qr-timer')).not.toBeNull();
     expect(card.querySelector('.ld-divider')).not.toBeNull();
     expect(card.querySelector('.ld-code-block')).not.toBeNull();

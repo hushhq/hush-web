@@ -361,9 +361,9 @@ export default function Home() {
             </>
           )}
 
-          <Flex direction="column" align="center" gap="1" className="home-footer">
-            <Text align="center" size="1" color="gray">
-              hush is open source and self-hostable.{` `}
+          <div className="home-footer">
+            <Text align="center" size="1" color="gray" className="home-footer-text">
+              Hush is open source and self-hostable.{` `}
               <a href="https://github.com/hushhq" className="home-footer-link">
                 github
               </a>
@@ -375,7 +375,7 @@ export default function Home() {
             <Text align="center" size="1" color="gray" className="home-footer-meta">
               v{APP_VERSION}
             </Text>
-          </Flex>
+          </div>
         </motion.div>
       </div>
 
