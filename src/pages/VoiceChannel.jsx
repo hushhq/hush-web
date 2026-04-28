@@ -122,6 +122,7 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
     currentUserId,
     getStore,
     voiceKeyRotationHours: undefined, // uses server handshake default (2h) when undefined
+    baseUrl,
   });
 
   // Bind PlaybackManager to a DOM container for remote audio elements.

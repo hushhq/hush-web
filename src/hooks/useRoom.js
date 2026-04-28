@@ -15,6 +15,7 @@ import { CaptureOrchestrator } from '../audio/capture/CaptureOrchestrator';
 import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
 import { CAPTURE_PROFILES, resolveMode, isMobileWebAudio } from '../audio';
 import { PlaybackManager } from '../audio/playback/PlaybackManager';
+import { getActiveAuthInstanceUrlSync, normalizeInstanceUrl } from '../lib/authInstanceStore';
 
 import {
   attachRemoteTrackListeners,
@@ -42,15 +43,50 @@ function fromBase64(b64) {
   return arr;
 }
 
+function shouldUseActiveInstanceForVoice() {
+  if (typeof window === 'undefined') return false;
+  if (window.hushDesktop?.isDesktop) return true;
+  const protocol = window.location?.protocol;
+  return protocol !== 'http:' && protocol !== 'https:';
+}
+
+function resolveVoiceBaseUrl(baseUrl = '') {
+  const normalized = normalizeInstanceUrl(baseUrl);
+  if (normalized) return normalized;
+  return shouldUseActiveInstanceForVoice() ? getActiveAuthInstanceUrlSync() : '';
+}
+
+function buildApiUrl(path, baseUrl = '') {
+  if (path.startsWith('http')) return path;
+  const normalized = normalizeInstanceUrl(baseUrl);
+  return normalized ? `${normalized}${path}` : path;
+}
+
+function buildLiveKitUrl(baseUrl = '') {
+  if (import.meta.env.VITE_LIVEKIT_URL) return import.meta.env.VITE_LIVEKIT_URL;
+
+  const normalized = normalizeInstanceUrl(baseUrl);
+  if (normalized) {
+    const url = new URL(normalized);
+    url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
+    url.pathname = '/livekit/';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  }
+
+  return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/livekit/`;
+}
+
 /**
  * LiveKit-based room connection hook.
  * Voice E2EE is fully MLS-based: frame keys are derived via MLS export_secret
  * (RFC 9420 §8.4) and applied to LiveKit ExternalE2EEKeyProvider.
  *
- * @param {{ wsClient: object, getToken: () => string|null, currentUserId: string, getStore: () => Promise<IDBDatabase>, voiceKeyRotationHours?: number }} deps
+ * @param {{ wsClient: object, getToken: () => string|null, currentUserId: string, getStore: () => Promise<IDBDatabase>, voiceKeyRotationHours?: number, baseUrl?: string }} deps
  * @returns {Object} Room state and media controls
  */
-export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyRotationHours }) {
+export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyRotationHours, baseUrl = '' }) {
   // ─── Connection State ─────────────────────────────────
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState(null);
@@ -216,7 +252,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           throw new Error('Session required. Please sign in again.');
         }
 
-        const response = await fetch('/api/livekit/token', {
+        const voiceBaseUrl = resolveVoiceBaseUrl(baseUrl);
+        const response = await fetch(buildApiUrl('/api/livekit/token', voiceBaseUrl), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -451,11 +488,10 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           setActiveSpeakerIds(speakers.map((s) => s.identity));
         });
 
-        // Derive LiveKit URL from the current page origin so it works
-        // through the nginx /livekit/ reverse proxy (both local and remote).
-        const livekitUrl =
-          import.meta.env.VITE_LIVEKIT_URL ||
-          `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/livekit/`;
+        // Browser builds use the current origin. Electron's packaged
+        // renderer is app://localhost, so voice must target the active
+        // auth instance's /livekit/ reverse proxy instead.
+        const livekitUrl = buildLiveKitUrl(voiceBaseUrl);
         await room.connect(livekitUrl, token, { autoSubscribe: false });
 
         if (isStale()) {
@@ -586,7 +622,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         setError(err.message);
       }
     },
-    [scheduleRemoteTracksUpdate, scheduleScreensUpdate, syncParticipantsFromRoom, wsClient, currentUserId, getToken, getStore, voiceKeyRotationHours],
+    [scheduleRemoteTracksUpdate, scheduleScreensUpdate, syncParticipantsFromRoom, wsClient, currentUserId, getToken, getStore, voiceKeyRotationHours, baseUrl],
   );
 
   // ─── Disconnect from Room ─────────────────────────────

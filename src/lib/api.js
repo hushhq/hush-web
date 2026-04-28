@@ -20,10 +20,21 @@ function resolveFetchBaseUrl(path, baseUrl = '') {
   if (baseUrl || path.startsWith('http')) {
     return baseUrl;
   }
-  if (path.startsWith('/api/auth')) {
+  if (path.startsWith('/api/auth') || (path.startsWith('/api/') && shouldUseActiveInstanceForRelativeApi())) {
     return getActiveAuthInstanceUrlSync();
   }
   return '';
+}
+
+function shouldUseActiveInstanceForRelativeApi() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  if (window.hushDesktop?.isDesktop) {
+    return true;
+  }
+  const protocol = window.location?.protocol;
+  return protocol !== 'http:' && protocol !== 'https:';
 }
 
 function buildRequestUrl(path, baseUrl = '') {

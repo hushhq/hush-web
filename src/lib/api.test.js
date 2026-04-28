@@ -26,6 +26,7 @@ describe('leaveGuild', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete window.hushDesktop;
   });
 
   it('calls POST /api/servers/:id/leave with auth header', async () => {
@@ -61,6 +62,22 @@ describe('leaveGuild', () => {
     vi.stubGlobal('fetch', mockFetch);
 
     await expect(leaveGuild(TOKEN, SERVER_ID)).rejects.toThrow('leave guild failed: 500');
+  });
+
+  it('routes relative API calls to the active instance in desktop runtime', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', mockFetch);
+    Object.defineProperty(window, 'hushDesktop', {
+      configurable: true,
+      value: { isDesktop: true },
+    });
+    localStorage.setItem('hush_auth_instance_default_origin_migrated_v1', '1');
+    sessionStorage.setItem('hush_auth_instance_active', 'https://app.gethush.live');
+
+    await leaveGuild(TOKEN, SERVER_ID);
+
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe(`https://app.gethush.live/api/servers/${SERVER_ID}/leave`);
   });
 });
 

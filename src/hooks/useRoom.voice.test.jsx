@@ -160,7 +160,7 @@ vi.mock('livekit-client', () => {
     emit(event, ...args) {
       this._handlers[event]?.(...args);
     }
-    async connect() {}
+    async connect(...args) { this.connectArgs = args; }
     async disconnect() {}
   }
 
@@ -321,6 +321,31 @@ describe('useRoom MLS voice E2EE', () => {
 
     expect(mockCreateVoiceGroup).toHaveBeenCalledTimes(1);
     expect(mockJoinVoiceGroup).not.toHaveBeenCalled();
+  });
+
+  it('uses the instance base URL for LiveKit token and websocket in desktop-safe paths', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+
+    const { result } = renderHook(() =>
+      useRoom({
+        wsClient,
+        getToken,
+        currentUserId: 'u1',
+        getStore,
+        voiceKeyRotationHours: 2,
+        baseUrl: 'https://app.gethush.live',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://app.gethush.live/api/livekit/token',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(capturedRooms.at(-1).connectArgs[0]).toBe('wss://app.gethush.live/livekit/');
   });
 
   it('connectRoom calls exportVoiceFrameKey and applies key via setKey(frameKeyBytes, epoch % 256)', async () => {
@@ -613,7 +638,7 @@ vi.mock('livekit-client', () => {
     emit(event, ...args) {
       this._handlers[event]?.(...args);
     }
-    async connect() {}
+    async connect(...args) { this.connectArgs = args; }
     async disconnect() {}
   }
 
