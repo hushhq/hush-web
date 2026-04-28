@@ -35,6 +35,7 @@ import {
   requestDownloadWindow,
   confirmChunk,
   fetchManifest,
+  deleteArchive,
 } from './linkArchiveTransport';
 import { base64ToBytes, bytesToBase64 } from './deviceLinking';
 import {
@@ -265,6 +266,14 @@ export async function uploadArchiveSession({
     if (exportPersisted) {
       try { await markExportTerminal(init.archiveId, err?.message ?? String(err)); }
       catch (cleanupErr) { console.warn('[linkArchive] markExportTerminal failed', cleanupErr); }
+    }
+    try {
+      await deleteArchive(init.archiveId, {
+        uploadToken: init.uploadToken,
+        downloadToken: init.downloadToken,
+      }, baseUrl);
+    } catch (cleanupErr) {
+      console.warn('[linkArchive] deleteArchive after upload failure failed', cleanupErr);
     }
     // Caller is expected to fire deleteArchive on failure; surface the error.
     throw err;
