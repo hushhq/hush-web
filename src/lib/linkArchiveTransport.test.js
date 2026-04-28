@@ -8,6 +8,7 @@ import {
   finalizeArchive,
   fetchManifest,
   downloadChunk,
+  downloadChunkViaWindow,
   deleteArchive,
   LinkArchiveError,
 } from './linkArchiveTransport';
@@ -178,6 +179,28 @@ describe('linkArchiveTransport — fetchManifest + downloadChunk', () => {
     fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 200, body: bytes }));
     const out = await downloadChunk('a', 'd', 0, '');
     expect(out).toEqual(bytes);
+  });
+
+  it('downloadChunkViaWindow prepends baseUrl when entry.url is path-only (postgres_bytea backend)', async () => {
+    // Regression: in an Electron renderer hosted under app://localhost, a
+    // path-only fetch resolves against the renderer's own protocol handler
+    // and surfaces as `Failed to fetch` for /api/auth/... requests. The
+    // helper must origin-anchor the URL with the caller's baseUrl.
+    const bytes = new Uint8Array([7, 7, 7]);
+    fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 200, body: bytes }));
+    const entry = { url: '/api/auth/link-archive-chunk/abc/0', method: 'GET' };
+    const out = await downloadChunkViaWindow(entry, 'https://app.gethush.live');
+    const [url] = fetchSpy.mock.calls[0];
+    expect(url).toBe('https://app.gethush.live/api/auth/link-archive-chunk/abc/0');
+    expect(out).toEqual(bytes);
+  });
+
+  it('downloadChunkViaWindow leaves absolute URLs (s3 presigned) untouched', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 200, body: new Uint8Array([1]) }));
+    const entry = { url: 'https://bucket.s3.example.com/key?X-Amz-Signature=…', method: 'GET' };
+    await downloadChunkViaWindow(entry, 'https://app.gethush.live');
+    const [url] = fetchSpy.mock.calls[0];
+    expect(url).toBe('https://bucket.s3.example.com/key?X-Amz-Signature=…');
   });
 });
 

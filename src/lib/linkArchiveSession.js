@@ -216,7 +216,7 @@ export async function uploadArchiveSession({
     if (backendKind === 'postgres_bytea') {
       await uploadChunk(init.archiveId, init.uploadToken, idx, ciphertexts[idx], chunkHashes[idx], token, baseUrl);
     } else {
-      await uploadChunkViaPresign(entry, ciphertexts[idx], chunkHashes[idx]);
+      await uploadChunkViaPresign(entry, ciphertexts[idx], chunkHashes[idx], baseUrl);
     }
     await confirmChunk(init.archiveId, init.uploadToken, idx, chunkHashes[idx], ciphertexts[idx].byteLength, token, baseUrl);
     if (exportPersisted) {
@@ -351,7 +351,7 @@ export async function resumeUploadArchiveSession({ token, baseUrl, rootPrivateKe
     if (backendKind === 'postgres_bytea') {
       await uploadChunk(archiveId, uploadToken, idx, ciphertextChunks[idx], chunkSha256s[idx], token, baseUrl);
     } else {
-      await uploadChunkViaPresign(entry, ciphertextChunks[idx], chunkSha256s[idx]);
+      await uploadChunkViaPresign(entry, ciphertextChunks[idx], chunkSha256s[idx], baseUrl);
     }
     await confirmChunk(archiveId, uploadToken, idx, chunkSha256s[idx], ciphertextChunks[idx].byteLength, token, baseUrl);
     try { await markChunkConfirmed(archiveId, idx); } catch { /* tolerate */ }
@@ -547,7 +547,7 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
       // ordering invariants (META first, END last).
       const sortedEntries = [...window.urls].sort((a, b) => a.idx - b.idx);
       for (const entry of sortedEntries) {
-        const ciphertext = await downloadChunkViaWindow(entry);
+        const ciphertext = await downloadChunkViaWindow(entry, baseUrl);
         const gzippedPlaintext = await decryptArchiveChunk(
           ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx,
         );
@@ -602,7 +602,7 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
       const to = Math.min(from + windowSize, archive.totalChunks);
       const window = await requestDownloadWindow(archive.id, archive.downloadToken, from, to, baseUrl);
       const tasks = window.urls.map((entry) => async () => {
-        const ciphertext = await downloadChunkViaWindow(entry);
+        const ciphertext = await downloadChunkViaWindow(entry, baseUrl);
         slices[entry.idx] = await decryptArchiveChunk(ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx);
         const result = await markChunkCommitted(archive.id, entry.idx);
         checkpoint.chunkProgress = checkpointInternals.setBit(checkpoint.chunkProgress, entry.idx);

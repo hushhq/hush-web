@@ -167,14 +167,23 @@ export async function uploadChunk(archiveId, uploadToken, idx, ciphertext, chunk
  * @param {Uint8Array} chunkHash
  * @returns {Promise<void>}
  */
-export async function uploadChunkViaPresign(entry, ciphertext, chunkHash) {
+export async function uploadChunkViaPresign(entry, ciphertext, chunkHash, baseUrl = '') {
+  // Symmetrical with downloadChunkViaWindow: tolerate a path-only
+  // `entry.url` by prepending the caller-supplied baseUrl. s3 always
+  // returns absolute URLs so this is a no-op for the s3 path; only
+  // matters if the postgres_bytea path is ever routed through the
+  // presign helper (defensive — current call graph routes that
+  // backend through `uploadChunk` instead).
+  const url = entry.url.startsWith('/')
+    ? `${archiveBaseUrl(baseUrl)}${entry.url}`
+    : entry.url;
   await retryWithBackoff(async () => {
     const headers = { ...(entry.headers || {}) };
     if (!headers['Content-Type']) headers['Content-Type'] = 'application/octet-stream';
     if (entry.contentSha256Header) {
       headers[entry.contentSha256Header] = bytesToBase64(chunkHash);
     }
-    const res = await fetch(entry.url, {
+    const res = await fetch(url, {
       method: entry.method || 'PUT',
       headers,
       body: ciphertext,
@@ -307,13 +316,31 @@ export async function confirmChunk(archiveId, uploadToken, idx, chunkHash, chunk
  * and works with the same code path because both URLs resolve to a
  * GET that returns octet-stream bytes.
  *
+ * `entry.url` may be either:
+ *   - an absolute URL (s3 presigned URLs always are), or
+ *   - a path-only string of the form `/api/auth/link-archive-chunk/...`
+ *     (postgres_bytea backend's `inAPIChunkURL` returns this shape).
+ *
+ * In a normal browser the path-only form resolves against the page
+ * origin and works. In an Electron renderer hosted under `app://`,
+ * the page origin is `app://localhost/` and a relative `/api/...`
+ * fetch resolves to the renderer's own protocol handler instead of
+ * the real backend — surfacing as `Failed to fetch`. Prepending the
+ * caller-supplied baseUrl when entry.url starts with `/` makes this
+ * helper origin-safe for both transports.
+ *
  * @param {{ url: string, method?: string, headers?: object }} entry
+ * @param {string} baseUrl - Instance base URL; only consulted when
+ *   `entry.url` is path-only.
  * @returns {Promise<Uint8Array>}
  */
-export async function downloadChunkViaWindow(entry) {
+export async function downloadChunkViaWindow(entry, baseUrl = '') {
+  const url = entry.url.startsWith('/')
+    ? `${archiveBaseUrl(baseUrl)}${entry.url}`
+    : entry.url;
   return retryWithBackoff(async () => {
     const headers = { ...(entry.headers || {}) };
-    const res = await fetch(entry.url, {
+    const res = await fetch(url, {
       method: entry.method || 'GET',
       headers,
     });
