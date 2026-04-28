@@ -410,25 +410,17 @@ body::after {
       `overflow-y: auto` and continue to scroll locally; only the document
       root and body are clamped. */
 
-/* Window drag gutter — macOS only.
-   Positioned beside (not under) the macOS traffic lights: starts at
-   `--desktop-server-strip-width` (the right edge of the server strip,
-   which sits under the lights) and extends across the empty top of the
-   channel sidebar safe area created by the
-   `.lay-content-row .sidebar-shell` desktop padding-top below. Width
-   capped at the channel-sidebar minimum width (mirrors useSidebarResize
-   MIN_WIDTH) so the gutter never extends past the sidebar into the
-   channel-area header even when the user resizes the sidebar to its
-   floor. Narrow + offset means `app-region: drag` does not compete
-   with hit-testing of any real UI control (header buttons, copy
-   actions, voice controls, auth surfaces). */
+/* Window drag layer — macOS only.
+   Full-width, transparent, and positioned over the titlebar safe area.
+   Desktop surfaces reserve the same vertical space below, so this layer
+   sits over empty chrome rather than on top of clickable UI controls. */
 .electron-drag-region {
   position: fixed;
   top: 0;
-  left: var(--desktop-server-strip-width, 48px);
-  width: var(--desktop-channel-sidebar-min-width, 180px);
+  left: 0;
+  right: 0;
   height: var(--desktop-titlebar-safe-top, 32px);
-  z-index: 1;
+  z-index: 1000;
   background: transparent;
   -webkit-app-region: drag;
   app-region: drag;
@@ -468,17 +460,6 @@ html[data-desktop] {
      Windows `titleBarOverlay` (~40 px) and Linux (native frame owns
      the titlebar above the renderer, so no in-renderer gutter). */
   --desktop-titlebar-safe-top: 32px;
-  /* Width of the desktop server-strip column. The drag gutter starts
-     at this offset (i.e. right of the server strip, beside the macOS
-     traffic lights) so the gutter does not sit under the lights and
-     does not block the strip's own guild buttons. */
-  --desktop-server-strip-width: 48px;
-  /* Minimum allowed width of the channel sidebar, mirrors MIN_WIDTH in
-     hush-web/src/hooks/useSidebarResize.js. The drag gutter width is
-     pinned to this floor so it cannot extend past the sidebar into the
-     `.lay-channel-area-header` controls when the user shrinks the
-     sidebar. */
-  --desktop-channel-sidebar-min-width: 180px;
 }
 
 html[data-desktop="win32"] {
@@ -490,7 +471,8 @@ html[data-desktop="linux"] {
 }
 
 html[data-desktop] .lay-container {
-  padding: 0;
+  box-sizing: border-box;
+  padding: var(--desktop-titlebar-safe-top) 0 0;
   gap: 0;
   background: var(--hush-surface);
 }
@@ -503,17 +485,30 @@ html[data-desktop] .lay-main {
 
 html[data-desktop] .sl-strip {
   border-right: 1px solid var(--hush-border);
-  padding-top: calc(var(--desktop-titlebar-safe-top) + 8px);
+  padding-top: 8px;
 }
 
-/* macOS only: pad the channel sidebar's top so its `.cl-header` row
-   (server-name button + header actions) is not hidden under the drag
-   gutter, which spans the same y-range above the sidebar. Other
-   platforms either have a native titlebar above the renderer (Linux)
-   or an OS-drawn `titleBarOverlay` (Windows) and do not render an
-   in-renderer drag gutter, so they need no padding here. */
-html[data-desktop="darwin"] .lay-content-row .sidebar-shell {
-  padding-top: var(--desktop-titlebar-safe-top);
+html[data-desktop] .home-page {
+  box-sizing: border-box;
+  padding-top: calc(var(--desktop-titlebar-safe-top) + 20px);
+}
+
+html[data-desktop] .ld-container {
+  padding-top: 0;
+}
+
+html[data-desktop] button,
+html[data-desktop] a,
+html[data-desktop] input,
+html[data-desktop] textarea,
+html[data-desktop] select,
+html[data-desktop] [role="button"],
+html[data-desktop] [role="link"],
+html[data-desktop] [role="menuitem"],
+html[data-desktop] [role="tab"],
+html[data-desktop] [contenteditable="true"] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* ── Glass (translucent) ───────────────────────── */
@@ -6557,12 +6552,9 @@ select:focus-visible {
 /* `.ld-container` keeps no own min-height or vertical padding. Vertical
    positioning is owned by the parent `.home-page` flex layout
    (display:flex; align-items:center; justify-content:center) so the card
-   actually centres in the viewport rather than anchoring to the top.
-   The desktop override below nudges the card down by the height of the
-   invisible drag region so it reads as centred in the *usable* window
-   area, not in the raw viewport. */
+   actually centres in the viewport rather than anchoring to the top. */
 html[data-desktop] .ld-container {
-  padding-top: 32px;
+  padding-top: 0;
 }
 
 .ld-card {

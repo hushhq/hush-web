@@ -15,25 +15,15 @@ function readDesktopApi() {
  * Window drag affordance for the Electron renderer.
  *
  * Architecture:
- *   The previous implementation rendered a full-width invisible bar
- *   across the top 32 px of the window with `-webkit-app-region: drag`.
- *   Because `app-region: drag` competes with normal pointer hit-testing
- *   (Electron consumes mousedown for window-drag before the page sees
- *   it), the overlay broke any interactive control that visually fell
- *   under the top 32 px — including buttons, copy actions, and the auth
- *   card surfaces when the window was sized close to the minimum.
- *
- *   This implementation applies `app-region: drag` only to the empty
- *   safe area above the server strip (top-left corner of the renderer)
- *   on macOS. Everything else in the renderer is implicitly `no-drag`,
- *   so all interactive controls remain hit-testable without each
- *   having to opt out individually.
+ *   A desktop app needs a real full-width titlebar hit area. The renderer
+ *   content is padded down by `--desktop-titlebar-safe-top`, so this fixed
+ *   drag layer sits only above empty chrome, not over real controls. Global
+ *   desktop CSS marks interactive controls as `no-drag` as a belt-and-braces
+ *   guard for anything that visually reaches the top edge later.
  *
  * Per-platform behaviour:
  *   - Browser: returns null (no bridge → not Electron).
- *   - macOS (`hiddenInset`): renders a small drag gutter beside the
- *     traffic-light area, co-located with the empty safe area above the
- *     channel sidebar. Width and height are sized in `global.css`.
+ *   - macOS (`hiddenInset`): renders a transparent full-width drag layer.
  *     Native traffic lights sit above the renderer and remain unaffected.
  *   - Windows (`hidden` + `titleBarOverlay`): the OS-drawn overlay area
  *     above the renderer already provides full-width drag (and the

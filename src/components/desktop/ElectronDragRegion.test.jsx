@@ -19,7 +19,7 @@ describe('ElectronDragRegion', () => {
     expect(container.querySelector('.electron-drag-region')).toBeNull();
   });
 
-  it('renders the narrow drag gutter on macOS desktop context', () => {
+  it('renders the full-width drag layer on macOS desktop context', () => {
     window.hushDesktop = { isDesktop: true, platform: 'darwin' };
     const { container } = render(<ElectronDragRegion />);
     const region = container.querySelector('.electron-drag-region');
