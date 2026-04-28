@@ -85,14 +85,17 @@ describe('linkArchiveTransport — uploadChunk', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends chunk bytes with X-Upload-Token + X-Chunk-Sha256 headers', async () => {
+  it('sends chunk bytes with Authorization + X-Upload-Token + X-Chunk-Sha256 headers', async () => {
     const ciphertext = new Uint8Array([1, 2, 3, 4]);
     const hash = await sha256(ciphertext);
     fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 204 }));
-    await uploadChunk('arch-1', 'utok', 0, ciphertext, hash, '');
+    await uploadChunk('arch-1', 'utok', 0, ciphertext, hash, 'jwt-bearer', '');
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe('/api/auth/link-archive-chunk/arch-1/0');
     expect(init.method).toBe('PUT');
+    // The chunk endpoint sits inside the JWT-gated upload plane on the
+    // server, so the bearer must be present alongside the upload-token.
+    expect(init.headers.Authorization).toBe('Bearer jwt-bearer');
     expect(init.headers['X-Upload-Token']).toBe('utok');
     expect(init.headers['X-Chunk-Sha256']).toBe(bytesToBase64(hash));
     expect(init.body).toBe(ciphertext);
@@ -102,7 +105,7 @@ describe('linkArchiveTransport — uploadChunk', () => {
     const ciphertext = new Uint8Array([5]);
     const hash = await sha256(ciphertext);
     fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 409, json: { error: 'chunk hash conflict for index' } }));
-    await expect(uploadChunk('a', 'u', 0, ciphertext, hash, '')).rejects.toBeInstanceOf(LinkArchiveError);
+    await expect(uploadChunk('a', 'u', 0, ciphertext, hash, 'jwt', '')).rejects.toBeInstanceOf(LinkArchiveError);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -112,7 +115,7 @@ describe('linkArchiveTransport — uploadChunk', () => {
     fetchSpy
       .mockResolvedValueOnce(fakeResponse({ status: 503, json: { error: 'try later' } }))
       .mockResolvedValueOnce(fakeResponse({ status: 204 }));
-    await uploadChunk('a', 'u', 1, ciphertext, hash, '');
+    await uploadChunk('a', 'u', 1, ciphertext, hash, 'jwt', '');
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

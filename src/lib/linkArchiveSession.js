@@ -213,7 +213,7 @@ export async function uploadArchiveSession({
   // x-amz-checksum-sha256 header set.
   async function putViaWindow(entry, idx) {
     if (backendKind === 'postgres_bytea') {
-      await uploadChunk(init.archiveId, init.uploadToken, idx, ciphertexts[idx], chunkHashes[idx], baseUrl);
+      await uploadChunk(init.archiveId, init.uploadToken, idx, ciphertexts[idx], chunkHashes[idx], token, baseUrl);
     } else {
       await uploadChunkViaPresign(entry, ciphertexts[idx], chunkHashes[idx]);
     }
@@ -340,7 +340,7 @@ export async function resumeUploadArchiveSession({ token, baseUrl, rootPrivateKe
 
   async function putAt(entry, idx) {
     if (backendKind === 'postgres_bytea') {
-      await uploadChunk(archiveId, uploadToken, idx, ciphertextChunks[idx], chunkSha256s[idx], baseUrl);
+      await uploadChunk(archiveId, uploadToken, idx, ciphertextChunks[idx], chunkSha256s[idx], token, baseUrl);
     } else {
       await uploadChunkViaPresign(entry, ciphertextChunks[idx], chunkSha256s[idx]);
     }

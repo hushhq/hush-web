@@ -111,21 +111,31 @@ export async function initArchive(token, body, baseUrl = '') {
  * postgres_bytea backend; for s3 the OLD device PUTs to a presigned
  * URL via uploadChunkViaPresign instead.
  *
+ * The endpoint sits inside the JWT-gated upload plane on the server
+ * (see hush-server linkArchiveRoutes; the `RequireAuth` middleware
+ * runs before the chunk handler), so the OLD device must send BOTH
+ * the upload-token (capability) and the bearer JWT (identity). The
+ * sibling endpoints `requestUploadWindow` / `confirmChunk` /
+ * `finalizeArchive` already do this; this helper was the outlier
+ * and produced spurious 401s during real LinkDevice approval flows.
+ *
  * @param {string} archiveId
  * @param {string} uploadToken
  * @param {number} idx
  * @param {Uint8Array} ciphertext
  * @param {Uint8Array} chunkHash
+ * @param {string} jwt - the OLD device's auth bearer.
  * @param {string} baseUrl
  * @returns {Promise<void>}
  */
-export async function uploadChunk(archiveId, uploadToken, idx, ciphertext, chunkHash, baseUrl = '') {
+export async function uploadChunk(archiveId, uploadToken, idx, ciphertext, chunkHash, jwt, baseUrl = '') {
   const url = `${archiveBaseUrl(baseUrl)}/api/auth/link-archive-chunk/${archiveId}/${idx}`;
   await retryWithBackoff(async () => {
     const res = await fetch(url, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/octet-stream',
+        Authorization: `Bearer ${jwt}`,
         'X-Upload-Token': uploadToken,
         'X-Chunk-Sha256': bytesToBase64(chunkHash),
       },
