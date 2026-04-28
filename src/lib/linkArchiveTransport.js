@@ -332,14 +332,21 @@ export async function confirmChunk(archiveId, uploadToken, idx, chunkHash, chunk
  * @param {{ url: string, method?: string, headers?: object }} entry
  * @param {string} baseUrl - Instance base URL; only consulted when
  *   `entry.url` is path-only.
+ * @param {string} downloadToken - Required only for path-only in-API
+ *   URLs; absolute object-store presigned URLs already carry auth in
+ *   the URL/signature and must not receive Hush API headers.
  * @returns {Promise<Uint8Array>}
  */
-export async function downloadChunkViaWindow(entry, baseUrl = '') {
-  const url = entry.url.startsWith('/')
+export async function downloadChunkViaWindow(entry, baseUrl = '', downloadToken = '') {
+  const isInAPIUrl = entry.url.startsWith('/');
+  const url = isInAPIUrl
     ? `${archiveBaseUrl(baseUrl)}${entry.url}`
     : entry.url;
   return retryWithBackoff(async () => {
     const headers = { ...(entry.headers || {}) };
+    if (isInAPIUrl && downloadToken) {
+      headers['X-Download-Token'] = downloadToken;
+    }
     const res = await fetch(url, {
       method: entry.method || 'GET',
       headers,

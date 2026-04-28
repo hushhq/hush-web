@@ -547,7 +547,7 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
       // ordering invariants (META first, END last).
       const sortedEntries = [...window.urls].sort((a, b) => a.idx - b.idx);
       for (const entry of sortedEntries) {
-        const ciphertext = await downloadChunkViaWindow(entry, baseUrl);
+        const ciphertext = await downloadChunkViaWindow(entry, baseUrl, archive.downloadToken);
         const gzippedPlaintext = await decryptArchiveChunk(
           ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx,
         );
@@ -602,7 +602,7 @@ export async function downloadArchiveSession({ archive, sessionPrivateKey, baseU
       const to = Math.min(from + windowSize, archive.totalChunks);
       const window = await requestDownloadWindow(archive.id, archive.downloadToken, from, to, baseUrl);
       const tasks = window.urls.map((entry) => async () => {
-        const ciphertext = await downloadChunkViaWindow(entry, baseUrl);
+        const ciphertext = await downloadChunkViaWindow(entry, baseUrl, archive.downloadToken);
         slices[entry.idx] = await decryptArchiveChunk(ciphertext, expectedHashes[entry.idx], key, nonceBase, entry.idx);
         const result = await markChunkCommitted(archive.id, entry.idx);
         checkpoint.chunkProgress = checkpointInternals.setBit(checkpoint.chunkProgress, entry.idx);
