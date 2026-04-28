@@ -8,6 +8,37 @@ const DEFAULT_MIGRATION_KEY = 'hush_auth_instance_default_origin_migrated_v1';
 
 export const HOSTED_AUTH_INSTANCE_URL = 'https://app.gethush.live';
 
+export function normalizeInstanceUrl(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+
+  const candidate = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function getInstanceDisplayName(value) {
+  const normalized = normalizeInstanceUrl(value);
+  if (!normalized) {
+    return String(value || '').trim() || 'instance';
+  }
+  try {
+    return new URL(normalized).host;
+  } catch {
+    return normalized;
+  }
+}
+
 function isDesktopRuntime() {
   return (
     typeof window !== 'undefined'
@@ -211,37 +242,6 @@ async function upsertKnownInstance(url, markUsed = false) {
   }
 
   return normalizedUrl;
-}
-
-export function normalizeInstanceUrl(value) {
-  const trimmed = String(value || '').trim();
-  if (!trimmed) return null;
-
-  const candidate = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)
-    ? trimmed
-    : `https://${trimmed}`;
-
-  try {
-    const url = new URL(candidate);
-    url.pathname = '';
-    url.search = '';
-    url.hash = '';
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-export function getInstanceDisplayName(value) {
-  const normalized = normalizeInstanceUrl(value);
-  if (!normalized) {
-    return String(value || '').trim() || 'instance';
-  }
-  try {
-    return new URL(normalized).host;
-  } catch {
-    return normalized;
-  }
 }
 
 export function getSelectedAuthInstanceUrlSync() {
