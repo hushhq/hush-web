@@ -12,35 +12,45 @@ function readDesktopApi() {
 }
 
 /**
- * Invisible top-edge drag region that lets Electron windows be dragged from
- * the empty space above the application content while keeping any visible
- * controls clickable.
+ * Window drag affordance for the Electron renderer.
  *
- * Behaviour:
- * - In a browser, returns null (the `-webkit-app-region` CSS property is a no-op
- *   in non-Electron Chromium, but skipping the DOM node entirely is cleaner).
- * - On macOS (`hiddenInset`) and Windows (`hidden` + `titleBarOverlay`), renders
- *   a 32 px tall, full-width, fully transparent fixed bar at the top of the
- *   viewport with `-webkit-app-region: drag`. Native window controls
- *   (traffic lights / caption buttons) sit above the BrowserWindow's web
- *   content and remain unaffected.
- * - On Linux (native frame), the OS already provides a drag handle in the
- *   native titlebar above the renderer surface, so we skip the overlay to
- *   avoid creating a redundant invisible drag zone inside the content area.
+ * Architecture:
+ *   The previous implementation rendered a full-width invisible bar
+ *   across the top 32 px of the window with `-webkit-app-region: drag`.
+ *   Because `app-region: drag` competes with normal pointer hit-testing
+ *   (Electron consumes mousedown for window-drag before the page sees
+ *   it), the overlay broke any interactive control that visually fell
+ *   under the top 32 px — including buttons, copy actions, and the auth
+ *   card surfaces when the window was sized close to the minimum.
  *
- * The preload script runs before any renderer JavaScript, so the bridge is
- * synchronously readable from the very first render — no `useEffect` /
- * `useState` indirection needed.
+ *   This implementation applies `app-region: drag` only to the empty
+ *   safe area above the server strip (top-left corner of the renderer)
+ *   on macOS. Everything else in the renderer is implicitly `no-drag`,
+ *   so all interactive controls remain hit-testable without each
+ *   having to opt out individually.
  *
- * Interactive elements that visually fall under the top 32 px (uncommon in
- * this app — the auth card is vertically centred and chat surfaces start
- * below the gutter) can opt out of the drag handle by carrying
- * `-webkit-app-region: no-drag` themselves.
+ * Per-platform behaviour:
+ *   - Browser: returns null (no bridge → not Electron).
+ *   - macOS (`hiddenInset`): renders a small drag gutter beside the
+ *     traffic-light area, co-located with the empty safe area above the
+ *     channel sidebar. Width and height are sized in `global.css`.
+ *     Native traffic lights sit above the renderer and remain unaffected.
+ *   - Windows (`hidden` + `titleBarOverlay`): the OS-drawn overlay area
+ *     above the renderer already provides full-width drag (and the
+ *     min/max/close buttons). A renderer-side overlay would only
+ *     duplicate behaviour and re-introduce the hit-test problem, so
+ *     this component renders nothing.
+ *   - Linux: native frame above the renderer provides drag — nothing
+ *     to render.
+ *
+ * The preload script runs before any renderer JavaScript, so the bridge
+ * is synchronously readable from the very first render — no `useEffect`
+ * / `useState` indirection needed.
  */
 export function ElectronDragRegion() {
   const api = readDesktopApi();
   if (!api) return null;
-  if (api.platform === 'linux') return null;
+  if (api.platform !== 'darwin') return null;
 
   return (
     <div

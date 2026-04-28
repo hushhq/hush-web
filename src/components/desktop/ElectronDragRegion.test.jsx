@@ -19,7 +19,7 @@ describe('ElectronDragRegion', () => {
     expect(container.querySelector('.electron-drag-region')).toBeNull();
   });
 
-  it('renders the invisible drag region on macOS desktop context', () => {
+  it('renders the narrow drag gutter on macOS desktop context', () => {
     window.hushDesktop = { isDesktop: true, platform: 'darwin' };
     const { container } = render(<ElectronDragRegion />);
     const region = container.querySelector('.electron-drag-region');
@@ -30,12 +30,13 @@ describe('ElectronDragRegion', () => {
     expect(region.dataset.platform).toBe('darwin');
   });
 
-  it('renders the invisible drag region on Windows desktop context', () => {
+  it('skips rendering on Windows (titleBarOverlay provides drag natively)', () => {
+    // Re-architecture decision: a renderer-side overlay would duplicate
+    // the OS-drawn titleBarOverlay drag area and re-introduce hit-test
+    // collisions with renderer UI.
     window.hushDesktop = { isDesktop: true, platform: 'win32' };
     const { container } = render(<ElectronDragRegion />);
-    const region = container.querySelector('.electron-drag-region');
-    expect(region).not.toBeNull();
-    expect(region.dataset.platform).toBe('win32');
+    expect(container.querySelector('.electron-drag-region')).toBeNull();
   });
 
   it('skips rendering on Linux (native frame already provides a drag handle)', () => {

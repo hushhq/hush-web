@@ -1,6 +1,5 @@
 /**
- * Hush logo mark (the two vertical bars).
- * Adapts to dark/light via CSS custom properties.
+ * Hush logo mark, matching the app icon source artwork.
  */
 export function HushLogo({ className }) {
   return (
@@ -13,8 +12,15 @@ export function HushLogo({ className }) {
       aria-label="Hush logo"
       role="img"
     >
-      <rect x="35" y="22" width="10" height="56" fill="var(--hush-amber)" />
-      <rect x="55" y="22" width="10" height="56" fill="var(--hush-amber)" />
+      <rect width="100" height="100" fill="#000000" />
+      <path
+        d="M35,22 L45,32 L45,75.5 Q45,78 42.5,78 L37.5,78 Q35,78 35,75.5 Z"
+        fill="#EEEEF0"
+      />
+      <path
+        d="M55,55 L65,65 L65,75.5 Q65,78 62.5,78 L57.5,78 Q55,78 55,75.5 Z"
+        fill="#EEEEF0"
+      />
     </svg>
   );
 }

@@ -410,15 +410,26 @@ body::after {
       `overflow-y: auto` and continue to scroll locally; only the document
       root and body are clamped. */
 
+/* Window drag gutter — macOS only.
+   Positioned beside (not under) the macOS traffic lights: starts at
+   `--desktop-server-strip-width` (the right edge of the server strip,
+   which sits under the lights) and extends across the empty top of the
+   channel sidebar safe area created by the
+   `.lay-content-row .sidebar-shell` desktop padding-top below. Width
+   capped at the channel-sidebar minimum width (mirrors useSidebarResize
+   MIN_WIDTH) so the gutter never extends past the sidebar into the
+   channel-area header even when the user resizes the sidebar to its
+   floor. Narrow + offset means `app-region: drag` does not compete
+   with hit-testing of any real UI control (header buttons, copy
+   actions, voice controls, auth surfaces). */
 .electron-drag-region {
   position: fixed;
   top: 0;
-  left: 0;
-  right: 0;
-  height: 32px;
+  left: var(--desktop-server-strip-width, 48px);
+  width: var(--desktop-channel-sidebar-min-width, 180px);
+  height: var(--desktop-titlebar-safe-top, 32px);
   z-index: 1;
   background: transparent;
-  pointer-events: auto;
   -webkit-app-region: drag;
   app-region: drag;
 }
@@ -457,6 +468,17 @@ html[data-desktop] {
      Windows `titleBarOverlay` (~40 px) and Linux (native frame owns
      the titlebar above the renderer, so no in-renderer gutter). */
   --desktop-titlebar-safe-top: 32px;
+  /* Width of the desktop server-strip column. The drag gutter starts
+     at this offset (i.e. right of the server strip, beside the macOS
+     traffic lights) so the gutter does not sit under the lights and
+     does not block the strip's own guild buttons. */
+  --desktop-server-strip-width: 48px;
+  /* Minimum allowed width of the channel sidebar, mirrors MIN_WIDTH in
+     hush-web/src/hooks/useSidebarResize.js. The drag gutter width is
+     pinned to this floor so it cannot extend past the sidebar into the
+     `.lay-channel-area-header` controls when the user shrinks the
+     sidebar. */
+  --desktop-channel-sidebar-min-width: 180px;
 }
 
 html[data-desktop="win32"] {
@@ -484,9 +506,14 @@ html[data-desktop] .sl-strip {
   padding-top: calc(var(--desktop-titlebar-safe-top) + 8px);
 }
 
-html[data-desktop] .lay-channel-area-header {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
+/* macOS only: pad the channel sidebar's top so its `.cl-header` row
+   (server-name button + header actions) is not hidden under the drag
+   gutter, which spans the same y-range above the sidebar. Other
+   platforms either have a native titlebar above the renderer (Linux)
+   or an OS-drawn `titleBarOverlay` (Windows) and do not render an
+   in-renderer drag gutter, so they need no padding here. */
+html[data-desktop="darwin"] .lay-content-row .sidebar-shell {
+  padding-top: var(--desktop-titlebar-safe-top);
 }
 
 /* ── Glass (translucent) ───────────────────────── */
