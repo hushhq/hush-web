@@ -23,6 +23,7 @@ import {
 import {
   encryptVault,
   decryptVaultAndExportKey,
+  decryptVaultWithRawKey,
   openVaultStore,
   saveEncryptedKey,
   loadEncryptedKey,
@@ -36,6 +37,11 @@ import {
   checkVaultExistsInIDB,
   loadVaultMarkerFromIDB,
 } from '../lib/identityVault';
+import {
+  storeVaultSessionKey,
+  retrieveVaultSessionKey,
+  clearVaultSessionKey,
+} from '../lib/desktopVaultBridge';
 import {
   openHistoryStore,
   importHistorySnapshot,
@@ -378,6 +384,9 @@ export function useAuth() {
   // In-memory identity key - never persisted to any storage as plaintext.
   const identityKeyRef = useRef(null);
 
+  // Tracks the current user id so lock/timeout callbacks can clear the desktop session key.
+  const currentUserIdRef = useRef(null);
+
   // Inactivity timer handle.
   const inactivityTimerRef = useRef(null);
 
@@ -552,6 +561,8 @@ export function useAuth() {
     sessionStorage.removeItem(VAULT_DERIVED_KEY);
     clearInactivityDeadline();
     clearTranscriptCache();
+    const userId = currentUserIdRef.current;
+    if (userId) clearVaultSessionKey(userId).catch(() => {});
     setVaultState('locked');
   }, [clearInactivityDeadline]);
 
@@ -1141,15 +1152,19 @@ export function useAuth() {
         throw new Error('vault is empty');
       }
 
-      const { privateKey } = await decryptVaultAndExportKey(blob, pin);
+      const { privateKey, rawKeyHex } = await decryptVaultAndExportKey(blob, pin);
 
-      // The derived wrapping key is intentionally NOT persisted to any
-      // browser storage. Persisting it (formerly in sessionStorage) made
-      // any same-origin script execution able to decrypt the vault — that
-      // failure mode worsens dramatically inside Electron renderers, so
-      // ans23 closed it for both web and the eventual desktop wrapper.
-      // The trade-off: a hard tab refresh now re-prompts for PIN
-      // because the wrapping key only lives in memory.
+      // The derived wrapping key is NOT persisted to browser storage — any
+      // same-origin script could read it from sessionStorage. In the desktop
+      // app the key is sent to main-process memory via IPC instead, where it
+      // is unreachable from renderer scripts (contextIsolation + no nodeIntegration).
+      // In the browser this call is a no-op.
+      try {
+        await storeVaultSessionKey(userId, rawKeyHex);
+      } catch {
+        // Non-fatal: desktop session continuity won't work on next reload,
+        // but the current unlock session is unaffected.
+      }
 
       // Derive public key from stored hex marker. If localStorage was evicted
       // (iOS non-Safari), fall back to IDB backup.
@@ -1227,6 +1242,8 @@ export function useAuth() {
     sessionStorage.removeItem(VAULT_DERIVED_KEY);
     clearVaultTimeoutEffects();
     clearTranscriptCache();
+    const userId = currentUserIdRef.current;
+    if (userId) clearVaultSessionKey(userId).catch(() => {});
     setVaultState('locked');
   }, [clearVaultTimeoutEffects]);
 
@@ -1327,7 +1344,10 @@ export function useAuth() {
       // BroadcastChannel may not be available in all environments.
     }
 
-    // 3. Delete all hush IDB databases.
+    // 3. Clear desktop vault session key (no-op in browser).
+    if (userId) clearVaultSessionKey(userId).catch(() => {});
+
+    // 4. Delete all hush IDB databases.
     const deviceId = getDeviceId();
     const deleteTargets = [];
 
@@ -1384,6 +1404,77 @@ export function useAuth() {
     setLoading(false);
   }, [user, clearGuestTimers, clearVaultTimeoutEffects]);
 
+  // ── Keep currentUserIdRef in sync with user state ─────────────────────────
+
+  useEffect(() => {
+    currentUserIdRef.current = user?.id ?? null;
+  }, [user]);
+
+  // ── Desktop auto-unlock ────────────────────────────────────────────────────
+
+  /**
+   * Attempts to auto-unlock the vault using the main-process session key.
+   * Desktop-only; returns false immediately in browser context (bridge is a no-op).
+   *
+   * When existingJwt is null (sessionStorage cleared on reload), performs a
+   * full challenge-response to obtain a fresh JWT. When existingJwt is present,
+   * unlocks in-memory only and re-uses the existing session.
+   *
+   * @param {string} userId
+   * @param {string|null} existingJwt
+   * @returns {Promise<boolean>} true if vault was auto-unlocked
+   */
+  const tryDesktopAutoUnlock = useCallback(async (userId, existingJwt) => {
+    const rawKeyHex = await retrieveVaultSessionKey(userId);
+    if (!rawKeyHex) return false;
+
+    try {
+      const db = await openVaultStore(userId);
+      const blob = await loadEncryptedKey(db);
+      db.close();
+
+      if (!blob) {
+        clearVaultSessionKey(userId).catch(() => {});
+        return false;
+      }
+
+      const privateKey = await decryptVaultWithRawKey(blob, rawKeyHex);
+      const pubKeyHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
+      const publicKey = pubKeyHex ? hexToBytes(pubKeyHex) : null;
+
+      if (!existingJwt) {
+        if (!publicKey) {
+          clearVaultSessionKey(userId).catch(() => {});
+          return false;
+        }
+        const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
+        // performChallengeResponse handles identityKeyRef, token, user,
+        // vaultState, transcript cache, and applyVaultTimeout.
+        await performChallengeResponse(privateKey, publicKey, homeInstance);
+        return true;
+      }
+
+      // JWT still valid — unlock in memory only.
+      identityKeyRef.current = { privateKey, publicKey };
+      setHasLocalVault(true);
+      clearPinSetup();
+      try {
+        await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
+      } catch (cacheErr) {
+        console.warn('[useAuth] desktop auto-unlock: transcript cache load failed:', cacheErr);
+        clearTranscriptCache();
+      }
+      setVaultState('unlocked');
+      applyVaultTimeout(userId);
+      return true;
+    } catch (err) {
+      console.warn('[useAuth] desktop auto-unlock failed:', err);
+      clearVaultSessionKey(userId).catch(() => {});
+      return false;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [performChallengeResponse, applyVaultTimeout, clearPinSetup]);
+
   // ── Startup: session rehydration ──────────────────────────────────────────
 
   useEffect(() => {
@@ -1409,8 +1500,12 @@ export function useAuth() {
             const result = await checkVaultExistsInIDB(vaultUserId);
             if (idbCheckCancelled) return;
             if (result.exists) {
-              setHasLocalVault(true);
-              setVaultState('locked');
+              const unlocked = await tryDesktopAutoUnlock(vaultUserId, null);
+              if (idbCheckCancelled) return;
+              if (!unlocked) {
+                setHasLocalVault(true);
+                setVaultState('locked');
+              }
             } else {
               // Vault marker set during registration but PIN never set - clear stale marker.
               localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${vaultUserId}`);
@@ -1458,8 +1553,12 @@ export function useAuth() {
                 localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, result.publicKeyHex);
               }
               localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, userId);
-              setHasLocalVault(true);
-              setVaultState('locked');
+              const unlocked = await tryDesktopAutoUnlock(userId, null);
+              if (idbCancelled) return;
+              if (!unlocked) {
+                setHasLocalVault(true);
+                setVaultState('locked');
+              }
               setLoading(false);
               return;
             }
@@ -1517,11 +1616,9 @@ export function useAuth() {
             sessionStorage.removeItem(VAULT_DERIVED_KEY);
 
             // Trigger one-shot migration of the legacy global vault
-            // timeout key into the per-user config. This used to run
-            // when applyVaultTimeout fired on auto-unlock; now that
-            // auto-unlock is gone, we still need the migration to land
-            // on first authenticated startup so the user's existing
-            // timeout preference is preserved.
+            // timeout key into the per-user config. Run eagerly here so
+            // the user's existing timeout preference is preserved regardless
+            // of whether the vault auto-unlocks (desktop) or waits for PIN.
             getEffectiveVaultConfig(u.id);
 
             // Always require PIN re-entry: verify the vault blob actually
@@ -1539,8 +1636,12 @@ export function useAuth() {
                 db.close();
                 if (cancelled) return;
                 if (blob) {
-                  clearPinSetup();
-                  setVaultState('locked');
+                  const unlocked = await tryDesktopAutoUnlock(u.id, stored);
+                  if (cancelled) return;
+                  if (!unlocked) {
+                    clearPinSetup();
+                    setVaultState('locked');
+                  }
                 } else {
                   // Stale marker - PIN was never set. Clear it.
                   localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);

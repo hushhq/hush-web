@@ -6414,8 +6414,8 @@ select:focus-visible {
 
 .ld-container {
   min-height: 100dvh;
-  padding-top: clamp(48px, 10vh, 96px);
-  padding-bottom: 48px;
+  padding-top: clamp(28px, 7vh, 80px);
+  padding-bottom: 32px;
 }
 
 .ld-card {
@@ -6423,7 +6423,11 @@ select:focus-visible {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+}
+
+.ld-new-card .home-section-title {
+  margin-bottom: 0;
 }
 
 .ld-subtitle {
@@ -6433,18 +6437,166 @@ select:focus-visible {
   line-height: 1.55;
 }
 
-.ld-qr-image,
-.ld-empty-box {
-  width: min(100%, 240px);
-  align-self: center;
+/* ── New-device card: 7 stable regions ────────────────
+   title / subtitle / qr-block / divider / code-block /
+   instance-row / footer. Each region renders unconditionally;
+   only the *content* swaps with state, so geometry stays put
+   across loading, regenerate, expired, and error transitions. */
+
+.ld-qr-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--hush-elevated);
+}
+
+.ld-qr-frame {
+  width: 180px;
+  height: 180px;
+  padding: 9px;
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hush-border);
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
 }
 
 .ld-qr-image {
   display: block;
-  padding: 12px;
-  background: #fff;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: ld-qr-fade-in 280ms var(--ease-out, cubic-bezier(0.2, 0.6, 0.2, 1)) both;
+}
+
+.ld-qr-placeholder {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--hush-text-muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.ld-qr-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--hush-text-secondary);
+  height: 22px;
+}
+
+.ld-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hush-text-ghost);
+  flex-shrink: 0;
+  transition: background var(--duration-fast, 200ms) var(--ease-out, ease-out);
+}
+
+.ld-pulse-dot.is-active {
+  background: #1d9e75;
+  animation: ld-pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes ld-pulse-dot {
+  0%, 100% { opacity: 1;    box-shadow: 0 0 0 0 rgba(29, 158, 117, 0.35); }
+  50%      { opacity: 0.45; box-shadow: 0 0 0 5px rgba(29, 158, 117, 0); }
+}
+
+@keyframes ld-qr-fade-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ld-qr-timer {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--hush-text-muted);
+  letter-spacing: 0.04em;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.ld-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 0;
+}
+
+.ld-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--hush-border);
+}
+
+.ld-divider-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hush-text-ghost);
+  white-space: nowrap;
+}
+
+.ld-code-block {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.ld-code-copy {
+  flex: 0 0 auto;
+}
+
+.ld-instance-row {
+  display: block;
+}
+
+.ld-connection-lost {
+  font-size: 0.78rem;
+  color: var(--hush-amber);
+  background: var(--hush-amber-glow);
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-md);
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.ld-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--hush-border);
+}
+
+.ld-footer .ld-back-link {
+  align-self: center;
+  margin-bottom: 0;
+}
+
+.ld-footer-regen {
+  flex: 0 0 auto;
+}
+
+/* ── Shared LinkDevice atoms (reused by ApproveLinkView) ────────── */
+
+.ld-qr-image-legacy,
+.ld-empty-box {
+  width: min(100%, 240px);
+  align-self: center;
 }
 
 .ld-empty-box {
@@ -6469,25 +6621,25 @@ select:focus-visible {
 
 .ld-code-value {
   font-family: var(--font-mono);
-  font-size: clamp(1.35rem, 4vw, 1.8rem);
-  letter-spacing: 0.16em;
+  font-size: 1.25rem;
+  letter-spacing: 0.14em;
   color: var(--hush-amber);
   text-align: center;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: var(--radius-md);
   background: var(--hush-elevated);
   border: 1px solid var(--hush-border);
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
+  transition: color var(--duration-fast, 200ms) var(--ease-out, ease-out);
 }
 
-.ld-code-row {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  width: 100%;
+.ld-code-value[data-state="placeholder"] {
+  color: var(--hush-text-ghost);
+  letter-spacing: 0.18em;
 }
 
 .ld-scanner {

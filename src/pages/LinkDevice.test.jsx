@@ -302,6 +302,171 @@ describe('LinkDevice', () => {
     });
   });
 
+  it('renders all seven stable regions in the steady QR-active state', async () => {
+    mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-1',
+      secret: 'secret-1',
+      code: 'XW8GYSE3',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult.mockResolvedValue({ status: 'pending' });
+
+    renderLinkDevice('/link-device?mode=new');
+
+    const qrImage = await screen.findByAltText(/device link qr code/i);
+    const card = qrImage.closest('.ld-card');
+    expect(card).not.toBeNull();
+
+    // 1. title
+    expect(card.querySelector('.home-section-title')?.textContent).toMatch(/Link this device/i);
+    // 2. subtitle
+    expect(card.querySelector('.ld-subtitle')).not.toBeNull();
+    // 3. QR block: frame (with image), status (active pulse dot + label), timer (countdown)
+    const qrBlock = card.querySelector('.ld-qr-block');
+    expect(qrBlock).not.toBeNull();
+    expect(qrBlock.dataset.state).toBe('active');
+    expect(qrBlock.querySelector('.ld-qr-frame')?.contains(qrImage)).toBe(true);
+    const status = qrBlock.querySelector('.ld-qr-status');
+    expect(status).not.toBeNull();
+    expect(status.querySelector('.ld-pulse-dot.is-active')).not.toBeNull();
+    expect(status.textContent).toMatch(/Waiting for approval/i);
+    expect(qrBlock.querySelector('.ld-qr-timer')?.textContent).toMatch(/Expires in /);
+    // 4. divider with "or use fallback code"
+    const divider = card.querySelector('.ld-divider');
+    expect(divider).not.toBeNull();
+    expect(divider.textContent).toMatch(/or use fallback code/i);
+    // 5. code block: real code present, copy enabled
+    const codeBlock = card.querySelector('.ld-code-block');
+    expect(codeBlock).not.toBeNull();
+    const codeValue = codeBlock.querySelector('.ld-code-value');
+    expect(codeValue?.dataset.state).toBe('ready');
+    expect(codeValue?.textContent).toBe('XW8GYSE3');
+    const copyBtn = codeBlock.querySelector('.ld-code-copy');
+    expect(copyBtn).not.toBeNull();
+    expect(copyBtn?.disabled).toBe(false);
+    // 6. instance row holds AuthInstanceSelector
+    const instanceRow = card.querySelector('.ld-instance-row');
+    expect(instanceRow).not.toBeNull();
+    expect(instanceRow.querySelector('.ais')).not.toBeNull();
+    // 7. footer: Regenerate + Back link, side-by-side
+    const footer = card.querySelector('.ld-footer');
+    expect(footer).not.toBeNull();
+    expect(footer.contains(screen.getByRole('button', { name: /regenerate/i }))).toBe(true);
+    expect(footer.querySelector('.ld-back-link')).not.toBeNull();
+  });
+
+  it('keeps all seven regions in place during the generating/loading state (no collapse)', async () => {
+    mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    // Hold the request pending so requestState stays null and the loading UI sticks.
+    mockCreateDeviceLinkRequest.mockImplementation(() => new Promise(() => {}));
+
+    renderLinkDevice('/link-device?mode=new');
+
+    // Wait until the placeholder for the loading state is mounted.
+    const placeholder = await screen.findByText(/Generating link request/i);
+    const card = placeholder.closest('.ld-card');
+    expect(card).not.toBeNull();
+
+    // All seven regions must still be present in the loading state.
+    expect(card.querySelector('.home-section-title')).not.toBeNull();
+    expect(card.querySelector('.ld-subtitle')).not.toBeNull();
+    const qrBlock = card.querySelector('.ld-qr-block');
+    expect(qrBlock).not.toBeNull();
+    expect(qrBlock.dataset.state).toBe('pending');
+    expect(qrBlock.querySelector('.ld-qr-frame')).not.toBeNull();
+    expect(qrBlock.querySelector('.ld-qr-placeholder')).not.toBeNull();
+    expect(qrBlock.querySelector('.ld-qr-status')).not.toBeNull();
+    // Pulse dot is NOT active in loading state — geometry slot still occupied.
+    expect(qrBlock.querySelector('.ld-pulse-dot')).not.toBeNull();
+    expect(qrBlock.querySelector('.ld-pulse-dot.is-active')).toBeNull();
+    expect(qrBlock.querySelector('.ld-qr-timer')).not.toBeNull();
+    expect(card.querySelector('.ld-divider')).not.toBeNull();
+    // Code block exists with placeholder; copy button disabled (no code yet).
+    const codeBlock = card.querySelector('.ld-code-block');
+    expect(codeBlock).not.toBeNull();
+    expect(codeBlock.querySelector('.ld-code-value')?.dataset.state).toBe('placeholder');
+    const copyBtn = codeBlock.querySelector('.ld-code-copy');
+    expect(copyBtn?.disabled).toBe(true);
+    expect(card.querySelector('.ld-instance-row')).not.toBeNull();
+    const footer = card.querySelector('.ld-footer');
+    expect(footer).not.toBeNull();
+    expect(footer.querySelector('.ld-back-link')).not.toBeNull();
+    expect(footer.contains(screen.getByRole('button', { name: /regenerate/i }))).toBe(true);
+  });
+
+  it('keeps the layout intact across a regenerate transition (active → loading → active)', async () => {
+    mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    let resolveSecond;
+    mockCreateDeviceLinkRequest
+      .mockResolvedValueOnce({
+        requestId: 'req-1',
+        secret: 'secret-1',
+        code: 'AAAA1111',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      })
+      .mockImplementationOnce(
+        () => new Promise((resolve) => { resolveSecond = resolve; }),
+      );
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult.mockResolvedValue({ status: 'pending' });
+
+    renderLinkDevice('/link-device?mode=new');
+
+    // Active state reached.
+    const firstQr = await screen.findByAltText(/device link qr code/i);
+    const card = firstQr.closest('.ld-card');
+    expect(card.querySelector('.ld-qr-block')?.dataset.state).toBe('active');
+    expect(card.querySelector('.ld-code-value')?.textContent).toBe('AAAA1111');
+
+    // Click Regenerate → triggers a fresh createDeviceLinkRequest (held pending).
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /regenerate/i }));
+
+    // While regenerating, QR slot reverts to placeholder, code reverts to placeholder,
+    // but every region remains in place.
+    await waitFor(() => {
+      expect(card.querySelector('.ld-qr-block')?.dataset.state).toBe('pending');
+    });
+    expect(card.querySelector('.ld-qr-frame')).not.toBeNull();
+    expect(card.querySelector('.ld-qr-placeholder')).not.toBeNull();
+    expect(card.querySelector('.ld-qr-status')).not.toBeNull();
+    expect(card.querySelector('.ld-qr-timer')).not.toBeNull();
+    expect(card.querySelector('.ld-divider')).not.toBeNull();
+    expect(card.querySelector('.ld-code-block')).not.toBeNull();
+    expect(card.querySelector('.ld-code-value')?.dataset.state).toBe('placeholder');
+    expect(card.querySelector('.ld-instance-row')).not.toBeNull();
+    expect(card.querySelector('.ld-footer')).not.toBeNull();
+
+    // Resolve second request → state returns to active, regions still in place.
+    resolveSecond({
+      requestId: 'req-2',
+      secret: 'secret-2',
+      code: 'BBBB2222',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+
+    await waitFor(() => {
+      expect(card.querySelector('.ld-qr-block')?.dataset.state).toBe('active');
+    });
+    expect(card.querySelector('.ld-code-value')?.textContent).toBe('BBBB2222');
+  });
+
   it('keeps the fallback code available when QR generation fails', async () => {
     mockCreateDeviceIdentity.mockResolvedValue({
       publicKeyBase64: 'device-public-key',

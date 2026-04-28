@@ -8,8 +8,22 @@ const DEFAULT_MIGRATION_KEY = 'hush_auth_instance_default_origin_migrated_v1';
 
 export const HOSTED_AUTH_INSTANCE_URL = 'https://app.gethush.live';
 
+function isDesktopRuntime() {
+  return (
+    typeof window !== 'undefined'
+    && Boolean(window?.hushDesktop?.isDesktop)
+  );
+}
+
 function resolveDefaultAuthInstanceUrl() {
   if (typeof window === 'undefined') {
+    return HOSTED_AUTH_INSTANCE_URL;
+  }
+
+  // Desktop app must default to the hosted instance, regardless of the
+  // packaged renderer's origin (e.g. `app://localhost`). User overrides are
+  // still honored via the persisted `SELECTED_INSTANCE_KEY` localStorage entry.
+  if (isDesktopRuntime()) {
     return HOSTED_AUTH_INSTANCE_URL;
   }
 

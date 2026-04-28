@@ -296,72 +296,121 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
     ? new Date(requestState.expiresAt).getTime() <= now
     : false;
 
+  const hasActiveRequest = Boolean(requestState && !isExpired);
+  const hasCode = Boolean(requestState?.code);
+
+  const placeholderMessage = error
+    ? 'Could not create link request.'
+    : authLoading
+    ? 'Finalizing device link…'
+    : isExpired
+    ? 'Link request expired.'
+    : hasActiveRequest
+    ? 'QR unavailable. Use the fallback code below.'
+    : 'Generating link request…';
+
+  const statusLabel = hasActiveRequest
+    ? 'Waiting for approval'
+    : isExpired
+    ? 'Link expired'
+    : error
+    ? 'Link unavailable'
+    : 'Preparing link…';
+
   return (
-    <div className="glass home-form-card ld-card">
+    <div className="glass home-form-card ld-card ld-new-card">
       <div className="home-section-title">Link this device</div>
       <p className="ld-subtitle">
         Scan this QR code from a device that is already signed in to the same account.
       </p>
 
-      <AuthInstanceSelector
-        value={selectedInstanceUrl}
-        instances={knownInstances}
-        onSelect={onSelectInstance}
-        disabled={authLoading}
-        compact
-      />
-
       {connectionLost && (
-        <div className="ld-connection-lost">Connection lost. Retrying...</div>
+        <div className="ld-connection-lost">Connection lost. Retrying…</div>
       )}
 
-      {requestState && !isExpired ? (
-        <>
-          {requestState.qrDataUrl ? (
-            <img className="ld-qr-image" src={requestState.qrDataUrl} alt="Device link QR code" />
+      <section
+        className="ld-qr-block"
+        aria-label="Device link QR area"
+        data-state={hasActiveRequest ? 'active' : 'pending'}
+      >
+        <div className="ld-qr-frame">
+          {hasActiveRequest && requestState.qrDataUrl ? (
+            <img
+              className="ld-qr-image"
+              src={requestState.qrDataUrl}
+              alt="Device link QR code"
+            />
           ) : (
-            <div className="ld-empty-box">QR unavailable. Use the fallback code below.</div>
+            <div className="ld-qr-placeholder" role="status" aria-live="polite">
+              {placeholderMessage}
+            </div>
           )}
-          <div className="ld-code-label">Desktop fallback code</div>
-          <div className="ld-code-row">
-            <div className="ld-code-value">{requestState.code}</div>
-            <Button
-              variant="secondary"
-              onClick={handleCopyCode}
-              aria-label="Copy device link code"
-              data-state={codeCopied ? 'copied' : 'idle'}
-            >
-              {codeCopied
-                ? <CheckIcon aria-hidden="true" />
-                : <CopyIcon aria-hidden="true" />}
-            </Button>
-          </div>
-          <div className="ld-timer">Expires in {formatCountdown(requestState.expiresAt, now)}</div>
-          <div className="ld-waiting">
-            <span className="ld-pulse">Waiting for approval<span className="ld-dots" /></span>
-          </div>
-        </>
-      ) : (
-        <div className="ld-empty-box">
-          {error
-            ? 'Could not create link request.'
-            : authLoading
-            ? 'Finalizing device link…'
-            : isExpired
-            ? 'Link request expired.'
-            : 'Generating link request…'}
         </div>
-      )}
+        <div className="ld-qr-status">
+          <span
+            className={`ld-pulse-dot${hasActiveRequest ? ' is-active' : ''}`}
+            aria-hidden="true"
+          />
+          <span className="ld-qr-status-text">{statusLabel}</span>
+        </div>
+        <div className="ld-qr-timer" aria-live="polite">
+          {hasActiveRequest
+            ? `Expires in ${formatCountdown(requestState.expiresAt, now)}`
+            : ' '}
+        </div>
+      </section>
+
+      <div className="ld-divider" role="separator" aria-orientation="horizontal">
+        <span className="ld-divider-line" aria-hidden="true" />
+        <span className="ld-divider-label">or use fallback code</span>
+        <span className="ld-divider-line" aria-hidden="true" />
+      </div>
+
+      <div className="ld-code-block">
+        <div
+          className="ld-code-value"
+          data-state={hasCode ? 'ready' : 'placeholder'}
+          aria-label="Device link code"
+        >
+          {hasCode ? requestState.code : '——————'}
+        </div>
+        <Button
+          variant="secondary"
+          onClick={handleCopyCode}
+          aria-label="Copy device link code"
+          data-state={codeCopied ? 'copied' : 'idle'}
+          disabled={!hasCode}
+          className="ld-code-copy"
+        >
+          {codeCopied
+            ? <CheckIcon aria-hidden="true" />
+            : <CopyIcon aria-hidden="true" />}
+        </Button>
+      </div>
+
+      <div className="ld-instance-row">
+        <AuthInstanceSelector
+          value={selectedInstanceUrl}
+          instances={knownInstances}
+          onSelect={onSelectInstance}
+          disabled={authLoading}
+          compact
+        />
+      </div>
 
       {status && <div className="ld-status">{status}</div>}
       {error && <div className="ld-error">{error}</div>}
 
-      <div className="ld-actions">
-        <Button variant="secondary" onClick={() => setRefreshKey((value) => value + 1)}>
+      <div className="ld-footer">
+        <Button
+          variant="secondary"
+          className="ld-footer-regen"
+          onClick={() => setRefreshKey((value) => value + 1)}
+        >
           Regenerate
         </Button>
+        <LinkDeviceBackLink />
       </div>
-      <LinkDeviceBackLink />
     </div>
   );
 }
