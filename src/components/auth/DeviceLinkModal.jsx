@@ -16,12 +16,20 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import * as ed from '@noble/ed25519';
 import QRCode from 'qrcode';
 import { encodeQRPayload, generateLinkingCode } from '../../lib/deviceLinking.js';
 import { listDeviceKeys } from '../../lib/api.js';
 import { useBreakpoint } from '../../hooks/useBreakpoint.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog.tsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs.tsx';
+import { Button } from '../ui/button.tsx';
 
 const LINK_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_INTERVAL_MS = 3000;
@@ -157,39 +165,31 @@ export default function DeviceLinkModal({ onClose, onLinked, token, currentDevic
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
+  const handleOpenChange = useCallback((open) => {
+    if (!open) onClose();
+  }, [onClose]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
-  return createPortal(
-    <div className="dl-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`dl-modal${isMobile ? ' dl-modal--mobile' : ''}`}>
-        <button type="button" className="dl-close-btn" onClick={onClose} title="Close">
-          &#x2715;
-        </button>
+  return (
+    <Dialog open onOpenChange={handleOpenChange}>
+      <DialogContent
+        className={`dl-modal sm:max-w-md${isMobile ? ' dl-modal--mobile' : ''}`}
+      >
+        <DialogHeader>
+          <DialogTitle className="dl-title">Link a new device</DialogTitle>
+          <DialogDescription className="dl-subtitle">
+            Show this to your other device to link it to your account.
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="dl-title">Link a new device</div>
-        <div className="dl-subtitle">
-          Show this to your other device to link it to your account.
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value={QR_TAB}>QR code</TabsTrigger>
+            <TabsTrigger value={CODE_TAB}>Text code</TabsTrigger>
+          </TabsList>
 
-        <div className="dl-tab-bar">
-          <button
-            type="button"
-            className={`dl-tab${activeTab === QR_TAB ? ' dl-tab--active' : ''}`}
-            onClick={() => setActiveTab(QR_TAB)}
-          >
-            QR code
-          </button>
-          <button
-            type="button"
-            className={`dl-tab${activeTab === CODE_TAB ? ' dl-tab--active' : ''}`}
-            onClick={() => setActiveTab(CODE_TAB)}
-          >
-            Text code
-          </button>
-        </div>
-
-        {activeTab === QR_TAB && (
-          <>
+          <TabsContent value={QR_TAB}>
             <div className="dl-canvas-wrapper">
               {qrPayload ? (
                 <canvas ref={canvasRef} />
@@ -205,11 +205,9 @@ export default function DeviceLinkModal({ onClose, onLinked, token, currentDevic
             <div className="dl-instructions">
               Scan this QR code from the new device you want to link.
             </div>
-          </>
-        )}
+          </TabsContent>
 
-        {activeTab === CODE_TAB && (
-          <>
+          <TabsContent value={CODE_TAB}>
             <div className="dl-code-display">
               {linkCode || '--------'}
             </div>
@@ -217,25 +215,22 @@ export default function DeviceLinkModal({ onClose, onLinked, token, currentDevic
               {expired ? 'Expired - close and try again' : `Expires in ${formatTimer(secondsLeft)}`}
             </div>
             <div className="dl-copy-row">
-              <button type="button" className="btn btn-secondary" onClick={handleCopy} disabled={!linkCode || expired}>
+              <Button
+                variant="secondary"
+                onClick={handleCopy}
+                disabled={!linkCode || expired}
+              >
                 {copied ? 'Copied' : 'Copy code'}
-              </button>
+              </Button>
             </div>
             <div className="dl-instructions">
               Enter this code on the new device you want to link.
             </div>
-          </>
-        )}
+          </TabsContent>
+        </Tabs>
 
         <div className="dl-status-row">{status}</div>
-
-        <div className="dl-actions">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

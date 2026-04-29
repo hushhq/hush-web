@@ -2,11 +2,17 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Flex, Text } from '@radix-ui/themes';
 import { ArrowLeftIcon, EnterIcon } from '@radix-ui/react-icons';
 import { isMnemonicValid, getEnglishWordlist } from '../../lib/bip39Identity';
+import { Button } from '../ui';
 import {
-  Button,
-  AlertDialogRoot, AlertDialogContent,
-  AlertDialogActions, AlertDialogAction, AlertDialogCancel,
-} from '../ui';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog.tsx';
 
 const WORDLIST_SUGGESTION_LIMIT = 5;
 const AUTOCOMPLETE_MIN_CHARS = 2;
@@ -247,36 +253,35 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
         </Button>
       </div>
 
-      <AlertDialogRoot open={revokeStep} onOpenChange={setRevokeStep}>
-        <AlertDialogContent
-          title="Revoke other devices?"
-          description="This will sign out all other devices. They will need to re-link to access your account."
-        >
-          <AlertDialogActions>
-            <AlertDialogCancel asChild>
-              <button type="button" className="back-link"><ArrowLeftIcon /> Back</button>
+      <AlertDialog open={revokeStep} onOpenChange={setRevokeStep}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke other devices?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will sign out all other devices. They will need to re-link to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>
+              <ArrowLeftIcon data-icon="inline-start" /> Back
             </AlertDialogCancel>
-            <AlertDialogAction asChild>
-              <Button
-                variant="secondary"
-                disabled={isLoading}
-                onClick={() => onSubmit(mnemonicString, false)}
-              >
-                {isLoading ? 'Signing in...' : 'Keep other devices'}
-              </Button>
+            <AlertDialogAction
+              variant="secondary"
+              disabled={isLoading}
+              onClick={() => onSubmit(mnemonicString, false)}
+            >
+              {isLoading ? 'Signing in...' : 'Keep other devices'}
             </AlertDialogAction>
-            <AlertDialogAction asChild>
-              <Button
-                variant="primary"
-                disabled={isLoading}
-                onClick={() => onSubmit(mnemonicString, true)}
-              >
-                {isLoading ? 'Signing in...' : 'Revoke other devices'}
-              </Button>
+            <AlertDialogAction
+              variant="default"
+              disabled={isLoading}
+              onClick={() => onSubmit(mnemonicString, true)}
+            >
+              {isLoading ? 'Signing in...' : 'Revoke other devices'}
             </AlertDialogAction>
-          </AlertDialogActions>
+          </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialogRoot>
+      </AlertDialog>
     </Flex>
   );
 }

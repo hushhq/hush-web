@@ -13,7 +13,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet.tsx"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,

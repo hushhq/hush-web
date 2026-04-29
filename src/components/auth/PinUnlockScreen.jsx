@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Flex, Text } from '@radix-ui/themes';
 import { LockClosedIcon } from '@radix-ui/react-icons';
-import { Button } from '../ui';
+import { Button } from '../ui/button.tsx';
 
 const MAX_ATTEMPTS = 10;
 
@@ -165,11 +165,11 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
         )}
 
         <Button
-          variant="primary"
+          variant="default"
           type="submit"
           disabled={!pin || pin.length < 4 || isLoading || isDelayed}
         >
-          {isLoading ? 'Unlocking...' : <><LockClosedIcon /> Unlock</>}
+          {isLoading ? 'Unlocking...' : <><LockClosedIcon data-icon="inline-start" /> Unlock</>}
         </Button>
       </form>
 

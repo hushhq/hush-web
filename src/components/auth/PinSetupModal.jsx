@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Flex, Text } from '@radix-ui/themes';
 import { CheckIcon } from '@radix-ui/react-icons';
-import { Button, TabsRoot, TabsList, TabsTrigger, TabsContent } from '../ui';
+import { Button } from '../ui/button.tsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs.tsx';
 
 function strengthClass(level) {
   return level < 2 ? 'weak' : level < 3 ? 'fair' : 'strong';
@@ -69,7 +70,7 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
         You will need it to unlock Hush after closing your browser.
       </Text>
 
-      <TabsRoot value={mode} onValueChange={switchMode}>
+      <Tabs value={mode} onValueChange={switchMode}>
         <TabsList>
           <TabsTrigger value="pin">Use a PIN</TabsTrigger>
           <TabsTrigger value="passphrase">Use a passphrase</TabsTrigger>
@@ -163,7 +164,7 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
               </button>
             )}
             <Button
-              variant="primary"
+              variant="default"
               type="submit"
               disabled={!confirmOk || isLoading}
             >
@@ -171,14 +172,14 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
                 'Saving...'
               ) : (
                 <>
-                  <CheckIcon />
+                  <CheckIcon data-icon="inline-start" />
                   {` Set ${isPin ? 'PIN' : 'passphrase'}`}
                 </>
               )}
             </Button>
           </div>
         </form>
-      </TabsRoot>
+      </Tabs>
 
       {onSkip && (
         <Text as="p" size="1" color="gray" className="pin-setup-skip-warning">

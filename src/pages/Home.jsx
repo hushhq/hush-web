@@ -13,7 +13,7 @@ import { PinUnlockScreen } from '../components/auth/PinUnlockScreen';
 import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button as ShadcnButton } from '../components/ui/button';
+import { Button as ShadcnButton } from '../components/ui/button.tsx';
 import { Card, CardContent, CardFooter } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { HushLogo } from '../components/brand/HushLogo';
@@ -297,11 +297,12 @@ export default function Home() {
       <Flex direction="column" gap="5" className="home-auth-choose">
         <Flex direction="column" gap="3">
           <ShadcnButton
+            variant="contrast"
             size="lg"
             className="home-auth-btn h-auto"
             onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
           >
-            <EnterIcon />
+            <EnterIcon data-icon="inline-start" />
             Sign in
           </ShadcnButton>
           <ShadcnButton

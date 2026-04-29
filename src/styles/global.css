@@ -7449,6 +7449,26 @@ html[data-desktop] .ld-container {
   flex-shrink: 0;
 }
 
+.ais__popover-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--hush-text-muted);
+  padding: 4px 8px 2px;
+  letter-spacing: 0.02em;
+}
+
+.ais__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ais__divider {
+  height: 1px;
+  background: var(--hush-border);
+  margin: 4px 0 2px;
+}
+
 .ais__form {
   padding: 4px 0;
   display: flex;

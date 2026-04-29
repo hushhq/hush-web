@@ -7,7 +7,7 @@ import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.js
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button as ShadcnButton } from '../components/ui/button';
+import { Button as ShadcnButton } from '../components/ui/button.tsx';
 import { Card } from '../components/ui/card';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Input } from '../components/ui/input';

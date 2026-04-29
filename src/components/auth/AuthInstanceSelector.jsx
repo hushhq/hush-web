@@ -4,12 +4,10 @@ import {
   getInstanceDisplayName,
 } from '../../lib/authInstanceStore';
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from '@/components/ui/dropdown-menu';
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button.tsx';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -59,8 +57,8 @@ export function AuthInstanceSelector({
     <div className={`ais${compact ? ' ais--compact' : ''}`}>
       <div className="ais__label">Instance</div>
 
-      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-        <DropdownMenuTrigger asChild>
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger asChild>
           <button
             type="button"
             className="ais__trigger"
@@ -85,46 +83,48 @@ export function AuthInstanceSelector({
               <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
             </svg>
           </button>
-        </DropdownMenuTrigger>
+        </PopoverTrigger>
 
-        <DropdownMenuContent
+        <PopoverContent
           align="start"
-          style={{ width: 'var(--radix-dropdown-menu-trigger-width)' }}
+          sideOffset={6}
+          className="ais__popover w-(--radix-popover-trigger-width) gap-2 p-2"
         >
-          <DropdownMenuLabel>Switch instance</DropdownMenuLabel>
+          <div className="ais__popover-label">Switch instance</div>
 
-          {instances.map((instance) => {
-            const isActive = instance.url === value;
-            const isDefault = instance.url === DEFAULT_AUTH_INSTANCE_URL;
+          <div className="ais__list">
+            {instances.map((instance) => {
+              const isActive = instance.url === value;
+              const isDefault = instance.url === DEFAULT_AUTH_INSTANCE_URL;
 
-            return (
-              <button
-                key={instance.url}
-                type="button"
-                className={`ais__item${isActive ? ' ais__item--active' : ''}`}
-                onClick={() => commitSelection(instance.url)}
-                disabled={isSaving}
-              >
-                <span className="ais__item-body">
-                  <span className="ais__item-name">{getInstanceDisplayName(instance.url)}</span>
-                  <span className="ais__item-sub">
-                    {isDefault
-                      ? 'Pinned default'
-                      : instance.lastUsedAt
-                        ? `Last used ${new Date(instance.lastUsedAt).toLocaleDateString()}`
-                        : 'Saved instance'}
+              return (
+                <button
+                  key={instance.url}
+                  type="button"
+                  className={`ais__item${isActive ? ' ais__item--active' : ''}`}
+                  onClick={() => commitSelection(instance.url)}
+                  disabled={isSaving}
+                >
+                  <span className="ais__item-body">
+                    <span className="ais__item-name">{getInstanceDisplayName(instance.url)}</span>
+                    <span className="ais__item-sub">
+                      {isDefault
+                        ? 'Pinned default'
+                        : instance.lastUsedAt
+                          ? `Last used ${new Date(instance.lastUsedAt).toLocaleDateString()}`
+                          : 'Saved instance'}
+                    </span>
                   </span>
-                </span>
-                {isActive && <span className="ais__item-badge">Current</span>}
-              </button>
-            );
-          })}
+                  {isActive && <span className="ais__item-badge">Current</span>}
+                </button>
+              );
+            })}
+          </div>
 
-          <DropdownMenuSeparator />
+          <div className="ais__divider" />
 
           <form className="ais__form" onSubmit={handleSubmit}>
             <Input
-              className="input"
               type="text"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -144,8 +144,8 @@ export function AuthInstanceSelector({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

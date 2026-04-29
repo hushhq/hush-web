@@ -1,5 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.tsx';
+import { Button } from './ui/button.tsx';
 
 const STORAGE_KEY = 'hush_post_recovery_wizard';
 
@@ -41,39 +50,26 @@ export function PostRecoveryWizard() {
   if (!show) return null;
 
   return (
-    <div
-      className="post-recovery-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="post-recovery-heading"
-    >
-      <div className="post-recovery-card">
-        <h2 id="post-recovery-heading" className="post-recovery-heading">
-          Account Secured
-        </h2>
-        <p className="post-recovery-body">
-          Your account has been recovered. If you want to add another device now,
-          open the approval flow on this trusted device.
-        </p>
-        <div className="post-recovery-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleLinkDevice}
-            style={{ flex: 1, padding: '10px' }}
-          >
-            Link a Device
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleSkip}
-            style={{ flex: 1, padding: '10px' }}
-          >
+    <Dialog open={show} onOpenChange={setShow}>
+      <DialogContent className="post-recovery-card">
+        <DialogHeader>
+          <DialogTitle className="post-recovery-heading">
+            Account Secured
+          </DialogTitle>
+          <DialogDescription className="post-recovery-body">
+            Your account has been recovered. If you want to add another device now,
+            open the approval flow on this trusted device.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="post-recovery-actions">
+          <Button variant="outline" onClick={handleSkip}>
             Skip
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+          <Button variant="default" onClick={handleLinkDevice}>
+            Link a Device
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

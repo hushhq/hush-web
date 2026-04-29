@@ -106,9 +106,9 @@ describe('PostRecoveryWizard', () => {
   it('has accessible dialog role and labelled heading', () => {
     localStorage.setItem(STORAGE_KEY, '1');
     renderWizard();
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'post-recovery-heading');
+    // Radix Dialog binds aria-labelledby to its DialogTitle automatically.
+    const dialog = screen.getByRole('dialog', { name: 'Account Secured' });
+    expect(dialog).toHaveAttribute('aria-labelledby');
     expect(screen.getByRole('heading', { name: 'Account Secured' })).toBeInTheDocument();
   });
 });
