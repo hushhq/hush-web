@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { DialogRoot, DialogContent } from './ui/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.tsx';
 import {
   DndContext,
   PointerSensor,
@@ -157,8 +163,12 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
   };
 
   return (
-    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent title="Create channel">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create channel</DialogTitle>
+          <DialogDescription className="sr-only">Create a text or voice channel.</DialogDescription>
+        </DialogHeader>
         <form className="modal-form" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="channel-name" className="modal-field-label">Name</label>
@@ -197,7 +207,7 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
           </div>
         </form>
       </DialogContent>
-    </DialogRoot>
+    </Dialog>
   );
 }
 
@@ -232,8 +242,12 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
   };
 
   return (
-    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent title="Create category">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create category</DialogTitle>
+          <DialogDescription className="sr-only">Group related channels under a named category.</DialogDescription>
+        </DialogHeader>
         <form className="modal-form" onSubmit={handleSubmit}>
           <div>
             <label htmlFor="category-name" className="modal-field-label">Name</label>
@@ -260,7 +274,7 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
           </div>
         </form>
       </DialogContent>
-    </DialogRoot>
+    </Dialog>
   );
 }
 
@@ -333,8 +347,12 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetad
   };
 
   return (
-    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent title="Invite people">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Invite people</DialogTitle>
+          <DialogDescription className="sr-only">Generate or copy an invite link for this server.</DialogDescription>
+        </DialogHeader>
         {loading ? (
           <div style={{ color: 'var(--hush-text-secondary)', fontSize: '0.85rem', padding: '16px 0' }}>
             Generating invite link...
@@ -364,7 +382,7 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetad
           <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
       </DialogContent>
-    </DialogRoot>
+    </Dialog>
   );
 }
 

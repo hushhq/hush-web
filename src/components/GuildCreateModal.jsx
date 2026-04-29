@@ -1,6 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DialogRoot, DialogContent } from './ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.tsx';
 import { createGuild, listServerTemplates } from '../lib/api';
 import { parseInviteLink } from '../lib/inviteLinks.js';
 import {
@@ -271,8 +277,16 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <DialogRoot open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent title={activeTab === 'create' ? 'Create a server' : 'Join a server'}>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{activeTab === 'create' ? 'Create a server' : 'Join a server'}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {activeTab === 'create'
+              ? 'Create a new server: name it, pick an instance, choose a template.'
+              : 'Join an existing server with an invite link or code.'}
+          </DialogDescription>
+        </DialogHeader>
         {/* Tab bar */}
         <div className="gcm-tab-bar">
           <button
@@ -427,6 +441,6 @@ export default function GuildCreateModal({ getToken, onClose, onCreated, activeI
           </div>
         )}
       </DialogContent>
-    </DialogRoot>
+    </Dialog>
   );
 }
