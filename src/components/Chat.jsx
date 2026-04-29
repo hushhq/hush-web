@@ -3,7 +3,7 @@ import { Spinner, Flex } from '@radix-ui/themes';
 import { PaperPlaneIcon } from '@radix-ui/react-icons';
 import { getDeviceId } from '../hooks/useAuth';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button.tsx';
 import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from '@/components/ui/empty';
 
 /** Maximum plaintext byte length before encryption (UTF-8 encoded).

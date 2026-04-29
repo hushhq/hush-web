@@ -1440,7 +1440,7 @@ select:focus-visible {
   color: var(--hush-text-muted);
   flex-shrink: 0;
   margin-top: auto;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
 .sl-settings-btn:hover {
@@ -1482,7 +1482,7 @@ select:focus-visible {
   color: var(--hush-text-secondary);
   flex-shrink: 0;
   position: relative;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
 
 .sl-dm-btn--expanded {
@@ -2666,7 +2666,7 @@ select:focus-visible {
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
 }
 
 .chat-send-btn:hover {
@@ -3953,7 +3953,7 @@ select:focus-visible {
   border-radius: var(--radius-md);
   border: 1px solid var(--hush-border);
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out);
 }
 
 .gcm-template-item--selected {
@@ -6537,7 +6537,7 @@ select:focus-visible {
   font-size: 12px;
   font-weight: 400;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
 
 .dl-tab--active {
