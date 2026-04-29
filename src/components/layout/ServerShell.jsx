@@ -2,13 +2,13 @@ import { Flex, Box } from '@radix-ui/themes';
 import { InfoCircledIcon } from '@radix-ui/react-icons';
 import TransparencyBlock from './TransparencyBlock';
 import EmptyServerShell from './EmptyServerShell';
-import DesktopShell from './DesktopShell';
+import AuthenticatedAppShell from './AuthenticatedAppShell';
 import MobileShell from './MobileShell';
 
 /**
  * Top-level authenticated shell.
- * Handles transparency hard-fail, empty state, offline banner, and
- * delegates to DesktopShell or MobileShell depending on breakpoint.
+ * Routes between the transparency error view, the empty (no server) shell,
+ * the new desktop `AuthenticatedAppShell`, and the mobile shell.
  */
 export default function ServerShell({
   transparencyError,
@@ -53,8 +53,36 @@ export default function ServerShell({
     );
   }
 
+  if (!isMobile) {
+    return (
+      <AuthenticatedAppShell
+        serverListEl={serverListEl}
+        channelSidebarEl={channelSidebarEl}
+        sidebarWidth={sidebarWidth}
+        onSidebarResize={onSidebarResize}
+        isInstanceOffline={isInstanceOffline}
+        instanceUrl={instanceUrl}
+        hasNoTransparencyLog={hasNoTransparencyLog}
+        authToken={authToken}
+        toastEl={toastEl}
+        pendingVoiceSwitchModal={pendingVoiceSwitchModal}
+        guildCreateModal={guildCreateModal}
+      >
+        {children}
+      </AuthenticatedAppShell>
+    );
+  }
+
   return (
-    <Flex className="lay-container" direction="row" height="100dvh" overflow="hidden" gap="2" p="3" style={{ overflow: 'hidden' }}>
+    <Flex
+      className="lay-container"
+      direction="row"
+      height="100dvh"
+      overflow="hidden"
+      gap="2"
+      p="3"
+      style={{ overflow: 'hidden' }}
+    >
       {isInstanceOffline && (
         <Box
           className="lay-offline-banner"
@@ -68,32 +96,19 @@ export default function ServerShell({
         </Box>
       )}
 
-      {!isMobile && (
-        <DesktopShell
-          serverListEl={serverListEl}
-          channelSidebarEl={channelSidebarEl}
-          sidebarWidth={sidebarWidth}
-          onSidebarResize={onSidebarResize}
-        >
-          {children}
-        </DesktopShell>
-      )}
-
-      {isMobile && (
-        <MobileShell
-          serverListEl={serverListEl}
-          channelSidebarEl={channelSidebarEl}
-          mobileStack={mobileStack}
-          activeVoiceChannel={activeVoiceChannel}
-          isViewingVoice={isViewingVoice}
-          onVoiceBarClick={onVoiceBarClick}
-          memberDrawerOpen={memberDrawerOpen}
-          closeMemberDrawer={closeMemberDrawer}
-          memberDrawerEl={memberDrawerEl}
-        >
-          {children}
-        </MobileShell>
-      )}
+      <MobileShell
+        serverListEl={serverListEl}
+        channelSidebarEl={channelSidebarEl}
+        mobileStack={mobileStack}
+        activeVoiceChannel={activeVoiceChannel}
+        isViewingVoice={isViewingVoice}
+        onVoiceBarClick={onVoiceBarClick}
+        memberDrawerOpen={memberDrawerOpen}
+        closeMemberDrawer={closeMemberDrawer}
+        memberDrawerEl={memberDrawerEl}
+      >
+        {children}
+      </MobileShell>
 
       {pendingVoiceSwitchModal}
 

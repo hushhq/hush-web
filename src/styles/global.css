@@ -2299,6 +2299,15 @@ select:focus-visible {
   gap: 8px;
 }
 
+/* AuthenticatedAppShell (new shell contract)
+   `.app-shell` reuses `.lay-container` for layout while adding semantic
+   class hooks the future migration can target without disturbing legacy
+   tests/CSS. P15 markers only; visual rules live on `.lay-*` siblings. */
+.app-shell { position: relative; }
+.app-shell__server-rail { display: flex; flex-shrink: 0; }
+.app-shell__sidebar { display: flex; flex-shrink: 0; min-width: 0; position: relative; }
+.app-shell__offline-banner { left: 0; position: absolute; right: 0; top: 0; z-index: 20; }
+
 .lay-header {
   height: 46px;
   min-height: 46px;

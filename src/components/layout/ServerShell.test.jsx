@@ -39,7 +39,7 @@ describe('ServerShell', () => {
   });
 
   it('renders desktop layout when not on mobile and a server is active', () => {
-    render(
+    const { container } = render(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
@@ -61,6 +61,10 @@ describe('ServerShell', () => {
     expect(screen.getByTestId('channel-sidebar')).toBeInTheDocument();
     expect(screen.getByTestId('channel-content')).toBeInTheDocument();
     expect(screen.getByRole('separator', { name: /resize channel list/i })).toBeInTheDocument();
+    expect(container.querySelector('.app-shell')).toBeInTheDocument();
+    expect(container.querySelector('.app-shell__server-rail')).toBeInTheDocument();
+    expect(container.querySelector('.app-shell__sidebar')).toBeInTheDocument();
+    expect(container.querySelector('.app-shell__main')).toBeInTheDocument();
   });
 
   it('renders mobile layout when on mobile and a server is active', () => {
