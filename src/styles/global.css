@@ -1,12 +1,30 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ── Hush Design System ─────────────────────── */
 /* Theme: default is dark. Light applied via prefers-color-scheme or [data-theme="light"]. */
+/*
+ * shadcn/Hush token bridge.
+ *
+ * Hush tokens (`--hush-*`, `--font-*`, `--radius-*`) defined in the second
+ * `:root` block below are the source of truth for color, font, border,
+ * focus, and radius. The first `:root` block (immediately following) maps
+ * shadcn-named CSS variables (`--background`, `--primary`, `--ring`, etc.)
+ * onto those Hush tokens via `var()` references, so:
+ *   - shadcn primitives (`@/components/ui/button`, future `card`, etc.)
+ *     pick up Hush colors automatically;
+ *   - Hush light/dark switching (`[data-theme]` / `prefers-color-scheme`)
+ *     flows through to shadcn vars without a separate `.dark` block;
+ *   - no shadcn-specific overrides need to be maintained per-component.
+ *
+ * Radius: shadcn `--radius` is pinned to 4px (matches Hush `--radius-lg`)
+ * so shadcn primitives sit consistently inside Hush surfaces and the
+ * desktop-shell edge-to-edge constraint is preserved (no inflated
+ * "web-card inside window" radii).
+ */
 
 @font-face {
   font-family: 'Sharphy';
@@ -28,38 +46,57 @@
 :root {
   --default-font-family: var(--font-sans);
   --heading-font-family: var(--font-sans);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
+
+  /* ── shadcn ↔ Hush colour bridge ──
+     Each shadcn-named var resolves to a Hush token. Light/dark switches
+     happen on the Hush side ([data-theme] / prefers-color-scheme) and
+     flow through automatically because var() resolves at use-site. */
+  --background:           var(--hush-black);
+  --foreground:           var(--hush-text);
+  --card:                 var(--hush-surface);
+  --card-foreground:      var(--hush-text);
+  --popover:              var(--hush-modal);
+  --popover-foreground:   var(--hush-text);
+  --primary:              var(--hush-amber);
+  --primary-foreground:   var(--hush-on-amber);
+  --secondary:            var(--hush-elevated);
+  --secondary-foreground: var(--hush-text);
+  --muted:                var(--hush-elevated);
+  --muted-foreground:     var(--hush-text-muted);
+  --accent:               var(--hush-elevated);
+  --accent-foreground:    var(--hush-text);
+  --destructive:          var(--hush-danger);
+  --destructive-foreground: var(--hush-text);
+  --border:               var(--hush-border);
+  --input:                var(--hush-border);
+  --ring:                 var(--hush-border-focus);
+
+  /* shadcn radius. Matches Hush `--radius-lg` (4px). The Tailwind
+     `--radius-sm/md/lg/xl` derivations from `@theme inline` are
+     intentionally removed below so they do not clobber Hush radii. */
+  --radius: 4px;
+
+  /* Sidebar slot mirrors the main bridge — shadcn's own sidebar
+     primitive is not used yet, but mapping it now means a future
+     `@/components/ui/sidebar` will look right without revisits. */
+  --sidebar:                    var(--hush-surface);
+  --sidebar-foreground:         var(--hush-text);
+  --sidebar-primary:            var(--hush-amber);
+  --sidebar-primary-foreground: var(--hush-on-amber);
+  --sidebar-accent:             var(--hush-elevated);
+  --sidebar-accent-foreground:  var(--hush-text);
+  --sidebar-border:             var(--hush-border);
+  --sidebar-ring:               var(--hush-border-focus);
+
+  /* Charts: no Hush equivalent today; left at shadcn defaults so
+     `--color-chart-*` mappings in `@theme inline` resolve. Replace
+     with Hush palette when a chart surface is added (debt logged in
+     the phase 2 answer file). */
   --chart-1: oklch(0.871 0.006 286.286);
   --chart-2: oklch(0.552 0.016 285.938);
   --chart-3: oklch(0.442 0.017 285.786);
   --chart-4: oklch(0.37 0.013 285.805);
   --chart-5: oklch(0.274 0.006 286.033);
-  --radius: 0.45rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
 }
 
 .radix-themes {
@@ -7973,9 +8010,22 @@ html[data-desktop] .ld-container {
   color: var(--hush-text);
 }
 
+/* shadcn → Tailwind v4 colour theme. Maps Tailwind utility tokens
+   (`--color-*`) onto the shadcn-named bridge vars defined in `:root`
+   above, which themselves resolve to Hush tokens.
+
+   `--font-sans` is intentionally NOT redefined here so Hush's own
+   `--font-sans` ('Geist', system fallback) in `:root` remains
+   authoritative. Tailwind utilities like `font-sans` therefore use
+   the same family as native Hush surfaces.
+
+   `--radius-sm/md/lg/xl` are intentionally NOT redefined here.
+   Restating them would clobber the Hush radius scale (`--radius-sm:
+   2px` etc.) defined in `:root`. The remaining `--radius-2xl/3xl/4xl`
+   slots have no Hush equivalent and are kept for shadcn primitives
+   that opt into them. */
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -8007,48 +8057,17 @@ html[data-desktop] .ld-container {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-.dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.871 0.006 286.286);
-  --chart-2: oklch(0.552 0.016 285.938);
-  --chart-3: oklch(0.442 0.017 285.786);
-  --chart-4: oklch(0.37 0.013 285.805);
-  --chart-5: oklch(0.274 0.006 286.033);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
-}
+/* `.dark` block intentionally omitted. The shadcn → Hush bridge in
+   the first `:root` derives all shadcn vars from Hush tokens, and Hush
+   light/dark switching is owned by `[data-theme]` / `prefers-color-scheme`
+   on `:root` (see top of file). A separate `.dark`-class theme would
+   only re-introduce duplication and would never fire because nothing
+   adds a `.dark` class to the document tree. */
 
 @layer base {
   * {
