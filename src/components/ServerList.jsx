@@ -15,6 +15,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import GuildCreateModal from './GuildCreateModal';
 import GuildContextMenu from './GuildContextMenu';
 import ConfirmModal from './ConfirmModal';
@@ -195,7 +196,11 @@ function SortableGuildIcon({
       {...listeners}
     >
       <span className="sl-guild-pill" aria-hidden="true" />
-      {getInitials(displayName)}
+      <Avatar className="sl-guild-avatar">
+        <AvatarFallback className="sl-guild-avatar-fallback">
+          {getInitials(displayName)}
+        </AvatarFallback>
+      </Avatar>
       {isOffline && <span className="sl-offline-dot" aria-label="offline" />}
       {hasUnread && (
         <span className="sl-unread-badge" aria-hidden="true">

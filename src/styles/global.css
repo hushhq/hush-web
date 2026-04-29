@@ -1338,6 +1338,30 @@ select:focus-visible {
   opacity: 1;
 }
 
+/* shadcn Avatar inside the guild button. The Avatar provides the
+   semantic image/fallback slot but must not introduce a separate
+   surface (size, background, ring, radius) — the parent button owns
+   all of those. Initials inherit colour and font from the button. */
+.sl-guild-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.sl-guild-avatar::after {
+  display: none;
+}
+.sl-guild-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border-radius: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Unread count badge: bottom-right of server icon */
 .sl-unread-badge {
   position: absolute;
