@@ -1681,6 +1681,29 @@ select:focus-visible {
   overflow: hidden;
 }
 
+/* WorkspaceSidebarShell (P16 explicit header/content/footer contract) */
+.workspace-sidebar-shell { /* layout via legacy `.sidebar-shell` */ }
+
+.workspace-sidebar-shell__header {
+  flex-shrink: 0;
+  gap: 0;
+  padding: 0;
+}
+
+.workspace-sidebar-shell__content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-sidebar-shell__footer {
+  flex-shrink: 0;
+  gap: 0;
+  padding: 0;
+}
+
 /* When sidebar-shell lives inside the unified lay-main panel, strip its own
    card appearance — the parent already provides border and border-radius. */
 .lay-content-row .sidebar-shell {

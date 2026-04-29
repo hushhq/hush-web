@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ServerList from '../components/ServerList';
 import ChannelList from '../components/ChannelList';
+import WorkspaceSidebarShell from '../components/layout/WorkspaceSidebarShell';
 import MemberList from '../components/MemberList';
 import SystemChannel from './SystemChannel';
 import TextChannel from './TextChannel';
@@ -1709,33 +1710,37 @@ export default function ServerLayout() {
 
   /** Channel list column with voice panel + persistent user panel at bottom. */
   const channelSidebarEl = (
-    <div className="sidebar-shell">
-      {isDmView ? dmListEl : channelListEl}
-      {activeVoiceChannel && (
-        <VoiceConnectedPanel
-          channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}
-          isScreenSharing={voiceScreenSharing}
-          isWebcamOn={voiceWebcamOn}
-          signalBars={connQuality.bars}
-          signalColor={connQuality.color}
-          signalReconnecting={connQuality.isReconnecting}
-          rtt={connQuality.rtt}
-          onScreenShare={() => voiceControlsRef.current?.toggleScreenShare()}
-          onSwitchScreen={() => voiceControlsRef.current?.switchScreenSource()}
-          onWebcam={() => voiceControlsRef.current?.toggleWebcam()}
-          onDisconnect={handleVoiceLeave}
-        />
-      )}
-      <UserPanel
-        user={user}
-        isMuted={!!activeVoiceChannel && !voiceMicOn}
-        isDeafened={!!activeVoiceChannel && voiceDeafened}
-        isInVoice={!!activeVoiceChannel}
-        onMute={() => voiceControlsRef.current?.toggleMic()}
-        onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
-        onMicFilterSettingsChange={(settings) => voiceControlsRef.current?.updateMicFilterSettings?.(settings)}
-      />
-    </div>
+    <WorkspaceSidebarShell
+      content={isDmView ? dmListEl : channelListEl}
+      footer={
+        <>
+          {activeVoiceChannel && (
+            <VoiceConnectedPanel
+              channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}
+              isScreenSharing={voiceScreenSharing}
+              isWebcamOn={voiceWebcamOn}
+              signalBars={connQuality.bars}
+              signalColor={connQuality.color}
+              signalReconnecting={connQuality.isReconnecting}
+              rtt={connQuality.rtt}
+              onScreenShare={() => voiceControlsRef.current?.toggleScreenShare()}
+              onSwitchScreen={() => voiceControlsRef.current?.switchScreenSource()}
+              onWebcam={() => voiceControlsRef.current?.toggleWebcam()}
+              onDisconnect={handleVoiceLeave}
+            />
+          )}
+          <UserPanel
+            user={user}
+            isMuted={!!activeVoiceChannel && !voiceMicOn}
+            isDeafened={!!activeVoiceChannel && voiceDeafened}
+            isInVoice={!!activeVoiceChannel}
+            onMute={() => voiceControlsRef.current?.toggleMic()}
+            onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
+            onMicFilterSettingsChange={(settings) => voiceControlsRef.current?.updateMicFilterSettings?.(settings)}
+          />
+        </>
+      }
+    />
   );
 
   const memberListEl = (
