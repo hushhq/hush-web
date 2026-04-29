@@ -13,7 +13,9 @@ import { PinUnlockScreen } from '../components/auth/PinUnlockScreen';
 import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button } from '../components/ui';
+import { Button as ShadcnButton } from '../components/ui/button';
+import { Card, CardContent, CardFooter } from '../components/ui/card';
+import { Alert, AlertDescription } from '../components/ui/alert';
 import { HushLogo } from '../components/brand/HushLogo';
 
 const HOME_PAGE_SCROLL_STYLE = {
@@ -294,20 +296,25 @@ export default function Home() {
     return (
       <Flex direction="column" gap="5" className="home-auth-choose">
         <Flex direction="column" gap="3">
-          <Button
-            variant="primary"
-            className="home-auth-btn"
+          <ShadcnButton
+            size="lg"
+            className="home-auth-btn h-auto"
             onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
           >
             <EnterIcon />
             Sign in
-          </Button>
-          <Button variant="secondary" className="home-auth-btn" asChild>
+          </ShadcnButton>
+          <ShadcnButton
+            variant="secondary"
+            size="lg"
+            className="home-auth-btn h-auto"
+            asChild
+          >
             <Link to="/link-device?mode=new">
               <Link1Icon />
               Link to existing device
             </Link>
-          </Button>
+          </ShadcnButton>
         </Flex>
 
         {registrationMode !== 'closed' && (
@@ -340,42 +347,45 @@ export default function Home() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-          className="glass home-form-card"
         >
-          {renderFormContent()}
+          <Card className="glass home-form-card gap-0 py-0 ring-0">
+            <CardContent className="px-0">
+              {renderFormContent()}
 
-          {authView !== AUTH_VIEW.PIN_SETUP && !needsUnlock && (
-            <>
-              <AuthInstanceSelector
-                value={selectedInstanceUrl}
-                instances={knownInstances}
-                onSelect={chooseInstance}
-                disabled={authLoading || (authView === AUTH_VIEW.REGISTER_WIZARD && isRegistrationInstanceLocked)}
-                compact
-              />
-              {handshakeError && (
-                <Text as="p" role="alert" color="red" size="2" className="home-instance-error">
-                  {instanceReachabilityMessage}
-                </Text>
+              {authView !== AUTH_VIEW.PIN_SETUP && !needsUnlock && (
+                <>
+                  <AuthInstanceSelector
+                    value={selectedInstanceUrl}
+                    instances={knownInstances}
+                    onSelect={chooseInstance}
+                    disabled={authLoading || (authView === AUTH_VIEW.REGISTER_WIZARD && isRegistrationInstanceLocked)}
+                    compact
+                  />
+                  {handshakeError && (
+                    <Alert variant="destructive" className="home-instance-error">
+                      <AlertDescription>{instanceReachabilityMessage}</AlertDescription>
+                    </Alert>
+                  )}
+                </>
               )}
-            </>
-          )}
+            </CardContent>
 
-          <div className="home-footer">
-            <Text align="center" size="1" color="gray" className="home-footer-text">
-              Hush is open source and self-hostable.{` `}
-              <a href="https://github.com/hushhq" className="home-footer-link">
-                github
-              </a>
-              {' · '}
-              <Link to="/roadmap" className="home-footer-link">
-                roadmap
-              </Link>
-            </Text>
-            <Text align="center" size="1" color="gray" className="home-footer-meta">
-              v{APP_VERSION}
-            </Text>
-          </div>
+            <CardFooter className="home-footer px-0 rounded-none">
+              <Text align="center" size="1" color="gray" className="home-footer-text">
+                Hush is open source and self-hostable.{` `}
+                <a href="https://github.com/hushhq" className="home-footer-link">
+                  github
+                </a>
+                {' · '}
+                <Link to="/roadmap" className="home-footer-link">
+                  roadmap
+                </Link>
+              </Text>
+              <Text align="center" size="1" color="gray" className="home-footer-meta">
+                v{APP_VERSION}
+              </Text>
+            </CardFooter>
+          </Card>
         </motion.div>
       </div>
 
