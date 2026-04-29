@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Spinner, Flex } from '@radix-ui/themes';
 import { PaperPlaneIcon } from '@radix-ui/react-icons';
 import { getDeviceId } from '../hooks/useAuth';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from '@/components/ui/empty';
 
 /** Maximum plaintext byte length before encryption (UTF-8 encoded).
  * Conservative: 4000 bytes < (8192 MLS budget - 16 GCM tag - 80 MLS framing).
@@ -556,6 +559,7 @@ export default function Chat({
           ref={messagesScrollRef}
           onScroll={handleScroll}
           className="chat-messages-scroll"
+          aria-busy={isChannelTransitioning || isInitialLoading}
         >
           {/* Spacer: grows to push messages to the bottom when they don't fill the container.
               Must come BEFORE messages — justify-content: flex-end is not usable here because
@@ -583,16 +587,18 @@ export default function Chat({
               <Spinner size="3" />
             </Flex>
           ) : !hasMessages ? (
-            <div className="chat-empty">
-              <div className="chat-empty-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
-              <div className="chat-empty-text">
-                no messages yet, start the conversation
-              </div>
-            </div>
+            <Empty className="chat-empty">
+              <EmptyHeader>
+                <EmptyMedia className="chat-empty-icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" focusable="false">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </EmptyMedia>
+                <EmptyDescription className="chat-empty-text">
+                  no messages yet, start the conversation
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             visibleMessages.map((msg, idx) => {
               const isOwn = msg.sender === currentUserId;
@@ -648,13 +654,14 @@ export default function Chat({
                     )}
                     {isFailed && (
                       <div className="chat-retry-wrapper">
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
                           className="chat-retry-btn"
                           onClick={() => handleRetry(msg)}
                         >
                           Retry
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -667,11 +674,12 @@ export default function Chat({
       </div>
       <div className="chat-input-bar">
         <div className="chat-input-wrapper">
-          <textarea
+          <Textarea
             id="chat-message"
             name="message"
             ref={inputRef}
             className="chat-input"
+            aria-label="Message"
             value={inputText}
             onChange={(e) => {
               const text = e.target.value;
@@ -692,19 +700,22 @@ export default function Chat({
               {MAX_PLAINTEXT_BYTES - inputByteLength}
             </span>
           )}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
             className={`chat-send-btn${!inputText.trim() || isSending || inputByteLength > MAX_PLAINTEXT_BYTES ? ' chat-send-btn--disabled' : ''}`}
             onClick={handleSend}
             disabled={!inputText.trim() || isSending || inputByteLength > MAX_PLAINTEXT_BYTES}
             aria-label="Send message"
           >
             <PaperPlaneIcon
+              data-icon="inline-start"
               width="16"
               height="16"
               aria-hidden="true"
               style={{ transform: 'rotate(-45deg)' }}
             />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

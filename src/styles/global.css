@@ -2469,6 +2469,7 @@ select:focus-visible {
   line-height: 1.45;
   outline: none;
   resize: none;
+  field-sizing: fixed;
   transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
 }
 
