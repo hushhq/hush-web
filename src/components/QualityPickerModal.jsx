@@ -1,11 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import { QUALITY_PRESETS } from '../utils/constants';
-
-const EXIT_DURATION_MS = 200;
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog.tsx';
+import { Button } from '@/components/ui/button.tsx';
 
 function OptionRow({ label, detail, recommendedLabel, onClick }) {
   return (
-    <div
+    <button
+      type="button"
       className="qpm-option"
       onClick={onClick}
     >
@@ -20,10 +26,20 @@ function OptionRow({ label, detail, recommendedLabel, onClick }) {
         </div>
         <div className="qpm-option-detail">{detail}</div>
       </div>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--hush-text-muted)" strokeWidth="2">
+      <svg
+        data-icon="inline-end"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--hush-text-muted)"
+        strokeWidth="2"
+        aria-hidden="true"
+        focusable="false"
+      >
         <polyline points="9 18 15 12 9 6" />
       </svg>
-    </div>
+    </button>
   );
 }
 
@@ -41,43 +57,25 @@ export default function QualityPickerModal({
   onSelect,
   onCancel,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const exitTimeoutRef = useRef(null);
+  const [open, setOpen] = useState(true);
 
-  const handleClose = useCallback(() => {
-    setIsOpen(false);
-    if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
-    exitTimeoutRef.current = setTimeout(onCancel, EXIT_DURATION_MS);
-  }, [onCancel]);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') handleClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('keydown', handleKey);
-      if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
-    };
-  }, [handleClose]);
+  const handleClose = () => {
+    setOpen(false);
+    onCancel?.();
+  };
 
   const recommendedLabel = formatRecommended(recommendedQualityKey, recommendedUploadMbps);
 
   return (
-    <div
-      className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`}
-      onClick={handleClose}
-    >
-      <div
-        className={`modal-content ${isOpen ? 'modal-content-open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose(); }}>
+      <DialogContent
+        className="modal-content qpm-content"
+        showCloseButton={false}
       >
-        <div className="qpm-title">choose stream quality</div>
+        <DialogTitle className="qpm-title">choose stream quality</DialogTitle>
+        <DialogDescription className="sr-only">
+          Pick a streaming quality preset for screen sharing.
+        </DialogDescription>
 
         {Object.entries(QUALITY_PRESETS).map(([key, preset]) => (
           <OptionRow
@@ -89,10 +87,15 @@ export default function QualityPickerModal({
           />
         ))}
 
-        <button className="qpm-cancel-btn" onClick={handleClose}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="qpm-cancel-btn"
+          onClick={handleClose}
+        >
           cancel
-        </button>
-      </div>
-    </div>
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

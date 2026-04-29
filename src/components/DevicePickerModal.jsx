@@ -1,16 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-
-const EXIT_DURATION_MS = 200;
+import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog.tsx';
+import { Button } from '@/components/ui/button.tsx';
+import { Empty, EmptyDescription } from '@/components/ui/empty.tsx';
 
 function DeviceOption({ label, isSelected, onSelect }) {
   return (
-    <div
+    <button
+      type="button"
       className={`dpm-option${isSelected ? ' dpm-option--selected' : ''}`}
       onClick={onSelect}
+      aria-pressed={isSelected}
     >
       <div className="dpm-option-label">{label || 'Unknown device'}</div>
-      {isSelected && <div className="dpm-selected-dot" />}
-    </div>
+      {isSelected && <div className="dpm-selected-dot" aria-hidden="true" />}
+    </button>
   );
 }
 
@@ -21,45 +29,31 @@ export default function DevicePickerModal({
   onSelect,
   onCancel,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const exitTimeoutRef = useRef(null);
+  const [open, setOpen] = useState(true);
 
-  const handleClose = useCallback(() => {
-    setIsOpen(false);
-    if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
-    exitTimeoutRef.current = setTimeout(onCancel, EXIT_DURATION_MS);
-  }, [onCancel]);
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') handleClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('keydown', handleKey);
-      if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
-    };
-  }, [handleClose]);
+  const handleClose = () => {
+    setOpen(false);
+    onCancel?.();
+  };
 
   return (
-    <div
-      className={`modal-backdrop ${isOpen ? 'modal-backdrop-open' : ''}`}
-      onClick={handleClose}
-    >
-      <div
-        className={`modal-content ${isOpen ? 'modal-content-open' : ''}`}
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={open} onOpenChange={(next) => { if (!next) handleClose(); }}>
+      <DialogContent
+        className="modal-content dpm-content"
+        showCloseButton={false}
       >
-        <div className="dpm-title">{title}</div>
+        <DialogTitle className="dpm-title">{title}</DialogTitle>
+        <DialogDescription className="sr-only">
+          Choose an input device from the list below.
+        </DialogDescription>
 
         <div className="dpm-list">
           {devices.length === 0 ? (
-            <div className="dpm-empty-text">no devices found</div>
+            <Empty className="dpm-empty">
+              <EmptyDescription className="dpm-empty-text">
+                no devices found
+              </EmptyDescription>
+            </Empty>
           ) : (
             devices.map((device) => (
               <DeviceOption
@@ -72,10 +66,15 @@ export default function DevicePickerModal({
           )}
         </div>
 
-        <button className="dpm-cancel-btn" onClick={handleClose}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="dpm-cancel-btn"
+          onClick={handleClose}
+        >
           cancel
-        </button>
-      </div>
-    </div>
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

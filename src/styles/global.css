@@ -4655,7 +4655,7 @@ select:focus-visible {
   border: 1px solid transparent;
   background: var(--hush-black);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
 .dpm-option:hover {
@@ -4723,7 +4723,7 @@ select:focus-visible {
   border: 1px solid transparent;
   background: var(--hush-black);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
 .qpm-option:hover {

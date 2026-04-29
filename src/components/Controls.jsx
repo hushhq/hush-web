@@ -8,7 +8,8 @@ import {
   SpeakerOffIcon,
   ChevronDownIcon,
 } from '@radix-ui/react-icons';
-import { IconButton } from './ui';
+import { Button } from '@/components/ui/button.tsx';
+import { Toggle } from '@/components/ui/toggle.tsx';
 
 /**
  * Renders a glyph with an optional diagonal strikethrough overlay so that on/off
@@ -17,7 +18,7 @@ import { IconButton } from './ui';
  */
 function StrikableGlyph({ children, off, size = 16 }) {
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', width: size, height: size }} aria-hidden="true">
+    <span data-icon="inline-start" style={{ position: 'relative', display: 'inline-flex', width: size, height: size }} aria-hidden="true">
       {children}
       {off && (
         <svg
@@ -28,6 +29,8 @@ function StrikableGlyph({ children, off, size = 16 }) {
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
+          aria-hidden="true"
+          focusable="false"
           style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
         >
           <line x1="3" y1="3" x2="21" y2="21" />
@@ -40,7 +43,7 @@ function StrikableGlyph({ children, off, size = 16 }) {
 function MicGlyph({ off, size = 18 }) {
   return (
     <StrikableGlyph off={off} size={size}>
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
         <rect x="9" y="2" width="6" height="12" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0" />
         <line x1="12" y1="19" x2="12" y2="22" />
@@ -55,7 +58,7 @@ function WebcamGlyph({ off, size = 18 }) {
   // off state overlays a diagonal strikethrough via StrikableGlyph.
   return (
     <StrikableGlyph off={off} size={size}>
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
         <path d="M23 7l-7 5 7 5V7z" />
         <rect x="1" y="5" width="15" height="14" rx="2" />
       </svg>
@@ -65,9 +68,9 @@ function WebcamGlyph({ off, size = 18 }) {
 
 function DeafenGlyph({ off, size = 18 }) {
   return off ? (
-    <SpeakerOffIcon width={size} height={size} aria-hidden="true" />
+    <SpeakerOffIcon data-icon="inline-start" width={size} height={size} aria-hidden="true" focusable="false" />
   ) : (
-    <SpeakerLoudIcon width={size} height={size} aria-hidden="true" />
+    <SpeakerLoudIcon data-icon="inline-start" width={size} height={size} aria-hidden="true" focusable="false" />
   );
 }
 
@@ -89,6 +92,7 @@ function SignalIcon({ bars = 0, color = 'var(--hush-text-muted)', isReconnecting
       height="12"
       viewBox="0 0 24 24"
       aria-hidden="true"
+      focusable="false"
       title={rtt != null ? `${rtt}ms` : 'Measuring...'}
     >
       {barDefs.map((bar, i) => (
@@ -142,39 +146,49 @@ export function VoiceConnectedPanel({ channelName, isScreenSharing, isWebcamOn, 
             {channelName}
           </Text>
         </Flex>
-        <IconButton
+        <Button
+          type="button"
+          variant="ghost"
           className="voice-panel-btn disconnect"
           onClick={onDisconnect}
+          aria-label="Disconnect from voice"
           title="Disconnect from voice"
         >
-          <ExitIcon width="16" height="16" aria-hidden="true" />
-        </IconButton>
+          <ExitIcon data-icon="inline-start" width="16" height="16" aria-hidden="true" focusable="false" />
+        </Button>
       </Flex>
       <Flex gap="1" className="voice-panel-controls">
-        <IconButton
+        <Toggle
+          pressed={!!isWebcamOn}
+          onPressedChange={() => onWebcam?.()}
           className={`voice-panel-btn${isWebcamOn ? ' active' : ''}`}
-          onClick={onWebcam}
+          aria-label={isWebcamOn ? 'Turn off camera' : 'Turn on camera'}
           title={isWebcamOn ? 'Turn off camera' : 'Turn on camera'}
         >
           <WebcamGlyph off={!isWebcamOn} size={16} />
-        </IconButton>
+        </Toggle>
 
-        <IconButton
+        <Toggle
+          pressed={!!isScreenSharing}
+          onPressedChange={() => onScreenShare?.()}
           className={`voice-panel-btn${isScreenSharing ? ' active' : ''}`}
-          onClick={onScreenShare}
+          aria-label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
           title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
         >
-          <DesktopIcon width="16" height="16" aria-hidden="true" />
-        </IconButton>
+          <DesktopIcon data-icon="inline-start" width="16" height="16" aria-hidden="true" focusable="false" />
+        </Toggle>
 
         {isScreenSharing && onSwitchScreen && (
-          <IconButton
+          <Button
+            type="button"
+            variant="ghost"
             className="voice-panel-btn"
             onClick={onSwitchScreen}
+            aria-label="Switch window"
             title="Switch window"
           >
-            <SwitchIcon width="16" height="16" aria-hidden="true" />
-          </IconButton>
+            <SwitchIcon data-icon="inline-start" width="16" height="16" aria-hidden="true" focusable="false" />
+          </Button>
         )}
       </Flex>
     </Flex>
@@ -205,39 +219,48 @@ export default function Controls({
   const btnSize = isMobile ? '52px' : '44px';
   const mediaDisabled = mediaE2EEUnavailable;
   const mediaTitle = mediaE2EEUnavailable ? 'Media encryption unavailable' : undefined;
+  const screenShareDisabled = !isReady || !IS_SCREEN_SHARE_SUPPORTED || mediaDisabled;
+  const screenShareTitle = mediaTitle || (isScreenSharing ? 'Stop sharing' : 'Share screen');
+  const micTitle = mediaTitle || (isMicOn ? 'Mute mic' : 'Unmute mic');
+  const webcamTitle = mediaTitle || (isWebcamOn ? 'Turn off camera' : 'Turn on camera');
 
   return (
     <div className="ctrl-bar">
       {/* Screen Share */}
       {showScreenShare && (!isMobile || IS_SCREEN_SHARE_SUPPORTED) && (
-        <button
+        <Toggle
+          pressed={!!isScreenSharing}
+          onPressedChange={() => onScreenShare?.()}
+          disabled={screenShareDisabled}
           className={`ctrl-btn${isScreenSharing ? ' ctrl-btn--active' : ''}`}
           style={{
             height: btnSize,
             ...(mediaDisabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
           }}
-          onClick={onScreenShare}
-          disabled={!isReady || !IS_SCREEN_SHARE_SUPPORTED || mediaDisabled}
-          title={mediaTitle || (isScreenSharing ? 'Stop sharing' : 'Share screen')}
+          aria-label={screenShareTitle}
+          title={screenShareTitle}
         >
-          <DesktopIcon width="18" height="18" aria-hidden="true" />
+          <DesktopIcon data-icon="inline-start" width="18" height="18" aria-hidden="true" focusable="false" />
           {isScreenSharing ? 'Stop' : 'Share'}
           {isScreenSharing && (
             <span className="ctrl-quality-tag">{QUALITY_PRESETS[quality]?.label || quality}</span>
           )}
-        </button>
+        </Toggle>
       )}
 
       {/* Change quality or window (only visible when sharing and showQualityPicker) */}
       {showQualityPicker && isScreenSharing && (
-        <button
+        <Button
+          type="button"
+          variant="ghost"
           className={`ctrl-icon-btn${isScreenSharing ? ' ctrl-icon-btn--active' : ''}`}
           style={{ width: btnSize, height: btnSize }}
           onClick={onOpenQualityOrWindow}
+          aria-label="Change quality or window"
           title="Change quality or window"
         >
-          <SwitchIcon width="16" height="16" aria-hidden="true" />
-        </button>
+          <SwitchIcon data-icon="inline-start" width="16" height="16" aria-hidden="true" focusable="false" />
+        </Button>
       )}
 
       {showScreenShare && <div className="ctrl-divider" />}
@@ -253,18 +276,20 @@ export default function Controls({
             ...(mediaDisabled ? { opacity: 0.6, pointerEvents: 'none' } : {}),
           }}
         >
-          <button
-            type="button"
+          <Toggle
+            pressed={!!isMicOn}
+            onPressedChange={() => onMic?.()}
+            disabled={!isReady || mediaDisabled}
             className="ctrl-device-group-main"
             style={{ width: btnSize, height: btnSize }}
-            onClick={onMic}
-            disabled={!isReady || mediaDisabled}
-            title={mediaTitle || (isMicOn ? 'Mute mic' : 'Unmute mic')}
+            aria-label={micTitle}
+            title={micTitle}
           >
             <MicGlyph off={!isMicOn} />
-          </button>
-          <button
+          </Toggle>
+          <Button
             type="button"
+            variant="ghost"
             className="ctrl-device-group-chevron"
             style={{ height: btnSize }}
             onClick={(e) => {
@@ -272,37 +297,42 @@ export default function Controls({
               onMicDeviceSwitch();
             }}
             disabled={mediaDisabled}
+            aria-label="Change microphone"
             title="Change microphone"
           >
-            <ChevronDownIcon width="12" height="12" aria-hidden="true" />
-          </button>
+            <ChevronDownIcon data-icon="inline-start" width="12" height="12" aria-hidden="true" focusable="false" />
+          </Button>
         </div>
       ) : (
-        <button
+        <Toggle
+          pressed={!!isMicOn}
+          onPressedChange={() => onMic?.()}
+          disabled={!isReady || mediaDisabled}
           className={`ctrl-icon-btn${isMicOn ? ' ctrl-icon-btn--active' : ' ctrl-icon-btn--danger'}`}
           style={{
             width: btnSize,
             height: btnSize,
             ...(mediaDisabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
           }}
-          onClick={onMic}
-          disabled={!isReady || mediaDisabled}
-          title={mediaTitle || (isMicOn ? 'Mute mic' : 'Unmute mic')}
+          aria-label={micTitle}
+          title={micTitle}
         >
           <MicGlyph off={!isMicOn} />
-        </button>
+        </Toggle>
       )}
 
       {/* Deafen (mute audio output) */}
       {onDeafen && (
-        <button
+        <Toggle
+          pressed={!!isDeafened}
+          onPressedChange={() => onDeafen?.()}
           className={`ctrl-icon-btn${isDeafened ? ' ctrl-icon-btn--danger' : ''}`}
           style={{ width: btnSize, height: btnSize }}
-          onClick={onDeafen}
+          aria-label={isDeafened ? 'Undeafen' : 'Deafen'}
           title={isDeafened ? 'Undeafen' : 'Deafen'}
         >
           <DeafenGlyph off={isDeafened} />
-        </button>
+        </Toggle>
       )}
 
       {showWebcam && <div className="ctrl-divider" />}
@@ -317,18 +347,20 @@ export default function Controls({
             ...(mediaDisabled ? { opacity: 0.6, pointerEvents: 'none' } : {}),
           }}
         >
-          <button
-            type="button"
+          <Toggle
+            pressed={!!isWebcamOn}
+            onPressedChange={() => onWebcam?.()}
+            disabled={!isReady || mediaDisabled}
             className="ctrl-device-group-main"
             style={{ width: btnSize, height: btnSize }}
-            onClick={onWebcam}
-            disabled={!isReady || mediaDisabled}
-            title={mediaTitle || (isWebcamOn ? 'Turn off camera' : 'Turn on camera')}
+            aria-label={webcamTitle}
+            title={webcamTitle}
           >
             <WebcamGlyph off={!isWebcamOn} />
-          </button>
-          <button
+          </Toggle>
+          <Button
             type="button"
+            variant="ghost"
             className="ctrl-device-group-chevron"
             style={{ height: btnSize }}
             onClick={(e) => {
@@ -336,37 +368,42 @@ export default function Controls({
               onWebcamDeviceSwitch();
             }}
             disabled={mediaDisabled}
+            aria-label="Change webcam"
             title="Change webcam"
           >
-            <ChevronDownIcon width="12" height="12" aria-hidden="true" />
-          </button>
+            <ChevronDownIcon data-icon="inline-start" width="12" height="12" aria-hidden="true" focusable="false" />
+          </Button>
         </div>
       ) : showWebcam ? (
-        <button
+        <Toggle
+          pressed={!!isWebcamOn}
+          onPressedChange={() => onWebcam?.()}
+          disabled={!isReady || mediaDisabled}
           className={`ctrl-icon-btn${isWebcamOn ? ' ctrl-icon-btn--active' : ''}`}
           style={{
             width: btnSize,
             height: btnSize,
             ...(mediaDisabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
           }}
-          onClick={onWebcam}
-          disabled={!isReady || mediaDisabled}
-          title={mediaTitle || (isWebcamOn ? 'Turn off camera' : 'Turn on camera')}
+          aria-label={webcamTitle}
+          title={webcamTitle}
         >
           <WebcamGlyph off={!isWebcamOn} />
-        </button>
+        </Toggle>
       ) : null}
 
       <div className="ctrl-divider" />
 
       {/* Leave */}
-      <button
+      <Button
+        type="button"
+        variant="ghost"
         className="ctrl-btn ctrl-btn--danger"
         style={{ height: btnSize }}
         onClick={onLeave}
       >
         Leave
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Flex, Text } from '@radix-ui/themes';
 import { GearIcon, DotFilledIcon } from '@radix-ui/react-icons';
-import { IconButton } from './ui';
+import { Button } from '@/components/ui/button.tsx';
+import { Toggle } from '@/components/ui/toggle.tsx';
 import UserSettingsModal from './UserSettingsModal';
 
 /**
@@ -35,6 +36,8 @@ export default function UserPanel({
 
   const displayName = user.displayName || user.username || 'User';
   const initials = displayName.charAt(0).toUpperCase();
+  const muteLabel = isMuted ? 'Unmute microphone' : 'Mute microphone';
+  const deafenLabel = isDeafened ? 'Undeafen' : 'Deafen';
 
   return (
     <>
@@ -46,21 +49,23 @@ export default function UserPanel({
               {displayName}
             </Text>
             <Flex align="center" gap="1" className="user-panel-status">
-              <DotFilledIcon width="8" height="8" color="var(--hush-live)" aria-hidden="true" />
+              <DotFilledIcon width="8" height="8" color="var(--hush-live)" aria-hidden="true" focusable="false" />
               <Text size="1" color="gray">Online</Text>
             </Flex>
           </Flex>
         </Flex>
         <Flex gap="1" className="user-panel-actions">
           {/* Mic toggle */}
-          <IconButton
-            className={`user-panel-btn${isMuted ? ' user-panel-btn--danger' : ''}`}
-            onClick={onMute}
-            title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          <Toggle
+            pressed={!!isMuted}
+            onPressedChange={() => onMute?.()}
             disabled={!isInVoice}
+            className={`user-panel-btn${isMuted ? ' user-panel-btn--danger' : ''}`}
+            aria-label={muteLabel}
+            title={muteLabel}
           >
             {isMuted ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg data-icon="inline-start" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
                 <line x1="1" y1="1" x2="23" y2="23" />
                 <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
                 <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .51-.06 1-.16 1.47" />
@@ -68,44 +73,49 @@ export default function UserPanel({
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg data-icon="inline-start" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                 <line x1="12" y1="19" x2="12" y2="23" />
                 <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             )}
-          </IconButton>
+          </Toggle>
 
           {/* Deafen toggle */}
-          <IconButton
-            className={`user-panel-btn${isDeafened ? ' user-panel-btn--danger' : ''}`}
-            onClick={onDeafen}
-            title={isDeafened ? 'Undeafen' : 'Deafen'}
+          <Toggle
+            pressed={!!isDeafened}
+            onPressedChange={() => onDeafen?.()}
             disabled={!isInVoice}
+            className={`user-panel-btn${isDeafened ? ' user-panel-btn--danger' : ''}`}
+            aria-label={deafenLabel}
+            title={deafenLabel}
           >
             {isDeafened ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg data-icon="inline-start" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
                 <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
                 <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
                 <line x1="1" y1="1" x2="23" y2="23" />
               </svg>
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg data-icon="inline-start" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
                 <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
                 <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
               </svg>
             )}
-          </IconButton>
+          </Toggle>
 
           {/* Settings */}
-          <IconButton
+          <Button
+            type="button"
+            variant="ghost"
             className="user-panel-btn"
             onClick={() => setShowSettings(true)}
+            aria-label="User settings"
             title="User settings"
           >
-            <GearIcon width="16" height="16" aria-hidden="true" />
-          </IconButton>
+            <GearIcon data-icon="inline-start" width="16" height="16" aria-hidden="true" focusable="false" />
+          </Button>
         </Flex>
       </Flex>
       {showSettings && (
