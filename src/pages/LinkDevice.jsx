@@ -7,7 +7,10 @@ import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.js
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
-import { Button } from '../components/ui';
+import { Button as ShadcnButton } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Alert, AlertDescription } from '../components/ui/alert';
+import { Input } from '../components/ui/input';
 import QRCodeScanner from '../components/QRCodeScanner';
 import * as mlsStore from '../lib/mlsStore';
 import { preDecryptForLinkExport } from '../lib/preDecryptForLinkExport';
@@ -310,7 +313,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
     : 'Generating link request…';
 
   return (
-    <div className="glass home-form-card ld-card ld-new-card">
+    <Card className="glass home-form-card ld-card ld-new-card gap-0 ring-0 py-0">
       <div className="home-section-title">Link this device</div>
       <p className="ld-subtitle">
         Scan this QR code from a device that is already signed in to the same account.
@@ -384,19 +387,23 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
       </div>
 
       {status && <div className="ld-status">{status}</div>}
-      {error && <div className="ld-error">{error}</div>}
+      {error && (
+        <Alert variant="destructive" className="ld-error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       <div className="ld-footer">
         <LinkDeviceBackLink />
-        <Button
+        <ShadcnButton
           variant="secondary"
           className="ld-footer-regen"
           onClick={() => setRefreshKey((value) => value + 1)}
         >
           Regenerate
-        </Button>
+        </ShadcnButton>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -829,15 +836,15 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
 
   if (loading) {
     return (
-      <div className="glass home-form-card ld-card">
+      <Card className="glass home-form-card ld-card gap-0 ring-0 py-0">
         <div className="ld-empty-box">Loading…</div>
-      </div>
+      </Card>
     );
   }
 
   if (needsVaultUnlock) {
     return (
-      <div className="glass home-form-card ld-card">
+      <Card className="glass home-form-card ld-card gap-0 ring-0 py-0">
         <div className="home-section-title">Approve device link</div>
         <p className="ld-subtitle">
           This browser is recognized for your Hush account, but the vault is locked in this tab.
@@ -849,18 +856,18 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           </div>
         )}
         <div className="ld-actions">
-          <Button variant="primary" onClick={() => navigate(unlockResumePath)}>
+          <ShadcnButton className="ld-action-button" onClick={() => navigate(unlockResumePath)}>
             Unlock to approve
-          </Button>
+          </ShadcnButton>
         </div>
         <LinkDeviceBackLink />
-      </div>
+      </Card>
     );
   }
 
   if (!hasUnlockedIdentity) {
     return (
-      <div className="glass home-form-card ld-card">
+      <Card className="glass home-form-card ld-card gap-0 ring-0 py-0">
         <div className="home-section-title">Approve device link</div>
         <p className="ld-subtitle">
           Open this page in a browser profile that is already signed in to the account you want to link.
@@ -871,12 +878,12 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           </div>
         )}
         <LinkDeviceBackLink />
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="glass home-form-card ld-card">
+    <Card className="glass home-form-card ld-card gap-0 ring-0 py-0">
       <div className="home-section-title">Approve device link</div>
       <p className="ld-subtitle">
         Scan the QR from your phone camera or enter the fallback code shown on the new device.
@@ -885,7 +892,7 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       {!claim && !showScanner && (
         <form className="ld-code-form" onSubmit={handleResolveCode}>
           <label htmlFor="device-link-code" className="ld-code-label">Link code</label>
-          <input
+          <Input
             id="device-link-code"
             className="ld-code-input"
             value={code}
@@ -895,18 +902,28 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
             autoCorrect="off"
             spellCheck="false"
           />
-          <Button type="submit" variant="secondary" disabled={isResolving}>
+          <ShadcnButton
+            type="submit"
+            variant="secondary"
+            className="ld-action-button"
+            disabled={isResolving}
+          >
             {isResolving ? 'Checking…' : 'Resolve code'}
-          </Button>
-          <Button
+          </ShadcnButton>
+          <ShadcnButton
             type="button"
             variant="secondary"
+            className="ld-action-button"
             onClick={() => { setScannerError(''); setShowScanner(true); }}
             aria-label="Scan QR code with camera"
           >
             Scan QR with camera
-          </Button>
-          {scannerError && <div className="ld-error">{scannerError}</div>}
+          </ShadcnButton>
+          {scannerError && (
+            <Alert variant="destructive" className="ld-error">
+              <AlertDescription>{scannerError}</AlertDescription>
+            </Alert>
+          )}
           {scannerUnavailable && (
             <div className="ld-status">
               Camera scanning is not supported in this browser. Use the manual code instead.
@@ -942,7 +959,11 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
       )}
 
       {status && <div className="ld-status">{status}</div>}
-      {error && <div className="ld-error">{error}</div>}
+      {error && (
+        <Alert variant="destructive" className="ld-error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {claim && resumableExport && !isApproving && !isResuming && (
         <div className="ld-status" data-testid="ld-resume-banner">
@@ -952,34 +973,42 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
             fresh upload.
           </p>
           <div className="ld-actions">
-            <Button variant="primary" onClick={handleResume}>
+            <ShadcnButton className="ld-action-button" onClick={handleResume}>
               Resume upload
-            </Button>
-            <Button variant="secondary" onClick={handleDiscardResume}>
+            </ShadcnButton>
+            <ShadcnButton
+              variant="secondary"
+              className="ld-action-button"
+              onClick={handleDiscardResume}
+            >
               Discard and start fresh
-            </Button>
+            </ShadcnButton>
           </div>
         </div>
       )}
 
       <div className="ld-actions">
         {claim && !resumableExport && (
-          <Button
-            variant="primary"
+          <ShadcnButton
+            className="ld-action-button"
             onClick={handleApprove}
             disabled={isApproving || isResuming}
           >
             {isApproving ? 'Approving…' : 'Approve link'}
-          </Button>
+          </ShadcnButton>
         )}
         {claim && resumableExport && isResuming && (
-          <Button variant="primary" disabled>Resuming…</Button>
+          <ShadcnButton className="ld-action-button" disabled>Resuming…</ShadcnButton>
         )}
-        <Button variant="secondary" onClick={() => navigate('/')}>
+        <ShadcnButton
+          variant="secondary"
+          className="ld-action-button"
+          onClick={() => navigate('/')}
+        >
           Close
-        </Button>
+        </ShadcnButton>
       </div>
-    </div>
+    </Card>
   );
 }
 
