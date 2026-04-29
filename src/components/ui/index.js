@@ -1,3 +1,6 @@
+// Legacy Hush UI primitives only. Import shadcn primitives from their
+// lowercase file paths; see ./README.md for the migration convention.
+
 export { Button }                                                  from './Button';
 export { IconButton }                                              from './IconButton';
 export {
