@@ -1,10 +1,13 @@
 import {
-  AlertDialogRoot,
-  AlertDialogContent,
-  AlertDialogActions,
-  AlertDialogCancel,
+  AlertDialog,
   AlertDialogAction,
-} from './ui/AlertDialog';
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 /**
  * Generic destructive confirmation dialog.
@@ -28,25 +31,48 @@ export default function ConfirmModal({
   onCancel,
 }) {
   return (
-    <AlertDialogRoot open>
+    <AlertDialog open>
       <AlertDialogContent
-        title={title}
-        description={message}
-        onEscapeKeyDown={() => { if (!loading) onCancel(); }}
+        onEscapeKeyDown={(event) => {
+          if (loading) {
+            event.preventDefault();
+            return;
+          }
+          onCancel();
+        }}
       >
-        <AlertDialogActions>
-          <AlertDialogCancel asChild>
-            <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
-              {cancelLabel}
-            </button>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            disabled={loading}
+            onClick={(event) => {
+              if (loading) {
+                event.preventDefault();
+                return;
+              }
+              onCancel();
+            }}
+          >
+            {cancelLabel}
           </AlertDialogCancel>
-          <AlertDialogAction asChild>
-            <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={loading}>
-              {loading && confirmLoadingLabel ? confirmLoadingLabel : confirmLabel}
-            </button>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={loading}
+            onClick={(event) => {
+              if (loading) {
+                event.preventDefault();
+                return;
+              }
+              onConfirm();
+            }}
+          >
+            {loading && confirmLoadingLabel ? confirmLoadingLabel : confirmLabel}
           </AlertDialogAction>
-        </AlertDialogActions>
+        </AlertDialogFooter>
       </AlertDialogContent>
-    </AlertDialogRoot>
+    </AlertDialog>
   );
 }
