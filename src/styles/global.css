@@ -9,21 +9,14 @@
 /*
  * shadcn/Hush token bridge.
  *
- * Hush tokens (`--hush-*`, `--font-*`, `--radius-*`) defined in the second
- * `:root` block below are the source of truth for color, font, border,
- * focus, and radius. The first `:root` block (immediately following) maps
- * shadcn-named CSS variables (`--background`, `--primary`, `--ring`, etc.)
- * onto those Hush tokens via `var()` references, so:
- *   - shadcn primitives (`@/components/ui/button`, future `card`, etc.)
- *     pick up Hush colors automatically;
- *   - Hush light/dark switching (`[data-theme]` / `prefers-color-scheme`)
- *     flows through to shadcn vars without a separate `.dark` block;
- *   - no shadcn-specific overrides need to be maintained per-component.
+ * shadcn semantic tokens (`--background`, `--primary`, `--ring`, etc.)
+ * are now the visual source of truth for migrated primitives. Legacy Hush
+ * tokens remain for non-migrated CSS and should be retired or remapped in
+ * later passes instead of reasserting the old palette over shadcn controls.
  *
- * Radius: shadcn `--radius` is pinned to 4px (matches Hush `--radius-lg`)
- * so shadcn primitives sit consistently inside Hush surfaces and the
- * desktop-shell edge-to-edge constraint is preserved (no inflated
- * "web-card inside window" radii).
+ * Radius: preset `bdvw9ILi` uses shadcn's "small" radius. The legacy
+ * `--radius-sm/md/lg/xl` slots below now derive from shadcn `--radius`
+ * so Tailwind rounded utilities and old selectors converge.
  */
 
 @font-face {
@@ -47,46 +40,45 @@
   --default-font-family: var(--font-sans);
   --heading-font-family: var(--font-sans);
 
-  /* ── shadcn ↔ Hush colour bridge ──
-     Each shadcn-named var resolves to a Hush token. Light/dark switches
-     happen on the Hush side ([data-theme] / prefers-color-scheme) and
-     flow through automatically because var() resolves at use-site. */
-  --background:           var(--hush-black);
-  --foreground:           var(--hush-text);
-  --card:                 var(--hush-surface);
-  --card-foreground:      var(--hush-text);
-  --popover:              var(--hush-modal);
-  --popover-foreground:   var(--hush-text);
-  --primary:              var(--hush-amber);
-  --primary-foreground:   var(--hush-on-amber);
-  --secondary:            var(--hush-elevated);
-  --secondary-foreground: var(--hush-text);
-  --muted:                var(--hush-elevated);
-  --muted-foreground:     var(--hush-text-muted);
-  --accent:               var(--hush-elevated);
-  --accent-foreground:    var(--hush-text);
-  --destructive:          var(--hush-danger);
-  --destructive-foreground: var(--hush-text);
-  --border:               var(--hush-border);
-  --input:                var(--hush-border);
-  --ring:                 var(--hush-border-focus);
+  /* ── shadcn semantic tokens (preset bdvw9ILi: mira / zinc / dark / small radius) ──
+     Direct zinc-dark values — shadcn primitives now lead the visual system.
+     Legacy `--hush-*` tokens below remain for non-migrated surfaces and derive
+     where possible from these semantic tokens. Light theme overrides further down. */
+  --background:           oklch(0.141 0.005 285.823);
+  --foreground:           oklch(0.985 0 0);
+  --card:                 oklch(0.21 0.006 285.885);
+  --card-foreground:      oklch(0.985 0 0);
+  --popover:              oklch(0.21 0.006 285.885);
+  --popover-foreground:   oklch(0.985 0 0);
+  --primary:              oklch(0.985 0 0);
+  --primary-foreground:   oklch(0.21 0.006 285.885);
+  --secondary:            oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted:                oklch(0.274 0.006 286.033);
+  --muted-foreground:     oklch(0.705 0.015 286.067);
+  --accent:               oklch(0.274 0.006 286.033);
+  --accent-foreground:    oklch(0.985 0 0);
+  --destructive:          oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border:               oklch(1 0 0 / 10%);
+  --input:                oklch(1 0 0 / 15%);
+  --ring:                 oklch(0.552 0.016 285.938);
 
-  /* shadcn radius. Matches Hush `--radius-lg` (4px). The Tailwind
-     `--radius-sm/md/lg/xl` derivations from `@theme inline` are
-     intentionally removed below so they do not clobber Hush radii. */
-  --radius: 4px;
+  /* shadcn radius — preset radius "small" → 0.5rem. Tailwind `--radius-sm/md/lg/xl`
+     derivations in `@theme inline` resolve from this. Hush `--radius-*` overrides
+     remain below for legacy selectors. */
+  --radius: 0.5rem;
 
-  /* Sidebar slot mirrors the main bridge — shadcn's own sidebar
-     primitive is not used yet, but mapping it now means a future
-     `@/components/ui/sidebar` will look right without revisits. */
-  --sidebar:                    var(--hush-surface);
-  --sidebar-foreground:         var(--hush-text);
-  --sidebar-primary:            var(--hush-amber);
-  --sidebar-primary-foreground: var(--hush-on-amber);
-  --sidebar-accent:             var(--hush-elevated);
-  --sidebar-accent-foreground:  var(--hush-text);
-  --sidebar-border:             var(--hush-border);
-  --sidebar-ring:               var(--hush-border-focus);
+  /* Sidebar slot — derive from shadcn semantic tokens so a future
+     `@/components/ui/sidebar` automatically follows the preset. */
+  --sidebar:                    var(--card);
+  --sidebar-foreground:         var(--card-foreground);
+  --sidebar-primary:            var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent:             var(--accent);
+  --sidebar-accent-foreground:  var(--accent-foreground);
+  --sidebar-border:             var(--border);
+  --sidebar-ring:               var(--ring);
 
   /* Charts: no Hush equivalent today; left at shadcn defaults so
      `--color-chart-*` mappings in `@theme inline` resolve. Replace
@@ -152,10 +144,10 @@
   --font-brand: 'Sharphy', var(--font-sans);
 
   /* ── Spacing & Radius ── */
-  --radius-sm:   2px;
-  --radius-md:   2px;
-  --radius-lg:   4px;
-  --radius-xl:   4px;
+  --radius-sm:   calc(var(--radius) - 4px);
+  --radius-md:   calc(var(--radius) - 2px);
+  --radius-lg:   var(--radius);
+  --radius-xl:   calc(var(--radius) + 4px);
   --radius-pill: 9999px;
   --radius-full: 9999px;
 
@@ -201,6 +193,27 @@
 /* Light theme: warm neutral palette. Follows system unless overridden by data-theme. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
+    /* shadcn semantic tokens — zinc light preset */
+    --background:           oklch(1 0 0);
+    --foreground:           oklch(0.141 0.005 285.823);
+    --card:                 oklch(1 0 0);
+    --card-foreground:      oklch(0.141 0.005 285.823);
+    --popover:              oklch(1 0 0);
+    --popover-foreground:   oklch(0.141 0.005 285.823);
+    --primary:              oklch(0.21 0.006 285.885);
+    --primary-foreground:   oklch(0.985 0 0);
+    --secondary:            oklch(0.967 0.001 286.375);
+    --secondary-foreground: oklch(0.21 0.006 285.885);
+    --muted:                oklch(0.967 0.001 286.375);
+    --muted-foreground:     oklch(0.552 0.016 285.938);
+    --accent:               oklch(0.967 0.001 286.375);
+    --accent-foreground:    oklch(0.21 0.006 285.885);
+    --destructive:          oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.985 0 0);
+    --border:               oklch(0.92 0.004 286.32);
+    --input:                oklch(0.92 0.004 286.32);
+    --ring:                 oklch(0.705 0.015 286.067);
+
     --hush-black:        #fdfcfd; /* mauve1 light - page bg */
     --hush-surface:      #faf9fb; /* mauve2 light - panel bg */
     --hush-elevated:     #f2eff3; /* mauve3 light - elevated within panel */
@@ -260,6 +273,27 @@
 
 /* Explicit theme override (for future in-app setting: system / light / dark) */
 [data-theme="light"] {
+  /* shadcn semantic tokens — zinc light preset */
+  --background:           oklch(1 0 0);
+  --foreground:           oklch(0.141 0.005 285.823);
+  --card:                 oklch(1 0 0);
+  --card-foreground:      oklch(0.141 0.005 285.823);
+  --popover:              oklch(1 0 0);
+  --popover-foreground:   oklch(0.141 0.005 285.823);
+  --primary:              oklch(0.21 0.006 285.885);
+  --primary-foreground:   oklch(0.985 0 0);
+  --secondary:            oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted:                oklch(0.967 0.001 286.375);
+  --muted-foreground:     oklch(0.552 0.016 285.938);
+  --accent:               oklch(0.967 0.001 286.375);
+  --accent-foreground:    oklch(0.21 0.006 285.885);
+  --destructive:          oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border:               oklch(0.92 0.004 286.32);
+  --input:                oklch(0.92 0.004 286.32);
+  --ring:                 oklch(0.705 0.015 286.067);
+
   --hush-black:        #fdfcfd;
   --hush-surface:      #faf9fb;
   --hush-elevated:     #f2eff3;
@@ -8036,20 +8070,18 @@ html[data-desktop] .ld-container {
   color: var(--hush-text);
 }
 
-/* shadcn → Tailwind v4 colour theme. Maps Tailwind utility tokens
-   (`--color-*`) onto the shadcn-named bridge vars defined in `:root`
-   above, which themselves resolve to Hush tokens.
+/* shadcn → Tailwind v4 theme. Maps Tailwind utility tokens (`--color-*`)
+   and rounded utility tokens onto the shadcn semantic vars defined in
+   `:root` above.
 
    `--font-sans` is intentionally NOT redefined here so Hush's own
    `--font-sans` ('Geist', system fallback) in `:root` remains
    authoritative. Tailwind utilities like `font-sans` therefore use
    the same family as native Hush surfaces.
 
-   `--radius-sm/md/lg/xl` are intentionally NOT redefined here.
-   Restating them would clobber the Hush radius scale (`--radius-sm:
-   2px` etc.) defined in `:root`. The remaining `--radius-2xl/3xl/4xl`
-   slots have no Hush equivalent and are kept for shadcn primitives
-   that opt into them. */
+   The radius scale now follows shadcn's standard derivation from
+   `--radius` so preset `bdvw9ILi` ("small") actually reaches primitives
+   using classes like `rounded-md` and `rounded-lg`. */
 @theme inline {
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -8083,17 +8115,19 @@ html[data-desktop] .ld-container {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* `.dark` block intentionally omitted. The shadcn → Hush bridge in
-   the first `:root` derives all shadcn vars from Hush tokens, and Hush
-   light/dark switching is owned by `[data-theme]` / `prefers-color-scheme`
-   on `:root` (see top of file). A separate `.dark`-class theme would
-   only re-introduce duplication and would never fire because nothing
-   adds a `.dark` class to the document tree. */
+/* `.dark` block intentionally omitted. Theme switching is owned by
+   `[data-theme]` / `prefers-color-scheme` on `:root` (see top of file).
+   A separate `.dark`-class theme would re-introduce duplication and would
+   not fire because nothing adds a `.dark` class to the document tree. */
 
 @layer base {
   * {
