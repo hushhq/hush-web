@@ -4,12 +4,15 @@ import {
   getInstanceDisplayName,
 } from '../../lib/authInstanceStore';
 import {
-  DropdownMenuRoot,
+  DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuSeparator,
   DropdownMenuLabel,
-} from '../ui';
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export function AuthInstanceSelector({
   value,
@@ -56,7 +59,7 @@ export function AuthInstanceSelector({
     <div className={`ais${compact ? ' ais--compact' : ''}`}>
       <div className="ais__label">Instance</div>
 
-      <DropdownMenuRoot open={open} onOpenChange={handleOpenChange}>
+      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
@@ -120,7 +123,7 @@ export function AuthInstanceSelector({
           <DropdownMenuSeparator />
 
           <form className="ais__form" onSubmit={handleSubmit}>
-            <input
+            <Input
               className="input"
               type="text"
               value={draft}
@@ -131,14 +134,18 @@ export function AuthInstanceSelector({
               spellCheck="false"
               disabled={isSaving}
             />
-            <button type="submit" className="btn btn-secondary" disabled={isSaving}>
+            <Button type="submit" variant="secondary" disabled={isSaving}>
               {isSaving ? 'Saving…' : 'Add custom instance'}
-            </button>
+            </Button>
           </form>
 
-          {error && <div className="ais__error">{error}</div>}
+          {error && (
+            <Alert variant="destructive" className="ais__error">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
         </DropdownMenuContent>
-      </DropdownMenuRoot>
+      </DropdownMenu>
     </div>
   );
 }
