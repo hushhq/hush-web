@@ -1681,6 +1681,54 @@ select:focus-visible {
   overflow: hidden;
 }
 
+/* SettingsDialogShell (P17) - layout for the centered settings dialog. */
+.settings-dialog-shell { /* DialogContent provides width/positioning */ }
+
+.settings-dialog-shell__layout {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-dialog-shell__nav {
+  flex-shrink: 0;
+  width: 200px;
+  border-right: 1px solid var(--hush-border);
+  padding: 16px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-dialog-shell__content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-dialog-shell__content-inner {
+  padding: 24px clamp(16px, 4vw, 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .settings-dialog-shell__layout { flex-direction: column; }
+  .settings-dialog-shell__nav {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--hush-border);
+    padding: 8px;
+  }
+}
+
 /* WorkspaceSidebarShell (P16 explicit header/content/footer contract) */
 .workspace-sidebar-shell { /* layout via legacy `.sidebar-shell` */ }
 

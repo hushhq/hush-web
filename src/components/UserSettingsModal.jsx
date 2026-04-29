@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDevices } from '../hooks/useDevices';
-import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useMicMonitor } from '../hooks/useMicMonitor';
 import { getDeviceId } from '../hooks/useAuth.js';
 import { getVaultConfig } from '../lib/identityVault';
@@ -18,6 +16,7 @@ import DeviceManagement from './DeviceManagement.jsx';
 import InstancesSettingsTab from './InstancesSettingsTab.jsx';
 import { Switch, Separator } from './ui/index.js';
 import ConfirmModal from './ConfirmModal.jsx';
+import SettingsDialogShell from './layout/SettingsDialogShell';
 
 const TAB_ACCOUNT = 'account';
 const TAB_APPEARANCE = 'appearance';
@@ -701,25 +700,7 @@ const SIDEBAR_ICONS = {
 
 export default function UserSettingsModal({ onClose, voiceRuntime = null }) {
   const [tab, setTab] = useState(TAB_ACCOUNT);
-  const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
-  const breakpoint = useBreakpoint();
-  const isMobile = breakpoint === 'mobile';
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  const handleOverlayClick = useCallback((e) => {
-    if (e.target === e.currentTarget) onClose();
-  }, [onClose]);
 
   const userTabs = [
     { key: TAB_ACCOUNT, label: 'Account' },
@@ -732,90 +713,68 @@ export default function UserSettingsModal({ onClose, voiceRuntime = null }) {
   const displayName = user?.displayName || user?.username || 'User';
   const initials = displayName.charAt(0).toUpperCase();
 
-  return createPortal(
-    <div
-      className={`settings-overlay${isOpen ? ' settings-overlay--open' : ''}${isMobile ? ' settings-overlay--mobile' : ''}`}
-      onClick={handleOverlayClick}
-    >
-      {isMobile ? (
-        <div className="settings-mobile-tab-bar">
-          {userTabs.map((t) => (
+  const nav = (
+    <>
+      <div className="settings-sidebar-profile">
+        <div className="settings-sidebar-avatar">{initials}</div>
+        <div className="settings-sidebar-profile-info">
+          <span className="settings-sidebar-profile-name">{displayName}</span>
+          <span className="settings-sidebar-profile-sub">{user?.username || ''}</span>
+        </div>
+      </div>
+
+      <div className="settings-sidebar-group">
+        <div className="settings-sidebar-group-label">User Settings</div>
+        {userTabs.map((t) => {
+          const Icon = SIDEBAR_ICONS[t.key];
+          return (
             <button
               key={t.key}
               type="button"
-              className={`settings-mobile-tab-btn${tab === t.key ? ' settings-mobile-tab-btn--active' : ''}`}
+              className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
               onClick={() => setTab(t.key)}
             >
+              {Icon && <Icon />}
               {t.label}
             </button>
-          ))}
-        </div>
-      ) : (
-        <div className="settings-sidebar">
-          {/* User profile header */}
-          <div className="settings-sidebar-profile">
-            <div className="settings-sidebar-avatar">{initials}</div>
-            <div className="settings-sidebar-profile-info">
-              <span className="settings-sidebar-profile-name">{displayName}</span>
-              <span className="settings-sidebar-profile-sub">{user?.username || ''}</span>
-            </div>
-          </div>
+          );
+        })}
+      </div>
 
-          {/* User Settings group */}
-          <div className="settings-sidebar-group">
-            <div className="settings-sidebar-group-label">User Settings</div>
-            {userTabs.map((t) => {
-              const Icon = SIDEBAR_ICONS[t.key];
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
-                  onClick={() => setTab(t.key)}
-                >
-                  {Icon && <Icon />}
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
+      <div className="settings-sidebar-divider" />
 
-          <div className="settings-sidebar-divider" />
-
-          {/* Info links */}
-          <div className="settings-sidebar-group">
-            <button type="button" className="settings-sidebar-item" onClick={() => window.open('https://github.com/hushhq/hush-web/blob/main/CHANGELOG.md', '_blank')}>
-              <IconChangelog />
-              Changelog
-              <svg className="settings-external-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className={`settings-content${isMobile ? ' settings-content--mobile' : ''}`}>
+      <div className="settings-sidebar-group">
         <button
           type="button"
-          className="settings-close-btn"
-          onClick={onClose}
-          title="Close (Esc)"
+          className="settings-sidebar-item"
+          onClick={() => window.open('https://github.com/hushhq/hush-web/blob/main/CHANGELOG.md', '_blank')}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          <IconChangelog />
+          Changelog
+          <svg className="settings-external-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" focusable="false">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
           </svg>
         </button>
-        {tab === TAB_ACCOUNT && <AccountTab />}
-        {tab === TAB_APPEARANCE && <AppearanceTab />}
-        {tab === TAB_AUDIO_VIDEO && <AudioVideoTab voiceRuntime={voiceRuntime} />}
-        {tab === TAB_DEVICES && <DevicesTab />}
-        {tab === TAB_INSTANCES && <InstancesSettingsTab />}
       </div>
-    </div>,
-    document.body,
+    </>
+  );
+
+  return (
+    <SettingsDialogShell
+      open
+      onOpenChange={(next) => { if (!next) onClose(); }}
+      title="User settings"
+      description="Manage account, appearance, audio/video, devices, and instances."
+      nav={nav}
+    >
+      {tab === TAB_ACCOUNT && <AccountTab />}
+      {tab === TAB_APPEARANCE && <AppearanceTab />}
+      {tab === TAB_AUDIO_VIDEO && <AudioVideoTab voiceRuntime={voiceRuntime} />}
+      {tab === TAB_DEVICES && <DevicesTab />}
+      {tab === TAB_INSTANCES && <InstancesSettingsTab />}
+    </SettingsDialogShell>
   );
 }
 

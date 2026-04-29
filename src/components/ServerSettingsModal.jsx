@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { getGuildMembers, listBans, listMutes, unbanUser, unmuteUser, getAuditLog, leaveGuild, deleteGuild } from '../lib/api';
 import ConfirmModal from './ConfirmModal';
-import { useBreakpoint } from '../hooks/useBreakpoint';
+import SettingsDialogShell from './layout/SettingsDialogShell';
 
 const TAB_OVERVIEW = 'overview';
 const TAB_MEMBERS = 'members';
@@ -475,28 +474,10 @@ export default function ServerSettingsModal({
   members,
 }) {
   const [tab, setTab] = useState(isAdmin ? TAB_OVERVIEW : TAB_MEMBERS);
-  const [isOpen, setIsOpen] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const breakpoint = useBreakpoint();
-  const isMobile = breakpoint === 'mobile';
-
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setIsOpen(true));
-    return () => cancelAnimationFrame(t);
-  }, []);
-
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  const handleOverlayClick = useCallback((e) => {
-    if (e.target === e.currentTarget) onClose();
-  }, [onClose]);
 
   const handleLeaveServer = useCallback(async () => {
     try {
@@ -532,29 +513,27 @@ export default function ServerSettingsModal({
     ] : []),
   ];
 
-  return createPortal(
-    <div
-      className={`settings-overlay${isOpen ? ' settings-overlay--open' : ''}${isMobile ? ' settings-overlay--mobile' : ''}`}
-      onClick={handleOverlayClick}
-    >
-      {isMobile ? (
-        <div className="settings-mobile-tab-bar">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={`settings-mobile-tab-btn${tab === t.key ? ' settings-mobile-tab-btn--active' : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="settings-sidebar">
+  const nav = (
+    <>
+      <div className="settings-sidebar-group">
+        <div className="settings-sidebar-group-label">{instanceName ?? 'server'}</div>
+        {tabs.filter(t => t.key === TAB_OVERVIEW || t.key === TAB_MEMBERS).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {isAdmin && (
+        <>
+          <div className="settings-sidebar-divider" />
           <div className="settings-sidebar-group">
-            <div className="settings-sidebar-group-label">{instanceName ?? 'server'}</div>
-            {tabs.filter(t => t.key === TAB_OVERVIEW || t.key === TAB_MEMBERS).map((t) => (
+            <div className="settings-sidebar-group-label">Moderation</div>
+            {tabs.filter(t => t.key === TAB_AUDIT_LOG || t.key === TAB_BANS_MUTES).map((t) => (
               <button
                 key={t.key}
                 type="button"
@@ -565,28 +544,19 @@ export default function ServerSettingsModal({
               </button>
             ))}
           </div>
-          {isAdmin && (
-            <>
-              <div className="settings-sidebar-divider" />
-              <div className="settings-sidebar-group">
-                <div className="settings-sidebar-group-label">Moderation</div>
-                {tabs.filter(t => t.key === TAB_AUDIT_LOG || t.key === TAB_BANS_MUTES).map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
-                    onClick={() => setTab(t.key)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        </>
       )}
+    </>
+  );
 
-      <div className={`settings-content${isMobile ? ' settings-content--mobile' : ''}`}>
+  return (
+    <SettingsDialogShell
+      open
+      onOpenChange={(next) => { if (!next) onClose(); }}
+      title={instanceName ? `${instanceName} settings` : 'Server settings'}
+      description="Manage server overview, members, audit log, and moderation."
+      nav={nav}
+    >
         {tab === TAB_OVERVIEW && isAdmin && (
           <>
             <OverviewTab serverName={instanceName} />
@@ -699,7 +669,6 @@ export default function ServerSettingsModal({
             showToast={showToast}
           />
         )}
-      </div>
 
       {showLeaveConfirm && (
         <ConfirmModal
@@ -710,16 +679,6 @@ export default function ServerSettingsModal({
           onCancel={() => setShowLeaveConfirm(false)}
         />
       )}
-
-      <button
-        type="button"
-        className="settings-close-btn"
-        onClick={onClose}
-        title="Close (Esc)"
-      >
-        &#x2715;
-      </button>
-    </div>,
-    document.body,
+    </SettingsDialogShell>
   );
 }
