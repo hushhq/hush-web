@@ -15,6 +15,9 @@ import {
 import DeviceManagement from './DeviceManagement.jsx';
 import InstancesSettingsTab from './InstancesSettingsTab.jsx';
 import { Switch, Separator } from './ui/index.js';
+import { Button } from './ui/button.tsx';
+import { NativeSelect } from './ui/native-select.tsx';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs.tsx';
 import ConfirmModal from './ConfirmModal.jsx';
 import SettingsDialogShell from './layout/SettingsDialogShell';
 
@@ -225,15 +228,16 @@ function AccountTab() {
         <div className="settings-card-row">
           <div style={{ flex: 1 }}>
             <div className="settings-field-label">Vault timeout</div>
-            <select
+            <NativeSelect
+              className="w-full"
               value={vaultTimeout}
               onChange={(e) => handleVaultTimeoutChange(e.target.value)}
-              className="settings-device-select"
+              aria-label="Vault timeout"
             >
               {VAULT_TIMEOUT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-            </select>
+            </NativeSelect>
             {vaultTimeout === 'never' && (
               <div className="settings-field-note settings-field-note--danger">
                 Your key will remain decrypted in memory.
@@ -253,14 +257,15 @@ function AccountTab() {
           <span className="settings-danger-action-text">
             Sign out and permanently wipe all local data.
           </span>
-          <button
+          <Button
             type="button"
-            className="btn btn-danger"
+            variant="destructive"
+            size="lg"
             onClick={handleLogoutClick}
             disabled={loggingOut}
           >
             {loggingOut ? 'Signing out\u2026' : 'Sign out'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -302,23 +307,14 @@ function AppearanceTab() {
       <div className="settings-section-title">Appearance</div>
 
       <div className="settings-field-row">
-        <label className="settings-field-label">Theme mode</label>
-        <div className="settings-mode-group">
-          {[
-            { key: 'system', label: 'System' },
-            { key: 'dark', label: 'Dark' },
-            { key: 'light', label: 'Light' },
-          ].map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              className={`settings-mode-btn${mode === opt.key ? ' settings-mode-btn--active' : ''}`}
-              onClick={() => handleModeChange(opt.key)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <label className="settings-field-label" id="theme-mode-label">Theme mode</label>
+        <Tabs value={mode} onValueChange={handleModeChange} aria-labelledby="theme-mode-label">
+          <TabsList>
+            <TabsTrigger value="system">System</TabsTrigger>
+            <TabsTrigger value="dark">Dark</TabsTrigger>
+            <TabsTrigger value="light">Light</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="settings-field-note">
           {mode === 'system'
             ? 'Follows your operating system preference.'
@@ -507,18 +503,20 @@ function AudioVideoTab({ voiceRuntime = null }) {
           <div style={{ flex: 1 }}>
             <div className="settings-field-label">Microphone</div>
             {audioDevices.length === 0 || !hasAudioLabels ? (
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+                variant="secondary"
+                size="lg"
                 onClick={() => requestPermission('audio')}
               >
                 Grant microphone access
-              </button>
+              </Button>
             ) : (
-              <select
-                className="settings-device-select"
+              <NativeSelect
+                className="w-full"
                 value={selectedMicId || ''}
                 onChange={handleMicSelectionChange}
+                aria-label="Microphone"
               >
                 <option value="">Default</option>
                 {audioDevices.map((d) => (
@@ -526,7 +524,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
                     {d.label || d.deviceId}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             )}
           </div>
         </div>
@@ -535,18 +533,20 @@ function AudioVideoTab({ voiceRuntime = null }) {
           <div style={{ flex: 1 }}>
             <div className="settings-field-label">Webcam</div>
             {videoDevices.length === 0 || !hasVideoLabels ? (
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary"
+                variant="secondary"
+                size="lg"
                 onClick={() => requestPermission('video')}
               >
                 Grant webcam access
-              </button>
+              </Button>
             ) : (
-              <select
-                className="settings-device-select"
+              <NativeSelect
+                className="w-full"
                 value={selectedWebcamId || ''}
                 onChange={(e) => selectWebcam(e.target.value)}
+                aria-label="Webcam"
               >
                 <option value="">Default</option>
                 {videoDevices.map((d) => (
@@ -554,7 +554,7 @@ function AudioVideoTab({ voiceRuntime = null }) {
                     {d.label || d.deviceId}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             )}
           </div>
         </div>
@@ -609,13 +609,14 @@ function AudioVideoTab({ voiceRuntime = null }) {
               <div className="settings-field-label">Mic Test</div>
               <div className="settings-card-value">Monitor your mic locally while adjusting input processing</div>
             </div>
-            <button
+            <Button
               type="button"
-              className={`settings-pill-toggle${isMicTesting ? ' settings-pill-toggle--active' : ''}`}
+              variant={isMicTesting ? 'default' : 'secondary'}
+              size="lg"
               onClick={handleMicTestToggle}
             >
               {isMicTesting ? 'Stop test' : 'Start test'}
-            </button>
+            </Button>
           </div>
           <div className="settings-field-note">
             {voiceRuntime?.isInVoice
@@ -732,6 +733,7 @@ export default function UserSettingsModal({ onClose, voiceRuntime = null }) {
               key={t.key}
               type="button"
               className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
+              aria-current={tab === t.key ? 'page' : undefined}
               onClick={() => setTab(t.key)}
             >
               {Icon && <Icon />}

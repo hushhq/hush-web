@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { CopyIcon, CheckIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, CopyIcon, CheckIcon } from '@radix-ui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.jsx';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
 import { Button as ShadcnButton } from '../components/ui/button.tsx';
-import { Card } from '../components/ui/card';
-import { Alert, AlertDescription } from '../components/ui/alert';
-import { Input } from '../components/ui/input';
+import { Card } from '../components/ui/card.tsx';
+import { Alert, AlertDescription } from '../components/ui/alert.tsx';
+import { Input } from '../components/ui/input.tsx';
 import QRCodeScanner from '../components/QRCodeScanner';
 import * as mlsStore from '../lib/mlsStore';
 import { preDecryptForLinkExport } from '../lib/preDecryptForLinkExport';
@@ -81,9 +81,11 @@ function buildUnlockResumePath(location) {
 
 function LinkDeviceBackLink() {
   return (
-    <Link className="back-link ld-back-link" to="/">
-      ← Back
-    </Link>
+    <ShadcnButton variant="ghost" size="lg" className="ld-back-link" asChild>
+      <Link to="/">
+        <ArrowLeftIcon data-icon="inline-start" /> Back
+      </Link>
+    </ShadcnButton>
   );
 }
 
@@ -362,8 +364,10 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         >
           {hasCode ? requestState.code : '——————'}
         </div>
-        <button
+        <ShadcnButton
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={handleCopyCode}
           aria-label="Copy device link code"
           data-state={codeCopied ? 'copied' : 'idle'}
@@ -373,7 +377,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           {codeCopied
             ? <CheckIcon aria-hidden="true" />
             : <CopyIcon aria-hidden="true" />}
-        </button>
+        </ShadcnButton>
       </div>
 
       <div className="ld-instance-row">
@@ -393,11 +397,12 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         </Alert>
       )}
 
-      <div className="ld-footer">
+      <div className="auth-actions ld-footer">
         <LinkDeviceBackLink />
         <ShadcnButton
           variant="secondary"
-          className="ld-footer-regen"
+          size="lg"
+          className="flex-1 ld-footer-regen"
           onClick={() => setRefreshKey((value) => value + 1)}
         >
           Regenerate
@@ -855,12 +860,17 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
             QR request detected. Unlock this browser to resume approval automatically.
           </div>
         )}
-        <div className="ld-actions">
-          <ShadcnButton className="ld-action-button" onClick={() => navigate(unlockResumePath)}>
+        <div className="auth-actions">
+          <LinkDeviceBackLink />
+          <ShadcnButton
+            variant="default"
+            size="lg"
+            className="flex-1"
+            onClick={() => navigate(unlockResumePath)}
+          >
             Unlock to approve
           </ShadcnButton>
         </div>
-        <LinkDeviceBackLink />
       </Card>
     );
   }
@@ -904,8 +914,9 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           />
           <ShadcnButton
             type="submit"
-            variant="secondary"
-            className="ld-action-button"
+            variant="default"
+            size="lg"
+            className="w-full"
             disabled={isResolving}
           >
             {isResolving ? 'Checking…' : 'Resolve code'}
@@ -913,7 +924,8 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           <ShadcnButton
             type="button"
             variant="secondary"
-            className="ld-action-button"
+            size="lg"
+            className="w-full"
             onClick={() => { setScannerError(''); setShowScanner(true); }}
             aria-label="Scan QR code with camera"
           >
@@ -972,25 +984,40 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
             to finish the same archive, or discard it to start a
             fresh upload.
           </p>
-          <div className="ld-actions">
-            <ShadcnButton className="ld-action-button" onClick={handleResume}>
-              Resume upload
-            </ShadcnButton>
+          <div className="auth-actions">
             <ShadcnButton
               variant="secondary"
-              className="ld-action-button"
+              size="lg"
+              className="flex-1"
               onClick={handleDiscardResume}
             >
               Discard and start fresh
+            </ShadcnButton>
+            <ShadcnButton
+              variant="default"
+              size="lg"
+              className="flex-1"
+              onClick={handleResume}
+            >
+              Resume upload
             </ShadcnButton>
           </div>
         </div>
       )}
 
-      <div className="ld-actions">
+      <div className="auth-actions">
+        <ShadcnButton
+          variant="ghost"
+          size="lg"
+          onClick={() => navigate('/')}
+        >
+          Close
+        </ShadcnButton>
         {claim && !resumableExport && (
           <ShadcnButton
-            className="ld-action-button"
+            variant="default"
+            size="lg"
+            className="flex-1"
             onClick={handleApprove}
             disabled={isApproving || isResuming}
           >
@@ -998,15 +1025,10 @@ function ApproveLinkView({ initialPayload, unlockResumePath }) {
           </ShadcnButton>
         )}
         {claim && resumableExport && isResuming && (
-          <ShadcnButton className="ld-action-button" disabled>Resuming…</ShadcnButton>
+          <ShadcnButton variant="default" size="lg" className="flex-1" disabled>
+            Resuming…
+          </ShadcnButton>
         )}
-        <ShadcnButton
-          variant="secondary"
-          className="ld-action-button"
-          onClick={() => navigate('/')}
-        >
-          Close
-        </ShadcnButton>
       </div>
     </Card>
   );

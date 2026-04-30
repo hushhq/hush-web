@@ -101,8 +101,8 @@ describe('ServerList - legacy prop-based mode', () => {
       />,
     );
     // In legacy mode (no instanceUrl), tooltip is just the name.
-    expect(screen.getByTitle('Alpha Guild')).toBeInTheDocument();
-    expect(screen.getByTitle('Beta')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Alpha Guild/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Beta/)).toBeInTheDocument();
     expect(screen.getByText('AG')).toBeInTheDocument();
     expect(screen.getByText('BE')).toBeInTheDocument();
   });
@@ -120,8 +120,8 @@ describe('ServerList - legacy prop-based mode', () => {
       />,
     );
     // aria-pressed comes from our own prop on the button, not overridden by dnd-kit in jsdom
-    const activeBtn = screen.getByTitle('Alpha Guild');
-    const inactiveBtn = screen.getByTitle('Beta');
+    const activeBtn = screen.getByLabelText(/^Alpha Guild/);
+    const inactiveBtn = screen.getByLabelText(/^Beta/);
     // Active button has sl-guild-btn--active class (amber state handled in CSS)
     expect(activeBtn.className).toContain('sl-guild-btn--active');
     // Inactive button does not have the active modifier class
@@ -141,7 +141,7 @@ describe('ServerList - legacy prop-based mode', () => {
         userRole="member"
       />,
     );
-    fireEvent.click(screen.getByTitle('Alpha Guild'));
+    fireEvent.click(screen.getByLabelText(/^Alpha Guild/));
     expect(onSelect).toHaveBeenCalledWith(guilds[0]);
   });
 
@@ -157,7 +157,7 @@ describe('ServerList - legacy prop-based mode', () => {
         userRole="member"
       />,
     );
-    expect(screen.getByTitle('Add a server')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Add a server/i)).toBeInTheDocument();
   });
 
   it('hides + button when policy is admin_only and user is member', () => {
@@ -187,7 +187,7 @@ describe('ServerList - legacy prop-based mode', () => {
         userRole="admin"
       />,
     );
-    expect(screen.getByTitle('Add a server')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Add a server/i)).toBeInTheDocument();
   });
 });
 
@@ -262,7 +262,7 @@ describe('ServerList - multi-instance mode via InstanceContext', () => {
     };
     renderWithInstanceCtx(ctxValue);
     expect(screen.getByTestId('dm-section')).toBeInTheDocument();
-    expect(screen.getByTitle('Direct Messages')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Direct Messages/i)).toBeInTheDocument();
   });
 
   it('shows context menu on right-click', () => {
@@ -449,7 +449,7 @@ describe('ServerList - DM button', () => {
       setGuildOrder: vi.fn(),
     };
     renderWithInstanceCtx(ctxValue, { onDmOpen });
-    const dmBtn = screen.getByTitle('Direct Messages');
+    const dmBtn = screen.getByLabelText(/Direct Messages/i);
     fireEvent.click(dmBtn);
     expect(onDmOpen).toHaveBeenCalledTimes(1);
   });

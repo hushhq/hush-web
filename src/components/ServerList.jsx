@@ -16,6 +16,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator.tsx';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip.tsx';
 import GuildCreateModal from './GuildCreateModal';
 import GuildContextMenu from './GuildContextMenu';
 import ConfirmModal from './ConfirmModal';
@@ -176,38 +178,43 @@ function SortableGuildIcon({
   const badgeLabel = unreadCount > 99 ? '99+' : String(unreadCount);
 
   return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      className={className}
-      style={style}
-      title={tooltip}
-      aria-label={hasUnread ? `${displayName} (${unreadCount} unread)` : displayName}
-      aria-pressed={isActive}
-      onClick={() => !isDragging && onGuildSelect?.(guild)}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onContextMenu?.(guild, { x: e.clientX, y: e.clientY });
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={cancelLongPress}
-      onTouchMove={handleTouchMove}
-      {...attributes}
-      {...listeners}
-    >
-      <span className="sl-guild-pill" aria-hidden="true" />
-      <Avatar className="sl-guild-avatar">
-        <AvatarFallback className="sl-guild-avatar-fallback">
-          {getInitials(displayName)}
-        </AvatarFallback>
-      </Avatar>
-      {isOffline && <span className="sl-offline-dot" aria-label="offline" />}
-      {hasUnread && (
-        <span className="sl-unread-badge" aria-hidden="true">
-          {badgeLabel}
-        </span>
-      )}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          ref={setNodeRef}
+          type="button"
+          className={className}
+          style={style}
+          title={tooltip}
+          aria-label={hasUnread ? `${displayName} (${unreadCount} unread)` : displayName}
+          aria-pressed={isActive}
+          onClick={() => !isDragging && onGuildSelect?.(guild)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onContextMenu?.(guild, { x: e.clientX, y: e.clientY });
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={cancelLongPress}
+          onTouchMove={handleTouchMove}
+          {...attributes}
+          {...listeners}
+        >
+          <span className="sl-guild-pill" aria-hidden="true" />
+          <Avatar className="sl-guild-avatar">
+            <AvatarFallback className="sl-guild-avatar-fallback">
+              {getInitials(displayName)}
+            </AvatarFallback>
+          </Avatar>
+          {isOffline && <span className="sl-offline-dot" aria-label="offline" />}
+          {hasUnread && (
+            <span className="sl-unread-badge" aria-hidden="true">
+              {badgeLabel}
+            </span>
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -233,22 +240,26 @@ function DmButton({ dmGuilds, onDmOpen, isActive }) {
 
   return (
     <div className="sl-dm-section" data-testid="dm-section">
-      <button
-        type="button"
-        className={`sl-dm-btn${isActive ? ' sl-dm-btn--expanded' : ''}`}
-        title="Direct Messages"
-        aria-label={`Direct Messages${totalUnread > 0 ? ` (${totalUnread} unread)` : ''}`}
-        onClick={onDmOpen}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-        {totalUnread > 0 && (
-          <span className="sl-unread-badge">
-            {totalUnread > 9 ? '9+' : totalUnread}
-          </span>
-        )}
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`sl-dm-btn${isActive ? ' sl-dm-btn--expanded' : ''}`}
+            aria-label={`Direct Messages${totalUnread > 0 ? ` (${totalUnread} unread)` : ''}`}
+            onClick={onDmOpen}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            {totalUnread > 0 && (
+              <span className="sl-unread-badge">
+                {totalUnread > 9 ? '9+' : totalUnread}
+              </span>
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Direct Messages</TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -636,56 +647,61 @@ export default function ServerList({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="sl-strip"
-      style={compact ? { width: 56, minWidth: 56 } : undefined}
-      data-testid="server-list"
-    >
-      {/* Direct Messages section pinned at top */}
-      <DmButton dmGuilds={dmGuilds} onDmOpen={onDmOpen} isActive={isDmActive} />
-
-      {dmGuilds.length > 0 && regularGuilds.length > 0 && (
-        <div className="sl-separator" />
-      )}
-
-      {/* Guild icon list with drag-and-drop */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
+    <TooltipProvider delayDuration={250}>
+      <div
+        className="sl-strip"
+        style={compact ? { width: 56, minWidth: 56 } : undefined}
+        data-testid="server-list"
       >
-        <SortableContext items={guildIds} strategy={verticalListSortingStrategy}>
-          {renderGroups.map((group) => (
-            <GroupSection
-              key={group.instanceUrl ?? 'flat'}
-              group={group}
-              activeGuild={activeGuild}
-              isGrouped={isGrouped}
-              isGuildOffline={isGuildOffline}
-              getGuildDisplayName={getGuildDisplayName}
-              onGuildSelect={onGuildSelect}
-              onContextMenu={handleContextMenu}
-              onLongPress={handleLongPress}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+        {/* Direct Messages section pinned at top */}
+        <DmButton dmGuilds={dmGuilds} onDmOpen={onDmOpen} isActive={isDmActive} />
 
-      {regularGuilds.length > 0 && showAddButton && (
-        <div className="sl-separator" />
-      )}
+        {dmGuilds.length > 0 && regularGuilds.length > 0 && (
+          <Separator className="sl-separator" />
+        )}
 
-      {showAddButton && (
-        <button
-          type="button"
-          className="sl-add-btn"
-          title="Add a server"
-          aria-label="Add a server"
-          onClick={() => setShowCreateModal(true)}
+        {/* Guild icon list with drag-and-drop */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          +
-        </button>
-      )}
+          <SortableContext items={guildIds} strategy={verticalListSortingStrategy}>
+            {renderGroups.map((group) => (
+              <GroupSection
+                key={group.instanceUrl ?? 'flat'}
+                group={group}
+                activeGuild={activeGuild}
+                isGrouped={isGrouped}
+                isGuildOffline={isGuildOffline}
+                getGuildDisplayName={getGuildDisplayName}
+                onGuildSelect={onGuildSelect}
+                onContextMenu={handleContextMenu}
+                onLongPress={handleLongPress}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+
+        {regularGuilds.length > 0 && showAddButton && (
+          <Separator className="sl-separator" />
+        )}
+
+        {showAddButton && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="sl-add-btn"
+                aria-label="Add a server"
+                onClick={() => setShowCreateModal(true)}
+              >
+                +
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Add a server</TooltipContent>
+          </Tooltip>
+        )}
 
       {showCreateModal && (
         <GuildCreateModal
@@ -727,6 +743,7 @@ export default function ServerList({
           onCancel={handleLeaveCancel}
         />
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

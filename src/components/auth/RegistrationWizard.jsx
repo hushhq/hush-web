@@ -5,7 +5,7 @@ import { generateIdentityMnemonic } from '../../lib/bip39Identity';
 import { checkUsernameAvailable, getInviteInfo } from '../../lib/api';
 import { MnemonicGrid } from './MnemonicGrid';
 import { MnemonicConfirm } from './MnemonicConfirm';
-import { Button } from '../ui';
+import { Button } from '../ui/button.tsx';
 
 const STEP = {
   INVITE_CODE: 'INVITE_CODE',
@@ -648,16 +648,19 @@ function InviteCodeStep({ value, onChange, inviteState, onNext, onCancel }) {
           </Text>
         )}
       </div>
-      <div className="rw-actions">
-        <button type="button" className="back-link" onClick={onCancel}>
-          <ArrowLeftIcon /> Cancel
-        </button>
+      <div className="auth-actions">
+        <Button type="button" variant="ghost" size="lg" onClick={onCancel}>
+          <ArrowLeftIcon data-icon="inline-start" /> Cancel
+        </Button>
         <Button
-          variant="primary"
+          type="button"
+          variant="default"
+          size="lg"
+          className="flex-1"
           disabled={!value.trim() || inviteState === 'checking'}
           onClick={onNext}
         >
-          {inviteState === 'checking' ? 'Checking...' : <><ArrowRightIcon /> Continue</>}
+          {inviteState === 'checking' ? 'Checking...' : <><ArrowRightIcon data-icon="inline-end" /> Continue</>}
         </Button>
       </div>
     </div>
@@ -747,16 +750,19 @@ function UsernameStep({
           autoComplete="off"
         />
       </div>
-      <div className="rw-actions">
-        <button type="button" className="back-link" onClick={onBack}>
-          <ArrowLeftIcon /> Back
-        </button>
+      <div className="auth-actions">
+        <Button type="button" variant="ghost" size="lg" onClick={onBack}>
+          <ArrowLeftIcon data-icon="inline-start" /> Back
+        </Button>
         <Button
-          variant="primary"
+          type="button"
+          variant="default"
+          size="lg"
+          className="flex-1"
           disabled={!username.trim() || usernameState !== 'ok'}
           onClick={onNext}
         >
-          <ArrowRightIcon /> Continue
+          <ArrowRightIcon data-icon="inline-end" /> Continue
         </Button>
       </div>
     </div>
@@ -798,16 +804,19 @@ function MnemonicDisplayStep({ words, savedConfirmed, onSavedConfirmedChange, on
         I have saved my recovery phrase
       </label>
 
-      <div className="rw-actions">
-        <button type="button" className="back-link" onClick={onBack}>
-          <ArrowLeftIcon /> Back
-        </button>
+      <div className="auth-actions">
+        <Button type="button" variant="ghost" size="lg" onClick={onBack}>
+          <ArrowLeftIcon data-icon="inline-start" /> Back
+        </Button>
         <Button
-          variant="primary"
+          type="button"
+          variant="default"
+          size="lg"
+          className="flex-1"
           disabled={!savedConfirmed}
           onClick={onNext}
         >
-          <ArrowRightIcon /> Continue
+          <ArrowRightIcon data-icon="inline-end" /> Continue
         </Button>
       </div>
     </div>

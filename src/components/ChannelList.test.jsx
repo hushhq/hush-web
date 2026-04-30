@@ -203,7 +203,7 @@ describe('ChannelList', () => {
         onChannelSelect={() => {}}
       />
     );
-    expect(screen.getByTitle('Create category')).toBeInTheDocument();
+    expect(screen.getByLabelText('Create category')).toBeInTheDocument();
   });
 
   it('Create channel modal does not include Category as a type option', async () => {
@@ -218,7 +218,7 @@ describe('ChannelList', () => {
         onChannelSelect={() => {}}
       />
     );
-    screen.getByTitle('Create channel').click();
+    screen.getByLabelText('Create channel').click();
     await waitFor(() => {
       expect(screen.getByLabelText('Type')).toBeInTheDocument();
     });
@@ -245,7 +245,7 @@ describe('ChannelList', () => {
         onChannelsUpdated={() => {}}
       />
     );
-    screen.getByTitle('Create category').click();
+    screen.getByLabelText('Create category').click();
     await waitFor(() => {
       expect(screen.getByLabelText('Name')).toBeInTheDocument();
     });
@@ -339,7 +339,7 @@ describe('ChannelList', () => {
           onChannelSelect={() => {}}
         />
       );
-      fireEvent.click(screen.getByTitle('Create channel'));
+      fireEvent.click(screen.getByLabelText('Create channel'));
       await waitFor(() => {
         expect(screen.getByRole('dialog', { name: 'Create channel' })).toBeInTheDocument();
       });
@@ -357,7 +357,7 @@ describe('ChannelList', () => {
           onChannelSelect={() => {}}
         />
       );
-      fireEvent.click(screen.getByTitle('Create channel'));
+      fireEvent.click(screen.getByLabelText('Create channel'));
       await waitFor(() => {
         expect(screen.getByRole('dialog', { name: 'Create channel' })).toBeInTheDocument();
       });
@@ -384,7 +384,7 @@ describe('ChannelList', () => {
           onChannelsUpdated={() => {}}
         />
       );
-      screen.getByTitle('Create channel').click();
+      screen.getByLabelText('Create channel').click();
       await waitFor(() => expect(screen.getByLabelText('Name')).toBeInTheDocument());
 
       fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'new-channel' } });
@@ -409,7 +409,7 @@ describe('ChannelList', () => {
           onChannelSelect={() => {}}
         />
       );
-      fireEvent.click(screen.getByTitle('Create category'));
+      fireEvent.click(screen.getByLabelText('Create category'));
       await waitFor(() => {
         expect(screen.getByRole('dialog', { name: 'Create category' })).toBeInTheDocument();
       });
@@ -427,7 +427,7 @@ describe('ChannelList', () => {
           onChannelSelect={() => {}}
         />
       );
-      fireEvent.click(screen.getByTitle('Create category'));
+      fireEvent.click(screen.getByLabelText('Create category'));
       await waitFor(() => {
         expect(screen.getByRole('dialog', { name: 'Create category' })).toBeInTheDocument();
       });

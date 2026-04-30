@@ -39,7 +39,7 @@ export default function SettingsDialogShell({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className={`settings-dialog-shell sm:max-w-3xl max-h-[80vh] h-[80vh] flex flex-col gap-0 p-0 ${className}`}
+        className={`settings-dialog-shell flex flex-col gap-0 p-0 inset-0 top-0 left-0 max-w-none max-h-none h-dvh w-screen translate-x-0 translate-y-0 rounded-none sm:fixed sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-3xl sm:max-h-[80vh] sm:h-[80vh] sm:w-full sm:rounded-xl ${className}`}
       >
         <DialogTitle className="settings-dialog-shell__title sr-only">{title}</DialogTitle>
         <DialogDescription className="settings-dialog-shell__description sr-only">

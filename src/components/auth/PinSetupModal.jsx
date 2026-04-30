@@ -153,19 +153,22 @@ export function PinSetupModal({ onSetPin, onSkip, isLoading = false }) {
             </Text>
           )}
 
-          <div className="pin-setup-actions">
+          <div className="auth-actions">
             {onSkip && (
-              <button
+              <Button
                 type="button"
-                className="back-link"
+                variant="ghost"
+                size="lg"
                 onClick={onSkip}
               >
                 Skip for now
-              </button>
+              </Button>
             )}
             <Button
-              variant="default"
               type="submit"
+              variant="default"
+              size="lg"
+              className="flex-1"
               disabled={!confirmOk || isLoading}
             >
               {isLoading ? (

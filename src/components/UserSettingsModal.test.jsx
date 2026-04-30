@@ -244,7 +244,7 @@ describe('UserSettingsModal', () => {
       render(<UserSettingsModal onClose={vi.fn()} />);
       await openAppearanceTab();
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /^Dark$/i }));
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /^Dark$/i }));
       });
       expect(localStorage.getItem('hush_theme_mode')).toBe('dark');
     });
@@ -254,7 +254,7 @@ describe('UserSettingsModal', () => {
       render(<UserSettingsModal onClose={vi.fn()} />);
       await openAppearanceTab();
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /^Light$/i }));
+        fireEvent.mouseDown(screen.getByRole('tab', { name: /^Light$/i }));
       });
       expect(localStorage.getItem('hush_theme_mode')).toBe('light');
     });

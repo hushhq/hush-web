@@ -395,7 +395,7 @@ describe('GuildCreateModal - join tab', () => {
 
     renderModal();
 
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /^join$/i }));
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 
@@ -405,7 +405,7 @@ describe('GuildCreateModal - join tab', () => {
 
     renderModal({ onClose });
 
-    fireEvent.click(screen.getByRole('button', { name: /^join$/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /^join$/i }));
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

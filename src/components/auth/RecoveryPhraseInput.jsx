@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Flex, Text } from '@radix-ui/themes';
 import { ArrowLeftIcon, EnterIcon } from '@radix-ui/react-icons';
 import { isMnemonicValid, getEnglishWordlist } from '../../lib/bip39Identity';
-import { Button } from '../ui';
+import { Button } from '../ui/button.tsx';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -236,20 +236,24 @@ export function RecoveryPhraseInput({ onSubmit, onCancel, isRecoveryMode = true,
         </Text>
       )}
 
-      <div className="rpi-actions">
-        <button
+      <div className="auth-actions">
+        <Button
           type="button"
-          className="back-link"
+          variant="ghost"
+          size="lg"
           onClick={onCancel}
         >
-          <ArrowLeftIcon /> Back
-        </button>
+          <ArrowLeftIcon data-icon="inline-start" /> Back
+        </Button>
         <Button
-          variant="primary"
+          type="button"
+          variant="default"
+          size="lg"
+          className="flex-1"
           disabled={!isValid || isLoading}
           onClick={handleSubmit}
         >
-          {isLoading ? 'Signing in...' : <><EnterIcon /> Sign in</>}
+          {isLoading ? 'Signing in...' : <><EnterIcon data-icon="inline-start" /> Sign in</>}
         </Button>
       </div>
 

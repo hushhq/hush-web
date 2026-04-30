@@ -1,14 +1,16 @@
 import { InfoCircledIcon } from '@radix-ui/react-icons';
 
 /**
- * AuthenticatedAppShell - desktop selected-server outer shell.
+ * AuthenticatedAppShell — desktop selected-server outer shell.
  *
- * Owns the outer layout contract: server rail, workspace (channel sidebar +
- * main pane), and overlay slots. Replaces the scattered
- * `ServerShell`/`DesktopShell`/`lay-*` ownership chain for the desktop
- * server-selected path.
+ * Discord-like two-left-column composition (server rail + channel sidebar)
+ * adapted from shadcn/dashboard-01 grammar: edge-to-edge, h-dvh-bound,
+ * 1px hairline separators, slot-named data attributes, no nested rounded
+ * panel inside the shell.
  *
- * Mobile and empty-state still go through their dedicated shells.
+ * `.lay-container` / `.lay-main` / `.lay-content-row` / `.lay-channel-area`
+ * remain as compatibility hooks for non-migrated CSS selectors and the
+ * existing test contract; visual rules now live on `.app-shell*`.
  */
 export default function AuthenticatedAppShell({
   serverListEl,
@@ -25,28 +27,56 @@ export default function AuthenticatedAppShell({
   children,
 }) {
   return (
-    <div className="app-shell lay-container" style={{ overflow: 'hidden' }}>
+    <div
+      className="app-shell lay-container"
+      data-slot="app-shell"
+      style={{ overflow: 'hidden' }}
+    >
       {isInstanceOffline && (
-        <div className="app-shell__offline-banner lay-offline-banner">
+        <div
+          className="app-shell__offline-banner lay-offline-banner"
+          data-slot="app-shell-offline-banner"
+        >
           {instanceUrl ? new URL(instanceUrl).host : 'Instance'} is offline - read-only mode
         </div>
       )}
 
-      <div className="app-shell__server-rail">{serverListEl}</div>
+      <div
+        className="app-shell__server-rail"
+        data-slot="app-shell-server-rail"
+      >
+        {serverListEl}
+      </div>
 
-      <div className="app-shell__workspace lay-main">
-        <div className="app-shell__workspace-row lay-content-row">
-          <div className="app-shell__sidebar" style={{ width: sidebarWidth }}>
+      <div
+        className="app-shell__workspace lay-main"
+        data-slot="app-shell-workspace"
+      >
+        <div
+          className="app-shell__workspace-row lay-content-row"
+          data-slot="app-shell-workspace-row"
+        >
+          <div
+            className="app-shell__sidebar"
+            data-slot="app-shell-sidebar"
+            style={{ width: sidebarWidth }}
+          >
             {channelSidebarEl}
             <div
               className="app-shell__resize-handle lay-resize-handle"
+              data-slot="app-shell-resize"
               onMouseDown={onSidebarResize}
               role="separator"
               aria-orientation="vertical"
               aria-label="Resize channel list"
             />
           </div>
-          <div className="app-shell__main lay-channel-area">{children}</div>
+          <div
+            className="app-shell__main lay-channel-area"
+            data-slot="app-shell-main"
+          >
+            {children}
+          </div>
         </div>
       </div>
 

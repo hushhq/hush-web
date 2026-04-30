@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Button } from '../ui/button.tsx';
 
 /** Returns inline style for the field validation status icon. */
 function statusIconStyle(state) {
@@ -120,23 +121,20 @@ export function MnemonicConfirm({ words, onConfirm, onStartOver, challengePositi
         })}
       </div>
 
-      <div className="mc-actions">
-        <button
-          type="button"
-          className="back-link"
-          onClick={onStartOver}
-        >
+      <div className="auth-actions">
+        <Button type="button" variant="ghost" size="lg" onClick={onStartOver}>
           Start over
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn btn-primary"
+          variant="default"
+          size="lg"
+          className="flex-1"
           disabled={!allCorrect}
           onClick={onConfirm}
-          style={{ flex: 1, padding: '10px' }}
         >
           Continue
-        </button>
+        </Button>
       </div>
     </div>
   );

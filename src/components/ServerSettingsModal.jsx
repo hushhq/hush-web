@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getGuildMembers, listBans, listMutes, unbanUser, unmuteUser, getAuditLog, leaveGuild, deleteGuild } from '../lib/api';
 import ConfirmModal from './ConfirmModal';
 import SettingsDialogShell from './layout/SettingsDialogShell';
+import { Button } from './ui/button.tsx';
+import { Input } from './ui/input.tsx';
+import { NativeSelect } from './ui/native-select.tsx';
+import { Alert, AlertDescription } from './ui/alert.tsx';
 
 const TAB_OVERVIEW = 'overview';
 const TAB_MEMBERS = 'members';
@@ -225,22 +229,23 @@ function AuditLogTab({ getToken, serverId, showToast, members = [] }) {
       <div className="settings-section-title">Audit Log</div>
 
       <div className="settings-audit-filter-bar">
-        <select
-          className="settings-audit-select"
+        <NativeSelect
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
+          aria-label="Audit action filter"
         >
           <option value="">All actions</option>
           {AUDIT_ACTIONS.map((a) => (
             <option key={a} value={a}>{ACTION_LABELS[a] ?? a}</option>
           ))}
-        </select>
-        <input
+        </NativeSelect>
+        <Input
           type="text"
-          className="settings-audit-input"
+          className="flex-1"
           placeholder="Search by username..."
           value={userSearch}
           onChange={(e) => setUserSearch(e.target.value)}
+          aria-label="Search audit log by username"
         />
       </div>
 
@@ -297,14 +302,16 @@ function AuditLogTab({ getToken, serverId, showToast, members = [] }) {
               </tbody>
             </table>
             {hasMore && (
-              <button
+              <Button
                 type="button"
-                className="settings-audit-load-more"
+                variant="secondary"
+                size="lg"
+                className="w-full"
                 onClick={handleLoadMore}
                 disabled={loading}
               >
                 {loading ? 'Loading...' : 'Load More'}
-              </button>
+              </Button>
             )}
           </>
         )}
@@ -345,30 +352,33 @@ function ModerationRow({ entry, actionLabel, onAction }) {
           </div>
         </div>
         {!expanded && (
-          <button type="button" className="settings-bm-action-btn" onClick={() => setExpanded(true)}>
+          <Button type="button" variant="secondary" size="lg" onClick={() => setExpanded(true)}>
             {actionLabel}
-          </button>
+          </Button>
         )}
       </div>
       {expanded && (
         <>
-          <input
+          <Input
             type="text"
-            className="settings-bm-reason-input"
             placeholder="Reason (required)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             disabled={submitting}
             autoFocus
           />
-          {error && <div className="settings-error-msg">{error}</div>}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           <div className="settings-bm-reason-actions">
-            <button type="button" className="settings-bm-cancel-btn" onClick={() => { setExpanded(false); setReason(''); setError(''); }} disabled={submitting}>
+            <Button type="button" variant="ghost" size="lg" onClick={() => { setExpanded(false); setReason(''); setError(''); }} disabled={submitting}>
               Cancel
-            </button>
-            <button type="button" className="settings-bm-confirm-btn" onClick={handleSubmit} disabled={submitting}>
+            </Button>
+            <Button type="button" variant="default" size="lg" onClick={handleSubmit} disabled={submitting}>
               {submitting ? 'Submitting...' : `Confirm ${actionLabel}`}
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -522,6 +532,7 @@ export default function ServerSettingsModal({
             key={t.key}
             type="button"
             className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
+            aria-current={tab === t.key ? 'page' : undefined}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -538,6 +549,7 @@ export default function ServerSettingsModal({
                 key={t.key}
                 type="button"
                 className={`settings-sidebar-item${tab === t.key ? ' settings-sidebar-item--active' : ''}`}
+                aria-current={tab === t.key ? 'page' : undefined}
                 onClick={() => setTab(t.key)}
               >
                 {t.label}
@@ -569,41 +581,44 @@ export default function ServerSettingsModal({
                   Permanently delete this server and all its channels, messages, and members. This cannot be undone.
                 </p>
                 {!showDeleteConfirm ? (
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-danger"
+                    variant="destructive"
+                    size="lg"
                     onClick={() => setShowDeleteConfirm(true)}
                   >
                     Delete Server
-                  </button>
+                  </Button>
                 ) : (
                   <div className="settings-delete-confirm">
                     <p className="settings-danger-action-text">
                       Type the server name to confirm: <strong>{serverName}</strong>
                     </p>
-                    <input
-                      className="settings-delete-input"
+                    <Input
                       value={deleteConfirmText}
                       onChange={(e) => setDeleteConfirmText(e.target.value)}
                       placeholder="Type server name..."
                       autoFocus
+                      aria-label="Confirm server name"
                     />
                     <div className="settings-delete-actions">
-                      <button
+                      <Button
                         type="button"
-                        className="btn btn-secondary"
+                        variant="ghost"
+                        size="lg"
                         onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); }}
                       >
                         Cancel
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="btn btn-danger"
+                        variant="destructive"
+                        size="lg"
                         disabled={deleteConfirmText !== serverName || isDeleting}
                         onClick={handleDeleteServer}
                       >
                         {isDeleting ? 'Deleting...' : 'Permanently Delete'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -615,13 +630,14 @@ export default function ServerSettingsModal({
                   <span className="settings-danger-action-text">
                     Leave this server. You will lose access to all channels.
                   </span>
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-danger"
+                    variant="destructive"
+                    size="lg"
                     onClick={() => setShowLeaveConfirm(true)}
                   >
                     Leave Server
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -642,13 +658,14 @@ export default function ServerSettingsModal({
                   <span className="settings-danger-action-text">
                     Leave this server. You will lose access to all channels.
                   </span>
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-danger"
+                    variant="destructive"
+                    size="lg"
                     onClick={() => setShowLeaveConfirm(true)}
                   >
                     Leave Server
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

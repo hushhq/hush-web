@@ -154,10 +154,6 @@ function getHomeInstanceUrl() {
   return localStorage.getItem(HOME_INSTANCE_KEY) || window.location.origin;
 }
 
-const LAYOUT_SCROLL_LOCK_STYLE = {
-  overflow: 'hidden',
-};
-
 // ── Layout styles removed - see lay-* classes in global.css ──────────────────
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -1603,49 +1599,45 @@ export default function ServerLayout() {
   // No guild selected - show empty state with guild strip and welcome message.
   if (!serverId) {
     return (
-      <div className="lay-container" style={LAYOUT_SCROLL_LOCK_STYLE}>
-        <ServerList
-          getToken={getToken}
-          guilds={mergedGuilds}
-          activeGuild={null}
-          onGuildSelect={handleGuildSelect}
-          onGuildSettings={() => { setRequestOpenSettings(true); setTimeout(() => setRequestOpenSettings(false), 0); }}
-          onGuildCreated={handleGuildCreated}
-          getMetadataKey={getMetadataKey}
-          getMetadataKeys={getMetadataKeys}
-          rememberMetadataKey={rememberMetadataKey}
-          instanceData={instanceData}
-          userRole={myRole}
-          userPermissionLevel={myPermissionLevel}
-        />
-        <div style={{ flex: 1, background: 'var(--hush-black)' }}>
+      <ServerShell
+        transparencyError={null}
+        onTransparencySignOut={handleTransparencySignOut}
+        serverId={null}
+        serverListEl={(
+          <ServerList
+            getToken={getToken}
+            guilds={mergedGuilds}
+            activeGuild={null}
+            onGuildSelect={handleGuildSelect}
+            onGuildSettings={() => { setRequestOpenSettings(true); setTimeout(() => setRequestOpenSettings(false), 0); }}
+            onGuildCreated={handleGuildCreated}
+            getMetadataKey={getMetadataKey}
+            getMetadataKeys={getMetadataKeys}
+            rememberMetadataKey={rememberMetadataKey}
+            instanceData={instanceData}
+            userRole={myRole}
+            userPermissionLevel={myPermissionLevel}
+          />
+        )}
+        emptyStateEl={(
           <EmptyState
             instanceStates={instanceStates}
             onCreateServer={handleOpenGuildCreateModal}
             onBrowseServers={() => navigate('/explore')}
           />
-        </div>
-        {showGuildCreateModal && (
+        )}
+        guildCreateModal={showGuildCreateModal ? (
           <GuildCreateModal
             getToken={getToken}
             onClose={handleCloseGuildCreateModal}
             onCreated={handleEmptyStateGuildCreated}
             activeInstanceUrl={null}
           />
-        )}
-        {hasNoTransparencyLog && authToken && (
-          <div
-            className="transp-no-log-badge"
-            title="Transparency log not configured - key operations cannot be independently verified"
-            aria-label="Transparency log not configured"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 14h2v2h-2v-2zm0-8h2v6h-2V7z" />
-            </svg>
-          </div>
-        )}
-        <Toast toasts={toasts} />
-      </div>
+        ) : null}
+        hasNoTransparencyLog={hasNoTransparencyLog}
+        authToken={authToken}
+        toastEl={<Toast toasts={toasts} />}
+      />
     );
   }
 

@@ -3,9 +3,18 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from './ui/dialog.tsx';
+import { Button } from './ui/button.tsx';
+import { Input } from './ui/input.tsx';
+import { NativeSelect } from './ui/native-select.tsx';
+import { Alert, AlertDescription } from './ui/alert.tsx';
+import { Field, FieldGroup, FieldLabel } from './ui/field.tsx';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from './ui/input-group.tsx';
+import { ScrollArea } from './ui/scroll-area.tsx';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip.tsx';
 import {
   DndContext,
   PointerSensor,
@@ -169,42 +178,47 @@ function CreateChannelModal({ getToken, serverId, currentUserId, onClose, onCrea
           <DialogTitle>Create channel</DialogTitle>
           <DialogDescription className="sr-only">Create a text or voice channel.</DialogDescription>
         </DialogHeader>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="channel-name" className="modal-field-label">Name</label>
-            <input
-              id="channel-name"
-              name="channel-name"
-              className="input"
-              type="text"
-              placeholder="general"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              autoComplete="off"
-            />
-          </div>
-          <div>
-            <label className="modal-field-label" htmlFor="create-channel-type">Type</label>
-            <select
-              id="create-channel-type"
-              className="input"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              <option value={CHANNEL_TYPE_TEXT}>Text</option>
-              <option value={CHANNEL_TYPE_VOICE}>Voice</option>
-            </select>
-          </div>
-          {error && <div className="modal-error">{error}</div>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="channel-name">Name</FieldLabel>
+              <Input
+                id="channel-name"
+                name="channel-name"
+                type="text"
+                placeholder="general"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={100}
+                autoComplete="off"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="create-channel-type">Type</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="create-channel-type"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+              >
+                <option value={CHANNEL_TYPE_TEXT}>Text</option>
+                <option value={CHANNEL_TYPE_VOICE}>Voice</option>
+              </NativeSelect>
+            </Field>
+          </FieldGroup>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="ghost" size="lg" onClick={onClose}>
               Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
+            </Button>
+            <Button type="submit" variant="default" size="lg" disabled={loading}>
               {loading ? 'Creating…' : 'Create'}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -248,30 +262,35 @@ function CreateCategoryModal({ getToken, serverId, onClose, onCreated }) {
           <DialogTitle>Create category</DialogTitle>
           <DialogDescription className="sr-only">Group related channels under a named category.</DialogDescription>
         </DialogHeader>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="category-name" className="modal-field-label">Name</label>
-            <input
-              id="category-name"
-              name="category-name"
-              className="input"
-              type="text"
-              placeholder="Gaming"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              autoComplete="off"
-            />
-          </div>
-          {error && <div className="modal-error">{error}</div>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="category-name">Name</FieldLabel>
+              <Input
+                id="category-name"
+                name="category-name"
+                type="text"
+                placeholder="Gaming"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={100}
+                autoComplete="off"
+              />
+            </Field>
+          </FieldGroup>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="ghost" size="lg" onClick={onClose}>
               Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
+            </Button>
+            <Button type="submit" variant="default" size="lg" disabled={loading}>
               {loading ? 'Creating…' : 'Create'}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -354,33 +373,36 @@ function InviteModal({ getToken, serverId, guildName, instanceUrl, getGuildMetad
           <DialogDescription className="sr-only">Generate or copy an invite link for this server.</DialogDescription>
         </DialogHeader>
         {loading ? (
-          <div style={{ color: 'var(--hush-text-secondary)', fontSize: '0.85rem', padding: '16px 0' }}>
-            Generating invite link...
-          </div>
+          <p className="text-xs text-muted-foreground py-2">Generating invite link...</p>
         ) : error ? (
-          <div className="modal-error">{error}</div>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                className="input"
+          <div className="flex flex-col gap-3">
+            <InputGroup>
+              <InputGroupInput
+                className="font-mono"
                 readOnly
                 value={inviteLink}
-                style={{ flex: 1, fontSize: '0.85rem' }}
                 onClick={(e) => e.target.select()}
               />
-              <button className="btn btn-primary" onClick={handleCopy} style={{ whiteSpace: 'nowrap' }}>
-                {copied ? 'Copied!' : 'Copy link'}
-              </button>
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--hush-text-muted)' }}>
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton variant="default" size="sm" onClick={handleCopy}>
+                  {copied ? 'Copied!' : 'Copy link'}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+            <p className="text-xs text-muted-foreground">
               This invite expires in 7 days and can be used 50 times.
-            </div>
+            </p>
           </div>
         )}
-        <div className="modal-actions" style={{ marginTop: '16px' }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
-        </div>
+        <DialogFooter>
+          <Button type="button" variant="ghost" size="lg" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -1016,29 +1038,43 @@ export default function ChannelList({
 
         <div className="cl-header-actions">
           {isAdmin && (
-            <>
-              <button
-                type="button"
-                className="cl-add-btn"
-                title="Create category"
-                onClick={() => setShowCreateCategoryModal(true)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="cl-add-btn"
-                title="Create channel"
-                onClick={() => setShowCreateModal(true)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-            </>
+            <TooltipProvider delayDuration={250}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="cl-add-btn"
+                    aria-label="Create category"
+                    onClick={() => setShowCreateCategoryModal(true)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Create category</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="cl-add-btn"
+                    aria-label="Create channel"
+                    onClick={() => setShowCreateModal(true)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Create channel</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
 
@@ -1077,7 +1113,7 @@ export default function ChannelList({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="cl-channel-list">
+        <ScrollArea className="cl-channel-list" data-slot="channel-list-scroll">
           {systemChannels.map((ch) => (
             <SystemChannelRow
               key={ch.id}
@@ -1106,7 +1142,7 @@ export default function ChannelList({
             position="bottom"
             visible={activeId !== null && !categoryIdSet.has(activeId) && channelMap.get(activeId)?.parentId != null}
           />
-        </div>
+        </ScrollArea>
         <DragOverlay>
           {draggedChannel ? (
             <ChannelRow

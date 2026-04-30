@@ -14,8 +14,8 @@ import { PinSetupModal } from '../components/auth/PinSetupModal';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
 import { Button as ShadcnButton } from '../components/ui/button.tsx';
-import { Card, CardContent, CardFooter } from '../components/ui/card';
-import { Alert, AlertDescription } from '../components/ui/alert';
+import { Card, CardContent, CardFooter } from '../components/ui/card.tsx';
+import { Alert, AlertDescription } from '../components/ui/alert.tsx';
 import { HushLogo } from '../components/brand/HushLogo';
 
 const HOME_PAGE_SCROLL_STYLE = {
@@ -297,7 +297,7 @@ export default function Home() {
       <Flex direction="column" gap="5" className="home-auth-choose">
         <Flex direction="column" gap="3">
           <ShadcnButton
-            variant="contrast"
+            variant="default"
             size="lg"
             className="home-auth-btn h-auto"
             onClick={() => setAuthView(AUTH_VIEW.RECOVERY)}
@@ -312,7 +312,7 @@ export default function Home() {
             asChild
           >
             <Link to="/link-device?mode=new">
-              <Link1Icon />
+              <Link1Icon data-icon="inline-start" />
               Link to existing device
             </Link>
           </ShadcnButton>

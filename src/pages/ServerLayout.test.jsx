@@ -289,10 +289,13 @@ describe('ServerLayout', () => {
   });
 
   it('shows welcome message when no guild is selected (/guilds route)', async () => {
-    renderAtRoute('/guilds');
+    const { container } = renderAtRoute('/guilds');
     await waitFor(() => {
       expect(screen.getByTestId('empty-state')).toBeInTheDocument();
     });
+    expect(container.querySelector('[data-slot="app-shell"][data-state="empty"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="app-shell-server-rail"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="app-shell-main"]')).toBeInTheDocument();
   });
 
   it('opens the guild creation modal from the welcome empty-state when the instance policy is open', async () => {

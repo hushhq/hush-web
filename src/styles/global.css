@@ -463,42 +463,6 @@ body {
   z-index: 1;
 }
 
-/* ── Ambient Glow ─────────────────────────────── */
-
-body::before, body::after {
-  content: '';
-  position: fixed;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 0;
-  filter: blur(120px);
-}
-body::before {
-  width: 600px; height: 400px;
-  top: -100px; left: 10%;
-  background: radial-gradient(ellipse, rgba(238,238,240,.07) 0%, transparent 70%);
-}
-body::after {
-  width: 500px; height: 500px;
-  bottom: -150px; right: 5%;
-  background: radial-gradient(ellipse, rgba(238,238,240,.04) 0%, transparent 70%);
-}
-
-@media (prefers-color-scheme: light) {
-  body::before {
-    background: radial-gradient(ellipse, rgba(200,190,178,.22) 0%, transparent 65%);
-  }
-  body::after {
-    background: radial-gradient(ellipse, rgba(210,200,188,.18) 0%, transparent 65%);
-  }
-}
-[data-theme="light"] body::before {
-  background: radial-gradient(ellipse, rgba(200,190,178,.22) 0%, transparent 65%);
-}
-[data-theme="light"] body::after {
-  background: radial-gradient(ellipse, rgba(210,200,188,.18) 0%, transparent 65%);
-}
-
 /* ── Electron desktop shell ────────────────────────
    `<html data-desktop="<platform>">` is set by `useDesktopShell` while the
    app runs inside the Electron renderer. Two consequences:
@@ -1725,7 +1689,15 @@ select:focus-visible {
     overflow-y: hidden;
     border-right: none;
     border-bottom: 1px solid var(--hush-border);
-    padding: 8px;
+    padding: 8px 44px 8px 8px;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .settings-dialog-shell__nav > * {
+    flex-shrink: 0;
+  }
+  .settings-dialog-shell__content-inner {
+    padding: 16px;
   }
 }
 
@@ -2370,14 +2342,41 @@ select:focus-visible {
   gap: 8px;
 }
 
-/* AuthenticatedAppShell (new shell contract)
-   `.app-shell` reuses `.lay-container` for layout while adding semantic
-   class hooks the future migration can target without disturbing legacy
-   tests/CSS. P15 markers only; visual rules live on `.lay-*` siblings. */
-.app-shell { position: relative; }
+/* AuthenticatedAppShell (P15 markers, P24 promoted to authoritative slots).
+   `.app-shell` is the desktop selected-server outer shell. It reuses
+   `.lay-container` as a compat hook for legacy CSS selectors still relied
+   on by non-migrated surfaces (sidebar-shell, mobile path, electron
+   safe-area rules). New surfaces should target `.app-shell*` slots. */
+.app-shell {
+  position: relative;
+}
+
+.app-shell.lay-container {
+  padding: 0;
+  gap: 0;
+  background: var(--hush-surface);
+}
+
+html[data-desktop] .app-shell.lay-container {
+  padding: var(--desktop-titlebar-safe-top) 0 0;
+}
+
+.app-shell__workspace.lay-main {
+  border: 0;
+  border-radius: 0;
+}
+
+.app-shell--empty .app-shell__main {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
 .app-shell__server-rail { display: flex; flex-shrink: 0; }
 .app-shell__sidebar { display: flex; flex-shrink: 0; min-width: 0; position: relative; }
 .app-shell__offline-banner { left: 0; position: absolute; right: 0; top: 0; z-index: 20; }
+.app-shell__workspace-row { /* compat with .lay-content-row */ }
+.app-shell__main { /* compat with .lay-channel-area */ }
+.app-shell__resize-handle { /* compat with .lay-resize-handle */ }
 
 .lay-header {
   height: 46px;
@@ -7277,6 +7276,26 @@ html[data-desktop] .ld-container {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--hush-border);
+}
+
+/* Shared auth/link-device action row contract (P21).
+   Stretch primary CTA via flex-1 on the Button; back/ghost stays auto. */
+.auth-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 480px) {
+  .auth-actions {
+    flex-direction: column-reverse;
+  }
+  .auth-actions > [data-slot="button"] {
+    width: 100%;
+  }
 }
 
 /* ── PostRecoveryWizard ──────────────────────── */

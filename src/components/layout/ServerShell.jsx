@@ -1,4 +1,3 @@
-import { Flex, Box } from '@radix-ui/themes';
 import { InfoCircledIcon } from '@radix-ui/react-icons';
 import TransparencyBlock from './TransparencyBlock';
 import EmptyServerShell from './EmptyServerShell';
@@ -74,26 +73,19 @@ export default function ServerShell({
   }
 
   return (
-    <Flex
-      className="lay-container"
-      direction="row"
-      height="100dvh"
-      overflow="hidden"
-      gap="2"
-      p="3"
+    <div
+      className="app-shell app-shell--mobile lay-container"
+      data-slot="app-shell"
+      data-state="mobile"
       style={{ overflow: 'hidden' }}
     >
       {isInstanceOffline && (
-        <Box
-          className="lay-offline-banner"
-          position="absolute"
-          top="0"
-          left="0"
-          right="0"
-          style={{ zIndex: 20 }}
+        <div
+          className="app-shell__offline-banner lay-offline-banner"
+          data-slot="app-shell-offline-banner"
         >
           {instanceUrl ? new URL(instanceUrl).host : 'Instance'} is offline - read-only mode
-        </Box>
+        </div>
       )}
 
       <MobileShell
@@ -113,16 +105,16 @@ export default function ServerShell({
       {pendingVoiceSwitchModal}
 
       {hasNoTransparencyLog && authToken && (
-        <Box
+        <div
           className="transp-no-log-badge"
           title="Transparency log not configured - key operations cannot be independently verified"
           aria-label="Transparency log not configured"
         >
           <InfoCircledIcon width="16" height="16" aria-hidden="true" />
-        </Box>
+        </div>
       )}
 
       {toastEl}
-    </Flex>
+    </div>
   );
 }

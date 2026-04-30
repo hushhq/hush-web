@@ -165,21 +165,24 @@ export function PinUnlockScreen({ username, avatarUrl, onUnlock, onSwitchAccount
         )}
 
         <Button
-          variant="default"
           type="submit"
+          variant="default"
+          size="lg"
+          className="w-full"
           disabled={!pin || pin.length < 4 || isLoading || isDelayed}
         >
           {isLoading ? 'Unlocking...' : <><LockClosedIcon data-icon="inline-start" /> Unlock</>}
         </Button>
       </form>
 
-      <button
+      <Button
         type="button"
-        className="back-link"
+        variant="ghost"
+        size="lg"
         onClick={onSwitchAccount}
       >
         Not you? Sign in
-      </button>
+      </Button>
     </Flex>
   );
 }
