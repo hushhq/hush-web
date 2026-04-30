@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { useAuthInstanceSelection } from './useAuthInstanceSelection.js';
 
 const getActiveAuthInstanceUrlSync = vi.hoisted(() => vi.fn(() => 'https://app.gethush.live'));
+const getSelectedAuthInstanceUrlSync = vi.hoisted(() => vi.fn(() => 'https://app.gethush.live'));
 const getInstanceDisplayName = vi.hoisted(() => vi.fn((value) => new URL(value).host));
 const loadKnownAuthInstances = vi.hoisted(() => vi.fn());
 const markAuthInstanceUsed = vi.hoisted(() => vi.fn());
@@ -10,6 +11,7 @@ const selectAuthInstance = vi.hoisted(() => vi.fn());
 
 vi.mock('../lib/authInstanceStore', () => ({
   getActiveAuthInstanceUrlSync,
+  getSelectedAuthInstanceUrlSync,
   getInstanceDisplayName,
   loadKnownAuthInstances,
   markAuthInstanceUsed,
@@ -20,6 +22,7 @@ describe('useAuthInstanceSelection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getActiveAuthInstanceUrlSync.mockReturnValue('https://app.gethush.live');
+    getSelectedAuthInstanceUrlSync.mockReturnValue('https://app.gethush.live');
     getInstanceDisplayName.mockImplementation((value) => new URL(value).host);
     loadKnownAuthInstances.mockResolvedValue([
       { url: 'https://app.gethush.live', lastUsedAt: 0 },
@@ -52,5 +55,19 @@ describe('useAuthInstanceSelection', () => {
 
     expect(markAuthInstanceUsed).toHaveBeenCalledWith('https://chat.example.com');
     expect(loadKnownAuthInstances).toHaveBeenCalledTimes(3);
+  });
+
+  it('initializes from the selected instance rather than stale active instance', async () => {
+    getActiveAuthInstanceUrlSync.mockReturnValue('https://app.gethush.live');
+    getSelectedAuthInstanceUrlSync.mockReturnValue('https://chat.example.com');
+
+    const { result } = renderHook(() => useAuthInstanceSelection());
+
+    await waitFor(() => {
+      expect(result.current.knownInstances).toHaveLength(2);
+    });
+
+    expect(result.current.selectedInstanceUrl).toBe('https://chat.example.com');
+    expect(getActiveAuthInstanceUrlSync).not.toHaveBeenCalled();
   });
 });

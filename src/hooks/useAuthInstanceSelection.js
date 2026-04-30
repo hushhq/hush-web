@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   getActiveAuthInstanceUrlSync,
   getInstanceDisplayName,
+  getSelectedAuthInstanceUrlSync,
   loadKnownAuthInstances,
   markAuthInstanceUsed,
   selectAuthInstance,
 } from '../lib/authInstanceStore';
 
 export function useAuthInstanceSelection() {
-  const [selectedInstanceUrl, setSelectedInstanceUrl] = useState(() => getActiveAuthInstanceUrlSync());
+  const [selectedInstanceUrl, setSelectedInstanceUrl] = useState(() => getSelectedAuthInstanceUrlSync());
   const [knownInstances, setKnownInstances] = useState([]);
 
   const refreshInstances = useCallback(async () => {

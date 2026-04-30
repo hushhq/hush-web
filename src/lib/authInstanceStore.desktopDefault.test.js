@@ -74,10 +74,32 @@ describe('authInstanceStore desktop defaulting + persistence', () => {
     expect(second.getActiveAuthInstanceUrlSync()).toBe('https://chat.example.com');
   });
 
+  it('preserves an explicit hosted selection in browser runtime', async () => {
+    const first = await loadModuleWithDesktop(false);
+    await first.selectAuthInstance(HOSTED);
+    expect(first.getSelectedAuthInstanceUrlSync()).toBe(HOSTED);
+
+    sessionStorage.clear();
+    const second = await loadModuleWithDesktop(false);
+    expect(second.getSelectedAuthInstanceUrlSync()).toBe(HOSTED);
+  });
+
   it('returns hosted default after relaunch when user never overrode', async () => {
     await loadModuleWithDesktop(true);
     sessionStorage.clear();
     const second = await loadModuleWithDesktop(true);
     expect(second.getSelectedAuthInstanceUrlSync()).toBe(HOSTED);
+  });
+
+  it('preserves an explicit selection when DEFAULT_MIGRATION_KEY is absent', async () => {
+    // Simulate stale storage from a session that pre-dates the explicit
+    // selection migration mark. The selected value must still be treated as
+    // a user choice, not as a legacy default to overwrite.
+    localStorage.setItem('hush_auth_instance_selected', HOSTED);
+    // No DEFAULT_MIGRATION_KEY set.
+
+    const mod = await loadModuleWithDesktop(false);
+    expect(mod.DEFAULT_AUTH_INSTANCE_URL).toBe('http://localhost:3000');
+    expect(mod.getSelectedAuthInstanceUrlSync()).toBe(HOSTED);
   });
 });

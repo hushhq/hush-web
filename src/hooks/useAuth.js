@@ -66,7 +66,10 @@ import {
   registerWithPublicKey,
   requestGuestSession,
 } from '../lib/api';
-import { getActiveAuthInstanceUrlSync } from '../lib/authInstanceStore';
+import {
+  getActiveAuthInstanceUrlSync,
+  markAuthInstanceUsed,
+} from '../lib/authInstanceStore';
 
 // ── JWT utilities ─────────────────────────────────────────────────────────────
 
@@ -1071,6 +1074,7 @@ export function useAuth() {
         }
       }
 
+      await markAuthInstanceUsed(authBaseUrl);
       publishAuthenticatedSession(authResult.token, authResult.user, authBaseUrl);
       localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${authResult.user.id}`, bytesToHex(bundle.rootPublicKey));
       setHasLocalVault(true);
@@ -1568,6 +1572,10 @@ export function useAuth() {
         }
 
         if (!idbCancelled) {
+          if (getLocalToken()) {
+            setLoading(false);
+            return;
+          }
           // No vault at all - show login/register.
           setLoading(false);
           setHasLocalVault(false);

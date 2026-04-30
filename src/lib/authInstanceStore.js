@@ -89,10 +89,13 @@ function maybeMigrateLegacyHostedSelection() {
     const selected = normalizeInstanceUrl(localStorage.getItem(SELECTED_INSTANCE_KEY));
     const active = normalizeInstanceUrl(sessionStorage.getItem(ACTIVE_INSTANCE_KEY));
 
-    if (!selected || selected === HOSTED_AUTH_INSTANCE_URL) {
+    // Only seed a default when the user has no prior selection. Any
+    // existing value may be an explicit user choice and must survive the
+    // legacy default-origin migration.
+    if (!selected) {
       localStorage.setItem(SELECTED_INSTANCE_KEY, DEFAULT_AUTH_INSTANCE_URL);
     }
-    if (!active || active === HOSTED_AUTH_INSTANCE_URL) {
+    if (!active) {
       sessionStorage.setItem(ACTIVE_INSTANCE_KEY, DEFAULT_AUTH_INSTANCE_URL);
     }
 
@@ -263,6 +266,7 @@ export function setSelectedAuthInstanceUrlSync(value) {
   const normalized = normalizeInstanceUrl(value) || DEFAULT_AUTH_INSTANCE_URL;
   try {
     localStorage.setItem(SELECTED_INSTANCE_KEY, normalized);
+    localStorage.setItem(DEFAULT_MIGRATION_KEY, '1');
   } catch {
     // Best-effort only.
   }

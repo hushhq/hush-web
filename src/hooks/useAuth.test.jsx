@@ -16,11 +16,13 @@ import { JWT_KEY } from './useAuth';
 
 // ── authInstanceStore mock (must be declared before module imports) ─────────────
 let _mockActiveInstanceUrl = '';
+const _mockMarkAuthInstanceUsed = vi.hoisted(() => vi.fn(async (value) => value));
 vi.mock('../lib/authInstanceStore', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
     getActiveAuthInstanceUrlSync: () => _mockActiveInstanceUrl,
+    markAuthInstanceUsed: _mockMarkAuthInstanceUsed,
   };
 });
 
@@ -148,6 +150,11 @@ beforeEach(() => {
   localStorage.clear();
   _vaultBlobs.clear();
   _mockActiveInstanceUrl = '';
+  _mockMarkAuthInstanceUsed.mockClear();
+  _mockMarkAuthInstanceUsed.mockImplementation(async (value) => {
+    _mockActiveInstanceUrl = value;
+    return value;
+  });
 
   vi.mocked(apiMod.fetchWithAuth).mockReset();
   vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: false, status: 401 });
@@ -404,9 +411,52 @@ describe('useAuth - completeDeviceLink', () => {
     expect(result.current.user?.id).toBe('user-1');
     expect(result.current.needsPinSetup).toBe(true);
     expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+    expect(_mockMarkAuthInstanceUsed).toHaveBeenCalledWith('https://chat.example.com');
 
     openHistoryStoreSpy.mockRestore();
     importHistorySnapshotSpy.mockRestore();
+  });
+
+  it('does not let stale no-token startup reset a just-completed device link', async () => {
+    let resolveVaultCheck;
+    vi.mocked(vaultMod.checkVaultExistsInIDB).mockImplementationOnce(() => new Promise((resolve) => {
+      resolveVaultCheck = resolve;
+    }));
+    localStorage.setItem('hush_vault_user__last_user', 'stale-user');
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(vaultMod.checkVaultExistsInIDB).toHaveBeenCalledWith('stale-user');
+    });
+
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: null,
+      instanceUrl: 'https://chat.example.com',
+    };
+
+    await act(async () => {
+      await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
+    });
+
+    await waitFor(() => {
+      expect(result.current.token).toBe('jwt-test');
+      expect(result.current.user?.id).toBe('user-1');
+      expect(result.current.vaultState).toBe('unlocked');
+    });
+
+    await act(async () => {
+      resolveVaultCheck({ exists: false, publicKeyHex: null });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.token).toBe('jwt-test');
+    expect(result.current.user?.id).toBe('user-1');
+    expect(result.current.vaultState).toBe('unlocked');
   });
 
   it('decrypts, re-protects, AND eagerly seeds the transcript cache before publishing the session', async () => {

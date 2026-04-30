@@ -40,6 +40,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    exclude: ['@gethush/hush-crypto'],
+  },
   worker: {
     format: 'es',
     plugins: () => [wasm(), topLevelAwait()],
