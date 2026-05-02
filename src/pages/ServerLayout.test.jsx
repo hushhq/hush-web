@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ServerLayout from './ServerLayout';
 
@@ -168,70 +168,6 @@ vi.mock('../lib/transparencyVerifier', () => ({
   })),
 }));
 
-// ServerList imports UserSettingsModal which calls window.matchMedia at module load time
-vi.mock('../components/ServerList', () => ({
-  default: function MockServerList() {
-    return <div data-testid="server-list" />;
-  },
-}));
-
-vi.mock('../components/GuildCreateModal', () => ({
-  default: function MockGuildCreateModal({ onClose, onCreated }) {
-    return (
-      <div data-testid="guild-create-modal">
-        <button type="button" onClick={() => onCreated({ id: 'g-new', instanceUrl: 'https://a.example.com' })}>
-          Create
-        </button>
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    );
-  },
-}));
-
-// ChannelList also imports ServerSettingsModal - mock the whole component
-vi.mock('../components/ChannelList', () => ({
-  default: function MockChannelList({ guildName }) {
-    return <div data-testid="channel-list">Guild:{guildName ?? ''}</div>;
-  },
-}));
-
-// MemberList
-vi.mock('../components/MemberList', () => ({
-  default: function MockMemberList() {
-    return <div data-testid="member-list" />;
-  },
-}));
-
-vi.mock('../components/UserPanel', () => ({
-  default: function MockUserPanel() {
-    return <div data-testid="user-panel" />;
-  },
-}));
-
-vi.mock('./TextChannel', () => ({
-  default: function MockTextChannel({ channel, sidebarSlot }) {
-    return (
-      <div data-testid="text-channel">
-        <span>#{channel?.name}</span>
-        {sidebarSlot}
-      </div>
-    );
-  },
-}));
-
-vi.mock('./VoiceChannel', () => ({
-  default: function MockVoiceChannel({ channel }) {
-    return (
-      <div data-testid="voice-channel">
-        <span>#{channel?.name}</span>
-        <span>Live</span>
-      </div>
-    );
-  },
-}));
-
 // Stable mock: show must be the same reference across renders to avoid
 // triggering effects that list showToast as a dependency on every re-render.
 // vi.hoisted() runs before vi.mock() hoisting so the reference is available.
@@ -292,15 +228,6 @@ describe('ServerLayout', () => {
     expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
     expect(container.querySelector('[data-slot="block-app-shell"]')).not.toBeInTheDocument();
   });
-
-  // PT4-DEMOLITION: empty-state guild-create modal flow depends on
-  // EmptyState UI which is unmounted during the pt4 reset. Will be
-  // re-introduced once the new shell exposes a guild creation entry.
-  it.skip('opens the guild creation modal from the welcome empty-state when the instance policy is open', async () => {});
-
-  // PT4-DEMOLITION: "select a channel" orb UI is unmounted during the
-  // pt4 reset. Channel-selection UI returns in pt6+.
-  it.skip('shows "select a channel" orb when serverId is set but no channelId', async () => {});
 
   it('locks body scroll on the authenticated layout', async () => {
     const { container } = renderAtRoute('/servers/s1/channels');
@@ -374,10 +301,6 @@ describe('ServerLayout', () => {
       expect(getGuildMembers).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
     });
   });
-
-  // PT4-DEMOLITION: TextChannel mount removed during the pt4 reset.
-  // Channel content rendering returns in pt6+.
-  it.skip('renders TextChannel when a text channel is active', async () => {});
 
   it('falls back to the imported history store for guild metadata names', async () => {
     const activeDb = { close: vi.fn() };
@@ -457,10 +380,6 @@ describe('ServerLayout', () => {
     // The active key fails first, so the history-store retry path is exercised.
     expect(guildMetadata.decryptGuildMetadata).toHaveBeenCalled();
   });
-
-  // PT4-DEMOLITION: VoiceChannel mount removed during the pt4 reset.
-  // Body scroll lock is covered by the dedicated lock test above.
-  it.skip('locks overflow while viewing a voice channel', async () => {});
 
   it('does not fetch guild data when no auth token in context', () => {
     vi.mocked(useAuth).mockReturnValueOnce({ token: null, user: null, logout: vi.fn() });
@@ -658,83 +577,6 @@ describe('ServerLayout – DM flow', () => {
     });
   });
 
-  // handleDmSelect refreshes guild state for brand-new DMs ----------------------
-
-  // PT4-DEMOLITION: DmListView is unmounted during the pt4 reset. The
-  // DM-selection handler chain is preserved internally; UI-driven
-  // verification returns once the new shell mounts the DM list.
-  it.skip('handleDmSelect calls refreshGuilds before navigating when the DM is brand-new', async () => {
-    const { createOrFindDM, searchUsersForDM } = await import('../lib/api');
-    const refreshGuilds = vi.fn().mockResolvedValue(undefined);
-    const existingDmGuild = { id: 'dm-existing', isDm: true, instanceUrl: 'http://localhost', accessPolicy: 'closed' };
-
-    vi.mocked(useInstanceContext).mockReturnValue({
-      instanceStates: new Map([['http://localhost', { connectionState: 'connected', jwt: 'test-token' }]]),
-      mergedGuilds: [],
-      dmGuilds: [existingDmGuild],
-      getWsClient: vi.fn(() => null),
-      getTokenForInstance: vi.fn(() => 'test-token'),
-      refreshGuilds,
-      guildOrder: [],
-      setGuildOrder: vi.fn().mockResolvedValue(undefined),
-    });
-
-    // createOrFindDM returns a guild that is NOT in dmGuilds yet
-    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-new', username: 'dave', displayName: 'Dave' }]);
-    vi.mocked(createOrFindDM).mockResolvedValue({
-      server: { id: 'dm-new', isDm: true, accessPolicy: 'closed' },
-      otherUser: { id: 'u-new', username: 'dave', displayName: 'Dave' },
-      channelId: 'ch-new',
-    });
-
-    // Render at the existing DM guild route → isDmView = true → DmListView is in the DOM
-    renderAtRoute('/servers/dm-existing/channels');
-    await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
-
-    // Trigger new-DM creation via DmListView search
-    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
-    fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'dave' } });
-    await waitFor(() => expect(screen.getByText('Dave')).toBeTruthy());
-    fireEvent.click(screen.getByText('Dave'));
-
-    // The critical guarantee: refreshGuilds is called so the new DM appears in
-    // context before navigation, ensuring activeGuild resolves and wsClient is non-null.
-    await waitFor(() => expect(refreshGuilds).toHaveBeenCalledWith('http://localhost'));
-  });
-
-  // PT4-DEMOLITION: see above — DmListView UI-driven test paused.
-  it.skip('handleDmSelect does not call refreshGuilds for an already-known DM guild', async () => {
-    const refreshGuilds = vi.fn().mockResolvedValue(undefined);
-    const existingDmGuild = {
-      id: 'dm-existing',
-      isDm: true,
-      instanceUrl: 'http://localhost',
-      accessPolicy: 'closed',
-      otherUser: { displayName: 'Alice', username: 'alice' },
-      channels: [{ id: 'ch-existing', unreadCount: 0 }],
-    };
-
-    vi.mocked(useInstanceContext).mockReturnValue({
-      instanceStates: new Map([['http://localhost', { connectionState: 'connected', jwt: 'test-token' }]]),
-      mergedGuilds: [],
-      dmGuilds: [existingDmGuild],
-      getWsClient: vi.fn(() => null),
-      getTokenForInstance: vi.fn(() => 'test-token'),
-      refreshGuilds,
-      guildOrder: [],
-      setGuildOrder: vi.fn().mockResolvedValue(undefined),
-    });
-
-    renderAtRoute('/servers/dm-existing/channels');
-    await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
-
-    // Click an existing DM item — calls handleDmSelect with a guild already in dmGuilds
-    fireEvent.click(screen.getByText('Alice'));
-
-    // No refresh needed for a guild we already know about
-    await new Promise((r) => setTimeout(r, 50));
-    expect(refreshGuilds).not.toHaveBeenCalled();
-  });
 });
 
 describe('ServerLayout – transparency hard-fail screen', () => {
