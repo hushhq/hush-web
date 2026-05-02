@@ -2409,6 +2409,17 @@ html[data-desktop] .app-shell.lay-container {
   border-radius: 0;
 }
 
+/* Same reset for the new block-led shell. The shadcn Sidebar primitive
+   owns the channel sidebar chrome; the rail owns the server rail chrome.
+   Legacy `.sl-strip` and `.sidebar-shell` rounded-card visuals must drop
+   inside the new shell so we don't double-frame the slots. */
+[data-slot="block-app-shell"] .sl-strip,
+[data-slot="block-app-shell"] .sidebar-shell {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
 .lay-header {
   height: 46px;
   min-height: 46px;

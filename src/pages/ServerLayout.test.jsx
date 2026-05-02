@@ -293,9 +293,9 @@ describe('ServerLayout', () => {
     await waitFor(() => {
       expect(screen.getByTestId('empty-state')).toBeInTheDocument();
     });
-    expect(container.querySelector('[data-slot="app-shell"][data-state="empty"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="app-shell-server-rail"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="app-shell-main"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="block-app-shell"][data-state="empty"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="server-rail"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="workspace-surface"]')).toBeInTheDocument();
   });
 
   it('opens the guild creation modal from the welcome empty-state when the instance policy is open', async () => {
@@ -338,7 +338,7 @@ describe('ServerLayout', () => {
       expect(screen.getByText(/select(?: a)? channel/i)).toBeInTheDocument();
     });
 
-    expect(container.querySelector('.lay-container')).toHaveStyle({ overflow: 'hidden' });
+    expect(container.querySelector('[data-slot="block-app-shell"]')).toHaveStyle({ overflow: 'hidden' });
     expect(document.body.dataset.hushScrollMode).toBe('locked');
     expect(document.body.style.overflowY).toBe('hidden');
   });
@@ -510,7 +510,7 @@ describe('ServerLayout', () => {
       expect(screen.getByTestId('voice-channel')).toBeInTheDocument();
     });
 
-    expect(container.querySelector('.lay-container')).toHaveStyle({ overflow: 'hidden' });
+    expect(container.querySelector('[data-slot="block-app-shell"]')).toHaveStyle({ overflow: 'hidden' });
   });
 
   it('does not fetch guild data when no auth token in context', () => {

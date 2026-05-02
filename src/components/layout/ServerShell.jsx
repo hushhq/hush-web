@@ -1,13 +1,19 @@
 import { InfoCircledIcon } from '@radix-ui/react-icons';
 import TransparencyBlock from './TransparencyBlock';
-import EmptyServerShell from './EmptyServerShell';
-import AuthenticatedAppShell from './AuthenticatedAppShell';
+import BlockAppShell from './BlockAppShell';
 import MobileShell from './MobileShell';
 
 /**
  * Top-level authenticated shell.
- * Routes between the transparency error view, the empty (no server) shell,
- * the new desktop `AuthenticatedAppShell`, and the mobile shell.
+ *
+ * Routes between the transparency hard-fail view, the desktop block-led
+ * shell (`BlockAppShell`, used for both empty and active states), and
+ * the mobile shell. The legacy `AuthenticatedAppShell` /
+ * `EmptyServerShell` chrome was removed in pt2 in favor of the
+ * shadcn-block-native `BlockAppShell` composition.
+ *
+ * Mobile remains on `MobileShell` for this slice; pt3 will migrate the
+ * mobile path onto shadcn `Sheet`-driven primitives.
  */
 export default function ServerShell({
   transparencyError,
@@ -22,8 +28,6 @@ export default function ServerShell({
   authToken,
   toastEl,
   isMobile,
-  sidebarWidth,
-  onSidebarResize,
   channelSidebarEl,
   mobileStack,
   activeVoiceChannel,
@@ -39,36 +43,22 @@ export default function ServerShell({
     return <TransparencyBlock error={transparencyError} onSignOut={onTransparencySignOut} />;
   }
 
-  if (!serverId) {
-    return (
-      <EmptyServerShell
-        serverListEl={serverListEl}
-        emptyStateEl={emptyStateEl}
-        guildCreateModal={guildCreateModal}
-        hasNoTransparencyLog={hasNoTransparencyLog}
-        authToken={authToken}
-        toastEl={toastEl}
-      />
-    );
-  }
-
   if (!isMobile) {
     return (
-      <AuthenticatedAppShell
+      <BlockAppShell
         serverListEl={serverListEl}
-        channelSidebarEl={channelSidebarEl}
-        sidebarWidth={sidebarWidth}
-        onSidebarResize={onSidebarResize}
+        channelSidebarEl={serverId ? channelSidebarEl : null}
+        emptyStateEl={!serverId ? emptyStateEl : null}
         isInstanceOffline={isInstanceOffline}
         instanceUrl={instanceUrl}
         hasNoTransparencyLog={hasNoTransparencyLog}
         authToken={authToken}
         toastEl={toastEl}
-        pendingVoiceSwitchModal={pendingVoiceSwitchModal}
         guildCreateModal={guildCreateModal}
+        pendingVoiceSwitchModal={pendingVoiceSwitchModal}
       >
-        {children}
-      </AuthenticatedAppShell>
+        {serverId ? children : null}
+      </BlockAppShell>
     );
   }
 
