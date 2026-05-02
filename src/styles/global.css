@@ -508,12 +508,25 @@ html[data-desktop] body {
   overscroll-behavior: none;
 }
 
-/* ── Desktop titlebar safe-top (Electron only) ──────────
-   Reserves space below the native window controls (macOS traffic
-   lights, Windows `titleBarOverlay`) so authenticated chrome reintroduced
-   in later slices can offset by `var(--desktop-titlebar-safe-top)`.
-   Browser/PWA behavior is untouched — every rule below is gated on
-   `html[data-desktop]`. */
+/* ── Desktop shell layout (Electron only) ──────────
+   Make the authenticated app fill the BrowserWindow edge-to-edge so the
+   OS window owns the outer shell. Strip the web-style outer padding,
+   gap, border and radius from the top-level columns; the OS clips the
+   actual window corners and provides the outer chrome.
+
+   Column separation switches from "two card panels with a gap" to a
+   single 1 px hairline between the server strip and the main panel. The
+   sidebar-shell hairline between channel sidebar and channel area is
+   already provided by `.lay-content-row .sidebar-shell` above.
+
+   Safe-area top padding on the server strip keeps its first guild
+   button clear of the native window controls (macOS traffic lights,
+   Windows `titleBarOverlay`). The header inside the channel area is
+   marked non-draggable so its controls remain clickable underneath the
+   invisible drag-region overlay.
+
+   Browser/PWA visual behaviour is untouched — every rule below is gated
+   on `html[data-desktop]`. */
 
 html[data-desktop] {
   /* Matches the height of `.electron-drag-region` and clears the macOS
@@ -529,6 +542,24 @@ html[data-desktop="win32"] {
 
 html[data-desktop="linux"] {
   --desktop-titlebar-safe-top: 0px;
+}
+
+html[data-desktop] .lay-container {
+  box-sizing: border-box;
+  padding: var(--desktop-titlebar-safe-top) 0 0;
+  gap: 0;
+  background: var(--hush-surface);
+}
+
+html[data-desktop] .sl-strip,
+html[data-desktop] .lay-main {
+  border: none;
+  border-radius: 0;
+}
+
+html[data-desktop] .sl-strip {
+  border-right: 1px solid var(--hush-border);
+  padding-top: 8px;
 }
 
 html[data-desktop] .home-page {
@@ -1600,6 +1631,20 @@ select:focus-visible {
   flex-shrink: 0;
 }
 
+/* ── Sidebar outer shell (wraps channel list + voice + user panel) ── */
+
+.sidebar-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: var(--hush-surface);
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
 /* SettingsDialogShell (P17) - layout for the centered settings dialog. */
 .settings-dialog-shell { /* DialogContent provides width/positioning */ }
 
@@ -1654,6 +1699,37 @@ select:focus-visible {
   .settings-dialog-shell__content-inner {
     padding: 16px;
   }
+}
+
+/* WorkspaceSidebarShell (P16 explicit header/content/footer contract) */
+.workspace-sidebar-shell { /* layout via legacy `.sidebar-shell` */ }
+
+.workspace-sidebar-shell__header {
+  flex-shrink: 0;
+  gap: 0;
+  padding: 0;
+}
+
+.workspace-sidebar-shell__content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-sidebar-shell__footer {
+  flex-shrink: 0;
+  gap: 0;
+  padding: 0;
+}
+
+/* When sidebar-shell lives inside the unified lay-main panel, strip its own
+   card appearance — the parent already provides border and border-radius. */
+.lay-content-row .sidebar-shell {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--hush-border);
 }
 
 /* ── Channel Sidebar (ChannelList.jsx) ──────────── */
@@ -2255,6 +2331,178 @@ select:focus-visible {
   border: 1px solid var(--hush-border);
   border-radius: var(--radius-xl);
   overflow: hidden;
+}
+
+.lay-container {
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--hush-black);
+  padding: 12px;
+  gap: 8px;
+}
+
+/* AuthenticatedAppShell (P15 markers, P24 promoted to authoritative slots).
+   `.app-shell` is the desktop selected-server outer shell. It reuses
+   `.lay-container` as a compat hook for legacy CSS selectors still relied
+   on by non-migrated surfaces (sidebar-shell, mobile path, electron
+   safe-area rules). New surfaces should target `.app-shell*` slots. */
+.app-shell {
+  position: relative;
+}
+
+.app-shell.lay-container {
+  padding: 0;
+  gap: 0;
+  background: var(--hush-surface);
+}
+
+html[data-desktop] .app-shell.lay-container {
+  padding: var(--desktop-titlebar-safe-top) 0 0;
+}
+
+.app-shell__workspace.lay-main {
+  border: 0;
+  border-radius: 0;
+}
+
+.app-shell--empty .app-shell__main {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.app-shell__server-rail { display: flex; flex-shrink: 0; }
+.app-shell__sidebar { display: flex; flex-shrink: 0; min-width: 0; position: relative; }
+.app-shell__offline-banner { left: 0; position: absolute; right: 0; top: 0; z-index: 20; }
+.app-shell__workspace-row { /* compat with .lay-content-row */ }
+.app-shell__main { /* compat with .lay-channel-area */ }
+.app-shell__resize-handle { /* compat with .lay-resize-handle */ }
+
+.lay-header {
+  height: 46px;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--hush-border);
+  background: var(--hush-black);
+  gap: 8px;
+}
+
+.lay-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--hush-black);
+}
+
+.lay-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--hush-surface);
+  border: 1px solid var(--hush-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.lay-content-row {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.lay-channel-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.lay-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--hush-text-muted);
+  font-size: 13px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.empty-state-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--hush-amber);
+  animation: dot-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+.lay-offline-banner {
+  background: var(--hush-danger-ghost);
+  color: var(--hush-danger);
+  font-size: 0.8rem;
+  padding: 6px 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.lay-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out);
+  z-index: 20;
+}
+
+.lay-resize-handle:hover {
+  background: var(--hush-border-hover);
+}
+
+.lay-channel-area-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 48px;
+  min-height: 48px;
+  background: var(--hush-elevated);
+  border-bottom: 1px solid var(--hush-border);
+  flex-shrink: 0;
+}
+
+/* Empty-state label floated over the channel area when no channel is active */
+.lay-empty-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  padding-left: 0.18em;
+  text-transform: uppercase;
+  color: var(--hush-text-muted);
+}
+
+/* Overlay that floats above the channel area when no channel is selected */
+.lay-empty-overlay {
+  pointer-events: none;
+  transition: padding-right var(--duration-fast) var(--ease-out);
 }
 
 /* ── Chat area (Chat.jsx) ──────────────────────── */
@@ -7373,8 +7621,12 @@ html[data-desktop] .ld-container {
 /* ── Mobile Stack Navigation (<768px) ─────────────────────────────────── */
 
 @media (max-width: 639px) {
+  /* Stack container - clips overflow so stacks slide without scrollbars */
+  .lay-container { position: relative; overflow: hidden; padding: 0; gap: 0; }
+
   /* Remove panel treatment on mobile - full-bleed stacks */
   .sl-strip { border: none; border-radius: 0; }
+  .sidebar-shell { border: none; border-radius: 0; background: var(--hush-black); }
 
   .home-page {
     align-items: stretch;
@@ -7989,84 +8241,6 @@ html[data-desktop] .ld-container {
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-/* sidebar-08 preview canvas. Two scoped overrides — both required
-   because Tailwind's `@layer utilities` rules are outranked here by
-   unlayered universal resets (Tailwind preflight `*, ::before, ::after
-   { padding: 0 }` and an additional radix-ui themes universal reset)
-   so utilities like `p-4`, `p-6`, and `gap-*` silently resolve to
-   zero on the wrapper. The scoped selectors land in the unlayered
-   block above, restoring the official preview's outer canvas padding
-   and constraining the block to the windowed app frame. Nothing
-   outside the preview wrapper is affected. */
-[data-slot="sidebar-08-preview-frame"] {
-  padding: 1rem;
-}
-@media (min-width: 640px) {
-  [data-slot="sidebar-08-preview-frame"] {
-    padding: 1.5rem;
-  }
-}
-[data-slot="sidebar-08-preview-frame"] [data-slot="sidebar-wrapper"] {
-  min-height: 100%;
-  height: 100%;
-  width: 100%;
-}
-/* Sidebar primitive uses `h-svh` on its fixed container, which equals
-   100svh (full viewport). Inside the windowed preview frame the
-   sidebar must instead match the frame height so the SidebarFooter
-   anchors at the inner-frame bottom edge instead of being clipped
-   below it. */
-[data-slot="sidebar-08-preview-frame"] [data-slot="sidebar-container"] {
-  height: 100%;
-}
-
-/* The vanilla sidebar primitive uses `position: fixed` for the
-   sidebar column, which by default resolves against the viewport
-   and would spill outside the windowed preview frame. Promoting
-   the inner frame to a containing block (any non-none `transform`)
-   makes that fixed element resolve against the frame instead, so
-   the rounded `overflow-hidden` clips the sidebar correctly. */
-[data-slot="sidebar-08-preview-frame-inner"] {
-  transform: translateZ(0);
-}
-
-/* `.dark` token block — required so the preview wrapper's `.dark`
-   class actually paints dark surfaces. Without this the
-   `prefers-color-scheme: light` media query above sets `:root` to the
-   light palette, and a downstream `.dark` class only activates dark
-   *variants* but does not re-assert dark tokens. Tokens redeclared
-   here mirror the `:root` dark values defined at the top of this
-   file. */
-.dark {
-  --background:           oklch(0.141 0.005 285.823);
-  --foreground:           oklch(0.985 0 0);
-  --card:                 oklch(0.21 0.006 285.885);
-  --card-foreground:      oklch(0.985 0 0);
-  --popover:              oklch(0.21 0.006 285.885);
-  --popover-foreground:   oklch(0.985 0 0);
-  --primary:              oklch(0.985 0 0);
-  --primary-foreground:   oklch(0.21 0.006 285.885);
-  --secondary:            oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted:                oklch(0.274 0.006 286.033);
-  --muted-foreground:     oklch(0.705 0.015 286.067);
-  --accent:               oklch(0.274 0.006 286.033);
-  --accent-foreground:    oklch(0.985 0 0);
-  --destructive:          oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border:               oklch(1 0 0 / 10%);
-  --input:                oklch(1 0 0 / 15%);
-  --ring:                 oklch(0.552 0.016 285.938);
-  --sidebar:              var(--card);
-  --sidebar-foreground:   var(--card-foreground);
-  --sidebar-primary:      var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent:       var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border:       var(--border);
-  --sidebar-ring:         var(--ring);
 }
 
 /* `.dark` block intentionally omitted. Theme switching is owned by

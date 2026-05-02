@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { TooltipProvider } from '../components/ui/tooltip';
 import ServerLayout from './ServerLayout';
 
 const { mockVerifyOwnKey } = vi.hoisted(() => ({
@@ -153,6 +152,10 @@ vi.mock('../hooks/useBreakpoint', () => ({
   useBreakpoint: vi.fn(() => 'desktop'),
 }));
 
+vi.mock('../hooks/useSidebarResize', () => ({
+  useSidebarResize: vi.fn(() => ({ width: 240, handleMouseDown: vi.fn() })),
+}));
+
 vi.mock('../lib/ws', () => ({
   createWsClient: vi.fn(() => ({
     connect: vi.fn(),
@@ -167,6 +170,70 @@ vi.mock('../lib/transparencyVerifier', () => ({
   TransparencyVerifier: vi.fn().mockImplementation(() => ({
     verifyOwnKey: mockVerifyOwnKey,
   })),
+}));
+
+// ServerList imports UserSettingsModal which calls window.matchMedia at module load time
+vi.mock('../components/ServerList', () => ({
+  default: function MockServerList() {
+    return <div data-testid="server-list" />;
+  },
+}));
+
+vi.mock('../components/GuildCreateModal', () => ({
+  default: function MockGuildCreateModal({ onClose, onCreated }) {
+    return (
+      <div data-testid="guild-create-modal">
+        <button type="button" onClick={() => onCreated({ id: 'g-new', instanceUrl: 'https://a.example.com' })}>
+          Create
+        </button>
+        <button type="button" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    );
+  },
+}));
+
+// ChannelList also imports ServerSettingsModal - mock the whole component
+vi.mock('../components/ChannelList', () => ({
+  default: function MockChannelList({ guildName }) {
+    return <div data-testid="channel-list">Guild:{guildName ?? ''}</div>;
+  },
+}));
+
+// MemberList
+vi.mock('../components/MemberList', () => ({
+  default: function MockMemberList() {
+    return <div data-testid="member-list" />;
+  },
+}));
+
+vi.mock('../components/UserPanel', () => ({
+  default: function MockUserPanel() {
+    return <div data-testid="user-panel" />;
+  },
+}));
+
+vi.mock('./TextChannel', () => ({
+  default: function MockTextChannel({ channel, sidebarSlot }) {
+    return (
+      <div data-testid="text-channel">
+        <span>#{channel?.name}</span>
+        {sidebarSlot}
+      </div>
+    );
+  },
+}));
+
+vi.mock('./VoiceChannel', () => ({
+  default: function MockVoiceChannel({ channel }) {
+    return (
+      <div data-testid="voice-channel">
+        <span>#{channel?.name}</span>
+        <span>Live</span>
+      </div>
+    );
+  },
 }));
 
 // Stable mock: show must be the same reference across renders to avoid
@@ -187,16 +254,14 @@ import { TransparencyVerifier } from '../lib/transparencyVerifier';
 
 function renderAtRoute(path) {
   return render(
-    <TooltipProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/home" element={<ServerLayout />} />
-          <Route path="/guilds" element={<ServerLayout />} />
-          <Route path="/servers/:serverId/*" element={<ServerLayout />} />
-          <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
-        </Routes>
-      </MemoryRouter>
-    </TooltipProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/home" element={<ServerLayout />} />
+        <Route path="/guilds" element={<ServerLayout />} />
+        <Route path="/servers/:serverId/*" element={<ServerLayout />} />
+        <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
@@ -223,22 +288,57 @@ describe('ServerLayout', () => {
     vi.mocked(TransparencyVerifier).mockClear();
   });
 
-  it('renders the vanilla sidebar-08 block when no guild is selected (/guilds route)', async () => {
+  it('shows welcome message when no guild is selected (/guilds route)', async () => {
     const { container } = renderAtRoute('/guilds');
     await waitFor(() => {
-      expect(container.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
+      expect(screen.getByTestId('empty-state')).toBeInTheDocument();
     });
-    expect(container.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
-    expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-slot="app-shell"][data-state="empty"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="app-shell-server-rail"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="app-shell-main"]')).toBeInTheDocument();
   });
 
-  it('locks body scroll on the authenticated layout', async () => {
+  it('opens the guild creation modal from the welcome empty-state when the instance policy is open', async () => {
+    vi.mocked(useInstanceContext).mockReturnValueOnce({
+      instanceStates: new Map([
+        ['https://a.example.com', {
+          connectionState: 'connected',
+          handshakeData: { server_creation_policy: 'open' },
+        }],
+      ]),
+      mergedGuilds: [],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => null),
+      refreshGuilds: vi.fn().mockResolvedValue(undefined),
+      bootInstance: vi.fn().mockResolvedValue(undefined),
+      disconnectInstance: vi.fn().mockResolvedValue(undefined),
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    renderAtRoute('/guilds');
+
+    const createButton = await screen.findByRole('button', { name: /create a server/i });
+    fireEvent.click(createButton);
+
+    expect(screen.getByTestId('guild-create-modal')).toBeInTheDocument();
+  });
+
+  it('shows "select a channel" orb when serverId is set but no channelId', async () => {
+    renderAtRoute('/servers/s1/channels');
+    await waitFor(() => {
+      expect(screen.getByText(/select(?: a)? channel/i)).toBeInTheDocument();
+    });
+  });
+
+  it('locks overflow on the main authenticated layout', async () => {
     const { container } = renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(container.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
+      expect(screen.getByText(/select(?: a)? channel/i)).toBeInTheDocument();
     });
 
+    expect(container.querySelector('.lay-container')).toHaveStyle({ overflow: 'hidden' });
     expect(document.body.dataset.hushScrollMode).toBe('locked');
     expect(document.body.style.overflowY).toBe('hidden');
   });
@@ -276,6 +376,9 @@ describe('ServerLayout', () => {
       expect(getGuildChannels).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
       expect(getGuildMembers).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
     });
+    await waitFor(() => {
+      expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
+    });
   });
 
   it('recovers legacy slug-only guild routes by decrypting metadata and upgrading to the canonical route', async () => {
@@ -303,6 +406,17 @@ describe('ServerLayout', () => {
       expect(getGuildChannels).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
       expect(getGuildMembers).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
     });
+  });
+
+  it('renders TextChannel when a text channel is active', async () => {
+    vi.mocked(getGuildChannels).mockResolvedValue([
+      { id: 'ch1', name: 'general', type: 'text', position: 0, parentId: null },
+    ]);
+    renderAtRoute('/servers/s1/channels/ch1');
+    await waitFor(() => {
+      expect(screen.getByTestId('text-channel')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('text-channel')).toHaveTextContent('general');
   });
 
   it('falls back to the imported history store for guild metadata names', async () => {
@@ -339,8 +453,9 @@ describe('ServerLayout', () => {
     renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
+      expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:History Guild');
     });
+    expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
     expect(activeDb.close).toHaveBeenCalled();
   });
 
@@ -378,10 +493,24 @@ describe('ServerLayout', () => {
     renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
+      expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:Recovered Guild');
     });
-    // The active key fails first, so the history-store retry path is exercised.
     expect(guildMetadata.decryptGuildMetadata).toHaveBeenCalled();
+    expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
+  });
+
+  it('locks overflow while viewing a voice channel', async () => {
+    vi.mocked(getGuildChannels).mockResolvedValue([
+      { id: 'ch2', name: 'standup', type: 'voice', position: 0, parentId: null },
+    ]);
+
+    const { container } = renderAtRoute('/servers/s1/channels/ch2');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('voice-channel')).toBeInTheDocument();
+    });
+
+    expect(container.querySelector('.lay-container')).toHaveStyle({ overflow: 'hidden' });
   });
 
   it('does not fetch guild data when no auth token in context', () => {
@@ -580,6 +709,79 @@ describe('ServerLayout – DM flow', () => {
     });
   });
 
+  // handleDmSelect refreshes guild state for brand-new DMs ----------------------
+
+  it('handleDmSelect calls refreshGuilds before navigating when the DM is brand-new', async () => {
+    const { createOrFindDM, searchUsersForDM } = await import('../lib/api');
+    const refreshGuilds = vi.fn().mockResolvedValue(undefined);
+    const existingDmGuild = { id: 'dm-existing', isDm: true, instanceUrl: 'http://localhost', accessPolicy: 'closed' };
+
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map([['http://localhost', { connectionState: 'connected', jwt: 'test-token' }]]),
+      mergedGuilds: [],
+      dmGuilds: [existingDmGuild],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => 'test-token'),
+      refreshGuilds,
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    // createOrFindDM returns a guild that is NOT in dmGuilds yet
+    vi.mocked(searchUsersForDM).mockResolvedValue([{ id: 'u-new', username: 'dave', displayName: 'Dave' }]);
+    vi.mocked(createOrFindDM).mockResolvedValue({
+      server: { id: 'dm-new', isDm: true, accessPolicy: 'closed' },
+      otherUser: { id: 'u-new', username: 'dave', displayName: 'Dave' },
+      channelId: 'ch-new',
+    });
+
+    // Render at the existing DM guild route → isDmView = true → DmListView is in the DOM
+    renderAtRoute('/servers/dm-existing/channels');
+    await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
+
+    // Trigger new-DM creation via DmListView search
+    fireEvent.click(screen.getByRole('button', { name: 'New message' }));
+    fireEvent.change(screen.getByPlaceholderText('Find a user...'), { target: { value: 'dave' } });
+    await waitFor(() => expect(screen.getByText('Dave')).toBeTruthy());
+    fireEvent.click(screen.getByText('Dave'));
+
+    // The critical guarantee: refreshGuilds is called so the new DM appears in
+    // context before navigation, ensuring activeGuild resolves and wsClient is non-null.
+    await waitFor(() => expect(refreshGuilds).toHaveBeenCalledWith('http://localhost'));
+  });
+
+  it('handleDmSelect does not call refreshGuilds for an already-known DM guild', async () => {
+    const refreshGuilds = vi.fn().mockResolvedValue(undefined);
+    const existingDmGuild = {
+      id: 'dm-existing',
+      isDm: true,
+      instanceUrl: 'http://localhost',
+      accessPolicy: 'closed',
+      otherUser: { displayName: 'Alice', username: 'alice' },
+      channels: [{ id: 'ch-existing', unreadCount: 0 }],
+    };
+
+    vi.mocked(useInstanceContext).mockReturnValue({
+      instanceStates: new Map([['http://localhost', { connectionState: 'connected', jwt: 'test-token' }]]),
+      mergedGuilds: [],
+      dmGuilds: [existingDmGuild],
+      getWsClient: vi.fn(() => null),
+      getTokenForInstance: vi.fn(() => 'test-token'),
+      refreshGuilds,
+      guildOrder: [],
+      setGuildOrder: vi.fn().mockResolvedValue(undefined),
+    });
+
+    renderAtRoute('/servers/dm-existing/channels');
+    await waitFor(() => expect(screen.getByText('Direct Messages')).toBeTruthy());
+
+    // Click an existing DM item — calls handleDmSelect with a guild already in dmGuilds
+    fireEvent.click(screen.getByText('Alice'));
+
+    // No refresh needed for a guild we already know about
+    await new Promise((r) => setTimeout(r, 50));
+    expect(refreshGuilds).not.toHaveBeenCalled();
+  });
 });
 
 describe('ServerLayout – transparency hard-fail screen', () => {

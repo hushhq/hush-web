@@ -650,7 +650,6 @@ export default function ServerList({
     <TooltipProvider delayDuration={250}>
       <div
         className="sl-strip"
-        data-slot="server-rail-list"
         style={compact ? { width: 56, minWidth: 56 } : undefined}
         data-testid="server-list"
       >

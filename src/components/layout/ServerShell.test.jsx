@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { TooltipProvider } from '../ui/tooltip';
 import ServerShell from './ServerShell';
-
-function renderShell(ui) {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
-}
 
 describe('ServerShell', () => {
   beforeEach(() => {
@@ -13,55 +8,133 @@ describe('ServerShell', () => {
   });
 
   it('renders TransparencyBlock when transparencyError is present', () => {
-    renderShell(
+    render(
       <ServerShell
         transparencyError="Key mismatch."
         onTransparencySignOut={vi.fn()}
+        serverId="s1"
       />,
     );
 
     expect(screen.getByRole('heading', { name: /key verification failed/i })).toBeInTheDocument();
   });
 
-  it('renders the sidebar-08 docs-style preview frame around the vanilla block', () => {
-    const { container } = renderShell(
+  it('renders empty-state shell when no serverId is provided', () => {
+    render(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
+        serverId={null}
+        serverListEl={<div data-testid="server-list" />}
+        emptyStateEl={<div data-testid="empty-state" />}
+        guildCreateModal={null}
+        hasNoTransparencyLog={false}
+        authToken="token"
+        toastEl={<div data-testid="toast" />}
       />,
     );
 
-    const frame = container.querySelector('[data-slot="sidebar-08-preview-frame"]');
-    expect(frame).toBeInTheDocument();
-    // Outer canvas: `.dark` activates the variant bridge, `bg-muted/40`
-    // paints the visible page padding around the windowed app frame.
-    expect(frame).toHaveClass('dark');
-    expect(frame).toHaveClass('h-svh');
-    expect(frame).toHaveClass('bg-muted/40');
-
-    // Inner app frame: rounded clipped surface that contains the block.
-    const inner = container.querySelector('[data-slot="sidebar-08-preview-frame-inner"]');
-    expect(inner).toBeInTheDocument();
-    expect(inner).toHaveClass('rounded-xl');
-    expect(inner).toHaveClass('border');
-    expect(inner).toHaveClass('bg-background');
-    expect(inner).toHaveClass('overflow-hidden');
-
-    // Block contract still present inside the inner frame.
-    expect(inner?.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
-    expect(inner?.querySelector('[data-slot="sidebar"]')).toBeInTheDocument();
-    expect(inner?.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
+    expect(screen.getByTestId('server-list')).toBeInTheDocument();
+    expect(screen.getByTestId('empty-state')).toBeInTheDocument();
   });
 
-  it('preserves the block sample data verbatim (Acme Inc / Enterprise)', () => {
-    renderShell(
+  it('renders desktop layout when not on mobile and a server is active', () => {
+    const { container } = render(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
-      />,
+        serverId="s1"
+        isMobile={false}
+        sidebarWidth={240}
+        onSidebarResize={vi.fn()}
+        serverListEl={<div data-testid="server-list" />}
+        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        hasNoTransparencyLog={false}
+        authToken="token"
+        toastEl={<div data-testid="toast" />}
+      >
+        <div data-testid="channel-content" />
+      </ServerShell>,
     );
 
-    expect(screen.getByText('Acme Inc')).toBeInTheDocument();
-    expect(screen.getByText('Enterprise')).toBeInTheDocument();
+    expect(screen.getByTestId('server-list')).toBeInTheDocument();
+    expect(screen.getByTestId('channel-sidebar')).toBeInTheDocument();
+    expect(screen.getByTestId('channel-content')).toBeInTheDocument();
+    expect(screen.getByRole('separator', { name: /resize channel list/i })).toBeInTheDocument();
+    expect(container.querySelector('.app-shell')).toBeInTheDocument();
+    expect(container.querySelector('.app-shell__server-rail')).toBeInTheDocument();
+    expect(container.querySelector('.app-shell__sidebar')).toBeInTheDocument();
+    expect(container.querySelector('.app-shell__main')).toBeInTheDocument();
+  });
+
+  it('renders mobile layout when on mobile and a server is active', () => {
+    render(
+      <ServerShell
+        transparencyError={null}
+        onTransparencySignOut={vi.fn()}
+        serverId="s1"
+        isMobile={true}
+        mobileStack={1}
+        activeVoiceChannel={null}
+        isViewingVoice={false}
+        serverListEl={<div data-testid="server-list" />}
+        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        hasNoTransparencyLog={false}
+        authToken="token"
+        toastEl={<div data-testid="toast" />}
+      >
+        <div data-testid="channel-content" />
+      </ServerShell>,
+    );
+
+    expect(screen.getByTestId('server-list')).toBeInTheDocument();
+    expect(screen.getByTestId('channel-sidebar')).toBeInTheDocument();
+    expect(screen.getByTestId('channel-content')).toBeInTheDocument();
+  });
+
+  it('shows offline banner when the instance is offline', () => {
+    render(
+      <ServerShell
+        transparencyError={null}
+        onTransparencySignOut={vi.fn()}
+        serverId="s1"
+        isInstanceOffline={true}
+        instanceUrl="https://a.example.com"
+        isMobile={false}
+        sidebarWidth={240}
+        onSidebarResize={vi.fn()}
+        serverListEl={<div data-testid="server-list" />}
+        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        hasNoTransparencyLog={false}
+        authToken="token"
+        toastEl={null}
+      >
+        <div />
+      </ServerShell>,
+    );
+
+    expect(screen.getByText(/a.example.com is offline/i)).toBeInTheDocument();
+  });
+
+  it('shows transparency no-log badge when configured and authenticated', () => {
+    render(
+      <ServerShell
+        transparencyError={null}
+        onTransparencySignOut={vi.fn()}
+        serverId="s1"
+        isMobile={false}
+        sidebarWidth={240}
+        onSidebarResize={vi.fn()}
+        serverListEl={<div data-testid="server-list" />}
+        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        hasNoTransparencyLog={true}
+        authToken="token"
+        toastEl={null}
+      >
+        <div />
+      </ServerShell>,
+    );
+
+    expect(screen.getByLabelText(/transparency log not configured/i)).toBeInTheDocument();
   });
 });
