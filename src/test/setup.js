@@ -19,3 +19,14 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
     dispatchEvent: () => false,
   });
 }
+
+// jsdom does not implement ResizeObserver. Radix Popper (used by
+// Tooltip / Popover / DropdownMenu / Select) measures its anchor with
+// it. Provide a no-op shim so vanilla shadcn primitives mount in tests.
+if (typeof globalThis !== 'undefined' && typeof globalThis.ResizeObserver !== 'function') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { TooltipProvider } from '../components/ui/tooltip';
 import ServerLayout from './ServerLayout';
 
 const { mockVerifyOwnKey } = vi.hoisted(() => ({
@@ -186,14 +187,16 @@ import { TransparencyVerifier } from '../lib/transparencyVerifier';
 
 function renderAtRoute(path) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/home" element={<ServerLayout />} />
-        <Route path="/guilds" element={<ServerLayout />} />
-        <Route path="/servers/:serverId/*" element={<ServerLayout />} />
-        <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
-      </Routes>
-    </MemoryRouter>,
+    <TooltipProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/home" element={<ServerLayout />} />
+          <Route path="/guilds" element={<ServerLayout />} />
+          <Route path="/servers/:serverId/*" element={<ServerLayout />} />
+          <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
+        </Routes>
+      </MemoryRouter>
+    </TooltipProvider>,
   );
 }
 
@@ -220,20 +223,20 @@ describe('ServerLayout', () => {
     vi.mocked(TransparencyVerifier).mockClear();
   });
 
-  it('renders the blank app canvas when no guild is selected (/guilds route)', async () => {
+  it('renders the vanilla sidebar-08 block when no guild is selected (/guilds route)', async () => {
     const { container } = renderAtRoute('/guilds');
     await waitFor(() => {
-      expect(container.querySelector('[data-slot="blank-app-canvas"]')).toBeInTheDocument();
+      expect(container.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
     });
+    expect(container.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
     expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-slot="block-app-shell"]')).not.toBeInTheDocument();
   });
 
   it('locks body scroll on the authenticated layout', async () => {
     const { container } = renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(container.querySelector('[data-slot="blank-app-canvas"]')).toBeInTheDocument();
+      expect(container.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
     });
 
     expect(document.body.dataset.hushScrollMode).toBe('locked');

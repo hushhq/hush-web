@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet.tsx"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Skeleton } from "@/components/ui/skeleton.tsx"
 import {
   Tooltip,
   TooltipContent,
@@ -268,7 +268,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon data-icon="inline-start" />
+      <PanelLeftIcon />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

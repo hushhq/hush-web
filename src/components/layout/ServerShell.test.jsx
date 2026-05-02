@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { TooltipProvider } from '../ui/tooltip';
 import ServerShell from './ServerShell';
+
+function renderShell(ui) {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 describe('ServerShell', () => {
   beforeEach(() => {
@@ -8,7 +13,7 @@ describe('ServerShell', () => {
   });
 
   it('renders TransparencyBlock when transparencyError is present', () => {
-    render(
+    renderShell(
       <ServerShell
         transparencyError="Key mismatch."
         onTransparencySignOut={vi.fn()}
@@ -18,28 +23,32 @@ describe('ServerShell', () => {
     expect(screen.getByRole('heading', { name: /key verification failed/i })).toBeInTheDocument();
   });
 
-  it('renders the blank app canvas when no transparency error is present', () => {
-    const { container } = render(
+  it('renders the vanilla sidebar-08 block when no transparency error is present', () => {
+    const { container } = renderShell(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
       />,
     );
 
-    expect(container.querySelector('[data-slot="blank-app-canvas"]')).toBeInTheDocument();
+    // sidebar-08 renders SidebarProvider (data-slot="sidebar-wrapper")
+    // wrapping AppSidebar (data-slot="sidebar") and a SidebarInset
+    // (data-slot="sidebar-inset"). All three are part of the official
+    // block contract.
+    expect(container.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="sidebar"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
   });
 
-  it('does not mount any legacy shell, server rail, or channel sidebar slot', () => {
-    const { container } = render(
+  it('renders the official block sample header (Acme Inc / Enterprise) without Hush data', () => {
+    renderShell(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
       />,
     );
 
-    expect(container.querySelector('[data-slot="block-app-shell"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-slot="server-rail"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-slot="channel-sidebar"]')).not.toBeInTheDocument();
-    expect(container.querySelector('[data-slot="workspace-surface"]')).not.toBeInTheDocument();
+    expect(screen.getByText('Acme Inc')).toBeInTheDocument();
+    expect(screen.getByText('Enterprise')).toBeInTheDocument();
   });
 });
