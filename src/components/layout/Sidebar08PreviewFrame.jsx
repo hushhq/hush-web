@@ -1,41 +1,44 @@
 import Sidebar08Block from './Sidebar08Block';
 
 /**
- * Sidebar08PreviewFrame — pt6 preview environment around the vanilla
+ * Sidebar08PreviewFrame — preview canvas around the vanilla
  * `sidebar-08` block.
  *
- * Hush's global stylesheet (`src/styles/global.css`) sets unlayered
- * body rules (`background-color: var(--hush-black)`, `color:
- * var(--hush-text)`, `font-size: 13px`) that shadow the
- * `@layer base { body { @apply bg-background text-foreground } }`
- * baseline shadcn primitives are designed against, and the document
- * tree never carries a `.dark` class so the `@custom-variant dark
- * (&:is(.dark *))` bridge is dormant — meaning shadcn `dark:`
- * variants never fire even though the `:root` tokens are already the
- * dark palette.
+ * Reproduces the structural environment of the shadcn block preview
+ * (visible outer page padding, a rounded clipped app frame, the inset
+ * sidebar/main surfaces inside that frame) without modifying the
+ * block itself.
  *
- * This wrapper restores the official preview environment for the
- * block without changing block markup or sample data:
- *   - `.dark` class so shadcn dark-variant utilities resolve.
- *   - Full viewport sizing (`h-svh w-full`) so the block frames the
- *     whole window, matching the shadcn preview.
- *   - `bg-background text-foreground` at the wrapper level so the
- *     body's legacy Hush palette stops bleeding through inside the
- *     block's region.
- *   - `text-sm` baseline so the block's typography reads at shadcn's
- *     default scale instead of Hush's `13px` body size.
- *   - `antialiased` to match shadcn preview rendering.
+ * Layered responsibilities:
+ *   - Outer canvas: full viewport `bg-muted/40` with padding so the
+ *     app frame is clearly inset from the page edge.
+ *   - App frame: `rounded-xl border bg-background overflow-hidden`
+ *     so the entire `Sidebar08Block` reads as a single windowed
+ *     surface, exactly like the shadcn preview tile.
+ *   - `.dark` ancestor so shadcn `dark:` variants resolve under
+ *     Hush's `@custom-variant dark (&:is(.dark *))` bridge.
  *
- * Scope is intentionally narrow: nothing here is Hush-specific. A
- * future Hush theming pass replaces this wrapper deliberately.
+ * The `SidebarProvider` inside the block ships `min-h-svh w-full`,
+ * which would overflow this windowed frame. Scoped CSS in
+ * `global.css` (under `[data-slot="sidebar-08-preview-frame"]`)
+ * relaxes the wrapper to `min-height: 100%; height: 100%` so the
+ * block fits the frame without altering block source.
+ *
+ * Scope is intentionally narrow. Hush theming will retire this
+ * wrapper deliberately.
  */
 export default function Sidebar08PreviewFrame() {
   return (
     <div
       data-slot="sidebar-08-preview-frame"
-      className="dark h-svh w-full bg-background text-sm text-foreground antialiased"
+      className="dark flex h-svh w-full items-stretch bg-muted/40 p-4 antialiased text-foreground sm:p-6"
     >
-      <Sidebar08Block />
+      <div
+        data-slot="sidebar-08-preview-frame-inner"
+        className="relative flex h-full w-full overflow-hidden rounded-xl border border-border bg-background text-sm shadow-2xl"
+      >
+        <Sidebar08Block />
+      </div>
     </div>
   );
 }

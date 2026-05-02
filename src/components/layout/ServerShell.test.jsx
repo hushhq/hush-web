@@ -23,7 +23,7 @@ describe('ServerShell', () => {
     expect(screen.getByRole('heading', { name: /key verification failed/i })).toBeInTheDocument();
   });
 
-  it('renders the sidebar-08 preview wrapper around the vanilla block', () => {
+  it('renders the sidebar-08 docs-style preview frame around the vanilla block', () => {
     const { container } = renderShell(
       <ServerShell
         transparencyError={null}
@@ -33,15 +33,24 @@ describe('ServerShell', () => {
 
     const frame = container.querySelector('[data-slot="sidebar-08-preview-frame"]');
     expect(frame).toBeInTheDocument();
-    // Preview wrapper owns the dark token bridge + viewport sizing.
+    // Outer canvas: `.dark` activates the variant bridge, `bg-muted/40`
+    // paints the visible page padding around the windowed app frame.
     expect(frame).toHaveClass('dark');
     expect(frame).toHaveClass('h-svh');
-    expect(frame).toHaveClass('bg-background');
-    expect(frame).toHaveClass('text-foreground');
-    // Block contract still present inside the wrapper.
-    expect(frame?.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
-    expect(frame?.querySelector('[data-slot="sidebar"]')).toBeInTheDocument();
-    expect(frame?.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
+    expect(frame).toHaveClass('bg-muted/40');
+
+    // Inner app frame: rounded clipped surface that contains the block.
+    const inner = container.querySelector('[data-slot="sidebar-08-preview-frame-inner"]');
+    expect(inner).toBeInTheDocument();
+    expect(inner).toHaveClass('rounded-xl');
+    expect(inner).toHaveClass('border');
+    expect(inner).toHaveClass('bg-background');
+    expect(inner).toHaveClass('overflow-hidden');
+
+    // Block contract still present inside the inner frame.
+    expect(inner?.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
+    expect(inner?.querySelector('[data-slot="sidebar"]')).toBeInTheDocument();
+    expect(inner?.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
   });
 
   it('preserves the block sample data verbatim (Acme Inc / Enterprise)', () => {

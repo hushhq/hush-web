@@ -15,30 +15,34 @@ import {
 } from "@/components/ui/sidebar"
 
 /**
- * Vanilla `sidebar-08` block from https://ui.shadcn.com/blocks/sidebar.
+ * Vanilla `sidebar-08` block — verbatim copy of the official radix-mira
+ * block source from
+ * `https://ui.shadcn.com/r/styles/radix-mira/sidebar-08.json`
+ * (`page.tsx`).
  *
- * Faithful to the official block source. No Hush wiring, no theming
- * changes, no data substitution. Sample data lives inside
- * `app-sidebar.tsx` and the navigation sub-components, also vanilla.
- *
- * pt5 introduces this block as the only visible UI on the
- * authenticated app route; pt6+ may decide one Hush-independent
- * structural change around it.
+ * The only changes are this repo's import paths (`@/registry/radix-mira/...`
+ * rewritten to `@/components/...`) and the explicit `.tsx` extension on the
+ * `separator` import to disambiguate from the legacy `Separator.jsx` sibling
+ * on macOS's case-insensitive filesystem. No markup, classNames, or sample
+ * data were modified.
  */
 export default function Sidebar08Block() {
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b">
+        <header className="flex h-16 shrink-0 items-center gap-2">
           <div className="flex items-center gap-2 px-4">
             <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
+            <Separator
+              orientation="vertical"
+              className="mr-2 data-vertical:h-4 data-vertical:self-auto"
+            />
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
                   <BreadcrumbLink href="#">
-                    Building Your Application
+                    Build Your Application
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
@@ -49,13 +53,13 @@ export default function Sidebar08Block() {
             </Breadcrumb>
           </div>
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
           <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-            <div className="bg-muted/50 aspect-video rounded-xl" />
-            <div className="bg-muted/50 aspect-video rounded-xl" />
-            <div className="bg-muted/50 aspect-video rounded-xl" />
+            <div className="aspect-video rounded-xl bg-muted/50" />
+            <div className="aspect-video rounded-xl bg-muted/50" />
+            <div className="aspect-video rounded-xl bg-muted/50" />
           </div>
-          <div className="bg-muted/50 min-h-[100vh] flex-1 rounded-xl md:min-h-min" />
+          <div className="min-h-screen flex-1 rounded-xl bg-muted/50 md:min-h-min" />
         </div>
       </SidebarInset>
     </SidebarProvider>
