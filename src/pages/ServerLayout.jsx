@@ -23,7 +23,6 @@ import { TransparencyVerifier } from '../lib/transparencyVerifier';
 import { createInstanceApi } from '../lib/instanceApi';
 import { useKeyPackageMaintenance } from '../hooks/useKeyPackageMaintenance';
 import { useBreakpoint } from '../hooks/useBreakpoint';
-import { useSidebarResize } from '../hooks/useSidebarResize';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as mlsGroup from '../lib/mlsGroup';
@@ -341,7 +340,6 @@ export default function ServerLayout() {
   // Remote participants' mute/deafen state: Map<userId, { isMuted, isDeafened }>
   const [voiceMuteStates, setVoiceMuteStates] = useState(() => new Map());
 
-  const { width: sidebarWidth, handleMouseDown: handleSidebarResize } = useSidebarResize();
   const [requestOpenSettings, setRequestOpenSettings] = useState(false);
 
   const isMobile = breakpoint === 'mobile';
@@ -1824,8 +1822,6 @@ export default function ServerLayout() {
       authToken={authToken}
       toastEl={<Toast toasts={toasts} />}
       isMobile={isMobile}
-      sidebarWidth={sidebarWidth}
-      onSidebarResize={handleSidebarResize}
       channelSidebarEl={channelSidebarEl}
       mobileStack={mobileStack}
       activeVoiceChannel={activeVoiceChannel}

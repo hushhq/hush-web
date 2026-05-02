@@ -152,10 +152,6 @@ vi.mock('../hooks/useBreakpoint', () => ({
   useBreakpoint: vi.fn(() => 'desktop'),
 }));
 
-vi.mock('../hooks/useSidebarResize', () => ({
-  useSidebarResize: vi.fn(() => ({ width: 240, handleMouseDown: vi.fn() })),
-}));
-
 vi.mock('../lib/ws', () => ({
   createWsClient: vi.fn(() => ({
     connect: vi.fn(),

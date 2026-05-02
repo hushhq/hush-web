@@ -2342,11 +2342,9 @@ select:focus-visible {
   gap: 8px;
 }
 
-/* AuthenticatedAppShell (P15 markers, P24 promoted to authoritative slots).
-   `.app-shell` is the desktop selected-server outer shell. It reuses
-   `.lay-container` as a compat hook for legacy CSS selectors still relied
-   on by non-migrated surfaces (sidebar-shell, mobile path, electron
-   safe-area rules). New surfaces should target `.app-shell*` slots. */
+/* Mobile app-shell compatibility. Desktop authenticated layout now uses
+   `[data-slot="block-app-shell"]`; `.app-shell` remains only for the
+   legacy mobile stack until it is migrated to shadcn Sheet primitives. */
 .app-shell {
   position: relative;
 }
@@ -2361,53 +2359,7 @@ html[data-desktop] .app-shell.lay-container {
   padding: var(--desktop-titlebar-safe-top) 0 0;
 }
 
-.app-shell__workspace.lay-main {
-  border: 0;
-  border-radius: 0;
-}
-
-.app-shell--empty .app-shell__main {
-  display: flex;
-  align-items: stretch;
-  justify-content: stretch;
-}
-.app-shell__server-rail {
-  display: flex;
-  flex-shrink: 0;
-  background: var(--background);
-  border-right: 1px solid var(--border);
-}
-.app-shell__sidebar {
-  display: flex;
-  flex-shrink: 0;
-  min-width: 0;
-  position: relative;
-  background: var(--card);
-  border-right: 1px solid var(--border);
-}
-.app-shell__main {
-  background: var(--background);
-}
 .app-shell__offline-banner { left: 0; position: absolute; right: 0; top: 0; z-index: 20; }
-.app-shell__workspace-row { /* compat with .lay-content-row */ }
-.app-shell__resize-handle { /* compat with .lay-resize-handle */ }
-
-/* Shell-context resets: legacy `.sl-strip` (server rail) and `.sidebar-shell`
-   (channel sidebar) ship a rounded inset-card visual. Inside the new app
-   shell those panels are first-class shell slots, not inset cards — drop
-   their border/radius/background and let the slot-level surface own the
-   visual contract. Outside `.app-shell` (e.g. unauthenticated cards) the
-   legacy treatment is preserved. */
-.app-shell .sl-strip {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-}
-.app-shell .sidebar-shell {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-}
 
 /* Same reset for the new block-led shell. The shadcn Sidebar primitive
    owns the channel sidebar chrome; the rail owns the server rail chrome.
@@ -2501,22 +2453,6 @@ html[data-desktop] .app-shell.lay-container {
   padding: 6px 16px;
   text-align: center;
   flex-shrink: 0;
-}
-
-.lay-resize-handle {
-  position: absolute;
-  right: -2px;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  background: transparent;
-  transition: background var(--duration-fast) var(--ease-out);
-  z-index: 20;
-}
-
-.lay-resize-handle:hover {
-  background: var(--hush-border-hover);
 }
 
 .lay-channel-area-header {
