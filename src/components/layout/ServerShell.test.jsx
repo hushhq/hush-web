@@ -23,7 +23,7 @@ describe('ServerShell', () => {
     expect(screen.getByRole('heading', { name: /key verification failed/i })).toBeInTheDocument();
   });
 
-  it('renders the vanilla sidebar-08 block when no transparency error is present', () => {
+  it('renders the sidebar-08 preview wrapper around the vanilla block', () => {
     const { container } = renderShell(
       <ServerShell
         transparencyError={null}
@@ -31,16 +31,20 @@ describe('ServerShell', () => {
       />,
     );
 
-    // sidebar-08 renders SidebarProvider (data-slot="sidebar-wrapper")
-    // wrapping AppSidebar (data-slot="sidebar") and a SidebarInset
-    // (data-slot="sidebar-inset"). All three are part of the official
-    // block contract.
-    expect(container.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="sidebar"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
+    const frame = container.querySelector('[data-slot="sidebar-08-preview-frame"]');
+    expect(frame).toBeInTheDocument();
+    // Preview wrapper owns the dark token bridge + viewport sizing.
+    expect(frame).toHaveClass('dark');
+    expect(frame).toHaveClass('h-svh');
+    expect(frame).toHaveClass('bg-background');
+    expect(frame).toHaveClass('text-foreground');
+    // Block contract still present inside the wrapper.
+    expect(frame?.querySelector('[data-slot="sidebar-wrapper"]')).toBeInTheDocument();
+    expect(frame?.querySelector('[data-slot="sidebar"]')).toBeInTheDocument();
+    expect(frame?.querySelector('[data-slot="sidebar-inset"]')).toBeInTheDocument();
   });
 
-  it('renders the official block sample header (Acme Inc / Enterprise) without Hush data', () => {
+  it('preserves the block sample data verbatim (Acme Inc / Enterprise)', () => {
     renderShell(
       <ServerShell
         transparencyError={null}
