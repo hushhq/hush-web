@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ServerList from '../components/ServerList';
-import ChannelList from '../components/ChannelList';
-import MemberList from '../components/MemberList';
-import SystemChannel from './SystemChannel';
-import TextChannel from './TextChannel';
-import VoiceChannel from './VoiceChannel';
 import { getInstance, getGuildChannels, getGuildMembers, getHandshake } from '../lib/api';
 import * as api from '../lib/api';
 import { importMetadataKey, fromBase64, decryptGuildMetadata } from '../lib/guildMetadata';
@@ -27,18 +21,10 @@ import * as hushCryptoLib from '../lib/hushCrypto';
 import * as mlsGroup from '../lib/mlsGroup';
 import { withChannelMLSMutex, textChannelKey } from '../lib/channelMLSMutex';
 import { buildGuildRouteRef, parseGuildRouteRef, slugify } from '../lib/slugify';
-import ConfirmModal from '../components/ConfirmModal';
-import DmListView from '../components/DmListView';
-import EmptyState from '../components/EmptyState';
-import GuildCreateModal from '../components/GuildCreateModal';
 import { useToast } from '../hooks/useToast';
-import Toast from '../components/Toast';
-import { VoiceConnectedPanel } from '../components/Controls';
-import UserPanel from '../components/UserPanel';
 import { useConnectionQuality } from '../hooks/useConnectionQuality';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import ServerShell from '../components/layout/ServerShell';
-import ChannelContent from '../components/layout/ChannelContent';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1558,318 +1544,19 @@ export default function ServerLayout() {
   }, []);
 
   // ── Render ────────────────────────────────────────────────────────────
-
-  // Transparency hard-fail: key mismatch detected - block the app.
-  if (transparencyError) {
-    return (
-      <div className="transp-hard-fail-overlay">
-        <div className="transp-hard-fail-card">
-          <div className="transp-hard-fail-icon">&#9888;</div>
-          <h2 className="transp-hard-fail-heading">
-            Key Verification Failed
-          </h2>
-          <p className="transp-hard-fail-body">
-            {transparencyError}
-          </p>
-          <p className="transp-hard-fail-note">
-            Your account may be compromised. Do not continue using this session.
-            Contact your instance administrator.
-          </p>
-          <button
-            type="button"
-            className="transp-hard-fail-btn"
-            onClick={() => {
-              // Sign out - leave local vault intact for recovery.
-              import('../contexts/AuthContext').then(({ useAuth: _ }) => {
-                sessionStorage.clear();
-                window.location.href = '/';
-              });
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // No guild selected - show empty state with guild strip and welcome message.
-  if (!serverId) {
-    return (
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={handleTransparencySignOut}
-        serverId={null}
-        serverListEl={(
-          <ServerList
-            getToken={getToken}
-            guilds={mergedGuilds}
-            activeGuild={null}
-            onGuildSelect={handleGuildSelect}
-            onGuildSettings={() => { setRequestOpenSettings(true); setTimeout(() => setRequestOpenSettings(false), 0); }}
-            onGuildCreated={handleGuildCreated}
-            getMetadataKey={getMetadataKey}
-            getMetadataKeys={getMetadataKeys}
-            rememberMetadataKey={rememberMetadataKey}
-            instanceData={instanceData}
-            userRole={myRole}
-            userPermissionLevel={myPermissionLevel}
-          />
-        )}
-        emptyStateEl={(
-          <EmptyState
-            instanceStates={instanceStates}
-            onCreateServer={handleOpenGuildCreateModal}
-            onBrowseServers={() => navigate('/explore')}
-          />
-        )}
-        guildCreateModal={showGuildCreateModal ? (
-          <GuildCreateModal
-            getToken={getToken}
-            onClose={handleCloseGuildCreateModal}
-            onCreated={handleEmptyStateGuildCreated}
-            activeInstanceUrl={null}
-          />
-        ) : null}
-        hasNoTransparencyLog={hasNoTransparencyLog}
-        authToken={authToken}
-        toastEl={<Toast toasts={toasts} />}
-      />
-    );
-  }
-
-  const serverListEl = (
-    <ServerList
-      getToken={getToken}
-      guilds={mergedGuilds}
-      activeGuild={dmMode ? null : activeGuild}
-      onGuildSelect={handleGuildSelect}
-      onGuildSettings={() => { setRequestOpenSettings(true); setTimeout(() => setRequestOpenSettings(false), 0); }}
-      onGuildCreated={handleGuildCreated}
-      onDmOpen={handleDmOpen}
-      isDmActive={dmMode || activeGuild?.isDm}
-      getMetadataKey={getMetadataKey}
-      getMetadataKeys={getMetadataKeys}
-      rememberMetadataKey={rememberMetadataKey}
-      instanceData={instanceData}
-      userRole={myRole}
-      userPermissionLevel={myPermissionLevel}
-      compact={isMobile}
-    />
-  );
-
-  // DM list element - shown in sidebar when dmMode is active or viewing a DM guild
-  const dmListEl = (
-    <DmListView
-      dmGuilds={dmGuilds}
-      onSelectDm={handleDmSelect}
-      getToken={getToken}
-      instanceUrl={dmInstanceUrl}
-    />
-  );
-
-  const isDmView = dmMode || activeGuild?.isDm;
-
-  // Displayed in the TextChannel header instead of #channel-name for DM conversations.
-  const dmPeerName = activeGuild?.isDm
-    ? (activeGuild?.otherUser?.displayName ?? activeGuild?.otherUser?.username ?? null)
-    : null;
-
-  const channelListEl = (
-    <ChannelList
-      getToken={getToken}
-      serverId={serverId}
-      guildName={activeGuildName ?? activeGuild?.name}
-      instanceUrl={activeGuild?.instanceUrl ?? null}
-      getGuildMetadataKey={getActiveGuildMetadataKey}
-      instanceData={instanceData}
-      channels={channels}
-      myRole={myRole}
-      myPermissionLevel={myPermissionLevel}
-      activeChannelId={channelId}
-      onChannelSelect={handleChannelSelect}
-      onChannelsUpdated={handleChannelsUpdated}
-      voiceParticipants={voiceParticipants}
-      showToast={showToast}
-      members={members}
-      currentUserId={currentUserId}
-      openSettings={requestOpenSettings}
-    />
-  );
-
-  /** Channel list body — feeds the desktop `SidebarContent` and the
-   *  mobile single-column composition. */
-  const channelSidebarBody = isDmView ? dmListEl : channelListEl;
-
-  /** Voice + user panel — feeds the desktop `SidebarFooter`; on mobile
-   *  it stacks below the body in `mobileChannelSidebarEl`. */
-  const channelSidebarFooter = (
-    <>
-      {activeVoiceChannel && (
-        <VoiceConnectedPanel
-          channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}
-          isScreenSharing={voiceScreenSharing}
-          isWebcamOn={voiceWebcamOn}
-          signalBars={connQuality.bars}
-          signalColor={connQuality.color}
-          signalReconnecting={connQuality.isReconnecting}
-          rtt={connQuality.rtt}
-          onScreenShare={() => voiceControlsRef.current?.toggleScreenShare()}
-          onSwitchScreen={() => voiceControlsRef.current?.switchScreenSource()}
-          onWebcam={() => voiceControlsRef.current?.toggleWebcam()}
-          onDisconnect={handleVoiceLeave}
-        />
-      )}
-      <UserPanel
-        user={user}
-        isMuted={!!activeVoiceChannel && !voiceMicOn}
-        isDeafened={!!activeVoiceChannel && voiceDeafened}
-        isInVoice={!!activeVoiceChannel}
-        onMute={() => voiceControlsRef.current?.toggleMic()}
-        onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
-        onMicFilterSettingsChange={(settings) => voiceControlsRef.current?.updateMicFilterSettings?.(settings)}
-      />
-    </>
-  );
-
-  /** Mobile composition — single column body + anchored footer.
-   *  `MobileShell` does not host a shadcn `Sidebar`, so the slot stack
-   *  is rendered as a plain flex column. */
-  const mobileChannelSidebarEl = (
-    <div
-      data-slot="mobile-channel-sidebar"
-      className="flex h-full w-full flex-col"
-    >
-      <div className="min-h-0 flex-1 overflow-hidden">{channelSidebarBody}</div>
-      <div className="flex-shrink-0 border-t border-border">{channelSidebarFooter}</div>
-    </div>
-  );
-
-  const memberListEl = (
-    <MemberList
-      members={members}
-      onlineUserIds={onlineUserIds}
-      currentUserId={currentUserId}
-      myRole={myRole}
-      myPermissionLevel={myPermissionLevel}
-      showToast={showToast}
-      onMemberUpdate={handleMemberUpdate}
-      serverId={serverId}
-      onSendMessage={handleSendMessage}
-    />
-  );
-
-  const desktopMembersSidebar = !isMobile ? (
-    <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`}>
-      <div className="sidebar-desktop-inner">
-        {memberListEl}
-      </div>
-    </div>
-  ) : null;
-
-  const contentEl = (
-    <ChannelContent
-      loading={loading}
-      isViewingVoice={isViewingVoice}
-      activeVoiceChannel={activeVoiceChannel}
-      serverId={serverId}
-      getToken={getToken}
-      wsClient={wsClient}
-      members={members}
-      memberIds={memberIds}
-      onlineUserIds={onlineUserIds}
-      myRole={myRole}
-      showToast={showToast}
-      handleMemberUpdate={handleMemberUpdate}
-      showMembers={showMembers}
-      showChatPanel={showChatPanel}
-      showParticipantsPanel={showParticipantsPanel}
-      togglePanel={togglePanel}
-      toggleMemberDrawer={toggleMemberDrawer}
-      handleVoiceLeave={handleVoiceLeave}
-      handleOrbPhaseChange={handleOrbPhaseChange}
-      voiceParticipants={voiceParticipants}
-      voiceMuteStates={voiceMuteStates}
-      voiceControlsRef={voiceControlsRef}
-      handleVoiceStateChange={handleVoiceStateChange}
-      instanceUrl={instanceUrl}
-      isMobile={isMobile}
-      isDmView={isDmView}
-      currentChannel={currentChannel}
-      dmPeerName={dmPeerName}
-      handleMarkRead={handleMarkRead}
-      handleMobileBack={handleMobileBack}
-      orbPhase={orbPhase}
-      toggleDrawer={toggleDrawer}
-      desktopMembersSidebar={desktopMembersSidebar}
-    />
-  );
+  //
+  // pt4 demolition: the authenticated app deliberately renders only a
+  // blank canvas (or the transparency hard-fail screen). All previous
+  // shell composition was removed so pt5 can introduce a single
+  // official shadcn block from a known-empty baseline. Domain hooks
+  // above continue to run (auth, instance bootstrap, channel/member
+  // fetches, MLS, voice, WS subscriptions) so backend behavior is
+  // preserved and pt6+ can re-mount UI without re-plumbing data.
 
   return (
     <ServerShell
       transparencyError={transparencyError}
       onTransparencySignOut={handleTransparencySignOut}
-      serverId={serverId}
-      isInstanceOffline={isInstanceOffline}
-      instanceUrl={instanceUrl}
-      serverListEl={serverListEl}
-      emptyStateEl={
-        <EmptyState
-          instanceStates={instanceStates}
-          onCreateServer={handleOpenGuildCreateModal}
-          onBrowseServers={() => navigate('/explore')}
-        />
-      }
-      guildCreateModal={
-        showGuildCreateModal ? (
-          <GuildCreateModal
-            getToken={getToken}
-            onClose={handleCloseGuildCreateModal}
-            onCreated={handleEmptyStateGuildCreated}
-            activeInstanceUrl={null}
-          />
-        ) : null
-      }
-      hasNoTransparencyLog={hasNoTransparencyLog}
-      authToken={authToken}
-      toastEl={<Toast toasts={toasts} />}
-      isMobile={isMobile}
-      channelSidebarBody={channelSidebarBody}
-      channelSidebarFooter={channelSidebarFooter}
-      mobileChannelSidebarEl={mobileChannelSidebarEl}
-      mobileStack={mobileStack}
-      activeVoiceChannel={activeVoiceChannel}
-      isViewingVoice={isViewingVoice}
-      onVoiceBarClick={() => handleChannelSelect(activeVoiceChannel)}
-      memberDrawerOpen={memberDrawerOpen}
-      closeMemberDrawer={closeMemberDrawer}
-      memberDrawerEl={
-        <MemberList
-          members={members}
-          onlineUserIds={onlineUserIds}
-          currentUserId={currentUserId}
-          myRole={myRole}
-          myPermissionLevel={myPermissionLevel}
-          showToast={showToast}
-          onMemberUpdate={handleMemberUpdate}
-          serverId={serverId}
-          onSendMessage={handleSendMessage}
-          onCloseDrawer={closeMemberDrawer}
-        />
-      }
-      pendingVoiceSwitchModal={
-        pendingVoiceSwitch ? (
-          <ConfirmModal
-            title="Switch voice channel"
-            message={`You are currently connected to "${activeVoiceChannel?.name}". Switch to "${pendingVoiceSwitch.name}"?`}
-            confirmLabel="Switch"
-            onConfirm={handleVoiceSwitchConfirmed}
-            onCancel={() => setPendingVoiceSwitch(null)}
-          />
-        ) : null
-      }
-    >
-      {contentEl}
-    </ServerShell>
+    />
   );
 }

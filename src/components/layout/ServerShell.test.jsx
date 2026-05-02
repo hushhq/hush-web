@@ -12,196 +12,34 @@ describe('ServerShell', () => {
       <ServerShell
         transparencyError="Key mismatch."
         onTransparencySignOut={vi.fn()}
-        serverId="s1"
       />,
     );
 
     expect(screen.getByRole('heading', { name: /key verification failed/i })).toBeInTheDocument();
   });
 
-  it('renders desktop block-led shell in empty mode when no serverId is provided', () => {
+  it('renders the blank app canvas when no transparency error is present', () => {
     const { container } = render(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
-        serverId={null}
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        emptyStateEl={<div data-testid="empty-state" />}
-        guildCreateModal={null}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={<div data-testid="toast" />}
       />,
     );
 
-    expect(screen.getByTestId('server-list')).toBeInTheDocument();
-    expect(screen.getByTestId('empty-state')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="block-app-shell"][data-state="empty"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="server-rail"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="workspace-surface"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="blank-app-canvas"]')).toBeInTheDocument();
   });
 
-  it('renders desktop block-led shell with channel sidebar body, footer, and content when a server is active', () => {
+  it('does not mount any legacy shell, server rail, or channel sidebar slot', () => {
     const { container } = render(
       <ServerShell
         transparencyError={null}
         onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
-        channelSidebarFooter={<div data-testid="channel-sidebar-footer" />}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={<div data-testid="toast" />}
-      >
-        <div data-testid="channel-content" />
-      </ServerShell>,
+      />,
     );
 
-    expect(screen.getByTestId('server-list')).toBeInTheDocument();
-    expect(screen.getByTestId('channel-sidebar-body')).toBeInTheDocument();
-    expect(screen.getByTestId('channel-sidebar-footer')).toBeInTheDocument();
-    expect(screen.getByTestId('channel-content')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="block-app-shell"][data-state="active"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="server-rail"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="channel-sidebar"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="channel-sidebar-content"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="channel-sidebar-footer"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="workspace-surface"]')).toBeInTheDocument();
-  });
-
-  it('does not render the channel sidebar footer when no footer slot is supplied', () => {
-    const { container } = render(
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
-        channelSidebarFooter={null}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={null}
-      >
-        <div />
-      </ServerShell>,
-    );
-
-    expect(container.querySelector('[data-slot="channel-sidebar-footer"]')).not.toBeInTheDocument();
-  });
-
-  it('does not expose a channel-sidebar collapse trigger', () => {
-    render(
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
-        channelSidebarFooter={null}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={null}
-      >
-        <div />
-      </ServerShell>,
-    );
-
-    expect(screen.queryByRole('button', { name: /toggle sidebar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('separator', { name: /resize channel list/i })).not.toBeInTheDocument();
-  });
-
-  it('renders mobile layout when on mobile and a server is active', () => {
-    render(
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isMobile={true}
-        mobileStack={1}
-        activeVoiceChannel={null}
-        isViewingVoice={false}
-        serverListEl={<div data-testid="server-list" />}
-        mobileChannelSidebarEl={<div data-testid="mobile-channel-sidebar" />}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={<div data-testid="toast" />}
-      >
-        <div data-testid="channel-content" />
-      </ServerShell>,
-    );
-
-    expect(screen.getByTestId('server-list')).toBeInTheDocument();
-    expect(screen.getByTestId('mobile-channel-sidebar')).toBeInTheDocument();
-    expect(screen.getByTestId('channel-content')).toBeInTheDocument();
-  });
-
-  it('shows offline banner when the instance is offline', () => {
-    render(
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isInstanceOffline={true}
-        instanceUrl="https://a.example.com"
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
-        channelSidebarFooter={null}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={null}
-      >
-        <div />
-      </ServerShell>,
-    );
-
-    expect(screen.getByText(/a.example.com is offline/i)).toBeInTheDocument();
-  });
-
-  it('shows transparency no-log badge when configured and authenticated', () => {
-    render(
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
-        channelSidebarFooter={null}
-        hasNoTransparencyLog={true}
-        authToken="token"
-        toastEl={null}
-      >
-        <div />
-      </ServerShell>,
-    );
-
-    expect(screen.getByLabelText(/transparency log not configured/i)).toBeInTheDocument();
-  });
-
-  it('locks overflow on the desktop block-led shell', () => {
-    const { container } = render(
-      <ServerShell
-        transparencyError={null}
-        onTransparencySignOut={vi.fn()}
-        serverId="s1"
-        isMobile={false}
-        serverListEl={<div data-testid="server-list" />}
-        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
-        channelSidebarFooter={null}
-        hasNoTransparencyLog={false}
-        authToken="token"
-        toastEl={null}
-      >
-        <div />
-      </ServerShell>,
-    );
-
-    expect(container.querySelector('[data-slot="block-app-shell"]')).toHaveStyle({ overflow: 'hidden' });
+    expect(container.querySelector('[data-slot="block-app-shell"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-slot="server-rail"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-slot="channel-sidebar"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-slot="workspace-surface"]')).not.toBeInTheDocument();
   });
 });

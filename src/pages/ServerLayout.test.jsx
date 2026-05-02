@@ -284,57 +284,31 @@ describe('ServerLayout', () => {
     vi.mocked(TransparencyVerifier).mockClear();
   });
 
-  it('shows welcome message when no guild is selected (/guilds route)', async () => {
+  it('renders the blank app canvas when no guild is selected (/guilds route)', async () => {
     const { container } = renderAtRoute('/guilds');
     await waitFor(() => {
-      expect(screen.getByTestId('empty-state')).toBeInTheDocument();
+      expect(container.querySelector('[data-slot="blank-app-canvas"]')).toBeInTheDocument();
     });
-    expect(container.querySelector('[data-slot="block-app-shell"][data-state="empty"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="server-rail"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="workspace-surface"]')).toBeInTheDocument();
+    expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-slot="block-app-shell"]')).not.toBeInTheDocument();
   });
 
-  it('opens the guild creation modal from the welcome empty-state when the instance policy is open', async () => {
-    vi.mocked(useInstanceContext).mockReturnValueOnce({
-      instanceStates: new Map([
-        ['https://a.example.com', {
-          connectionState: 'connected',
-          handshakeData: { server_creation_policy: 'open' },
-        }],
-      ]),
-      mergedGuilds: [],
-      getWsClient: vi.fn(() => null),
-      getTokenForInstance: vi.fn(() => null),
-      refreshGuilds: vi.fn().mockResolvedValue(undefined),
-      bootInstance: vi.fn().mockResolvedValue(undefined),
-      disconnectInstance: vi.fn().mockResolvedValue(undefined),
-      guildOrder: [],
-      setGuildOrder: vi.fn().mockResolvedValue(undefined),
-    });
+  // PT4-DEMOLITION: empty-state guild-create modal flow depends on
+  // EmptyState UI which is unmounted during the pt4 reset. Will be
+  // re-introduced once the new shell exposes a guild creation entry.
+  it.skip('opens the guild creation modal from the welcome empty-state when the instance policy is open', async () => {});
 
-    renderAtRoute('/guilds');
+  // PT4-DEMOLITION: "select a channel" orb UI is unmounted during the
+  // pt4 reset. Channel-selection UI returns in pt6+.
+  it.skip('shows "select a channel" orb when serverId is set but no channelId', async () => {});
 
-    const createButton = await screen.findByRole('button', { name: /create a server/i });
-    fireEvent.click(createButton);
-
-    expect(screen.getByTestId('guild-create-modal')).toBeInTheDocument();
-  });
-
-  it('shows "select a channel" orb when serverId is set but no channelId', async () => {
-    renderAtRoute('/servers/s1/channels');
-    await waitFor(() => {
-      expect(screen.getByText(/select(?: a)? channel/i)).toBeInTheDocument();
-    });
-  });
-
-  it('locks overflow on the main authenticated layout', async () => {
+  it('locks body scroll on the authenticated layout', async () => {
     const { container } = renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(screen.getByText(/select(?: a)? channel/i)).toBeInTheDocument();
+      expect(container.querySelector('[data-slot="blank-app-canvas"]')).toBeInTheDocument();
     });
 
-    expect(container.querySelector('[data-slot="block-app-shell"]')).toHaveStyle({ overflow: 'hidden' });
     expect(document.body.dataset.hushScrollMode).toBe('locked');
     expect(document.body.style.overflowY).toBe('hidden');
   });
@@ -372,9 +346,6 @@ describe('ServerLayout', () => {
       expect(getGuildChannels).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
       expect(getGuildMembers).toHaveBeenCalledWith('instance-token', 's1', 'https://a.example.com');
     });
-    await waitFor(() => {
-      expect(screen.queryByTestId('empty-state')).not.toBeInTheDocument();
-    });
   });
 
   it('recovers legacy slug-only guild routes by decrypting metadata and upgrading to the canonical route', async () => {
@@ -404,16 +375,9 @@ describe('ServerLayout', () => {
     });
   });
 
-  it('renders TextChannel when a text channel is active', async () => {
-    vi.mocked(getGuildChannels).mockResolvedValue([
-      { id: 'ch1', name: 'general', type: 'text', position: 0, parentId: null },
-    ]);
-    renderAtRoute('/servers/s1/channels/ch1');
-    await waitFor(() => {
-      expect(screen.getByTestId('text-channel')).toBeInTheDocument();
-    });
-    expect(screen.getByTestId('text-channel')).toHaveTextContent('general');
-  });
+  // PT4-DEMOLITION: TextChannel mount removed during the pt4 reset.
+  // Channel content rendering returns in pt6+.
+  it.skip('renders TextChannel when a text channel is active', async () => {});
 
   it('falls back to the imported history store for guild metadata names', async () => {
     const activeDb = { close: vi.fn() };
@@ -449,9 +413,8 @@ describe('ServerLayout', () => {
     renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:History Guild');
+      expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
     });
-    expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
     expect(activeDb.close).toHaveBeenCalled();
   });
 
@@ -489,25 +452,15 @@ describe('ServerLayout', () => {
     renderAtRoute('/servers/s1/channels');
 
     await waitFor(() => {
-      expect(screen.getByTestId('channel-list')).toHaveTextContent('Guild:Recovered Guild');
+      expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
     });
+    // The active key fails first, so the history-store retry path is exercised.
     expect(guildMetadata.decryptGuildMetadata).toHaveBeenCalled();
-    expect(mlsStore.openHistoryStore).toHaveBeenCalledWith('u1', 'device-1');
   });
 
-  it('locks overflow while viewing a voice channel', async () => {
-    vi.mocked(getGuildChannels).mockResolvedValue([
-      { id: 'ch2', name: 'standup', type: 'voice', position: 0, parentId: null },
-    ]);
-
-    const { container } = renderAtRoute('/servers/s1/channels/ch2');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('voice-channel')).toBeInTheDocument();
-    });
-
-    expect(container.querySelector('[data-slot="block-app-shell"]')).toHaveStyle({ overflow: 'hidden' });
-  });
+  // PT4-DEMOLITION: VoiceChannel mount removed during the pt4 reset.
+  // Body scroll lock is covered by the dedicated lock test above.
+  it.skip('locks overflow while viewing a voice channel', async () => {});
 
   it('does not fetch guild data when no auth token in context', () => {
     vi.mocked(useAuth).mockReturnValueOnce({ token: null, user: null, logout: vi.fn() });
@@ -707,7 +660,10 @@ describe('ServerLayout – DM flow', () => {
 
   // handleDmSelect refreshes guild state for brand-new DMs ----------------------
 
-  it('handleDmSelect calls refreshGuilds before navigating when the DM is brand-new', async () => {
+  // PT4-DEMOLITION: DmListView is unmounted during the pt4 reset. The
+  // DM-selection handler chain is preserved internally; UI-driven
+  // verification returns once the new shell mounts the DM list.
+  it.skip('handleDmSelect calls refreshGuilds before navigating when the DM is brand-new', async () => {
     const { createOrFindDM, searchUsersForDM } = await import('../lib/api');
     const refreshGuilds = vi.fn().mockResolvedValue(undefined);
     const existingDmGuild = { id: 'dm-existing', isDm: true, instanceUrl: 'http://localhost', accessPolicy: 'closed' };
@@ -746,7 +702,8 @@ describe('ServerLayout – DM flow', () => {
     await waitFor(() => expect(refreshGuilds).toHaveBeenCalledWith('http://localhost'));
   });
 
-  it('handleDmSelect does not call refreshGuilds for an already-known DM guild', async () => {
+  // PT4-DEMOLITION: see above — DmListView UI-driven test paused.
+  it.skip('handleDmSelect does not call refreshGuilds for an already-known DM guild', async () => {
     const refreshGuilds = vi.fn().mockResolvedValue(undefined);
     const existingDmGuild = {
       id: 'dm-existing',
