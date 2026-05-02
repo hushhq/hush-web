@@ -515,9 +515,7 @@ html[data-desktop] body {
    actual window corners and provides the outer chrome.
 
    Column separation switches from "two card panels with a gap" to a
-   single 1 px hairline between the server strip and the main panel. The
-   sidebar-shell hairline between channel sidebar and channel area is
-   already provided by `.lay-content-row .sidebar-shell` above.
+   single 1 px hairline between the server strip and the main panel.
 
    Safe-area top padding on the server strip keeps its first guild
    button clear of the native window controls (macOS traffic lights,
@@ -1631,20 +1629,6 @@ select:focus-visible {
   flex-shrink: 0;
 }
 
-/* ── Sidebar outer shell (wraps channel list + voice + user panel) ── */
-
-.sidebar-shell {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  background: var(--hush-surface);
-  border: 1px solid var(--hush-border);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
-
 /* SettingsDialogShell (P17) - layout for the centered settings dialog. */
 .settings-dialog-shell { /* DialogContent provides width/positioning */ }
 
@@ -1699,37 +1683,6 @@ select:focus-visible {
   .settings-dialog-shell__content-inner {
     padding: 16px;
   }
-}
-
-/* WorkspaceSidebarShell (P16 explicit header/content/footer contract) */
-.workspace-sidebar-shell { /* layout via legacy `.sidebar-shell` */ }
-
-.workspace-sidebar-shell__header {
-  flex-shrink: 0;
-  gap: 0;
-  padding: 0;
-}
-
-.workspace-sidebar-shell__content {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.workspace-sidebar-shell__footer {
-  flex-shrink: 0;
-  gap: 0;
-  padding: 0;
-}
-
-/* When sidebar-shell lives inside the unified lay-main panel, strip its own
-   card appearance — the parent already provides border and border-radius. */
-.lay-content-row .sidebar-shell {
-  border: none;
-  border-radius: 0;
-  border-right: 1px solid var(--hush-border);
 }
 
 /* ── Channel Sidebar (ChannelList.jsx) ──────────── */
@@ -2361,15 +2314,17 @@ html[data-desktop] .app-shell.lay-container {
 
 .app-shell__offline-banner { left: 0; position: absolute; right: 0; top: 0; z-index: 20; }
 
-/* Same reset for the new block-led shell. The shadcn Sidebar primitive
-   owns the channel sidebar chrome; the rail owns the server rail chrome.
-   Legacy `.sl-strip` and `.sidebar-shell` rounded-card visuals must drop
-   inside the new shell so we don't double-frame the slots. */
-[data-slot="block-app-shell"] .sl-strip,
-[data-slot="block-app-shell"] .sidebar-shell {
+/* Block-led shell rail reset. The outer `[data-slot="server-rail"]`
+   `<aside>` already owns the rail chrome (background, trailing
+   hairline, fixed width); the inner `.sl-strip` server-list collapses
+   into a flat full-width column inside it. */
+[data-slot="block-app-shell"] [data-slot="server-rail-list"] {
+  width: 100%;
   background: transparent;
   border: 0;
   border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .lay-header {
@@ -7604,7 +7559,6 @@ html[data-desktop] .ld-container {
 
   /* Remove panel treatment on mobile - full-bleed stacks */
   .sl-strip { border: none; border-radius: 0; }
-  .sidebar-shell { border: none; border-radius: 0; background: var(--hush-black); }
 
   .home-page {
     align-items: stretch;

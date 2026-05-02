@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ServerList from '../components/ServerList';
 import ChannelList from '../components/ChannelList';
-import WorkspaceSidebarShell from '../components/layout/WorkspaceSidebarShell';
 import MemberList from '../components/MemberList';
 import SystemChannel from './SystemChannel';
 import TextChannel from './TextChannel';
@@ -1698,39 +1697,52 @@ export default function ServerLayout() {
     />
   );
 
-  /** Channel list column with voice panel + persistent user panel at bottom. */
-  const channelSidebarEl = (
-    <WorkspaceSidebarShell
-      content={isDmView ? dmListEl : channelListEl}
-      footer={
-        <>
-          {activeVoiceChannel && (
-            <VoiceConnectedPanel
-              channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}
-              isScreenSharing={voiceScreenSharing}
-              isWebcamOn={voiceWebcamOn}
-              signalBars={connQuality.bars}
-              signalColor={connQuality.color}
-              signalReconnecting={connQuality.isReconnecting}
-              rtt={connQuality.rtt}
-              onScreenShare={() => voiceControlsRef.current?.toggleScreenShare()}
-              onSwitchScreen={() => voiceControlsRef.current?.switchScreenSource()}
-              onWebcam={() => voiceControlsRef.current?.toggleWebcam()}
-              onDisconnect={handleVoiceLeave}
-            />
-          )}
-          <UserPanel
-            user={user}
-            isMuted={!!activeVoiceChannel && !voiceMicOn}
-            isDeafened={!!activeVoiceChannel && voiceDeafened}
-            isInVoice={!!activeVoiceChannel}
-            onMute={() => voiceControlsRef.current?.toggleMic()}
-            onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
-            onMicFilterSettingsChange={(settings) => voiceControlsRef.current?.updateMicFilterSettings?.(settings)}
-          />
-        </>
-      }
-    />
+  /** Channel list body — feeds the desktop `SidebarContent` and the
+   *  mobile single-column composition. */
+  const channelSidebarBody = isDmView ? dmListEl : channelListEl;
+
+  /** Voice + user panel — feeds the desktop `SidebarFooter`; on mobile
+   *  it stacks below the body in `mobileChannelSidebarEl`. */
+  const channelSidebarFooter = (
+    <>
+      {activeVoiceChannel && (
+        <VoiceConnectedPanel
+          channelName={activeVoiceChannel._displayName ?? activeVoiceChannel.name}
+          isScreenSharing={voiceScreenSharing}
+          isWebcamOn={voiceWebcamOn}
+          signalBars={connQuality.bars}
+          signalColor={connQuality.color}
+          signalReconnecting={connQuality.isReconnecting}
+          rtt={connQuality.rtt}
+          onScreenShare={() => voiceControlsRef.current?.toggleScreenShare()}
+          onSwitchScreen={() => voiceControlsRef.current?.switchScreenSource()}
+          onWebcam={() => voiceControlsRef.current?.toggleWebcam()}
+          onDisconnect={handleVoiceLeave}
+        />
+      )}
+      <UserPanel
+        user={user}
+        isMuted={!!activeVoiceChannel && !voiceMicOn}
+        isDeafened={!!activeVoiceChannel && voiceDeafened}
+        isInVoice={!!activeVoiceChannel}
+        onMute={() => voiceControlsRef.current?.toggleMic()}
+        onDeafen={() => voiceControlsRef.current?.toggleDeafen()}
+        onMicFilterSettingsChange={(settings) => voiceControlsRef.current?.updateMicFilterSettings?.(settings)}
+      />
+    </>
+  );
+
+  /** Mobile composition — single column body + anchored footer.
+   *  `MobileShell` does not host a shadcn `Sidebar`, so the slot stack
+   *  is rendered as a plain flex column. */
+  const mobileChannelSidebarEl = (
+    <div
+      data-slot="mobile-channel-sidebar"
+      className="flex h-full w-full flex-col"
+    >
+      <div className="min-h-0 flex-1 overflow-hidden">{channelSidebarBody}</div>
+      <div className="flex-shrink-0 border-t border-border">{channelSidebarFooter}</div>
+    </div>
   );
 
   const memberListEl = (
@@ -1822,7 +1834,9 @@ export default function ServerLayout() {
       authToken={authToken}
       toastEl={<Toast toasts={toasts} />}
       isMobile={isMobile}
-      channelSidebarEl={channelSidebarEl}
+      channelSidebarBody={channelSidebarBody}
+      channelSidebarFooter={channelSidebarFooter}
+      mobileChannelSidebarEl={mobileChannelSidebarEl}
       mobileStack={mobileStack}
       activeVoiceChannel={activeVoiceChannel}
       isViewingVoice={isViewingVoice}

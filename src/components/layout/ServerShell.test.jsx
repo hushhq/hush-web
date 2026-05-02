@@ -42,7 +42,7 @@ describe('ServerShell', () => {
     expect(container.querySelector('[data-slot="workspace-surface"]')).toBeInTheDocument();
   });
 
-  it('renders desktop block-led shell with channel sidebar and content when a server is active', () => {
+  it('renders desktop block-led shell with channel sidebar body, footer, and content when a server is active', () => {
     const { container } = render(
       <ServerShell
         transparencyError={null}
@@ -50,7 +50,8 @@ describe('ServerShell', () => {
         serverId="s1"
         isMobile={false}
         serverListEl={<div data-testid="server-list" />}
-        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
+        channelSidebarFooter={<div data-testid="channel-sidebar-footer" />}
         hasNoTransparencyLog={false}
         authToken="token"
         toastEl={<div data-testid="toast" />}
@@ -60,12 +61,36 @@ describe('ServerShell', () => {
     );
 
     expect(screen.getByTestId('server-list')).toBeInTheDocument();
-    expect(screen.getByTestId('channel-sidebar')).toBeInTheDocument();
+    expect(screen.getByTestId('channel-sidebar-body')).toBeInTheDocument();
+    expect(screen.getByTestId('channel-sidebar-footer')).toBeInTheDocument();
     expect(screen.getByTestId('channel-content')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="block-app-shell"][data-state="active"]')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="server-rail"]')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="channel-sidebar"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="channel-sidebar-content"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-slot="channel-sidebar-footer"]')).toBeInTheDocument();
     expect(container.querySelector('[data-slot="workspace-surface"]')).toBeInTheDocument();
+  });
+
+  it('does not render the channel sidebar footer when no footer slot is supplied', () => {
+    const { container } = render(
+      <ServerShell
+        transparencyError={null}
+        onTransparencySignOut={vi.fn()}
+        serverId="s1"
+        isMobile={false}
+        serverListEl={<div data-testid="server-list" />}
+        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
+        channelSidebarFooter={null}
+        hasNoTransparencyLog={false}
+        authToken="token"
+        toastEl={null}
+      >
+        <div />
+      </ServerShell>,
+    );
+
+    expect(container.querySelector('[data-slot="channel-sidebar-footer"]')).not.toBeInTheDocument();
   });
 
   it('does not expose a channel-sidebar collapse trigger', () => {
@@ -76,7 +101,8 @@ describe('ServerShell', () => {
         serverId="s1"
         isMobile={false}
         serverListEl={<div data-testid="server-list" />}
-        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
+        channelSidebarFooter={null}
         hasNoTransparencyLog={false}
         authToken="token"
         toastEl={null}
@@ -100,7 +126,7 @@ describe('ServerShell', () => {
         activeVoiceChannel={null}
         isViewingVoice={false}
         serverListEl={<div data-testid="server-list" />}
-        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        mobileChannelSidebarEl={<div data-testid="mobile-channel-sidebar" />}
         hasNoTransparencyLog={false}
         authToken="token"
         toastEl={<div data-testid="toast" />}
@@ -110,7 +136,7 @@ describe('ServerShell', () => {
     );
 
     expect(screen.getByTestId('server-list')).toBeInTheDocument();
-    expect(screen.getByTestId('channel-sidebar')).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-channel-sidebar')).toBeInTheDocument();
     expect(screen.getByTestId('channel-content')).toBeInTheDocument();
   });
 
@@ -124,7 +150,8 @@ describe('ServerShell', () => {
         instanceUrl="https://a.example.com"
         isMobile={false}
         serverListEl={<div data-testid="server-list" />}
-        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
+        channelSidebarFooter={null}
         hasNoTransparencyLog={false}
         authToken="token"
         toastEl={null}
@@ -144,7 +171,8 @@ describe('ServerShell', () => {
         serverId="s1"
         isMobile={false}
         serverListEl={<div data-testid="server-list" />}
-        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
+        channelSidebarFooter={null}
         hasNoTransparencyLog={true}
         authToken="token"
         toastEl={null}
@@ -164,7 +192,8 @@ describe('ServerShell', () => {
         serverId="s1"
         isMobile={false}
         serverListEl={<div data-testid="server-list" />}
-        channelSidebarEl={<div data-testid="channel-sidebar" />}
+        channelSidebarBody={<div data-testid="channel-sidebar-body" />}
+        channelSidebarFooter={null}
         hasNoTransparencyLog={false}
         authToken="token"
         toastEl={null}

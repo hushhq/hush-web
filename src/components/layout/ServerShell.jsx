@@ -7,13 +7,15 @@ import MobileShell from './MobileShell';
  * Top-level authenticated shell.
  *
  * Routes between the transparency hard-fail view, the desktop block-led
- * shell (`BlockAppShell`, used for both empty and active states), and
- * the mobile shell. The legacy `AuthenticatedAppShell` /
- * `EmptyServerShell` chrome was removed in pt2 in favor of the
- * shadcn-block-native `BlockAppShell` composition.
+ * shell (`BlockAppShell`), and the mobile shell. Desktop empty state is
+ * handled inside `BlockAppShell` via the `emptyStateEl` slot.
  *
- * Mobile remains on `MobileShell` for this slice; pt3 will migrate the
- * mobile path onto shadcn `Sheet`-driven primitives.
+ * Channel sidebar slots are split:
+ *   - `channelSidebarBody`: channel list / DM list (scrolls).
+ *   - `channelSidebarFooter`: voice + user panel (anchored).
+ *   - `mobileChannelSidebarEl`: pre-composed combined element kept for
+ *     `MobileShell`, which still renders the channel sidebar as a
+ *     single column without a `Sidebar` primitive.
  */
 export default function ServerShell({
   transparencyError,
@@ -28,7 +30,9 @@ export default function ServerShell({
   authToken,
   toastEl,
   isMobile,
-  channelSidebarEl,
+  channelSidebarBody,
+  channelSidebarFooter,
+  mobileChannelSidebarEl,
   mobileStack,
   activeVoiceChannel,
   isViewingVoice,
@@ -47,7 +51,8 @@ export default function ServerShell({
     return (
       <BlockAppShell
         serverListEl={serverListEl}
-        channelSidebarEl={serverId ? channelSidebarEl : null}
+        channelSidebarBody={serverId ? channelSidebarBody : null}
+        channelSidebarFooter={serverId ? channelSidebarFooter : null}
         emptyStateEl={!serverId ? emptyStateEl : null}
         isInstanceOffline={isInstanceOffline}
         instanceUrl={instanceUrl}
@@ -80,7 +85,7 @@ export default function ServerShell({
 
       <MobileShell
         serverListEl={serverListEl}
-        channelSidebarEl={channelSidebarEl}
+        channelSidebarEl={mobileChannelSidebarEl}
         mobileStack={mobileStack}
         activeVoiceChannel={activeVoiceChannel}
         isViewingVoice={isViewingVoice}

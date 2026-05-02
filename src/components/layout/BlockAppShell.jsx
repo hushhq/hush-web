@@ -7,28 +7,23 @@ import WorkspaceSurface from './WorkspaceSurface';
 /**
  * BlockAppShell — block-led desktop shell for the authenticated app.
  *
- * Replaces the legacy `AuthenticatedAppShell` / `EmptyServerShell` chrome
- * with a shadcn-block-native composition:
- *
  *   - `ServerRail` is a persistent narrow column OUTSIDE the inset frame.
  *   - The inset workspace frame (rounded, hairline-bordered, m-2 ml-0)
  *     contains the channel `Sidebar` and the `SidebarInset` workspace
  *     surface as a single contour.
- *   - Channel sidebar is a real shadcn `Sidebar` (not a legacy
- *     `.sidebar-shell` card) and is non-collapsible per pt2.
- *
- * Slot semantics are preserved so `ServerLayout` keeps wiring the same
- * domain elements (`serverListEl`, `channelSidebarEl`, modal slots,
- * offline banner, transparency badge, toasts).
+ *   - Channel sidebar is a real shadcn `Sidebar` with separate body and
+ *     footer slots (anchored voice + user panel), and is
+ *     non-collapsible per pt2.
  *
  * `emptyStateEl` is rendered in the workspace surface when no server is
- * selected; `children` (channel content) renders otherwise. Routing
- * between empty and selected modes lives in `ServerShell` so this
- * component stays a pure visual contract.
+ * selected; otherwise the channel sidebar (`channelSidebarBody` +
+ * `channelSidebarFooter`) and `children` (channel content) render.
+ * Routing between empty and selected modes lives in `ServerShell`.
  *
  * @param {object} props
- * @param {React.ReactNode} props.serverListEl - Slot for the guild list.
- * @param {React.ReactNode} [props.channelSidebarEl] - Slot for the channel sidebar contents (omit for empty mode).
+ * @param {React.ReactNode} props.serverListEl - Slot for the guild list (server rail body).
+ * @param {React.ReactNode} [props.channelSidebarBody] - Channel-list / DM-list slot inside `SidebarContent`.
+ * @param {React.ReactNode} [props.channelSidebarFooter] - Voice + user panel slot inside `SidebarFooter`.
  * @param {React.ReactNode} [props.children] - Active channel content (omit for empty mode).
  * @param {React.ReactNode} [props.emptyStateEl] - Empty-state element when no server is selected.
  * @param {boolean} [props.isInstanceOffline] - Show offline banner.
@@ -41,7 +36,8 @@ import WorkspaceSurface from './WorkspaceSurface';
  */
 export default function BlockAppShell({
   serverListEl,
-  channelSidebarEl,
+  channelSidebarBody,
+  channelSidebarFooter,
   children,
   emptyStateEl,
   isInstanceOffline,
@@ -52,7 +48,7 @@ export default function BlockAppShell({
   guildCreateModal,
   pendingVoiceSwitchModal,
 }) {
-  const isEmpty = !channelSidebarEl;
+  const isEmpty = !channelSidebarBody;
 
   return (
     <div
@@ -83,7 +79,9 @@ export default function BlockAppShell({
           <WorkspaceSurface>{emptyStateEl}</WorkspaceSurface>
         ) : (
           <>
-            <ChannelSidebar>{channelSidebarEl}</ChannelSidebar>
+            <ChannelSidebar footer={channelSidebarFooter}>
+              {channelSidebarBody}
+            </ChannelSidebar>
             <WorkspaceSurface>{children}</WorkspaceSurface>
           </>
         )}
