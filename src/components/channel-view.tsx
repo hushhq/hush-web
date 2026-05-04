@@ -28,6 +28,9 @@ import { HomeView } from "@/components/home-view"
 
 type ChannelKind = "text" | "voice" | "home"
 
+const EMPTY_MEMBERS: ServerMember[] = []
+const EMPTY_VOICE_PARTICIPANTS: VoiceParticipantInfo[] = []
+
 type ThreadParent = {
   author: string
   initials: string
@@ -73,8 +76,10 @@ interface ChannelViewProps {
   members?: ServerMember[]
   voiceParticipants?: VoiceParticipantInfo[]
   currentUserRole?: MemberRole
-  onKickMember?: (member: ServerMember) => void | Promise<void>
+  onKickMember?: (member: ServerMember, reason: string) => void | Promise<void>
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
+  /** Slot — production hush-web mounts the legacy Chat for text channels. */
+  messageBody?: React.ReactNode
   /** Slot — production hush-web mounts the legacy VoiceChannel for voice channels. */
   voiceBody?: React.ReactNode
 }
@@ -88,11 +93,12 @@ export function ChannelView({
   favoriteIds,
   onAddFavorite,
   onRemoveFavorite,
-  members = [],
-  voiceParticipants = [],
+  members = EMPTY_MEMBERS,
+  voiceParticipants = EMPTY_VOICE_PARTICIPANTS,
   currentUserRole,
   onKickMember,
   onDirectMessage,
+  messageBody,
   voiceBody,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
@@ -199,16 +205,18 @@ export function ChannelView({
               defaultSize="60%"
               minSize="30%"
             >
-              <TextChannelView
-                channelId={channelId}
-                channelName={channelName}
-                onOpenThread={toggleThread}
-                channelContext={channelContext}
-                channelKind={channelKind === "voice" ? "voice" : "text"}
-                favoriteIds={favoriteIds}
-                onAddFavorite={onAddFavorite}
-                onRemoveFavorite={onRemoveFavorite}
-              />
+              {messageBody ?? (
+                <TextChannelView
+                  channelId={channelId}
+                  channelName={channelName}
+                  onOpenThread={toggleThread}
+                  channelContext={channelContext}
+                  channelKind="text"
+                  favoriteIds={favoriteIds}
+                  onAddFavorite={onAddFavorite}
+                  onRemoveFavorite={onRemoveFavorite}
+                />
+              )}
             </ResizablePanel>
             <ResizableHandle />
             <ResizablePanel
@@ -225,11 +233,18 @@ export function ChannelView({
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <TextChannelView
-            channelId={channelId}
-            channelName={channelName}
-            onOpenThread={setThread}
-          />
+          messageBody ?? (
+            <TextChannelView
+              channelId={channelId}
+              channelName={channelName}
+              onOpenThread={setThread}
+              channelContext={channelContext}
+              channelKind="text"
+              favoriteIds={favoriteIds}
+              onAddFavorite={onAddFavorite}
+              onRemoveFavorite={onRemoveFavorite}
+            />
+          )
         )}
       </div>
       </div>

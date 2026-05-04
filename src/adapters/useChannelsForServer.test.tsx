@@ -11,7 +11,6 @@ vi.mock("@/lib/api", () => ({
   moveChannel: vi.fn(),
 }))
 
-// @ts-expect-error legacy JS
 import { getGuildChannels as _getGuildChannels, moveChannel as _moveChannel } from "@/lib/api"
 import { useChannelsForServer } from "./useChannelsForServer"
 
@@ -34,6 +33,7 @@ describe("useChannelsForServer", () => {
     getGuildChannels.mockResolvedValue([
       { id: "cat-2", name: "Voice cat", type: "category", parentId: null, position: 1 },
       { id: "cat-1", name: "Text cat", type: "category", parentId: null, position: 0 },
+      { id: "sys-1", name: "server-log", type: "system", parentId: null, position: 0 },
       { id: "ch-2", name: "general", type: "text", parentId: "cat-1", position: 0 },
       { id: "ch-3", name: "audio", type: "voice", parentId: "cat-2", position: 0 },
       { id: "ch-1", name: "random", type: "text", parentId: "cat-1", position: 1 },
@@ -46,10 +46,38 @@ describe("useChannelsForServer", () => {
     })
     expect(result.current.categories.map((c) => c.id)).toEqual(["cat-1", "cat-2"])
     expect(result.current.channels.map((c) => c.id)).toEqual(["ch-2", "ch-3", "ch-1"])
+    expect(result.current.channels.some((c) => c.id === "sys-1")).toBe(false)
     expect(result.current.channels[0]).toMatchObject({
       kind: "text",
       categoryId: "cat-1",
     })
+  })
+
+  it("decodes plaintext metadata names when the API omits name", async () => {
+    getGuildChannels.mockResolvedValue([
+      {
+        id: "cat-1",
+        encryptedMetadata: btoa(JSON.stringify({ n: "Text cat" })),
+        type: "category",
+        parentId: null,
+        position: 0,
+      },
+      {
+        id: "ch-1",
+        encryptedMetadata: btoa(JSON.stringify({ n: "general" })),
+        type: "text",
+        parentId: "cat-1",
+        position: 0,
+      },
+    ])
+
+    const { result } = renderHook(() => useChannelsForServer(ARGS))
+
+    await waitFor(() => {
+      expect(result.current.channels).toHaveLength(1)
+    })
+    expect(result.current.categories[0]?.name).toBe("Text cat")
+    expect(result.current.channels[0]?.name).toBe("general")
   })
 
   it("emits api.moveChannel for each entry on onChannelsChange", async () => {

@@ -53,6 +53,7 @@ interface CommandPaletteProps {
   onOpenCheatSheet: () => void
   isDark: boolean
   onDiscoverServers?: () => void
+  onCreateServer?: () => void
   onOpenSettings?: () => void
   onSignOut?: () => void | Promise<void>
 }
@@ -70,6 +71,7 @@ export function CommandPalette({
   onOpenCheatSheet,
   isDark,
   onDiscoverServers,
+  onCreateServer,
   onOpenSettings,
   onSignOut,
 }: CommandPaletteProps) {
@@ -144,8 +146,10 @@ export function CommandPalette({
           <CommandSeparator />
 
           <CommandGroup heading="Server actions">
-            {/* TODO(yarin, 2026-05-04): create server flow lands with explore page port */}
-            <CommandItem disabled>
+            <CommandItem
+              disabled={!onCreateServer}
+              onSelect={runAction(() => onCreateServer?.())}
+            >
               <PlusIcon />
               <span>Create server</span>
             </CommandItem>

@@ -13,6 +13,12 @@ import {
   type ServerMember,
 } from "./members-sidebar"
 
+type MemberHandler = (
+  member: ServerMember,
+  reason: string
+) => void | Promise<void>
+type DirectMessageHandler = (member: ServerMember) => void | Promise<void>
+
 const ALICE: ServerMember = {
   id: "alice-id",
   name: "Alice",
@@ -43,8 +49,8 @@ describe("MembersSidebar", () => {
   function setup(opts: {
     members?: ServerMember[]
     currentUserRole?: ServerMember["role"]
-    onKickMember?: ReturnType<typeof vi.fn>
-    onDirectMessage?: ReturnType<typeof vi.fn>
+    onKickMember?: MemberHandler
+    onDirectMessage?: DirectMessageHandler
   } = {}) {
     return render(
       <MembersSidebar

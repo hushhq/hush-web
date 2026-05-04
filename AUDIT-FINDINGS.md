@@ -218,9 +218,9 @@ Fix (`e60a78d`):
 
 **Reproduction plan for next session**:
 
-1. `cd /Users/yarin/development/hush/hush-server && docker compose ps`
+1. `cd ../hush-server && docker compose ps`
    to confirm backend is up (it was during this session; sufficient).
-2. `cd /Users/yarin/development/hush/hush-web && bun run dev` —
+2. `cd ../hush-web && bun run dev` —
    Vite serves on the next free port (5175 in this session).
 3. Open the page; sign up via Playwright using the dialog at instance
    `localhost:8080` (NOT the Vite port; the dialog defaults to the

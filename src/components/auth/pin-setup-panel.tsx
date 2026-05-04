@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/tabs.tsx"
 import { cn } from "@/lib/utils.ts"
 import { HushLogo } from "@/components/brand/HushLogo"
-// @ts-expect-error legacy JS
 import { useAuth } from "@/contexts/AuthContext"
 
 const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const

@@ -18,9 +18,7 @@ import { cn } from "@/lib/utils.ts"
 
 import { InstanceSelector } from "@/components/auth/instance-selector"
 import { HushLogo } from "@/components/brand/HushLogo"
-// @ts-expect-error legacy JS
 import { generateIdentityMnemonic } from "@/lib/bip39Identity"
-// @ts-expect-error legacy JS
 import { checkUsernameAvailable } from "@/lib/api"
 
 type AuthView = "main" | "sign-in" | "link" | "sign-up"

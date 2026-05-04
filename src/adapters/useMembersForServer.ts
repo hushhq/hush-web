@@ -4,7 +4,6 @@
  * events later (placeholder "online" for now).
  */
 import * as React from "react"
-// @ts-expect-error legacy JS
 import { getGuildMembers } from "@/lib/api"
 
 import {

@@ -5,7 +5,6 @@
  * viewer.
  */
 import * as React from "react"
-// @ts-expect-error legacy JS
 import { getAuditLog, getSystemMessages } from "@/lib/api"
 
 export type SystemEventSource = "server-log" | "moderation"

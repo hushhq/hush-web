@@ -14,6 +14,7 @@ import {
   LogOutIcon,
   PuzzleIcon,
   SettingsIcon,
+  TrashIcon,
 } from "lucide-react"
 import {
   DndContext,
@@ -167,8 +168,12 @@ interface JoinedVoiceInfo {
   serverName: string
   isMuted: boolean
   isDeafened: boolean
+  isVideoOn: boolean
+  isScreenSharing: boolean
   onToggleMute: () => void
   onToggleDeafen: () => void
+  onToggleVideo: () => void
+  onToggleScreen: () => void
   onDisconnect: () => void
   onJump: () => void
 }
@@ -193,13 +198,19 @@ interface ChannelSidebarProps {
   onOpenServerSettings?: () => void
   onOpenUserSettings?: () => void
   /** Create a new channel of the given kind. Resolves on success. */
-  onCreateChannel?: (kind: ChannelKind, name: string) => Promise<void>
+  onCreateChannel?: (
+    kind: ChannelKind,
+    name: string,
+    parentId?: string | null
+  ) => Promise<void>
   /** Delete a channel. Confirmation handled by caller via wrapper if needed. */
   onDeleteChannel?: (channelId: string) => Promise<void>
   /** Create an invite for the active server. Returns the shareable URL. */
   onCreateInvite?: () => Promise<string | null>
   /** Whether the current user can perform admin actions (create/delete channel, invite). */
   canAdministrate?: boolean
+  /** Home/DM surfaces reuse this shell but must not expose server actions. */
+  serverMenuEnabled?: boolean
 }
 
 const CHANNELS_SECTION_LABEL = "Channels"
@@ -227,6 +238,7 @@ export function ChannelSidebar({
   onDeleteChannel,
   onCreateInvite,
   canAdministrate = false,
+  serverMenuEnabled = true,
 }: ChannelSidebarProps) {
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
 
@@ -243,6 +255,7 @@ export function ChannelSidebar({
             onOpenServerSettings={onOpenServerSettings}
             onCreateInvite={onCreateInvite}
             canAdministrate={canAdministrate}
+            menuEnabled={serverMenuEnabled}
           />
         </SidebarHeader>
         <SidebarContent className="show-native-scrollbar">
@@ -321,6 +334,7 @@ function ServerHeader({
   onOpenServerSettings,
   onCreateInvite,
   canAdministrate,
+  menuEnabled,
 }: {
   name: string
   plan?: string
@@ -330,6 +344,7 @@ function ServerHeader({
   onOpenServerSettings?: () => void
   onCreateInvite?: () => Promise<string | null>
   canAdministrate?: boolean
+  menuEnabled?: boolean
 }) {
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   const [inviteOpen, setInviteOpen] = React.useState(false)
@@ -379,11 +394,16 @@ function ServerHeader({
                   </span>
                 ) : null}
               </div>
-              <ChevronsUpDownIcon className="ml-auto size-4 opacity-70" />
+              <ChevronsUpDownIcon
+                className={cn("ml-auto size-4 opacity-70", !menuEnabled && "md:hidden")}
+              />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+            className={cn(
+              "w-(--radix-dropdown-menu-trigger-width) min-w-56",
+              !menuEnabled && "md:hidden"
+            )}
             align="start"
             side="bottom"
             sideOffset={4}
@@ -409,41 +429,48 @@ function ServerHeader({
                   </DropdownMenuItem>
                 ))}
               </div>
-              <DropdownMenuSeparator />
+              {menuEnabled ? <DropdownMenuSeparator /> : null}
             </div>
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Server
-            </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={() => onOpenServerSettings?.()}>
-              <SettingsIcon className="size-4" />
-              Server settings
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!canAdministrate || !onCreateInvite}
-              onSelect={(event) => {
-                event.preventDefault()
-                void handleInvite()
-              }}
-            >
-              <PlusIcon className="size-4" />
-              Invite people
-            </DropdownMenuItem>
-            {/* TODO(yarin, 2026-05-04): backend integrations not implemented */}
-            <DropdownMenuItem disabled>
-              <PuzzleIcon className="size-4" />
-              Manage integrations
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={(event) => {
-                event.preventDefault()
-                setLeaveOpen(true)
-              }}
-            >
-              <LogOutIcon className="size-4" />
-              Leave server
-            </DropdownMenuItem>
+            {menuEnabled ? (
+              <>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Server
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  disabled={!onOpenServerSettings}
+                  onSelect={() => onOpenServerSettings?.()}
+                >
+                  <SettingsIcon className="size-4" />
+                  Server settings
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canAdministrate || !onCreateInvite}
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    void handleInvite()
+                  }}
+                >
+                  <PlusIcon className="size-4" />
+                  Invite people
+                </DropdownMenuItem>
+                {/* TODO(yarin, 2026-05-04): backend integrations not implemented */}
+                <DropdownMenuItem disabled>
+                  <PuzzleIcon className="size-4" />
+                  Manage integrations
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    setLeaveOpen(true)
+                  }}
+                >
+                  <LogOutIcon className="size-4" />
+                  Leave server
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
@@ -579,7 +606,11 @@ interface ChannelsSectionProps {
   onSelect: (id: string) => void
   onCategoriesChange?: (next: ChannelCategory[]) => void
   onChannelsChange?: (next: Channel[]) => void
-  onCreateChannel?: (kind: ChannelKind, name: string) => Promise<void>
+  onCreateChannel?: (
+    kind: ChannelKind,
+    name: string,
+    parentId?: string | null
+  ) => Promise<void>
   onDeleteChannel?: (channelId: string) => Promise<void>
   canAdministrate?: boolean
 }
@@ -596,12 +627,14 @@ function ChannelsSection({
   canAdministrate = false,
 }: ChannelsSectionProps) {
   const [createOpen, setCreateOpen] = React.useState<ChannelKind | null>(null)
+  const [createParentId, setCreateParentId] = React.useState<string | null>(null)
   const [createName, setCreateName] = React.useState("")
   const [createBusy, setCreateBusy] = React.useState(false)
   const [createError, setCreateError] = React.useState<string | null>(null)
 
-  const openCreate = React.useCallback((kind: ChannelKind) => {
+  const openCreate = React.useCallback((kind: ChannelKind, parentId: string | null = null) => {
     setCreateOpen(kind)
+    setCreateParentId(parentId)
     setCreateName("")
     setCreateError(null)
   }, [])
@@ -616,14 +649,15 @@ function ChannelsSection({
     setCreateBusy(true)
     setCreateError(null)
     try {
-      await onCreateChannel(createOpen, name)
+      await onCreateChannel(createOpen, name, createParentId)
       setCreateOpen(null)
+      setCreateParentId(null)
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create channel")
     } finally {
       setCreateBusy(false)
     }
-  }, [createOpen, createName, onCreateChannel])
+  }, [createOpen, createName, createParentId, onCreateChannel])
   const [activeDrag, setActiveDrag] = React.useState<{
     id: string
     kind: DraggedKind
@@ -669,38 +703,7 @@ function ChannelsSection({
   }
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event
-    if (!over) return
-    const activeKind = active.data.current?.kind as DraggedKind | undefined
-    if (activeKind !== "channel") return
-
-    const activeChannel = channels.find((c) => c.id === active.id)
-    if (!activeChannel) return
-
-    const overData = over.data.current as
-      | { kind?: DraggedKind; categoryId?: string | null; isContainer?: boolean }
-      | undefined
-    let targetCategoryId: string | null | undefined
-
-    if (over.id === ROOT_DROPPABLE_ID) {
-      targetCategoryId = null
-    } else if (overData?.kind === "category" && overData.isContainer) {
-      // Hovering empty category container (collapsible content droppable)
-      targetCategoryId = String(over.id).startsWith("cat-zone-")
-        ? String(over.id).slice("cat-zone-".length)
-        : null
-    } else if (overData?.kind === "channel") {
-      targetCategoryId = (overData.categoryId ?? null) as string | null
-    } else {
-      return
-    }
-
-    if (activeChannel.categoryId === targetCategoryId) return
-    onChannelsChange?.(
-      channels.map((c) =>
-        c.id === active.id ? { ...c, categoryId: targetCategoryId ?? null } : c
-      )
-    )
+    if (!event.over) return
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -719,6 +722,9 @@ function ChannelsSection({
     }
 
     if (activeKind === "channel") {
+      const activeChannel = channels.find((c) => c.id === active.id)
+      if (!activeChannel) return
+
       const overData = over.data.current as
         | { kind?: DraggedKind; categoryId?: string | null }
         | undefined
@@ -736,22 +742,27 @@ function ChannelsSection({
         return
       }
 
-      // Reorder within target category subset
-      const subset = channels.filter((c) => c.categoryId === targetCategoryId)
-      const oldIndex = subset.findIndex((c) => c.id === active.id)
+      const channelsWithoutActive = channels.filter((c) => c.id !== active.id)
+      const targetSubset = channelsWithoutActive.filter(
+        (c) => c.categoryId === targetCategoryId
+      )
       const overChannelId =
         overData?.kind === "channel" ? String(over.id) : null
-      const newIndex = overChannelId
-        ? subset.findIndex((c) => c.id === overChannelId)
-        : subset.length - 1
+      const insertIndex = overChannelId
+        ? targetSubset.findIndex((c) => c.id === overChannelId)
+        : targetSubset.length
 
-      if (oldIndex < 0) {
-        return
-      }
+      const nextTargetSubset = [...targetSubset]
+      nextTargetSubset.splice(Math.max(insertIndex, 0), 0, {
+        ...activeChannel,
+        categoryId: targetCategoryId,
+      })
 
-      const reorderedSubset = arrayMove(subset, oldIndex, Math.max(newIndex, 0))
-      const others = channels.filter((c) => c.categoryId !== targetCategoryId)
-      onChannelsChange?.([...others, ...reorderedSubset])
+      const next = [
+        ...channelsWithoutActive.filter((c) => c.categoryId !== targetCategoryId),
+        ...nextTargetSubset,
+      ]
+      if (!sameChannelOrder(channels, next)) onChannelsChange?.(next)
     }
   }
 
@@ -782,6 +793,8 @@ function ChannelsSection({
                 channels={rootChannels}
                 activeChannelId={activeChannelId}
                 onSelect={onSelect}
+                onDeleteChannel={onDeleteChannel}
+                canAdministrate={canAdministrate}
               />
               <SortableContext
                 items={categories.map((c) => c.id)}
@@ -794,6 +807,13 @@ function ChannelsSection({
                     channels={channelsByCategory.get(category.id) ?? []}
                     activeChannelId={activeChannelId}
                     onSelect={onSelect}
+                    onDeleteChannel={onDeleteChannel}
+                    canAdministrate={canAdministrate}
+                    onCreateTextChannel={
+                      canAdministrate && onCreateChannel
+                        ? () => openCreate("text", category.id)
+                        : undefined
+                    }
                   />
                 ))}
               </SortableContext>
@@ -898,14 +918,27 @@ function ChannelsSection({
   )
 }
 
+function sameChannelOrder(left: Channel[], right: Channel[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every(
+    (channel, index) =>
+      channel.id === right[index]?.id &&
+      channel.categoryId === right[index]?.categoryId
+  )
+}
+
 function RootChannelsZone({
   channels,
   activeChannelId,
   onSelect,
+  onDeleteChannel,
+  canAdministrate,
 }: {
   channels: Channel[]
   activeChannelId: string
   onSelect: (id: string) => void
+  onDeleteChannel?: (channelId: string) => Promise<void>
+  canAdministrate: boolean
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: ROOT_DROPPABLE_ID,
@@ -932,6 +965,8 @@ function RootChannelsZone({
               channel={channel}
               isActive={channel.id === activeChannelId}
               onSelect={() => onSelect(channel.id)}
+              onDeleteChannel={onDeleteChannel}
+              canAdministrate={canAdministrate}
             />
           ))}
         </SidebarMenu>
@@ -945,11 +980,17 @@ function SortableCategory({
   channels,
   activeChannelId,
   onSelect,
+  onDeleteChannel,
+  canAdministrate,
+  onCreateTextChannel,
 }: {
   category: ChannelCategory
   channels: Channel[]
   activeChannelId: string
   onSelect: (id: string) => void
+  onDeleteChannel?: (channelId: string) => Promise<void>
+  canAdministrate: boolean
+  onCreateTextChannel?: () => void
 }) {
   const {
     attributes,
@@ -1005,6 +1046,8 @@ function SortableCategory({
             size="icon-xs"
             title={`Add channel to ${category.name}`}
             className="text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground"
+            disabled={!onCreateTextChannel}
+            onClick={onCreateTextChannel}
           >
             <PlusIcon />
           </Button>
@@ -1029,6 +1072,8 @@ function SortableCategory({
                     channel={channel}
                     isActive={channel.id === activeChannelId}
                     onSelect={() => onSelect(channel.id)}
+                    onDeleteChannel={onDeleteChannel}
+                    canAdministrate={canAdministrate}
                   />
                 ))}
               </SidebarMenu>
@@ -1044,10 +1089,14 @@ function SortableChannel({
   channel,
   isActive,
   onSelect,
+  onDeleteChannel,
+  canAdministrate,
 }: {
   channel: Channel
   isActive: boolean
   onSelect: () => void
+  onDeleteChannel?: (channelId: string) => Promise<void>
+  canAdministrate: boolean
 }) {
   const {
     attributes,
@@ -1072,12 +1121,29 @@ function SortableChannel({
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <ChannelButton
-        channel={channel}
-        isActive={isActive}
-        onSelect={onSelect}
-      />
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="group/channel-row flex min-w-0 items-start gap-1"
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="mt-1 flex size-4 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground active:cursor-grabbing group-hover/channel-row:opacity-100"
+        aria-label={`Drag ${channel.name}`}
+      >
+        <GripVerticalIcon className="size-3" />
+      </button>
+      <div className="min-w-0 flex-1">
+        <ChannelButton
+          channel={channel}
+          isActive={isActive}
+          onSelect={onSelect}
+          onDeleteChannel={onDeleteChannel}
+          canAdministrate={canAdministrate}
+        />
+      </div>
     </div>
   )
 }
@@ -1086,35 +1152,106 @@ function ChannelButton({
   channel,
   isActive,
   onSelect,
+  onDeleteChannel,
+  canAdministrate = false,
   isDragging,
 }: {
   channel: Channel
   isActive: boolean
   onSelect: () => void
+  onDeleteChannel?: (channelId: string) => Promise<void>
+  canAdministrate?: boolean
   isDragging?: boolean
 }) {
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [deleteBusy, setDeleteBusy] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
   const hasParticipants =
     channel.kind === "voice" && (channel.participants?.length ?? 0) > 0
+  const canDelete = canAdministrate && Boolean(onDeleteChannel)
+
+  const confirmDelete = React.useCallback(async () => {
+    if (!onDeleteChannel) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await onDeleteChannel(channel.id)
+      setDeleteOpen(false)
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete channel"
+      )
+    } finally {
+      setDeleteBusy(false)
+    }
+  }, [channel.id, onDeleteChannel])
 
   return (
     <>
-      <SidebarMenuItem
-        className={cn(isDragging && "rounded-md bg-card shadow-lg")}
-      >
-        <SidebarMenuButton isActive={isActive} onClick={onSelect}>
-          {channel.kind === "voice" ? <Volume2Icon /> : <HashIcon />}
-          <span>{channel.name}</span>
-        </SidebarMenuButton>
-        {channel.mentionCount && channel.mentionCount > 0 ? (
-          <SidebarMenuBadge className="bg-primary text-primary-foreground peer-data-active/menu-button:text-primary-foreground peer-hover/menu-button:text-primary-foreground">
-            {channel.mentionCount > 99 ? "99+" : channel.mentionCount}
-          </SidebarMenuBadge>
-        ) : channel.unreadCount && channel.unreadCount > 0 ? (
-          <SidebarMenuBadge className="bg-muted text-muted-foreground peer-data-active/menu-button:text-foreground peer-hover/menu-button:text-foreground">
-            {channel.unreadCount > 99 ? "99+" : channel.unreadCount}
-          </SidebarMenuBadge>
-        ) : null}
-      </SidebarMenuItem>
+      <ContextMenu>
+        <SidebarMenuItem className={cn(isDragging && "rounded-md bg-card shadow-lg")}>
+          <ContextMenuTrigger asChild>
+            <SidebarMenuButton isActive={isActive} onClick={onSelect}>
+              {channel.kind === "voice" ? <Volume2Icon /> : <HashIcon />}
+              <span>{channel.name}</span>
+            </SidebarMenuButton>
+          </ContextMenuTrigger>
+          {channel.mentionCount && channel.mentionCount > 0 ? (
+            <SidebarMenuBadge className="bg-primary text-primary-foreground peer-data-active/menu-button:text-primary-foreground peer-hover/menu-button:text-primary-foreground">
+              {channel.mentionCount > 99 ? "99+" : channel.mentionCount}
+            </SidebarMenuBadge>
+          ) : channel.unreadCount && channel.unreadCount > 0 ? (
+            <SidebarMenuBadge className="bg-muted text-muted-foreground peer-data-active/menu-button:text-foreground peer-hover/menu-button:text-foreground">
+              {channel.unreadCount > 99 ? "99+" : channel.unreadCount}
+            </SidebarMenuBadge>
+          ) : null}
+        </SidebarMenuItem>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem disabled>
+            <SettingsIcon className="size-4" />
+            Channel settings
+          </ContextMenuItem>
+          <ContextMenuItem
+            variant="destructive"
+            disabled={!canDelete}
+            onSelect={(event) => {
+              event.preventDefault()
+              setDeleteError(null)
+              setDeleteOpen(true)
+            }}
+          >
+            <TrashIcon className="size-4" />
+            Delete channel
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete #{channel.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the channel and its messages. Cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? (
+            <div className="text-sm text-destructive">{deleteError}</div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmDelete()
+              }}
+            >
+              {deleteBusy ? "Deleting..." : "Delete channel"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {hasParticipants ? (
         <VoiceParticipantsGroup participants={channel.participants!} />
       ) : null}

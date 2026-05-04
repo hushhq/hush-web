@@ -11,7 +11,6 @@ vi.mock("@/lib/api", () => ({
   getSystemMessages: vi.fn(),
 }))
 
-// @ts-expect-error legacy JS
 import { getAuditLog as _getAuditLog, getSystemMessages as _getSystemMessages } from "@/lib/api"
 import { useSystemEvents } from "./useSystemEvents"
 

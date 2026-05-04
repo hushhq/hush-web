@@ -9,7 +9,6 @@ vi.mock("@/lib/api", () => ({
   getGuildMembers: vi.fn(),
 }))
 
-// @ts-expect-error legacy JS
 import { getGuildMembers as _getGuildMembers } from "@/lib/api"
 import { useMembersForServer } from "./useMembersForServer"
 

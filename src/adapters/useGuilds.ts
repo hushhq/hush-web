@@ -3,7 +3,6 @@
  * Filters out guilds with no instance URL (they cannot be routed).
  */
 import * as React from "react"
-// @ts-expect-error legacy JS
 import { useInstanceContext } from "@/contexts/InstanceContext"
 
 import {

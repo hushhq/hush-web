@@ -44,26 +44,31 @@ import {
 } from "@/components/ui/resizable"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip.tsx"
-// @ts-expect-error legacy JS
-import Chat from "@/components/Chat"
-// @ts-expect-error legacy JS
-import VoiceChannel from "@/pages/VoiceChannel"
-// @ts-expect-error legacy JS
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import ChatImpl from "@/components/Chat"
+import VoiceChannelImpl from "@/pages/VoiceChannel"
 import { useAuth } from "@/contexts/AuthContext"
-// @ts-expect-error legacy JS
 import { getDeviceId } from "@/hooks/useAuth"
-// @ts-expect-error legacy JS
 import { useInstanceContext } from "@/contexts/InstanceContext"
-// @ts-expect-error legacy JS
 import * as mlsStore from "@/lib/mlsStore"
-// @ts-expect-error legacy JS
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
-// @ts-expect-error legacy JS
+import { getActiveAuthInstanceUrlSync } from "@/lib/authInstanceStore"
 import {
   kickUser,
   createGuildChannel,
   deleteGuildChannel,
   createGuildInvite,
+  createGuild,
   leaveGuild,
   deleteGuild,
   createOrFindDM,
@@ -103,6 +108,52 @@ interface JoinedVoice {
   instanceUrl: string
 }
 
+interface VoiceControls {
+  toggleMic?: () => void
+  toggleDeafen?: () => void
+  toggleScreenShare?: () => void
+  toggleWebcam?: () => void
+}
+
+interface VoiceState {
+  isMicOn: boolean
+  isDeafened: boolean
+  isScreenSharing: boolean
+  isWebcamOn: boolean
+}
+
+interface ChatProps {
+  channelId: string
+  serverId: string
+  currentUserId: string
+  getToken: () => string | null
+  getStore: () => unknown
+  getHistoryStore: () => unknown
+  wsClient: unknown
+  members: ServerMember[]
+  baseUrl: string
+}
+
+interface VoiceChannelProps {
+  channel: {
+    id: string
+    name: string
+    type: "voice"
+  }
+  serverId: string
+  getToken: () => string | null
+  wsClient: unknown
+  members: ServerMember[]
+  myRole: MemberRole
+  onLeave: () => void | Promise<void>
+  voiceControlsRef: React.RefObject<VoiceControls>
+  onVoiceStateChange: (state: VoiceState) => void
+  baseUrl: string
+}
+
+const Chat = ChatImpl as React.ComponentType<ChatProps>
+const VoiceChannel = VoiceChannelImpl as React.ComponentType<VoiceChannelProps>
+
 const APPS: AppEntry[] = [
   // Backend support pending — kept as visual placeholder per design spec.
   { id: "linear", name: "Linear", icon: <PuzzleIcon /> },
@@ -120,6 +171,14 @@ const HOME_SYSTEM_CHANNELS: SystemChannel[] = [
   { id: "favorites", name: "Favorites", icon: <StarIcon /> },
 ]
 
+type ShellChannelKind = Channel["kind"] | "system"
+
+interface ShellChannel {
+  id: string
+  name: string
+  kind: ShellChannelKind
+}
+
 export function AuthenticatedApp() {
   const params = useParams<{
     instance?: string
@@ -131,7 +190,7 @@ export function AuthenticatedApp() {
     user: { id: string; username?: string; display_name?: string } | null
     performLogout: () => Promise<void>
   }
-  const { getTokenForInstance, getWsClient, refreshGuilds, dmGuilds } = useInstanceContext() as {
+  const { getTokenForInstance, getWsClient, refreshGuilds, dmGuilds } = useInstanceContext() as unknown as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
     refreshGuilds: (instanceUrl: string) => Promise<void>
@@ -190,13 +249,14 @@ export function AuthenticatedApp() {
   )
 
   const handleKickMember = React.useCallback(
-    async (member: ServerMember) => {
+    async (member: ServerMember, reason: string) => {
       if (!activeServer || !token) return
       try {
-        await kickUser(token, activeServer.id, member.id, "", baseUrl)
+        await kickUser(token, activeServer.id, member.id, reason, baseUrl)
         await refetchMembers()
       } catch (err) {
         console.error("kickUser failed", err)
+        throw err
       }
     },
     [activeServer, token, baseUrl, refetchMembers]
@@ -206,9 +266,18 @@ export function AuthenticatedApp() {
     currentUserRole === "owner" || currentUserRole === "admin"
 
   const handleCreateChannel = React.useCallback(
-    async (kind: "text" | "voice", name: string) => {
+    async (kind: "text" | "voice", name: string, parentId?: string | null) => {
       if (!activeServer || !token) return
-      await createGuildChannel(token, activeServer.id, { name, type: kind }, baseUrl)
+      const body =
+        parentId == null
+          ? { name, type: kind }
+          : { name, type: kind, parentId }
+      await createGuildChannel(
+        token,
+        activeServer.id,
+        body,
+        baseUrl
+      )
       await refetchChannels()
     },
     [activeServer, token, baseUrl, refetchChannels]
@@ -296,27 +365,98 @@ export function AuthenticatedApp() {
     return `${window.location.origin}/join/${encodeURIComponent(host)}/${encodeURIComponent(code)}`
   }, [activeServer, token, baseUrl, instanceUrl])
 
+  const [isCreateServerOpen, setIsCreateServerOpen] = React.useState(false)
+  const [createServerName, setCreateServerName] = React.useState("")
+  const [createServerBusy, setCreateServerBusy] = React.useState(false)
+  const [createServerError, setCreateServerError] =
+    React.useState<string | null>(null)
+
+  const handleOpenServerSettings = React.useCallback((serverId: string) => {
+    setSettingsTargetServerId(serverId)
+    setIsServerSettingsOpen(true)
+  }, [])
+
+  const openCreateServerDialog = React.useCallback(() => {
+    setCreateServerName("")
+    setCreateServerError(null)
+    setIsCreateServerOpen(true)
+  }, [])
+
+  const handleCreateServer = React.useCallback(async () => {
+    const name = createServerName.trim()
+    if (!name) {
+      setCreateServerError("Server name required")
+      return
+    }
+
+    const targetInstanceUrl =
+      activeServer?.raw.instanceUrl ?? getActiveAuthInstanceUrlSync()
+    if (!targetInstanceUrl) {
+      setCreateServerError("No active instance available")
+      return
+    }
+    const tk = getTokenForInstance(targetInstanceUrl)
+    if (!tk) {
+      setCreateServerError("No session for the active instance")
+      return
+    }
+
+    setCreateServerBusy(true)
+    setCreateServerError(null)
+    try {
+      const server = (await createGuild(
+        tk,
+        undefined,
+        undefined,
+        targetInstanceUrl,
+        name
+      )) as { id: string }
+      await refreshGuilds(targetInstanceUrl)
+      const host = new URL(targetInstanceUrl).host
+      navigate(
+        `/${host}/${buildGuildRouteRef(name, server.id)}/${SYSTEM_CHANNELS[0].id}`
+      )
+      setCreateServerName("")
+      setIsCreateServerOpen(false)
+    } catch (err) {
+      setCreateServerError(
+        err instanceof Error ? err.message : "Failed to create server"
+      )
+    } finally {
+      setCreateServerBusy(false)
+    }
+  }, [
+    activeServer,
+    createServerName,
+    getTokenForInstance,
+    refreshGuilds,
+    navigate,
+  ])
+
   const allChannels = React.useMemo(
-    () => [
+    (): ShellChannel[] => [
       ...SYSTEM_CHANNELS.map((c) => ({
         id: c.id,
         name: c.name,
-        kind: "text" as const,
+        kind: "system" as const,
       })),
       ...channels.map((c) => ({ id: c.id, name: c.name, kind: c.kind })),
     ],
     [channels]
   )
 
-  // Fallback chain: exact slug match → first real text channel (skip placeholder
-  // SYSTEM_CHANNELS which have no backend) → empty stub. Avoids mounting Chat.jsx
-  // on a fake channel id like "server-log" when channelSlug is missing/invalid.
+  // Fallback chain: exact slug match → read-only system channel. A newly
+  // opened server must never mount Chat on an empty placeholder while template
+  // channels are still loading.
   const activeChannel = React.useMemo(
-    () =>
+    (): ShellChannel =>
       allChannels.find((c) => c.id === params.channelSlug) ??
-      channels.find((c) => c.kind === "text") ??
-      { id: "", name: "Channel", kind: "text" as const },
-    [allChannels, channels, params.channelSlug]
+      {
+        id: SYSTEM_CHANNELS[0].id,
+        name: SYSTEM_CHANNELS[0].name,
+        kind: "system" as const,
+      },
+    [allChannels, params.channelSlug]
   )
 
   // Voice state — populated by legacy <VoiceChannel /> via onVoiceStateChange.
@@ -333,14 +473,9 @@ export function AuthenticatedApp() {
   const isDeafened = voiceState.isDeafened
   const isVideoOn = voiceState.isWebcamOn
   const isScreenSharing = voiceState.isScreenSharing
-  const voiceControlsRef = React.useRef<{
-    toggleMic?: () => void
-    toggleDeafen?: () => void
-    toggleScreenShare?: () => void
-    toggleWebcam?: () => void
-  }>({})
+  const voiceControlsRef = React.useRef<VoiceControls>({})
   const handleVoiceStateChange = React.useCallback(
-    (next: { isMicOn: boolean; isDeafened: boolean; isScreenSharing: boolean; isWebcamOn: boolean }) => {
+    (next: VoiceState) => {
       setVoiceState(next)
     },
     []
@@ -348,6 +483,8 @@ export function AuthenticatedApp() {
   const [isCommandOpen, setIsCommandOpen] = React.useState(false)
   const [isCheatSheetOpen, setIsCheatSheetOpen] = React.useState(false)
   const [isServerSettingsOpen, setIsServerSettingsOpen] = React.useState(false)
+  const [settingsTargetServerId, setSettingsTargetServerId] =
+    React.useState<string | null>(null)
   const [isUserSettingsOpen, setIsUserSettingsOpen] = React.useState(false)
   const [favorites, setFavorites] = React.useState<FavoriteEntry[]>([])
   const favoriteIds = React.useMemo(
@@ -662,7 +799,7 @@ export function AuthenticatedApp() {
 
   // Guard against SYSTEM_CHANNELS (server-log/moderation placeholders) — those
   // ids have no backend channel and would crash MLS group lookup in Chat.jsx.
-  const isSystemChannel = SYSTEM_CHANNELS.some((s) => s.id === activeChannel.id)
+  const isSystemChannel = activeChannel.kind === "system"
   const chatBody =
     activeServer &&
     activeChannel.kind === "text" &&
@@ -705,7 +842,7 @@ export function AuthenticatedApp() {
     <ChannelView
       channelId={activeChannel.id}
       channelName={activeChannel.name}
-      channelKind={activeChannel.kind}
+      channelKind={activeChannel.kind === "voice" ? "voice" : "text"}
       channelContext={{
         serverId: activeServer.id,
         serverName: activeServer.name,
@@ -719,12 +856,6 @@ export function AuthenticatedApp() {
       onAddFavorite={handleAddFavorite}
       onRemoveFavorite={handleRemoveFavorite}
       voiceParticipants={[]}
-      features={{
-        threads: false,
-        pinnedMessages: false,
-        favorites: false,
-        reactions: false,
-      }}
     />
   ) : (
     <ChannelView
@@ -744,7 +875,9 @@ export function AuthenticatedApp() {
         getServerRole={getServerRole}
         onLeaveServer={handleLeaveServer}
         onDeleteServer={handleDeleteServer}
-        onOpenServerSettings={() => setIsServerSettingsOpen(true)}
+        onOpenServerSettings={handleOpenServerSettings}
+        onCreateServer={openCreateServerDialog}
+        onDiscoverServers={() => navigate("/explore")}
       />
       <SidebarProvider className="h-svh min-h-0! overflow-hidden bg-sidebar md:pl-(--rail-width)">
         {isMobile
@@ -765,7 +898,9 @@ export function AuthenticatedApp() {
                 activeRailId={activeServer.id}
                 onSelectRail={handleSelectRail}
                 voice={voiceProps}
-                onOpenServerSettings={() => setIsServerSettingsOpen(true)}
+                onOpenServerSettings={() => {
+                  if (activeServer) handleOpenServerSettings(activeServer.id)
+                }}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                 onCreateChannel={handleCreateChannel}
                 onDeleteChannel={handleDeleteChannel}
@@ -791,14 +926,12 @@ export function AuthenticatedApp() {
               />
           : null}
         <ResizablePanelGroup
-          direction="horizontal"
-          autoSaveId="hush-shell-v3"
+          orientation="horizontal"
           className="h-full w-full"
         >
           {!isMobile ? (
             <ResizablePanel
               id="shell-sidebar"
-              order={1}
               defaultSize="18rem"
               minSize="14rem"
               maxSize="22rem"
@@ -820,7 +953,9 @@ export function AuthenticatedApp() {
                   activeRailId={activeServer.id}
                   onSelectRail={handleSelectRail}
                   voice={voiceProps}
-                  onOpenServerSettings={() => setIsServerSettingsOpen(true)}
+                  onOpenServerSettings={() => {
+                    if (activeServer) handleOpenServerSettings(activeServer.id)
+                  }}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                   onCreateChannel={handleCreateChannel}
                   onDeleteChannel={handleDeleteChannel}
@@ -853,7 +988,6 @@ export function AuthenticatedApp() {
           ) : null}
           <ResizablePanel
             id="shell-main"
-            order={2}
             minSize="20rem"
             className="flex"
           >
@@ -915,18 +1049,77 @@ export function AuthenticatedApp() {
         onOpenCheatSheet={() => setIsCheatSheetOpen(true)}
         isDark={isDark}
         onDiscoverServers={() => navigate("/explore")}
+        onCreateServer={openCreateServerDialog}
         onOpenSettings={() => setIsUserSettingsOpen(true)}
         onSignOut={async () => {
           await performLogout()
         }}
       />
       <CheatSheet open={isCheatSheetOpen} onOpenChange={setIsCheatSheetOpen} />
+      <Dialog open={isCreateServerOpen} onOpenChange={setIsCreateServerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create server</DialogTitle>
+            <DialogDescription>
+              Create a server on your active Hush instance.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-3 py-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void handleCreateServer()
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="create-server-name">Server name</Label>
+              <Input
+                id="create-server-name"
+                value={createServerName}
+                onChange={(event) => {
+                  setCreateServerName(event.target.value)
+                  setCreateServerError(null)
+                }}
+                disabled={createServerBusy}
+                placeholder="My server"
+              />
+            </div>
+            {createServerError ? (
+              <div className="text-sm text-destructive">
+                {createServerError}
+              </div>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsCreateServerOpen(false)}
+                disabled={createServerBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createServerBusy || !createServerName.trim()}
+              >
+                {createServerBusy ? "Creating..." : "Create server"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <ServerSettingsDialog
         open={isServerSettingsOpen}
         onOpenChange={setIsServerSettingsOpen}
-        serverName={activeServer?.name ?? "Server"}
+        serverName={
+          servers.find((server) => server.id === settingsTargetServerId)?.name ??
+          activeServer?.name ??
+          "Server"
+        }
         onDeleteServer={
-          activeServer && currentUserRole === "owner"
+          activeServer &&
+          settingsTargetServerId === activeServer.id &&
+          currentUserRole === "owner"
             ? async () => {
                 await handleDeleteServer(activeServer.id)
                 setIsServerSettingsOpen(false)
@@ -999,6 +1192,7 @@ function HomeSidebar({
       onSelectRail={onSelectRail}
       voice={voice}
       onOpenUserSettings={onOpenUserSettings}
+      serverMenuEnabled={false}
     />
   )
 }

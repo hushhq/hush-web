@@ -81,7 +81,7 @@ export function UserMenu({ user, onOpenSettings }: UserMenuProps) {
                 <SettingsIcon className="size-4" />
                 Preferences
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled>
                 <BellIcon className="size-4" />
                 Notifications
               </DropdownMenuItem>

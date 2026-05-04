@@ -59,6 +59,8 @@ interface ServerRailProps {
   onLeaveServer?: (serverId: string) => Promise<void> | void
   onDeleteServer?: (serverId: string) => Promise<void> | void
   onOpenServerSettings?: (serverId: string) => void
+  onCreateServer?: () => void
+  onDiscoverServers?: () => void
 }
 
 export function ServerRail({
@@ -69,6 +71,8 @@ export function ServerRail({
   onLeaveServer,
   onDeleteServer,
   onOpenServerSettings,
+  onCreateServer,
+  onDiscoverServers,
 }: ServerRailProps) {
   const scrollRootRef = React.useRef<HTMLDivElement>(null)
   const [edges, setEdges] = React.useState({ top: false, bottom: true })
@@ -179,11 +183,13 @@ export function ServerRail({
           label="Add server"
           icon={<PlusIcon className="size-5" />}
           muted
+          onClick={onCreateServer}
         />
         <RailIcon
           label="Discover"
           icon={<CompassIcon className="size-5" />}
           muted
+          onClick={onDiscoverServers}
         />
       </div>
     </aside>
@@ -210,9 +216,11 @@ function RailServer({
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const isOwner = role === "owner"
-  const canDelete = isOwner && Boolean(onDelete)
-  const canLeave = !isOwner && Boolean(onLeave)
-  const canOpenSettings = role === "owner" || role === "admin"
+  const canUseServerActions = active
+  const canDelete = canUseServerActions && isOwner && Boolean(onDelete)
+  const canLeave = canUseServerActions && !isOwner && Boolean(onLeave)
+  const canOpenSettings =
+    canUseServerActions && (role === "owner" || role === "admin")
 
   return (
     <ContextMenu>
@@ -280,7 +288,7 @@ function RailServer({
           }}
         >
           <SettingsIcon className="size-4" />
-          Server settings
+          {active ? "Server settings" : "Open server first"}
         </ContextMenuItem>
         {/* TODO(yarin, 2026-05-04): privacy prefs not implemented */}
         <ContextMenuItem disabled>

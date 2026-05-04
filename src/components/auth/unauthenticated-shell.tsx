@@ -12,15 +12,10 @@ import { useNavigate } from "react-router-dom"
 import { AuthFlow } from "@/components/auth/auth-flow"
 import { PinUnlockPanel } from "@/components/auth/pin-unlock-panel"
 import { PinSetupPanel } from "@/components/auth/pin-setup-panel"
-// @ts-expect-error legacy JS
 import { useAuth } from "@/contexts/AuthContext"
-// @ts-expect-error legacy JS
 import { useBootController } from "@/hooks/useBootController"
-// @ts-expect-error legacy JS
 import { useAuthInstanceSelection } from "@/hooks/useAuthInstanceSelection"
-// @ts-expect-error legacy JS
 import { getInstanceDisplayName } from "@/lib/authInstanceStore"
-// @ts-expect-error legacy JS
 import { APP_VERSION } from "@/utils/constants"
 
 interface KnownInstance {

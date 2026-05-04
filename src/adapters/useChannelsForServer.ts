@@ -13,15 +13,15 @@
  * local update; rollback on error.
  */
 import * as React from "react"
-// @ts-expect-error legacy JS
 import { getGuildChannels, moveChannel } from "@/lib/api"
 
 import type { Channel, ChannelCategory, ChannelKind } from "./types"
 
 interface RawChannel {
   id: string
-  name: string
-  type: "category" | "text" | "voice"
+  name?: string
+  encryptedMetadata?: string | null
+  type: "category" | "system" | ChannelKind
   parentId: string | null
   position: number
   unreadCount?: number
@@ -45,6 +45,39 @@ interface UseChannelsResult {
 }
 
 const CATEGORY = "category"
+
+function parseMetadataName(json: string): string | null {
+  try {
+    const parsed = JSON.parse(json) as { n?: unknown; name?: unknown }
+    const name = typeof parsed.n === "string" ? parsed.n : parsed.name
+    return typeof name === "string" && name.trim() ? name : null
+  } catch {
+    return null
+  }
+}
+
+function decodeMetadataName(metadata?: string | null): string | null {
+  if (!metadata) return null
+  const directName = parseMetadataName(metadata)
+  if (directName) return directName
+
+  try {
+    const bytes = Uint8Array.from(atob(metadata), (c) => c.charCodeAt(0))
+    return parseMetadataName(new TextDecoder().decode(bytes))
+  } catch {
+    return null
+  }
+}
+
+function channelDisplayName(channel: RawChannel): string {
+  return channel.name?.trim() || decodeMetadataName(channel.encryptedMetadata) || ""
+}
+
+function isRawMessageChannel(
+  channel: RawChannel
+): channel is RawChannel & { type: ChannelKind } {
+  return channel.type === "text" || channel.type === "voice"
+}
 
 export function useChannelsForServer({
   serverId,
@@ -82,19 +115,19 @@ export function useChannelsForServer({
       raw
         .filter((c) => c.type === CATEGORY)
         .sort((a, b) => a.position - b.position)
-        .map((c) => ({ id: c.id, name: c.name })),
+        .map((c) => ({ id: c.id, name: channelDisplayName(c) })),
     [raw]
   )
 
   const channels = React.useMemo<Channel[]>(
     () =>
       raw
-        .filter((c) => c.type !== CATEGORY)
+        .filter(isRawMessageChannel)
         .sort((a, b) => a.position - b.position)
         .map((c) => ({
           id: c.id,
-          name: c.name,
-          kind: c.type as ChannelKind,
+          name: channelDisplayName(c),
+          kind: c.type,
           categoryId: c.parentId,
           unreadCount: c.unreadCount,
           mentionCount: c.mentionCount,

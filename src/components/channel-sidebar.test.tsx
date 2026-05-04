@@ -89,6 +89,32 @@ describe("ChannelSidebar", () => {
     expect(onSelectChannel).toHaveBeenCalledWith("ch-1")
   })
 
+  it("opens the channel section menu from right click", async () => {
+    const user = userEvent.setup()
+    setup({ canAdministrate: true, onCreateChannel: vi.fn() })
+
+    await user.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByText("Channels"),
+    })
+
+    expect(await screen.findByText(/new text channel/i)).toBeInTheDocument()
+    expect(screen.getByText(/new voice channel/i)).toBeInTheDocument()
+  })
+
+  it("opens a channel row menu from right click", async () => {
+    const user = userEvent.setup()
+    setup({ canAdministrate: true, onDeleteChannel: vi.fn() })
+
+    await user.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByText("general").closest("button")!,
+    })
+
+    expect(await screen.findByText(/channel settings/i)).toBeInTheDocument()
+    expect(screen.getByText(/delete channel/i)).toBeInTheDocument()
+  })
+
   it("disables Invite people when canAdministrate is false", async () => {
     setup({ canAdministrate: false, onCreateInvite: vi.fn() })
 
@@ -111,5 +137,16 @@ describe("ChannelSidebar", () => {
       .getByText(/invite people/i)
       .closest("[role='menuitem']")
     expect(invite).not.toHaveAttribute("data-disabled")
+  })
+
+  it("keeps Home header active while hiding server actions", async () => {
+    setup({ serverName: "Home", serverMenuEnabled: false })
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /home/i }))
+
+    expect(screen.getByText("Servers")).toBeInTheDocument()
+    expect(screen.queryByText(/server settings/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/invite people/i)).not.toBeInTheDocument()
   })
 })

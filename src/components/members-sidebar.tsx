@@ -39,6 +39,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog.tsx"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
 export type MemberPresence = "online" | "idle" | "dnd" | "offline"
@@ -61,7 +63,7 @@ interface MembersSidebarProps {
   /** Current user's role on this server. Drives permission-gated actions. */
   currentUserRole?: MemberRole
   /** Real handler when present; undefined → kick item disabled. */
-  onKickMember?: (member: ServerMember) => void | Promise<void>
+  onKickMember?: (member: ServerMember, reason: string) => void | Promise<void>
   /** Open or create a direct message with the given member. */
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
@@ -173,7 +175,7 @@ const ROLE_BADGE_LABEL: Record<MemberRole, string> = {
 interface MemberRowProps {
   member: ServerMember
   currentUserRole?: MemberRole
-  onKickMember?: (member: ServerMember) => void | Promise<void>
+  onKickMember?: (member: ServerMember, reason: string) => void | Promise<void>
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
 
@@ -185,7 +187,30 @@ function MemberRow({
 }: MemberRowProps) {
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [kickOpen, setKickOpen] = React.useState(false)
+  const [kickReason, setKickReason] = React.useState("")
+  const [kickBusy, setKickBusy] = React.useState(false)
+  const [kickError, setKickError] = React.useState<string | null>(null)
   const showKick = canKick(currentUserRole, member.role) && Boolean(onKickMember)
+
+  const confirmKick = React.useCallback(async () => {
+    const reason = kickReason.trim()
+    if (!reason) {
+      setKickError("Kick reason required")
+      return
+    }
+    if (!onKickMember) return
+    setKickBusy(true)
+    setKickError(null)
+    try {
+      await onKickMember(member, reason)
+      setKickOpen(false)
+      setKickReason("")
+    } catch (err) {
+      setKickError(err instanceof Error ? err.message : "Failed to kick member")
+    } finally {
+      setKickBusy(false)
+    }
+  }, [kickReason, member, onKickMember])
 
   return (
     <Popover open={profileOpen} onOpenChange={setProfileOpen}>
@@ -261,7 +286,7 @@ function MemberRow({
         sideOffset={12}
         className="w-72 p-0"
       >
-        <ProfileCard member={member} />
+        <ProfileCard member={member} onDirectMessage={onDirectMessage} />
       </PopoverContent>
       {showKick ? (
         <AlertDialog open={kickOpen} onOpenChange={setKickOpen}>
@@ -273,15 +298,33 @@ function MemberRow({
                 via invite.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`kick-reason-${member.id}`}>Reason</Label>
+              <Input
+                id={`kick-reason-${member.id}`}
+                value={kickReason}
+                onChange={(event) => {
+                  setKickReason(event.target.value)
+                  setKickError(null)
+                }}
+                disabled={kickBusy}
+                placeholder="Violation of server rules"
+              />
+              {kickError ? (
+                <div className="text-sm text-destructive">{kickError}</div>
+              ) : null}
+            </div>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={kickBusy}>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
-                onClick={() => {
-                  void onKickMember?.(member)
+                disabled={kickBusy}
+                onClick={(event) => {
+                  event.preventDefault()
+                  void confirmKick()
                 }}
               >
-                Kick
+                {kickBusy ? "Kicking..." : "Kick"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -291,7 +334,13 @@ function MemberRow({
   )
 }
 
-function ProfileCard({ member }: { member: ServerMember }) {
+function ProfileCard({
+  member,
+  onDirectMessage,
+}: {
+  member: ServerMember
+  onDirectMessage?: (member: ServerMember) => void | Promise<void>
+}) {
   return (
     <div className="flex flex-col">
       <div className="h-14 rounded-t-md bg-gradient-to-br from-primary/30 to-primary/5" />
@@ -317,6 +366,10 @@ function ProfileCard({ member }: { member: ServerMember }) {
         </div>
         <button
           type="button"
+          disabled={!onDirectMessage}
+          onClick={() => {
+            void onDirectMessage?.(member)
+          }}
           className="flex h-8 items-center justify-center gap-2 rounded-md bg-muted text-xs font-medium transition-colors hover:bg-muted/70"
         >
           <MessageSquareIcon className="size-3.5" />
@@ -335,7 +388,7 @@ interface GroupedMembers {
 interface MembersListProps {
   grouped: GroupedMembers[]
   currentUserRole?: MemberRole
-  onKickMember?: (member: ServerMember) => void | Promise<void>
+  onKickMember?: (member: ServerMember, reason: string) => void | Promise<void>
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
 

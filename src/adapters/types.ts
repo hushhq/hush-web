@@ -73,10 +73,9 @@ export function permissionLevelToRole(level: number | undefined): MemberRole {
 const ROLE_STRING_TO_LEVEL: Record<string, number> = {
   owner: 3,
   admin: 2,
-  moderator: 2,
+  moderator: 1,
   mod: 1,
   member: 0,
-  bot: 0,
 }
 
 /**
@@ -93,9 +92,10 @@ export function memberRoleFromRaw(raw: {
     return permissionLevelToRole(raw.permissionLevel)
   }
   if (typeof raw.role === "string" && raw.role) {
-    const level = ROLE_STRING_TO_LEVEL[raw.role.toLowerCase()]
+    const role = raw.role.toLowerCase()
+    if (role === "bot") return "bot"
+    const level = ROLE_STRING_TO_LEVEL[role]
     if (typeof level === "number") return permissionLevelToRole(level)
-    if (raw.role === "bot") return "bot"
   }
   return "member"
 }
