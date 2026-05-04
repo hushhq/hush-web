@@ -626,10 +626,9 @@ export function AuthenticatedApp() {
   )
 }
 
-const HOME_DMS = [
-  // Backend support pending — visual placeholder.
-  { id: "dm-alex", name: "alex", initials: "AL", presence: "online" as const },
-] as const
+// Direct messages — backend support pending. Empty until DM channel
+// CRUD lands; HomeSidebar still renders the section so layout matches.
+const HOME_DMS: { id: string; name: string; initials: string; presence: "online" | "idle" | "dnd" | "offline" }[] = []
 
 function HomeSidebar({
   user,
