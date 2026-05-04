@@ -37,8 +37,10 @@ interface AuthInstanceState {
 export function UnauthenticatedShell() {
   const navigate = useNavigate()
   const { bootState } = useBootController() as { bootState: string }
-  const auth = useAuth() as {
-    user: { id: string } | null
+  const {
+    performRegister,
+    performRecovery,
+  } = useAuth() as {
     performRegister: (
       username: string,
       displayName: string,
@@ -51,46 +53,13 @@ export function UnauthenticatedShell() {
       revokeOtherDevices: boolean,
       instanceUrl: string
     ) => Promise<void>
-    setPIN: (pin: string) => Promise<void>
   }
-  const { performRegister, performRecovery, setPIN, user } = auth
   const {
     selectedInstanceUrl,
     knownInstances,
     chooseInstance,
     rememberSelectedInstance,
   } = useAuthInstanceSelection() as AuthInstanceState
-
-  // After performRegister resolves, AuthContext state has not yet flushed —
-  // setPIN's user-id check would still see the stale null. Defer the PIN
-  // commit to an effect that fires once user.id is available.
-  const [pendingPin, setPendingPin] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (!pendingPin || !user?.id) return
-    let cancelled = false
-    setPIN(pendingPin)
-      .catch((err) => {
-        console.warn("setPIN deferred failed", err)
-      })
-      .finally(() => {
-        if (!cancelled) setPendingPin(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [pendingPin, user?.id, setPIN])
-
-  // While we're committing a deferred PIN from the sign-up wizard, suppress
-  // the standalone PinSetupPanel render — otherwise the user would see two
-  // PIN forms in a row.
-  if (pendingPin) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
-        Locking your vault…
-      </div>
-    )
-  }
 
   if (bootState === "needs_pin") return <PinUnlockPanel />
   if (bootState === "pin_setup") return <PinSetupPanel />
@@ -119,17 +88,15 @@ export function UnauthenticatedShell() {
     username,
     displayName,
     mnemonic,
-    pin,
   }: {
     username: string
     displayName: string
     mnemonic: string
-    pin: string
   }) => {
     const instanceUrl = await rememberSelectedInstance(selectedInstanceUrl)
     await performRegister(username, displayName, mnemonic, undefined, instanceUrl)
-    // Defer setPIN until user.id has flushed into context state.
-    if (pin) setPendingPin(pin)
+    // performRegister flips bootState to 'pin_setup'; PinSetupPanel mounts
+    // on next render and owns the PIN commit through useAuth().setPIN.
   }
 
   return (

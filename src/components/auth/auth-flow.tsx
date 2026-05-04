@@ -14,14 +14,8 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator.tsx"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs.tsx"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils.ts"
 
 import { InstanceSelector } from "@/components/auth/instance-selector"
 import { HushLogo } from "@/components/brand/HushLogo"
@@ -43,7 +37,6 @@ interface SignUpPayload {
   username: string
   displayName: string
   mnemonic: string
-  pin: string
 }
 
 interface AuthFlowProps {
@@ -495,13 +488,13 @@ function SignUpPanel({
   const [displayName, setDisplayName] = React.useState("")
   const [usernameAvailable, setUsernameAvailable] = React.useState<boolean | null>(null)
   const [usernameChecking, setUsernameChecking] = React.useState(false)
-  const [pin, setPin] = React.useState("")
-  const [pinValid, setPinValid] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [mnemonic] = React.useState<string>(() => generateIdentityMnemonic())
   const mnemonicWords = React.useMemo(() => mnemonic.split(" "), [mnemonic])
-  const totalSteps = 4
+  // 3 wizard steps: username, recovery phrase reveal, confirm. PIN setup is
+  // a separate post-register UI driven by bootController.
+  const totalSteps = 3
 
   const next = async () => {
     if (step < totalSteps - 1) {
@@ -516,7 +509,6 @@ function SignUpPanel({
         username: username.trim(),
         displayName: displayName.trim(),
         mnemonic,
-        pin,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-up failed")
@@ -562,10 +554,8 @@ function SignUpPanel({
         />
       ) : step === 1 ? (
         <PassphraseStep words={mnemonicWords} />
-      ) : step === 2 ? (
-        <ConfirmStep />
       ) : (
-        <PinSetupStep onValidChange={setPinValid} onPinChange={setPin} />
+        <ConfirmStep />
       )}
 
       {error ? (
@@ -586,8 +576,7 @@ function SignUpPanel({
           disabled={
             submitting ||
             (step === 0 &&
-              (!username.trim() || usernameChecking || usernameAvailable !== true)) ||
-            (step === totalSteps - 1 && !pinValid)
+              (!username.trim() || usernameChecking || usernameAvailable !== true))
           }
         >
           {step === totalSteps - 1 ? (
@@ -796,139 +785,6 @@ function PassphraseStep({ words }: { words: string[] }) {
           ))}
         </div>
       </div>
-    </div>
-  )
-}
-
-const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const
-
-function passphraseStrength(value: string): number {
-  if (value.length < 6) return 0
-  if (value.length < 9) return 1
-  if (value.length < 12) return 2
-  if (value.length < 16) return 3
-  return 4
-}
-
-function strengthBarClass(level: number): string {
-  if (level < 2) return "bg-destructive"
-  if (level < 3) return "bg-amber-500"
-  return "bg-success"
-}
-
-function PinSetupStep({
-  onValidChange,
-  onPinChange,
-}: {
-  onValidChange: (valid: boolean) => void
-  onPinChange: (value: string) => void
-}) {
-  const [mode, setMode] = React.useState<"pin" | "passphrase">("pin")
-  const [value, setValue] = React.useState("")
-  const [confirm, setConfirm] = React.useState("")
-
-  const isPin = mode === "pin"
-  const minLength = isPin ? 4 : 6
-  const valueOk = value.length >= minLength
-  const confirmOk = value === confirm && valueOk
-  const mismatch = confirm.length > 0 && value !== confirm
-  const strength = !isPin ? passphraseStrength(value) : 0
-
-  React.useEffect(() => {
-    onValidChange(confirmOk)
-    if (confirmOk) onPinChange(value)
-  }, [confirmOk, onValidChange, onPinChange, value])
-
-  const switchMode = (next: string) => {
-    setMode(next as "pin" | "passphrase")
-    setValue("")
-    setConfirm("")
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Lock your vault</h2>
-        <p className="text-sm text-muted-foreground">
-          Your {isPin ? "PIN" : "passphrase"} encrypts your identity key on
-          this device. You will need it to unlock Hush after closing the app.
-        </p>
-      </div>
-
-      <Tabs value={mode} onValueChange={switchMode}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="pin">Use a PIN</TabsTrigger>
-          <TabsTrigger value="passphrase">Use a passphrase</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pin" className="flex flex-col gap-2 pt-3">
-          <Label htmlFor="pin-value">PIN (min 4 digits)</Label>
-          <Input
-            id="pin-value"
-            type="password"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            placeholder="Enter a PIN"
-            autoComplete="new-password"
-          />
-        </TabsContent>
-
-        <TabsContent value="passphrase" className="flex flex-col gap-2 pt-3">
-          <Label htmlFor="phrase-value">Passphrase (min 6 characters)</Label>
-          <Input
-            id="phrase-value"
-            type="password"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            placeholder="Enter a passphrase"
-            autoComplete="new-password"
-          />
-          {value.length >= 2 ? (
-            <div className="flex items-center gap-2">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn(
-                    "h-full transition-all duration-200",
-                    strengthBarClass(strength)
-                  )}
-                  style={{ width: `${(strength / 4) * 100}%` }}
-                />
-              </div>
-              <span className="w-12 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                {STRENGTH_LABELS[strength] || "—"}
-              </span>
-            </div>
-          ) : null}
-        </TabsContent>
-      </Tabs>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="pin-confirm">
-          Confirm {isPin ? "PIN" : "passphrase"}
-        </Label>
-        <Input
-          id="pin-confirm"
-          type="password"
-          inputMode={isPin ? "numeric" : undefined}
-          value={confirm}
-          onChange={(event) => setConfirm(event.target.value)}
-          placeholder={`Repeat your ${isPin ? "PIN" : "passphrase"}`}
-          autoComplete="new-password"
-          aria-invalid={mismatch}
-        />
-        {mismatch ? (
-          <p role="alert" className="text-xs text-destructive">
-            {isPin ? "PINs do not match" : "Passphrases do not match"}
-          </p>
-        ) : null}
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        Without a {isPin ? "PIN" : "passphrase"}, you would need your 12-word
-        recovery phrase every time you open Hush.
-      </p>
     </div>
   )
 }
