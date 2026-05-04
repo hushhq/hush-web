@@ -15,7 +15,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select.tsx"
 import { cn } from "@/lib/utils"
 
 export interface JoinSettings {

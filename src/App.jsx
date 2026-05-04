@@ -33,6 +33,7 @@ function RoadmapRoute() {
   return <RoadmapPage onBack={handleBack} />;
 }
 const ServerLayout = lazy(() => import('./pages/ServerLayout'));
+const ServerShell = lazy(() => import('./components/server-shell'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 
 const fallback = (
@@ -170,6 +171,13 @@ function AppContent() {
 
           {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
           <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
+
+          {/* UI port preview: /v2/:instance/:guildSlug/:channelSlug?
+              Parallel route mounting the ported ChannelView + ChannelSidebar
+              against real channel/member adapters. Default route swap to v2
+              happens in Phase 7 cleanup once Chat.jsx is wired in as the
+              message body. */}
+          <Route path="/v2/:instance/:guildSlug/:channelSlug?" element={<ServerShell />} />
 
           {/* Legacy: /servers/:serverId/* */}
           <Route path="/servers/:serverId/*" element={<ServerLayout />} />

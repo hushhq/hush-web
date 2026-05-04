@@ -19,7 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu.tsx"
 
 import {
   Chat,
@@ -33,10 +33,10 @@ import {
   ChatEventContent,
   ChatEventHoverActions,
   ChatEventHoverActionsButton,
-} from "@/components/chat"
+} from "@/components/chat/index"
 import { MessageContent } from "@/components/message-content"
 import { MessageComposer } from "@/components/message-composer"
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator.tsx"
 import { cn } from "@/lib/utils"
 
 import { getMessagesForChannel } from "@/data/messages"

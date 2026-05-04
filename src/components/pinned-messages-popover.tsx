@@ -7,7 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { ScrollArea } from "@/components/ui/scroll-area.tsx"
 import type { SampleMessage } from "@/data/messages"
 
 interface PinnedMessagesPopoverProps {
