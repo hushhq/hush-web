@@ -61,8 +61,13 @@ import {
   createGuildChannel,
   deleteGuildChannel,
   createGuildInvite,
+  leaveGuild,
+  deleteGuild,
 } from "@/lib/api"
-import type { ServerMember } from "@/components/members-sidebar"
+import type {
+  MemberRole,
+  ServerMember,
+} from "@/components/members-sidebar"
 
 import {
   useGuilds,
@@ -118,9 +123,10 @@ export function AuthenticatedApp() {
   }>()
   const navigate = useNavigate()
   const { user } = useAuth() as { user: { id: string; username?: string; display_name?: string } | null }
-  const { getTokenForInstance, getWsClient } = useInstanceContext() as {
+  const { getTokenForInstance, getWsClient, refreshGuilds } = useInstanceContext() as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
+    refreshGuilds: (instanceUrl: string) => Promise<void>
   }
   const isMobile = useIsMobile()
 
@@ -201,6 +207,48 @@ export function AuthenticatedApp() {
       await refetchChannels()
     },
     [activeServer, token, baseUrl, refetchChannels]
+  )
+
+  const handleLeaveServer = React.useCallback(
+    async (serverId: string) => {
+      const target = servers.find((s) => s.id === serverId)
+      if (!target?.raw.instanceUrl) return
+      const tk = getTokenForInstance(target.raw.instanceUrl)
+      if (!tk) return
+      try {
+        await leaveGuild(tk, serverId, target.raw.instanceUrl)
+        await refreshGuilds(target.raw.instanceUrl)
+        if (activeServer?.id === serverId) navigate("/home")
+      } catch (err) {
+        console.error("leaveGuild failed", err)
+      }
+    },
+    [servers, getTokenForInstance, refreshGuilds, activeServer, navigate]
+  )
+
+  const handleDeleteServer = React.useCallback(
+    async (serverId: string) => {
+      const target = servers.find((s) => s.id === serverId)
+      if (!target?.raw.instanceUrl) return
+      const tk = getTokenForInstance(target.raw.instanceUrl)
+      if (!tk) return
+      try {
+        await deleteGuild(tk, serverId, target.raw.instanceUrl)
+        await refreshGuilds(target.raw.instanceUrl)
+        if (activeServer?.id === serverId) navigate("/home")
+      } catch (err) {
+        console.error("deleteGuild failed", err)
+      }
+    },
+    [servers, getTokenForInstance, refreshGuilds, activeServer, navigate]
+  )
+
+  const getServerRole = React.useCallback(
+    (serverId: string): MemberRole | undefined => {
+      if (serverId !== activeServer?.id) return undefined
+      return currentUserRole
+    },
+    [activeServer, currentUserRole]
   )
 
   const handleCreateInvite = React.useCallback(async (): Promise<string | null> => {
@@ -573,6 +621,10 @@ export function AuthenticatedApp() {
         servers={servers}
         activeRailId={activeServer?.id ?? "home"}
         onSelect={handleSelectRail}
+        getServerRole={getServerRole}
+        onLeaveServer={handleLeaveServer}
+        onDeleteServer={handleDeleteServer}
+        onOpenServerSettings={() => setIsServerSettingsOpen(true)}
       />
       <SidebarProvider className="h-svh min-h-0! overflow-hidden bg-sidebar md:pl-(--rail-width)">
         {isMobile

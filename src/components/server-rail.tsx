@@ -15,6 +15,16 @@ import {
 import { Button } from "@/components/ui/button.tsx"
 import { cn } from "@/lib/utils"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog.tsx"
+import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -25,6 +35,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx"
+import type { MemberRole } from "@/components/members-sidebar"
 import {
   Tooltip,
   TooltipContent,
@@ -43,12 +54,21 @@ interface ServerRailProps {
   servers: Server[]
   activeRailId: RailSelection
   onSelect: (id: RailSelection) => void
+  /** Returns the current user's role on the given server. */
+  getServerRole?: (serverId: string) => MemberRole | undefined
+  onLeaveServer?: (serverId: string) => Promise<void> | void
+  onDeleteServer?: (serverId: string) => Promise<void> | void
+  onOpenServerSettings?: (serverId: string) => void
 }
 
 export function ServerRail({
   servers,
   activeRailId,
   onSelect,
+  getServerRole,
+  onLeaveServer,
+  onDeleteServer,
+  onOpenServerSettings,
 }: ServerRailProps) {
   const scrollRootRef = React.useRef<HTMLDivElement>(null)
   const [edges, setEdges] = React.useState({ top: false, bottom: true })
@@ -122,6 +142,10 @@ export function ServerRail({
                 server={server}
                 active={server.id === activeRailId}
                 onClick={() => onSelect(server.id)}
+                role={getServerRole?.(server.id)}
+                onLeave={onLeaveServer}
+                onDelete={onDeleteServer}
+                onOpenSettings={onOpenServerSettings}
               />
             ))}
           </div>
@@ -170,11 +194,26 @@ function RailServer({
   server,
   active,
   onClick,
+  role,
+  onLeave,
+  onDelete,
+  onOpenSettings,
 }: {
   server: Server
   active: boolean
   onClick: () => void
+  role?: MemberRole
+  onLeave?: (serverId: string) => Promise<void> | void
+  onDelete?: (serverId: string) => Promise<void> | void
+  onOpenSettings?: (serverId: string) => void
 }) {
+  const [leaveOpen, setLeaveOpen] = React.useState(false)
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const isOwner = role === "owner"
+  const canDelete = isOwner && Boolean(onDelete)
+  const canLeave = !isOwner && Boolean(onLeave)
+  const canOpenSettings = role === "owner" || role === "admin"
+
   return (
     <ContextMenu>
       <Tooltip>
@@ -233,8 +272,13 @@ function RailServer({
           Mark server as read
         </ContextMenuItem>
         <ContextMenuSeparator />
-        {/* TODO(yarin, 2026-05-04): server settings dialog wiring */}
-        <ContextMenuItem disabled>
+        <ContextMenuItem
+          disabled={!canOpenSettings || !onOpenSettings}
+          onSelect={(event) => {
+            event.preventDefault()
+            onOpenSettings?.(server.id)
+          }}
+        >
           <SettingsIcon className="size-4" />
           Server settings
         </ContextMenuItem>
@@ -244,12 +288,76 @@ function RailServer({
           Privacy settings
         </ContextMenuItem>
         <ContextMenuSeparator />
-        {/* TODO(yarin, 2026-05-04): wire to instanceApi.leaveGuild */}
-        <ContextMenuItem variant="destructive" disabled>
-          <LogOutIcon className="size-4" />
-          Leave server
-        </ContextMenuItem>
+        {canDelete ? (
+          <ContextMenuItem
+            variant="destructive"
+            onSelect={(event) => {
+              event.preventDefault()
+              setDeleteOpen(true)
+            }}
+          >
+            <LogOutIcon className="size-4" />
+            Delete server
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem
+            variant="destructive"
+            disabled={!canLeave}
+            onSelect={(event) => {
+              event.preventDefault()
+              setLeaveOpen(true)
+            }}
+          >
+            <LogOutIcon className="size-4" />
+            Leave server
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
+      <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave {server.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will lose access to all channels and conversations in
+              {" "}
+              {server.name}. Re-joining requires a new invite.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void onLeave?.(server.id)
+              }}
+            >
+              Leave server
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {server.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the server, its channels, and all
+              messages for every member. Cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                void onDelete?.(server.id)
+              }}
+            >
+              Delete forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ContextMenu>
   )
 }
