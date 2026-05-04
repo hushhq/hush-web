@@ -594,18 +594,24 @@ export function AuthenticatedApp() {
     handleToggleDeafen,
   ])
 
+  // Channel palette: only the active server has its channel list fetched
+  // (useChannelsForServer keys on activeServer.id). Earlier this code
+  // flat-mapped every server across the same active-server channel list,
+  // producing a cartesian product where each server appeared with channels
+  // it does not own. Restrict to active server's channels until per-server
+  // pre-fetch lands.
   const paletteChannels = React.useMemo(
     () =>
-      servers.flatMap((server) =>
-        channels.map((c) => ({
-          id: c.id,
-          name: c.name,
-          kind: c.kind,
-          serverId: server.id,
-          serverName: server.name,
-        }))
-      ),
-    [servers, channels]
+      activeServer
+        ? channels.map((c) => ({
+            id: c.id,
+            name: c.name,
+            kind: c.kind,
+            serverId: activeServer.id,
+            serverName: activeServer.name,
+          }))
+        : [],
+    [activeServer, channels]
   )
 
   const voiceProps = joinedVoice
