@@ -73,11 +73,18 @@ if (!window.matchMedia) {
 }
 
 // Mock all lazy-loaded pages so Suspense doesn't need to resolve them
-vi.mock('./pages/Home', () => ({ default: () => <div>Home</div> }));
+vi.mock('./components/auth/unauthenticated-shell', () => ({
+  UnauthenticatedShell: () => <div>Home</div>,
+}));
+vi.mock('./components/authenticated-app', () => ({
+  AuthenticatedApp: () => <div>ServerLayout</div>,
+}));
+vi.mock('./components/roadmap-page', () => ({
+  RoadmapPage: () => <div>Roadmap</div>,
+}));
 vi.mock('./pages/Invite', () => ({ default: () => <div>Invite</div> }));
 vi.mock('./pages/LinkDevice.jsx', () => ({ default: () => <div>LinkDevice</div> }));
 vi.mock('./pages/Room', () => ({ default: () => <div>Room</div> }));
-vi.mock('./pages/Roadmap', () => ({ default: () => <div>Roadmap</div> }));
 vi.mock('./pages/ServerLayout', () => ({ default: () => <div>ServerLayout</div> }));
 vi.mock('./pages/ExplorePage', () => ({ default: () => <div>ExplorePage</div> }));
 
