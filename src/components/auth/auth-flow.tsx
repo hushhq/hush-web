@@ -130,7 +130,12 @@ function PanelFooter({
       <Separator />
       <p className="text-center text-xs text-muted-foreground">
         Hush is open source and self-hostable.{" "}
-        <a className="font-medium underline-offset-4 hover:underline" href="#">
+        <a
+          className="font-medium underline-offset-4 hover:underline"
+          href="https://github.com/gethush/hush"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
           github
         </a>{" "}
         ·{" "}
@@ -927,7 +932,7 @@ function FakeQR({ seed }: { seed: number }) {
 
   return (
     <div
-      className="grid bg-white p-3"
+      className="grid bg-background p-3"
       style={{
         gridTemplateColumns: `repeat(${QR_GRID_SIZE}, 1fr)`,
         width: 200,
@@ -935,7 +940,7 @@ function FakeQR({ seed }: { seed: number }) {
       }}
     >
       {cells.map((on, i) => (
-        <div key={i} className={on ? "bg-black" : "bg-white"} />
+        <div key={i} className={on ? "bg-foreground" : "bg-background"} />
       ))}
     </div>
   )

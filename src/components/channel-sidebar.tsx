@@ -888,6 +888,8 @@ function ChannelsSection({
               <Label htmlFor="cs-create-channel-name">Channel name</Label>
               <Input
                 id="cs-create-channel-name"
+                // autoFocus: dialog is user-initiated, focusing the only input on open
+                // is the expected interaction for a name entry form.
                 autoFocus
                 value={createName}
                 onChange={(event) => setCreateName(event.target.value)}
