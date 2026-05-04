@@ -131,10 +131,16 @@ export function AuthenticatedApp() {
     user: { id: string; username?: string; display_name?: string } | null
     performLogout: () => Promise<void>
   }
-  const { getTokenForInstance, getWsClient, refreshGuilds } = useInstanceContext() as {
+  const { getTokenForInstance, getWsClient, refreshGuilds, dmGuilds } = useInstanceContext() as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
     refreshGuilds: (instanceUrl: string) => Promise<void>
+    dmGuilds: Array<{
+      id: string
+      otherUser?: { id: string; username?: string; displayName?: string }
+      channelId?: string
+      instanceUrl?: string
+    }>
   }
   const isMobile = useIsMobile()
 
@@ -353,6 +359,41 @@ export function AuthenticatedApp() {
   const railEntries = React.useMemo(
     () => [{ id: "home", name: "Home", initials: "HO" }, ...servers],
     [servers]
+  )
+
+  // DMs (isDm guilds) surfaced separately from regular servers in HomeSidebar.
+  // Click navigates to the DM guild's text channel via the standard route.
+  const homeDMs = React.useMemo(
+    () =>
+      dmGuilds
+        .filter((g) => g.channelId)
+        .map((g) => {
+          const name =
+            g.otherUser?.displayName ?? g.otherUser?.username ?? "user"
+          return {
+            id: g.channelId as string,
+            name,
+            initials: deriveInitials(name),
+            presence: "online" as const,
+          }
+        }),
+    [dmGuilds]
+  )
+
+  const handleSelectHomeDM = React.useCallback(
+    (channelId: string) => {
+      const dm = dmGuilds.find((g) => g.channelId === channelId)
+      if (!dm?.instanceUrl) {
+        navigate(`/home/${channelId}`)
+        return
+      }
+      const host = new URL(dm.instanceUrl).host
+      const name =
+        dm.otherUser?.displayName ?? dm.otherUser?.username ?? "user"
+      const ref = buildGuildRouteRef(name, dm.id)
+      navigate(`/${host}/${ref}/${channelId}`)
+    },
+    [dmGuilds, navigate]
   )
 
   const navigateToServer = React.useCallback(
@@ -731,9 +772,16 @@ export function AuthenticatedApp() {
                 activeRailId="home"
                 onSelectRail={handleSelectRail}
                 activeChannelId={params.channelSlug ?? "catch-up"}
-                onSelectChannel={(id) => navigate(`/home/${id}`)}
+                onSelectChannel={(id) => {
+                  if (homeDMs.some((d) => d.id === id)) {
+                    handleSelectHomeDM(id)
+                    return
+                  }
+                  navigate(`/home/${id}`)
+                }}
                 voice={voiceProps}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                directMessages={homeDMs}
               />
           : null}
         <ResizablePanelGroup
@@ -780,9 +828,16 @@ export function AuthenticatedApp() {
                   activeRailId="home"
                   onSelectRail={handleSelectRail}
                   activeChannelId={params.channelSlug ?? "catch-up"}
-                  onSelectChannel={(id) => navigate(`/home/${id}`)}
+                  onSelectChannel={(id) => {
+                    if (homeDMs.some((d) => d.id === id)) {
+                      handleSelectHomeDM(id)
+                      return
+                    }
+                    navigate(`/home/${id}`)
+                  }}
                   voice={voiceProps}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  directMessages={homeDMs}
                 />
               )}
             </ResizablePanel>
@@ -893,9 +948,12 @@ export function AuthenticatedApp() {
   )
 }
 
-// Direct messages — backend support pending. Empty until DM channel
-// CRUD lands; HomeSidebar still renders the section so layout matches.
-const HOME_DMS: { id: string; name: string; initials: string; presence: "online" | "idle" | "dnd" | "offline" }[] = []
+interface HomeDM {
+  id: string
+  name: string
+  initials: string
+  presence: "online" | "idle" | "dnd" | "offline"
+}
 
 function HomeSidebar({
   user,
@@ -906,6 +964,7 @@ function HomeSidebar({
   onSelectChannel,
   voice,
   onOpenUserSettings,
+  directMessages,
 }: {
   user: { name: string; email: string; initials: string }
   railEntries: { id: string; name: string; initials: string }[]
@@ -915,13 +974,14 @@ function HomeSidebar({
   onSelectChannel: (id: string) => void
   voice?: React.ComponentProps<typeof ChannelSidebar>["voice"]
   onOpenUserSettings?: () => void
+  directMessages: HomeDM[]
 }) {
   return (
     <ChannelSidebar
       serverName="Home"
       serverPlan="Sweet Home"
       systemChannels={HOME_SYSTEM_CHANNELS}
-      directMessages={HOME_DMS}
+      directMessages={directMessages}
       categories={[] as ChannelCategory[]}
       channels={[] as Channel[]}
       apps={[]}
