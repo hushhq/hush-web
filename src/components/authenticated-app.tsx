@@ -29,6 +29,7 @@ import type {
   SystemChannel,
 } from "@/components/channel-sidebar"
 import { ChannelView } from "@/components/channel-view"
+import { SystemChannelView } from "@/components/system-channel-view"
 import { ServerRail } from "@/components/server-rail"
 import { CheatSheet } from "@/components/cheat-sheet"
 import { ServerSettingsDialog } from "@/components/server-settings-dialog"
@@ -604,6 +605,13 @@ export function AuthenticatedApp() {
       channelName="Catch up"
       channelKind="home"
       channelTopic="Mentions, replies, threads, DMs"
+    />
+  ) : activeServer && isSystemChannel ? (
+    <SystemChannelView
+      serverId={activeServer.id}
+      source={activeChannel.id === "moderation" ? "moderation" : "server-log"}
+      token={token}
+      baseUrl={baseUrl}
     />
   ) : activeServer ? (
     <ChannelView
