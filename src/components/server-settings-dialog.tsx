@@ -24,12 +24,15 @@ interface ServerSettingsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   serverName: string
+  /** Owner-only delete handler. When omitted the danger zone is hidden. */
+  onDeleteServer?: () => void | Promise<void>
 }
 
 export function ServerSettingsDialog({
   open,
   onOpenChange,
   serverName,
+  onDeleteServer,
 }: ServerSettingsDialogProps) {
   const groups: SettingsGroup[] = [
     { id: "general", label: "General" },
@@ -109,15 +112,22 @@ export function ServerSettingsDialog({
       icon: <ActivityIcon />,
       content: <PlaceholderPanel title="Activity" />,
     },
-    {
+  ]
+  if (onDeleteServer) {
+    sections.push({
       id: "delete",
       groupId: "danger",
       label: "Delete server",
       icon: <TrashIcon />,
       destructive: true,
-      content: <DeleteServerPanel serverName={serverName} />,
-    },
-  ]
+      content: (
+        <DeleteServerPanel
+          serverName={serverName}
+          onConfirm={onDeleteServer}
+        />
+      ),
+    })
+  }
 
   return (
     <SettingsDialog
@@ -132,7 +142,13 @@ export function ServerSettingsDialog({
   )
 }
 
-function DeleteServerPanel({ serverName }: { serverName: string }) {
+function DeleteServerPanel({
+  serverName,
+  onConfirm,
+}: {
+  serverName: string
+  onConfirm: () => void | Promise<void>
+}) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -153,6 +169,9 @@ function DeleteServerPanel({ serverName }: { serverName: string }) {
           title={`Delete ${serverName}?`}
           description={`This permanently deletes ${serverName}, all channels, messages, and member data. This action cannot be undone.`}
           confirmLabel="Delete server"
+          onConfirm={() => {
+            void onConfirm()
+          }}
           trigger={
             <button
               type="button"

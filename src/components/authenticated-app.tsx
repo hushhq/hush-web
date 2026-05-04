@@ -122,7 +122,10 @@ export function AuthenticatedApp() {
     channelSlug?: string
   }>()
   const navigate = useNavigate()
-  const { user } = useAuth() as { user: { id: string; username?: string; display_name?: string } | null }
+  const { user, performLogout } = useAuth() as {
+    user: { id: string; username?: string; display_name?: string } | null
+    performLogout: () => Promise<void>
+  }
   const { getTokenForInstance, getWsClient, refreshGuilds } = useInstanceContext() as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
@@ -753,10 +756,30 @@ export function AuthenticatedApp() {
         open={isServerSettingsOpen}
         onOpenChange={setIsServerSettingsOpen}
         serverName={activeServer?.name ?? "Server"}
+        onDeleteServer={
+          activeServer && currentUserRole === "owner"
+            ? async () => {
+                await handleDeleteServer(activeServer.id)
+                setIsServerSettingsOpen(false)
+              }
+            : undefined
+        }
       />
       <UserSettingsDialog
         open={isUserSettingsOpen}
         onOpenChange={setIsUserSettingsOpen}
+        account={
+          user
+            ? {
+                displayName: user.display_name ?? user.username ?? "you",
+                username: user.username ?? "",
+              }
+            : undefined
+        }
+        onSignOut={async () => {
+          await performLogout()
+          setIsUserSettingsOpen(false)
+        }}
       />
     </TooltipProvider>
   )

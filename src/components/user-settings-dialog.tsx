@@ -22,14 +22,23 @@ import {
   type SettingsSection,
 } from "@/components/settings-dialog"
 
+interface UserAccountInfo {
+  displayName: string
+  username: string
+}
+
 interface UserSettingsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  account?: UserAccountInfo
+  onSignOut?: () => void | Promise<void>
 }
 
 export function UserSettingsDialog({
   open,
   onOpenChange,
+  account,
+  onSignOut,
 }: UserSettingsDialogProps) {
   const groups: SettingsGroup[] = [
     { id: "account", label: "Account" },
@@ -43,7 +52,7 @@ export function UserSettingsDialog({
       groupId: "account",
       label: "My account",
       icon: <UserIcon />,
-      content: <AccountPanel />,
+      content: <AccountPanel account={account} />,
     },
     {
       id: "profile",
@@ -128,7 +137,7 @@ export function UserSettingsDialog({
       label: "Log out",
       icon: <LogOutIcon />,
       destructive: true,
-      content: <LogoutPanel />,
+      content: <LogoutPanel onSignOut={onSignOut} />,
     },
   ]
 
@@ -145,7 +154,11 @@ export function UserSettingsDialog({
   )
 }
 
-function LogoutPanel() {
+function LogoutPanel({
+  onSignOut,
+}: {
+  onSignOut?: () => void | Promise<void>
+}) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -159,17 +172,21 @@ function LogoutPanel() {
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium">Sign out</span>
           <span className="text-xs text-muted-foreground">
-            You can sign back in any time with your credentials.
+            You can sign back in any time with your recovery phrase.
           </span>
         </div>
         <ConfirmAction
           title="Log out?"
           description="You will be signed out on this device. Active voice calls will disconnect."
           confirmLabel="Log out"
+          onConfirm={() => {
+            void onSignOut?.()
+          }}
           trigger={
             <button
               type="button"
-              className="shrink-0 rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
+              disabled={!onSignOut}
+              className="shrink-0 rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Log out
             </button>
@@ -180,13 +197,15 @@ function LogoutPanel() {
   )
 }
 
-function AccountPanel() {
-  const fields: { label: string; value: string; action?: string }[] = [
-    { label: "Display name", value: "yarin", action: "Edit" },
-    { label: "Username", value: "yarin#0001", action: "Edit" },
-    { label: "Email", value: "yarin.cardillo@gmail.com", action: "Edit" },
-    { label: "Phone", value: "Not added", action: "Add" },
-    { label: "Password", value: "•••••••••••", action: "Change" },
+function AccountPanel({ account }: { account?: UserAccountInfo }) {
+  const displayName = account?.displayName ?? "—"
+  const username = account?.username ?? "—"
+  // TODO(yarin, 2026-05-04): backend lacks email/phone/password endpoints
+  // — identity is currently mnemonic-derived. Edit actions deferred until
+  // profile-update API lands.
+  const fields: { label: string; value: string }[] = [
+    { label: "Display name", value: displayName },
+    { label: "Username", value: username },
   ]
 
   return (
@@ -194,7 +213,8 @@ function AccountPanel() {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">My account</h2>
         <p className="text-sm text-muted-foreground">
-          Account credentials, identity, and security.
+          Identity is derived from your recovery phrase. Profile editing
+          requires backend support — coming soon.
         </p>
       </div>
 
@@ -219,77 +239,8 @@ function AccountPanel() {
                 </span>
                 <span className="text-sm">{field.value}</span>
               </div>
-              <button
-                type="button"
-                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted"
-              >
-                {field.action}
-              </button>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Two-factor authentication
-        </h3>
-        <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">2FA disabled</span>
-            <span className="text-xs text-muted-foreground">
-              Add an authenticator app for an extra layer of security on your account.
-            </span>
-          </div>
-          <button
-            type="button"
-            className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Enable
-          </button>
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Account removal
-        </h3>
-        <div className="flex items-start justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">Disable or delete account</span>
-            <span className="text-xs text-muted-foreground">
-              Disabling lets you come back later. Deleting is permanent.
-            </span>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <ConfirmAction
-              title="Disable account?"
-              description="Your account will be disabled. You can re-enable it any time by signing back in."
-              confirmLabel="Disable account"
-              variant="default"
-              trigger={
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
-                >
-                  Disable
-                </button>
-              }
-            />
-            <ConfirmAction
-              title="Delete account?"
-              description="This will permanently delete your account, messages, and uploads. This action cannot be undone."
-              confirmLabel="Delete forever"
-              trigger={
-                <button
-                  type="button"
-                  className="rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
-                >
-                  Delete
-                </button>
-              }
-            />
-          </div>
         </div>
       </section>
     </div>
