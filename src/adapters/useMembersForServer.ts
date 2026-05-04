@@ -10,7 +10,7 @@ import { getGuildMembers } from "@/lib/api"
 import {
   type ServerMember,
   deriveInitials,
-  permissionLevelToRole,
+  memberRoleFromRaw,
 } from "./types"
 
 interface RawMember {
@@ -78,7 +78,10 @@ export function useMembersForServer({
           name,
           initials: deriveInitials(name),
           presence: "online",
-          role: permissionLevelToRole(m.permissionLevel),
+          role: memberRoleFromRaw({
+            permissionLevel: m.permissionLevel,
+            role: m.role,
+          }),
         }
       }),
     [raw]

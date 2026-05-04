@@ -114,6 +114,34 @@ Fix (`<this-commit>`):
   per-server pre-fetch lands, only the open server contributes
   searchable channels.
 
+#### F-21-4 (HIGH) — Member role mapping ignored backend `role` strings
+
+`useMembersForServer` mapped each row through `permissionLevelToRole(m.permissionLevel)`.
+The hush-web backend's `getGuildMembers` endpoint returns either
+`permissionLevel` (int 0-3) **or** `role` string (`owner`, `admin`,
+`moderator`, `member`, `bot`) — the legacy `MemberList` accepted both.
+When the backend returned `role` strings (the documented response shape
+in `lib/api.js`), `m.permissionLevel` was `undefined`, the helper
+defaulted to `"member"`, and every member — including the current user
+— was treated as a `member`.
+
+User-visible effect: `currentUserRole` always resolved to `member`
+even for the server owner. `canAdministrate` was always `false`, so
+the entire admin context menu (Invite people, New text channel, New
+voice channel, Server settings, Delete server) and members-sidebar Kick
+appeared disabled. From the user's perspective, "buttons don't work"
+and "right-click menus aren't there."
+
+Fix (`<this-commit>`):
+
+- `adapters/types.ts` adds `memberRoleFromRaw({ permissionLevel, role })`
+  that prefers `permissionLevel` when present and falls back to a
+  string-table lookup over `role`. Mirrors the legacy `getMemberLevel`
+  fallback.
+- `useMembersForServer` passes the raw `{ permissionLevel, role }` pair
+  through the new helper, so backend rows with either shape resolve
+  correctly.
+
 ### Quick win bundled with this audit (LOW)
 
 #### F-21-3 (LOW) — HomeSidebar DM section empty

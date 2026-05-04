@@ -70,6 +70,36 @@ export function permissionLevelToRole(level: number | undefined): MemberRole {
   return "member"
 }
 
+const ROLE_STRING_TO_LEVEL: Record<string, number> = {
+  owner: 3,
+  admin: 2,
+  moderator: 2,
+  mod: 1,
+  member: 0,
+  bot: 0,
+}
+
+/**
+ * Resolve a member entry to its prototype MemberRole. Backend `getGuildMembers`
+ * may return `permissionLevel` (int 0-3) OR `role` (string). Legacy hush-web
+ * supported both via `getMemberLevel`; this mirrors that fallback so the new
+ * shell stays compatible with both shapes.
+ */
+export function memberRoleFromRaw(raw: {
+  permissionLevel?: number | null
+  role?: string | null
+}): MemberRole {
+  if (typeof raw.permissionLevel === "number") {
+    return permissionLevelToRole(raw.permissionLevel)
+  }
+  if (typeof raw.role === "string" && raw.role) {
+    const level = ROLE_STRING_TO_LEVEL[raw.role.toLowerCase()]
+    if (typeof level === "number") return permissionLevelToRole(level)
+    if (raw.role === "bot") return "bot"
+  }
+  return "member"
+}
+
 /** Two-letter initials from a display/user name. Empty string returns "?". */
 export function deriveInitials(name: string): string {
   const trimmed = (name ?? "").trim()
