@@ -18,7 +18,20 @@ const Home = lazy(() => import('./pages/Home'));
 const Invite = lazy(() => import('./pages/Invite'));
 const LinkDevice = lazy(() => import('./pages/LinkDevice.jsx'));
 const Room = lazy(() => import('./pages/Room'));
-const Roadmap = lazy(() => import('./pages/Roadmap'));
+const RoadmapPage = lazy(() => import('./components/roadmap-page').then((m) => ({ default: m.RoadmapPage })));
+
+/**
+ * Route wrapper for the new shadcn-based RoadmapPage. Bridges the component's
+ * `onBack` prop to react-router's history. Falls back to "/" if no history.
+ */
+function RoadmapRoute() {
+  const navigate = useNavigate();
+  const handleBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/');
+  };
+  return <RoadmapPage onBack={handleBack} />;
+}
 const ServerLayout = lazy(() => import('./pages/ServerLayout'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 
@@ -120,7 +133,7 @@ function AppContent() {
           <Route path="/invite/:code" element={<Invite />} />
           <Route path="/link-device" element={<LinkDevice />} />
           <Route path="/room/:roomName" element={<Room />} />
-          <Route path="/roadmap" element={<Roadmap />} />
+          <Route path="/roadmap" element={<RoadmapRoute />} />
 
           {/* Everything else → login/PIN screen */}
           <Route path="*" element={<Home />} />
@@ -168,7 +181,7 @@ function AppContent() {
 
           {/* Utility pages */}
           <Route path="/room/:roomName" element={<Room />} />
-          <Route path="/roadmap" element={<Roadmap />} />
+          <Route path="/roadmap" element={<RoadmapRoute />} />
         </Routes>
       </Suspense>
     </>
