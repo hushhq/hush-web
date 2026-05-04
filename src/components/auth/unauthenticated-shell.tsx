@@ -81,6 +81,17 @@ export function UnauthenticatedShell() {
     }
   }, [pendingPin, user?.id, setPIN])
 
+  // While we're committing a deferred PIN from the sign-up wizard, suppress
+  // the standalone PinSetupPanel render — otherwise the user would see two
+  // PIN forms in a row.
+  if (pendingPin) {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+        Locking your vault…
+      </div>
+    )
+  }
+
   if (bootState === "needs_pin") return <PinUnlockPanel />
   if (bootState === "pin_setup") return <PinSetupPanel />
 

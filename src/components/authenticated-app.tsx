@@ -232,12 +232,19 @@ export function AuthenticatedApp() {
     [activeServer, allChannels, navigateToServer]
   )
 
-  // Auto-redirect to first text channel when no channel selected
+  // Auto-redirect to first text channel when no channel selected (server view)
   React.useEffect(() => {
     if (!activeServer || params.channelSlug) return
     const first = channels[0]
     if (first) navigateToServer(activeServer, first.id)
   }, [activeServer, params.channelSlug, channels, navigateToServer])
+
+  // Default to Catch-up surface when on /home with no channel slug
+  React.useEffect(() => {
+    if (activeServer || params.channelSlug) return
+    if (params.instance || params.guildSlug) return
+    navigate("/home/catch-up", { replace: true })
+  }, [activeServer, params.channelSlug, params.instance, params.guildSlug, navigate])
 
   const handleToggleMute = React.useCallback(() => {
     if (isDeafened) {
