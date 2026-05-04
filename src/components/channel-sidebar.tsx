@@ -48,6 +48,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog.tsx"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.tsx"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button.tsx"
@@ -182,6 +192,14 @@ interface ChannelSidebarProps {
   voice?: JoinedVoiceInfo
   onOpenServerSettings?: () => void
   onOpenUserSettings?: () => void
+  /** Create a new channel of the given kind. Resolves on success. */
+  onCreateChannel?: (kind: ChannelKind, name: string) => Promise<void>
+  /** Delete a channel. Confirmation handled by caller via wrapper if needed. */
+  onDeleteChannel?: (channelId: string) => Promise<void>
+  /** Create an invite for the active server. Returns the shareable URL. */
+  onCreateInvite?: () => Promise<string | null>
+  /** Whether the current user can perform admin actions (create/delete channel, invite). */
+  canAdministrate?: boolean
 }
 
 const CHANNELS_SECTION_LABEL = "Channels"
@@ -205,6 +223,10 @@ export function ChannelSidebar({
   voice,
   onOpenServerSettings,
   onOpenUserSettings,
+  onCreateChannel,
+  onDeleteChannel,
+  onCreateInvite,
+  canAdministrate = false,
 }: ChannelSidebarProps) {
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
 
@@ -219,6 +241,8 @@ export function ChannelSidebar({
             activeRailId={activeRailId}
             onSelectRail={onSelectRail}
             onOpenServerSettings={onOpenServerSettings}
+            onCreateInvite={onCreateInvite}
+            canAdministrate={canAdministrate}
           />
         </SidebarHeader>
         <SidebarContent className="show-native-scrollbar">
@@ -244,6 +268,9 @@ export function ChannelSidebar({
               onSelect={onSelectChannel}
               onCategoriesChange={onCategoriesChange}
               onChannelsChange={onChannelsChange}
+              onCreateChannel={onCreateChannel}
+              onDeleteChannel={onDeleteChannel}
+              canAdministrate={canAdministrate}
             />
           ) : null}
           {/* maybe for future: {apps.length > 0 ? <AppsSection apps={apps} /> : null} */}
@@ -292,6 +319,8 @@ function ServerHeader({
   activeRailId,
   onSelectRail,
   onOpenServerSettings,
+  onCreateInvite,
+  canAdministrate,
 }: {
   name: string
   plan?: string
@@ -299,8 +328,39 @@ function ServerHeader({
   activeRailId: string
   onSelectRail: (id: string) => void
   onOpenServerSettings?: () => void
+  onCreateInvite?: () => Promise<string | null>
+  canAdministrate?: boolean
 }) {
   const [leaveOpen, setLeaveOpen] = React.useState(false)
+  const [inviteOpen, setInviteOpen] = React.useState(false)
+  const [inviteUrl, setInviteUrl] = React.useState<string | null>(null)
+  const [inviteError, setInviteError] = React.useState<string | null>(null)
+  const [inviteBusy, setInviteBusy] = React.useState(false)
+  const [copied, setCopied] = React.useState(false)
+
+  const handleInvite = React.useCallback(async () => {
+    if (!onCreateInvite) return
+    setInviteBusy(true)
+    setInviteError(null)
+    setInviteUrl(null)
+    setCopied(false)
+    setInviteOpen(true)
+    try {
+      const url = await onCreateInvite()
+      setInviteUrl(url ?? null)
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Failed to create invite")
+    } finally {
+      setInviteBusy(false)
+    }
+  }, [onCreateInvite])
+
+  const handleCopy = React.useCallback(() => {
+    if (!inviteUrl) return
+    void navigator.clipboard?.writeText(inviteUrl)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }, [inviteUrl])
 
   return (
     <SidebarMenu>
@@ -358,8 +418,13 @@ function ServerHeader({
               <SettingsIcon className="size-4" />
               Server settings
             </DropdownMenuItem>
-            {/* TODO(yarin, 2026-05-04): wire to instanceApi.createInvite */}
-            <DropdownMenuItem disabled>
+            <DropdownMenuItem
+              disabled={!canAdministrate || !onCreateInvite}
+              onSelect={(event) => {
+                event.preventDefault()
+                void handleInvite()
+              }}
+            >
               <PlusIcon className="size-4" />
               Invite people
             </DropdownMenuItem>
@@ -399,6 +464,42 @@ function ServerHeader({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite people to {name}</DialogTitle>
+            <DialogDescription>
+              Share this link to let new members join. Single-use unless server
+              policy allows reuse.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            {inviteBusy ? (
+              <div className="text-sm text-muted-foreground">
+                Generating invite…
+              </div>
+            ) : inviteError ? (
+              <div className="text-sm text-destructive">{inviteError}</div>
+            ) : inviteUrl ? (
+              <div className="flex items-center gap-2">
+                <Input readOnly value={inviteUrl} className="font-mono text-xs" />
+                <Button type="button" size="sm" onClick={handleCopy}>
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setInviteOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarMenu>
   )
 }
@@ -478,6 +579,9 @@ interface ChannelsSectionProps {
   onSelect: (id: string) => void
   onCategoriesChange?: (next: ChannelCategory[]) => void
   onChannelsChange?: (next: Channel[]) => void
+  onCreateChannel?: (kind: ChannelKind, name: string) => Promise<void>
+  onDeleteChannel?: (channelId: string) => Promise<void>
+  canAdministrate?: boolean
 }
 
 function ChannelsSection({
@@ -487,7 +591,39 @@ function ChannelsSection({
   onSelect,
   onCategoriesChange,
   onChannelsChange,
+  onCreateChannel,
+  onDeleteChannel,
+  canAdministrate = false,
 }: ChannelsSectionProps) {
+  const [createOpen, setCreateOpen] = React.useState<ChannelKind | null>(null)
+  const [createName, setCreateName] = React.useState("")
+  const [createBusy, setCreateBusy] = React.useState(false)
+  const [createError, setCreateError] = React.useState<string | null>(null)
+
+  const openCreate = React.useCallback((kind: ChannelKind) => {
+    setCreateOpen(kind)
+    setCreateName("")
+    setCreateError(null)
+  }, [])
+
+  const submitCreate = React.useCallback(async () => {
+    if (!createOpen || !onCreateChannel) return
+    const name = createName.trim()
+    if (!name) {
+      setCreateError("Channel name required")
+      return
+    }
+    setCreateBusy(true)
+    setCreateError(null)
+    try {
+      await onCreateChannel(createOpen, name)
+      setCreateOpen(null)
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create channel")
+    } finally {
+      setCreateBusy(false)
+    }
+  }, [createOpen, createName, onCreateChannel])
   const [activeDrag, setActiveDrag] = React.useState<{
     id: string
     kind: DraggedKind
@@ -665,16 +801,28 @@ function ChannelsSection({
           </SidebarGroup>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
-          {/* TODO(yarin, 2026-05-04): wire to api.createCategory / createGuildChannel */}
+          {/* TODO(yarin, 2026-05-04): backend categories CRUD endpoint missing */}
           <ContextMenuItem disabled>
             <FolderPlusIcon className="size-4" />
             New category
           </ContextMenuItem>
-          <ContextMenuItem disabled>
+          <ContextMenuItem
+            disabled={!canAdministrate || !onCreateChannel}
+            onSelect={(event) => {
+              event.preventDefault()
+              openCreate("text")
+            }}
+          >
             <HashIcon className="size-4" />
             New text channel
           </ContextMenuItem>
-          <ContextMenuItem disabled>
+          <ContextMenuItem
+            disabled={!canAdministrate || !onCreateChannel}
+            onSelect={(event) => {
+              event.preventDefault()
+              openCreate("voice")
+            }}
+          >
             <Volume2Icon className="size-4" />
             New voice channel
           </ContextMenuItem>
@@ -694,6 +842,58 @@ function ChannelsSection({
           </div>
         ) : null}
       </DragOverlay>
+      <Dialog
+        open={createOpen !== null}
+        onOpenChange={(open) => {
+          if (!open) setCreateOpen(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              New {createOpen === "voice" ? "voice" : "text"} channel
+            </DialogTitle>
+            <DialogDescription>
+              Lowercase letters, numbers, and dashes recommended.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-3 py-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void submitCreate()
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cs-create-channel-name">Channel name</Label>
+              <Input
+                id="cs-create-channel-name"
+                autoFocus
+                value={createName}
+                onChange={(event) => setCreateName(event.target.value)}
+                disabled={createBusy}
+                placeholder="general"
+              />
+            </div>
+            {createError ? (
+              <div className="text-sm text-destructive">{createError}</div>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setCreateOpen(null)}
+                disabled={createBusy}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createBusy || !createName.trim()}>
+                {createBusy ? "Creating…" : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </DndContext>
   )
 }

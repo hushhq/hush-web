@@ -56,7 +56,12 @@ import * as mlsStore from "@/lib/mlsStore"
 // @ts-expect-error legacy JS
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
 // @ts-expect-error legacy JS
-import { kickUser } from "@/lib/api"
+import {
+  kickUser,
+  createGuildChannel,
+  deleteGuildChannel,
+  createGuildInvite,
+} from "@/lib/api"
 import type { ServerMember } from "@/components/members-sidebar"
 
 import {
@@ -141,12 +146,17 @@ export function AuthenticatedApp() {
   const wsClient = instanceUrl ? getWsClient(instanceUrl) : null
   const currentUserId = user?.id ?? ""
 
-  const { categories, channels, onCategoriesChange, onChannelsChange } =
-    useChannelsForServer({
-      serverId: activeServer?.id ?? null,
-      token,
-      baseUrl,
-    })
+  const {
+    categories,
+    channels,
+    onCategoriesChange,
+    onChannelsChange,
+    refetch: refetchChannels,
+  } = useChannelsForServer({
+    serverId: activeServer?.id ?? null,
+    token,
+    baseUrl,
+  })
   const { members, refetch: refetchMembers } = useMembersForServer({
     serverId: activeServer?.id ?? null,
     token,
@@ -171,6 +181,39 @@ export function AuthenticatedApp() {
     },
     [activeServer, token, baseUrl, refetchMembers]
   )
+
+  const canAdministrate =
+    currentUserRole === "owner" || currentUserRole === "admin"
+
+  const handleCreateChannel = React.useCallback(
+    async (kind: "text" | "voice", name: string) => {
+      if (!activeServer || !token) return
+      await createGuildChannel(token, activeServer.id, { name, type: kind }, baseUrl)
+      await refetchChannels()
+    },
+    [activeServer, token, baseUrl, refetchChannels]
+  )
+
+  const handleDeleteChannel = React.useCallback(
+    async (channelId: string) => {
+      if (!activeServer || !token) return
+      await deleteGuildChannel(token, activeServer.id, channelId, baseUrl)
+      await refetchChannels()
+    },
+    [activeServer, token, baseUrl, refetchChannels]
+  )
+
+  const handleCreateInvite = React.useCallback(async (): Promise<string | null> => {
+    if (!activeServer || !token || !instanceUrl) return null
+    const result = (await createGuildInvite(token, activeServer.id, {}, baseUrl)) as {
+      code?: string
+      inviteCode?: string
+    }
+    const code = result.code ?? result.inviteCode
+    if (!code) return null
+    const host = new URL(instanceUrl).host
+    return `${window.location.origin}/join/${encodeURIComponent(host)}/${encodeURIComponent(code)}`
+  }, [activeServer, token, baseUrl, instanceUrl])
 
   const allChannels = React.useMemo(
     () => [
@@ -552,6 +595,10 @@ export function AuthenticatedApp() {
                 voice={voiceProps}
                 onOpenServerSettings={() => setIsServerSettingsOpen(true)}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                onCreateChannel={handleCreateChannel}
+                onDeleteChannel={handleDeleteChannel}
+                onCreateInvite={handleCreateInvite}
+                canAdministrate={canAdministrate}
               />
             : <HomeSidebar
                 user={sidebarUser}
@@ -596,6 +643,10 @@ export function AuthenticatedApp() {
                   voice={voiceProps}
                   onOpenServerSettings={() => setIsServerSettingsOpen(true)}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  onCreateChannel={handleCreateChannel}
+                  onDeleteChannel={handleDeleteChannel}
+                  onCreateInvite={handleCreateInvite}
+                  canAdministrate={canAdministrate}
                 />
               ) : (
                 <HomeSidebar
