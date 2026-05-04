@@ -440,6 +440,21 @@ export function AuthenticatedApp() {
   const isViewingVoice =
     joinedVoice != null && activeChannel.id === joinedVoice.channelId
   const joinedVoiceInstanceUrl = joinedVoice?.instanceUrl ?? null
+  // Voice connection lives on the joined-voice instance, not the
+  // currently-navigated channel's instance. When the user navigates to
+  // another instance while in voice, the VoiceChannel mount must keep
+  // talking to the original instance's wsClient + token. Otherwise the
+  // MLS voice group / WebSocket diverges from the active session.
+  const voiceToken = joinedVoiceInstanceUrl
+    ? getTokenForInstance(joinedVoiceInstanceUrl)
+    : null
+  const voiceWsClient = joinedVoiceInstanceUrl
+    ? getWsClient(joinedVoiceInstanceUrl)
+    : null
+  const voiceGetToken = React.useCallback(
+    () => voiceToken,
+    [voiceToken]
+  )
 
   const handleJumpToVoice = React.useCallback(() => {
     if (!joinedVoice) return
@@ -798,10 +813,16 @@ export function AuthenticatedApp() {
                       type: "voice",
                     }}
                     serverId={joinedVoice.serverId}
-                    getToken={getToken}
-                    wsClient={wsClient}
-                    members={members}
-                    myRole={currentUserRole ?? "member"}
+                    getToken={voiceGetToken}
+                    wsClient={voiceWsClient}
+                    members={
+                      activeServer?.id === joinedVoice.serverId ? members : []
+                    }
+                    myRole={
+                      activeServer?.id === joinedVoice.serverId
+                        ? currentUserRole ?? "member"
+                        : "member"
+                    }
                     onLeave={handleVoiceLeave}
                     voiceControlsRef={voiceControlsRef}
                     onVoiceStateChange={handleVoiceStateChange}
