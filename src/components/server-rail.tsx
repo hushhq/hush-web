@@ -207,39 +207,45 @@ function RailServer({
         <ContextMenuLabel className="text-xs text-muted-foreground">
           {server.name}
         </ContextMenuLabel>
+        {/* TODO(yarin, 2026-05-04): mute presets need notification mute backend */}
         <ContextMenuSub>
-          <ContextMenuSubTrigger>
+          <ContextMenuSubTrigger disabled>
             <BellOffIcon className="size-4" />
             Mute server
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            <ContextMenuItem>For 15 minutes</ContextMenuItem>
-            <ContextMenuItem>For 1 hour</ContextMenuItem>
-            <ContextMenuItem>For 8 hours</ContextMenuItem>
-            <ContextMenuItem>Until tomorrow</ContextMenuItem>
+            <ContextMenuItem disabled>For 15 minutes</ContextMenuItem>
+            <ContextMenuItem disabled>For 1 hour</ContextMenuItem>
+            <ContextMenuItem disabled>For 8 hours</ContextMenuItem>
+            <ContextMenuItem disabled>Until tomorrow</ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem>Until I turn it back on</ContextMenuItem>
+            <ContextMenuItem disabled>Until I turn it back on</ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
-        <ContextMenuItem>
+        {/* TODO(yarin, 2026-05-04): per-server notification prefs not implemented */}
+        <ContextMenuItem disabled>
           <BellIcon className="size-4" />
           Notification settings
         </ContextMenuItem>
-        <ContextMenuItem>
+        {/* TODO(yarin, 2026-05-04): wire to wsClient mark-read on all channels */}
+        <ContextMenuItem disabled>
           <CheckCheckIcon className="size-4" />
           Mark server as read
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem>
+        {/* TODO(yarin, 2026-05-04): server settings dialog wiring */}
+        <ContextMenuItem disabled>
           <SettingsIcon className="size-4" />
           Server settings
         </ContextMenuItem>
-        <ContextMenuItem>
+        {/* TODO(yarin, 2026-05-04): privacy prefs not implemented */}
+        <ContextMenuItem disabled>
           <ShieldIcon className="size-4" />
           Privacy settings
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive">
+        {/* TODO(yarin, 2026-05-04): wire to instanceApi.leaveGuild */}
+        <ContextMenuItem variant="destructive" disabled>
           <LogOutIcon className="size-4" />
           Leave server
         </ContextMenuItem>

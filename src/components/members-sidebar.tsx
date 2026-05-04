@@ -156,27 +156,35 @@ function MemberRow({ member }: { member: ServerMember }) {
             <UserIcon />
             View profile
           </ContextMenuItem>
-          <ContextMenuItem>
+          {/* TODO(yarin, 2026-05-04): DM channel backend not implemented */}
+          <ContextMenuItem disabled>
             <MessageSquareIcon />
             Send message
           </ContextMenuItem>
-          <ContextMenuItem>
+          {/* TODO(yarin, 2026-05-04): mention insertion needs composer ref bridge */}
+          <ContextMenuItem disabled>
             <AtSignIcon />
             Mention in channel
           </ContextMenuItem>
-          <ContextMenuItem>
+          {/* TODO(yarin, 2026-05-04): friend graph backend not implemented */}
+          <ContextMenuItem disabled>
             <UserPlusIcon />
             Add friend
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              void navigator.clipboard?.writeText(member.id)
+            }}
+          >
             <CopyIcon />
             Copy user ID
           </ContextMenuItem>
           {member.role !== "owner" ? (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive">
+              {/* TODO(yarin, 2026-05-04): wire to instanceApi.kickMember */}
+              <ContextMenuItem variant="destructive" disabled>
                 <BanIcon />
                 Kick from server
               </ContextMenuItem>

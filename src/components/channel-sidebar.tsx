@@ -358,11 +358,13 @@ function ServerHeader({
               <SettingsIcon className="size-4" />
               Server settings
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            {/* TODO(yarin, 2026-05-04): wire to instanceApi.createInvite */}
+            <DropdownMenuItem disabled>
               <PlusIcon className="size-4" />
               Invite people
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            {/* TODO(yarin, 2026-05-04): backend integrations not implemented */}
+            <DropdownMenuItem disabled>
               <PuzzleIcon className="size-4" />
               Manage integrations
             </DropdownMenuItem>
@@ -663,15 +665,16 @@ function ChannelsSection({
           </SidebarGroup>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
-          <ContextMenuItem>
+          {/* TODO(yarin, 2026-05-04): wire to api.createCategory / createGuildChannel */}
+          <ContextMenuItem disabled>
             <FolderPlusIcon className="size-4" />
             New category
           </ContextMenuItem>
-          <ContextMenuItem>
+          <ContextMenuItem disabled>
             <HashIcon className="size-4" />
             New text channel
           </ContextMenuItem>
-          <ContextMenuItem>
+          <ContextMenuItem disabled>
             <Volume2Icon className="size-4" />
             New voice channel
           </ContextMenuItem>

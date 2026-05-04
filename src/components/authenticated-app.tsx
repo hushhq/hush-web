@@ -163,11 +163,15 @@ export function AuthenticatedApp() {
     [channels]
   )
 
+  // Fallback chain: exact slug match → first real text channel (skip placeholder
+  // SYSTEM_CHANNELS which have no backend) → empty stub. Avoids mounting Chat.jsx
+  // on a fake channel id like "server-log" when channelSlug is missing/invalid.
   const activeChannel = React.useMemo(
     () =>
       allChannels.find((c) => c.id === params.channelSlug) ??
-      allChannels[0] ?? { id: "", name: "Channel", kind: "text" as const },
-    [allChannels, params.channelSlug]
+      channels.find((c) => c.kind === "text") ??
+      { id: "", name: "Channel", kind: "text" as const },
+    [allChannels, channels, params.channelSlug]
   )
 
   // Mock voice / favorites state (UI only until backend lands).
@@ -432,8 +436,14 @@ export function AuthenticatedApp() {
   const isCatchUp = isHomeSurface && params.channelSlug === "catch-up"
   const isFavoritesSurface = isHomeSurface && params.channelSlug === "favorites"
 
+  // Guard against SYSTEM_CHANNELS (server-log/moderation placeholders) — those
+  // ids have no backend channel and would crash MLS group lookup in Chat.jsx.
+  const isSystemChannel = SYSTEM_CHANNELS.some((s) => s.id === activeChannel.id)
   const chatBody =
-    activeServer && activeChannel.kind === "text" && activeChannel.id ? (
+    activeServer &&
+    activeChannel.kind === "text" &&
+    activeChannel.id &&
+    !isSystemChannel ? (
       <Chat
         channelId={activeChannel.id}
         serverId={activeServer.id}
