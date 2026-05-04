@@ -105,6 +105,7 @@ export function UnauthenticatedShell() {
   return (
     <AuthFlow
       instanceProps={instanceProps}
+      instanceUrl={selectedInstanceUrl}
       signIn={signIn}
       signUp={signUp}
       onOpenRoadmap={() => navigate("/roadmap")}

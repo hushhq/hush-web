@@ -27,6 +27,8 @@ import { InstanceSelector } from "@/components/auth/instance-selector"
 import { HushLogo } from "@/components/brand/HushLogo"
 // @ts-expect-error legacy JS
 import { generateIdentityMnemonic } from "@/lib/bip39Identity"
+// @ts-expect-error legacy JS
+import { checkUsernameAvailable } from "@/lib/api"
 
 type AuthView = "main" | "sign-in" | "link" | "sign-up"
 
@@ -46,6 +48,8 @@ interface SignUpPayload {
 
 interface AuthFlowProps {
   instanceProps: InstanceProps
+  /** Full URL of the active instance (used for backend reachability checks). */
+  instanceUrl: string
   signIn: (mnemonic: string) => Promise<void> | void
   signUp: (payload: SignUpPayload) => Promise<void> | void
   onOpenRoadmap?: () => void
@@ -54,6 +58,7 @@ interface AuthFlowProps {
 
 export function AuthFlow({
   instanceProps,
+  instanceUrl,
   signIn,
   signUp,
   onOpenRoadmap,
@@ -99,6 +104,7 @@ export function AuthFlow({
               onComplete={signUp}
               onOpenRoadmap={onOpenRoadmap}
               instanceProps={instanceProps}
+              instanceUrl={instanceUrl}
               versionLabel={versionLabel}
             />
           )}
@@ -474,17 +480,21 @@ function SignUpPanel({
   onComplete,
   onOpenRoadmap,
   instanceProps,
+  instanceUrl,
   versionLabel,
 }: {
   onBack: () => void
   onComplete: (payload: SignUpPayload) => Promise<void> | void
   onOpenRoadmap?: () => void
   instanceProps: InstanceProps
+  instanceUrl: string
   versionLabel: string
 }) {
   const [step, setStep] = React.useState(0)
   const [username, setUsername] = React.useState("")
   const [displayName, setDisplayName] = React.useState("")
+  const [usernameAvailable, setUsernameAvailable] = React.useState<boolean | null>(null)
+  const [usernameChecking, setUsernameChecking] = React.useState(false)
   const [pin, setPin] = React.useState("")
   const [pinValid, setPinValid] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
@@ -544,6 +554,11 @@ function SignUpPanel({
           displayName={displayName}
           onUsername={setUsername}
           onDisplayName={setDisplayName}
+          instanceUrl={instanceUrl}
+          available={usernameAvailable}
+          onAvailableChange={setUsernameAvailable}
+          checking={usernameChecking}
+          onCheckingChange={setUsernameChecking}
         />
       ) : step === 1 ? (
         <PassphraseStep words={mnemonicWords} />
@@ -570,7 +585,8 @@ function SignUpPanel({
           onClick={next}
           disabled={
             submitting ||
-            (step === 0 && !username.trim()) ||
+            (step === 0 &&
+              (!username.trim() || usernameChecking || usernameAvailable !== true)) ||
             (step === totalSteps - 1 && !pinValid)
           }
         >
@@ -597,17 +613,91 @@ function SignUpPanel({
   )
 }
 
+const USERNAME_RE = /^[a-z0-9_-]{3,32}$/
+
 function UsernameStep({
   username,
   displayName,
   onUsername,
   onDisplayName,
+  instanceUrl,
+  available,
+  onAvailableChange,
+  checking,
+  onCheckingChange,
 }: {
   username: string
   displayName: string
   onUsername: (value: string) => void
   onDisplayName: (value: string) => void
+  instanceUrl: string
+  available: boolean | null
+  onAvailableChange: (value: boolean | null) => void
+  checking: boolean
+  onCheckingChange: (value: boolean) => void
 }) {
+  const trimmed = username.trim().toLowerCase()
+  const isValidShape = USERNAME_RE.test(trimmed)
+
+  // Debounced availability check.
+  React.useEffect(() => {
+    if (!isValidShape) {
+      onAvailableChange(null)
+      onCheckingChange(false)
+      return
+    }
+    let cancelled = false
+    const controller = new AbortController()
+    onCheckingChange(true)
+    const id = window.setTimeout(async () => {
+      try {
+        const ok = await checkUsernameAvailable(trimmed, instanceUrl, controller.signal)
+        if (!cancelled) onAvailableChange(Boolean(ok))
+      } catch {
+        if (!cancelled) onAvailableChange(null)
+      } finally {
+        if (!cancelled) onCheckingChange(false)
+      }
+    }, 400)
+    return () => {
+      cancelled = true
+      controller.abort()
+      window.clearTimeout(id)
+      onCheckingChange(false)
+    }
+  }, [trimmed, isValidShape, instanceUrl, onAvailableChange, onCheckingChange])
+
+  let feedback: React.ReactNode = null
+  if (!username) {
+    feedback = null
+  } else if (!isValidShape) {
+    feedback = (
+      <span className="text-xs text-muted-foreground">
+        3–32 chars: lowercase letters, digits, dashes, underscores
+      </span>
+    )
+  } else if (checking) {
+    feedback = <span className="text-xs text-muted-foreground">Checking…</span>
+  } else if (available === true) {
+    feedback = (
+      <span className="text-xs text-success font-medium">
+        @{trimmed} is available
+      </span>
+    )
+  } else if (available === false) {
+    feedback = (
+      <span className="text-xs text-destructive font-medium">
+        @{trimmed} is already taken
+      </span>
+    )
+  } else {
+    feedback = (
+      <span className="text-xs text-muted-foreground">
+        Could not reach instance — check connection
+      </span>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -626,7 +716,9 @@ function UsernameStep({
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
+          aria-invalid={available === false || (Boolean(username) && !isValidShape)}
         />
+        {feedback}
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="signup-display">
