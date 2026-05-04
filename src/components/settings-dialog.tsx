@@ -5,7 +5,7 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog.tsx"
 import {
   Sidebar,
   SidebarContent,
@@ -16,7 +16,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator.tsx"
 import { cn } from "@/lib/utils"
 
 export interface SettingsSection {

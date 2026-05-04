@@ -6,7 +6,7 @@ import {
 } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { ScrollArea } from "@/components/ui/scroll-area.tsx"
 import { cn } from "@/lib/utils"
 
 type InboxItem = {

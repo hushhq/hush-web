@@ -29,7 +29,7 @@ import * as React from "react";
 import { FileTextIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 
 export interface ChatToolbarProps extends React.ComponentProps<"div"> {
   children?: React.ReactNode;

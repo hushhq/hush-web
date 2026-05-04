@@ -38,6 +38,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@radix-ui/themes": "^3.3.0",
     "@scure/bip39": "^2.0.1",
     "@streamdown/code": "^1.1.1",
     "@tailwindcss/vite": "^4.2.4",

@@ -16,12 +16,12 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu"
+} from "@/components/ui/context-menu.tsx"
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
-} from "@/components/ui/popover"
+} from "@/components/ui/popover.tsx"
 import {
   Sheet,
   SheetContent,

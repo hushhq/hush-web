@@ -4,9 +4,9 @@ import { Slot } from "radix-ui"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button.tsx"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator.tsx"
 import {
   Sheet,
   SheetContent,
@@ -19,7 +19,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "@/components/ui/tooltip.tsx"
 import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"

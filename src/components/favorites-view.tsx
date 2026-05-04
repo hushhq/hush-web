@@ -1,8 +1,8 @@
 import { StarIcon, HashIcon, Volume2Icon, XIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+import { Button } from "@/components/ui/button.tsx"
+import { Separator } from "@/components/ui/separator.tsx"
 import { MessageContent } from "@/components/message-content"
 
 interface FavoriteEntry {

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { MicIcon, MicOffIcon, VideoIcon, VideoOffIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button.tsx"
 import {
   Card,
   CardContent,
@@ -15,7 +15,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select.tsx"
 import { cn } from "@/lib/utils"
 
 export interface JoinSettings {

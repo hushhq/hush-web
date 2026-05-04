@@ -12,7 +12,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator.tsx"
 import { ConfirmAction } from "@/components/confirm-action"
 import {
   SettingsDialog,

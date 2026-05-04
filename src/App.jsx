@@ -14,13 +14,31 @@ import { PostRecoveryWizard } from './components/PostRecoveryWizard';
 // Apply stored theme before first paint to avoid FOUC.
 applyThemeMode(getStoredThemeMode());
 
-const Home = lazy(() => import('./pages/Home'));
+const UnauthenticatedShell = lazy(() =>
+  import('./components/auth/unauthenticated-shell').then((m) => ({
+    default: m.UnauthenticatedShell,
+  }))
+);
 const Invite = lazy(() => import('./pages/Invite'));
 const LinkDevice = lazy(() => import('./pages/LinkDevice.jsx'));
 const Room = lazy(() => import('./pages/Room'));
-const Roadmap = lazy(() => import('./pages/Roadmap'));
+const RoadmapPage = lazy(() =>
+  import('./components/roadmap-page').then((m) => ({ default: m.RoadmapPage }))
+);
 const ServerLayout = lazy(() => import('./pages/ServerLayout'));
+const AuthenticatedApp = lazy(() =>
+  import('./components/authenticated-app').then((m) => ({ default: m.AuthenticatedApp }))
+);
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
+
+function RoadmapRoute() {
+  const navigate = useNavigate();
+  const handleBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/');
+  };
+  return <RoadmapPage onBack={handleBack} />;
+}
 
 const fallback = (
   <div style={{
@@ -120,10 +138,10 @@ function AppContent() {
           <Route path="/invite/:code" element={<Invite />} />
           <Route path="/link-device" element={<LinkDevice />} />
           <Route path="/room/:roomName" element={<Room />} />
-          <Route path="/roadmap" element={<Roadmap />} />
+          <Route path="/roadmap" element={<RoadmapRoute />} />
 
           {/* Everything else → login/PIN screen */}
-          <Route path="*" element={<Home />} />
+          <Route path="*" element={<UnauthenticatedShell />} />
         </Routes>
       </Suspense>
     );
@@ -141,7 +159,8 @@ function AppContent() {
           <Route path="/" element={<PostLoginRedirect />} />
 
           {/* DM landing / no-guild empty state */}
-          <Route path="/home" element={<ServerLayout />} />
+          <Route path="/home" element={<AuthenticatedApp />} />
+          <Route path="/home/:channelSlug" element={<AuthenticatedApp />} />
 
           {/* Guild discovery */}
           <Route path="/explore" element={<ExplorePage />} />
@@ -156,7 +175,7 @@ function AppContent() {
           <Route path="/link-device" element={<LinkDevice />} />
 
           {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
-          <Route path="/:instance/:guildSlug/:channelSlug?" element={<ServerLayout />} />
+          <Route path="/:instance/:guildSlug/:channelSlug?" element={<AuthenticatedApp />} />
 
           {/* Legacy: /servers/:serverId/* */}
           <Route path="/servers/:serverId/*" element={<ServerLayout />} />
@@ -168,7 +187,7 @@ function AppContent() {
 
           {/* Utility pages */}
           <Route path="/room/:roomName" element={<Room />} />
-          <Route path="/roadmap" element={<Roadmap />} />
+          <Route path="/roadmap" element={<RoadmapRoute />} />
         </Routes>
       </Suspense>
     </>

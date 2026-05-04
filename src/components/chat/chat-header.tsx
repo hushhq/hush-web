@@ -21,7 +21,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 
 type AvatarProps = React.ComponentProps<typeof Avatar>;
 type AvatarImageProps = React.ComponentProps<typeof AvatarImage>;

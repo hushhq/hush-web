@@ -1,50 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { TooltipProvider } from './components/ui';
-import { Theme } from '@radix-ui/themes';
+import { TooltipProvider } from './components/ui/tooltip.tsx';
 import App from './App';
-import '@radix-ui/themes/styles.css';
+import '@fontsource-variable/geist';
 import './styles/global.css';
-
-/**
- * Resolve the app's active theme into a Radix Themes appearance value.
- * The app stores the active CSS class name in `data-theme` on <html>.
- * Anything containing "light" maps to Radix "light"; everything else is "dark".
- */
-function resolveRadixAppearance() {
-  const theme = document.documentElement.dataset.theme || '';
-  return theme.includes('light') ? 'light' : 'dark';
-}
-
-function RadixThemeWrapper({ children }) {
-  const [appearance, setAppearance] = useState(resolveRadixAppearance);
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setAppearance(resolveRadixAppearance());
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <Theme
-      appearance={appearance}
-      hasBackground={false}
-      accentColor="amber"
-      grayColor="mauve"
-      panelBackground="solid"
-      radius="medium"
-      scaling="100%"
-    >
-      {children}
-    </Theme>
-  );
-}
 
 // Dev-only: console log buffer + dev toolbar + eruda mobile console.
 if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_TOOLBAR === 'true') {
@@ -224,9 +184,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       }}
     >
       <TooltipProvider>
-        <RadixThemeWrapper>
-          <App />
-        </RadixThemeWrapper>
+        <App />
       </TooltipProvider>
     </BrowserRouter>
   </React.StrictMode>

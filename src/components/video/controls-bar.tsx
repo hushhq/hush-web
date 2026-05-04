@@ -13,7 +13,7 @@ import {
   useRoomContext,
 } from "@livekit/components-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 

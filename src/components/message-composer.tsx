@@ -6,7 +6,7 @@ import {
   ChatToolbarAddon,
   ChatToolbarButton,
   ChatToolbarAttachmentButton,
-} from "@/components/chat"
+} from "@/components/chat/index"
 import {
   NovelComposer,
   type NovelComposerHandle,

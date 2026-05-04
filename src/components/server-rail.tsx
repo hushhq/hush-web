@@ -12,7 +12,7 @@ import {
   LogOutIcon,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button.tsx"
 import { cn } from "@/lib/utils"
 import {
   ContextMenu,
@@ -24,12 +24,12 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu"
+} from "@/components/ui/context-menu.tsx"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from "@/components/ui/tooltip.tsx"
 
 type Server = {
   id: string

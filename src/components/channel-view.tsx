@@ -18,7 +18,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator.tsx"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { TextChannelView } from "@/components/text-channel-view"
 import { ThreadPanel } from "@/components/thread-panel"

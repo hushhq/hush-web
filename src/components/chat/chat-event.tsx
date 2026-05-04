@@ -43,7 +43,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 import { useMemo } from "react";
 
 type AvatarProps = React.ComponentProps<typeof Avatar>;

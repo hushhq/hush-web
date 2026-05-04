@@ -1,14 +1,14 @@
 import * as React from "react"
 import { CheckIcon, PencilIcon, PlusIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button.tsx"
 import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { Separator } from "@/components/ui/separator"
+} from "@/components/ui/popover.tsx"
+import { Separator } from "@/components/ui/separator.tsx"
 import { cn } from "@/lib/utils"
 
 interface InstanceSelectorProps {

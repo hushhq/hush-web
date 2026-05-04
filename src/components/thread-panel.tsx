@@ -2,9 +2,9 @@ import * as React from "react"
 import { XIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+import { Button } from "@/components/ui/button.tsx"
+import { ScrollArea } from "@/components/ui/scroll-area.tsx"
+import { Separator } from "@/components/ui/separator.tsx"
 import { MessageComposer } from "@/components/message-composer"
 import { MessageContent } from "@/components/message-content"
 

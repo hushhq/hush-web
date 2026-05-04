@@ -9,58 +9,62 @@ import {
   RefreshCwIcon,
 } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
+import { Separator } from "@/components/ui/separator.tsx"
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/components/ui/tabs"
+} from "@/components/ui/tabs.tsx"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 import { InstanceSelector } from "@/components/auth/instance-selector"
-import { RoadmapPage } from "@/components/roadmap-page"
+import { HushLogo } from "@/components/brand/HushLogo"
+// @ts-expect-error legacy JS
+import { generateIdentityMnemonic } from "@/lib/bip39Identity"
 
-type AuthView = "main" | "sign-in" | "link" | "sign-up" | "roadmap"
+type AuthView = "main" | "sign-in" | "link" | "sign-up"
 
-interface AuthFlowProps {
-  onSignedIn: () => void
+interface InstanceProps {
+  instances: string[]
+  active: string
+  onSelect: (value: string) => void
+  onAdd: (value: string) => void
 }
 
-const DEFAULT_INSTANCES = ["app.gethush.live"]
-const VERSION_LABEL = "v0.7.0-alpha"
+interface SignUpPayload {
+  username: string
+  displayName: string
+  mnemonic: string
+  pin: string
+}
 
-export function AuthFlow({ onSignedIn }: AuthFlowProps) {
+interface AuthFlowProps {
+  instanceProps: InstanceProps
+  signIn: (mnemonic: string) => Promise<void> | void
+  signUp: (payload: SignUpPayload) => Promise<void> | void
+  onOpenRoadmap?: () => void
+  versionLabel?: string
+}
+
+export function AuthFlow({
+  instanceProps,
+  signIn,
+  signUp,
+  onOpenRoadmap,
+  versionLabel = "v0.7.0-alpha",
+}: AuthFlowProps) {
   const [view, setView] = React.useState<AuthView>("main")
-  const [instances, setInstances] = React.useState<string[]>(DEFAULT_INSTANCES)
-  const [activeInstance, setActiveInstance] = React.useState(
-    DEFAULT_INSTANCES[0]
-  )
-
-  const handleAddInstance = (value: string) => {
-    setInstances((prev) => (prev.includes(value) ? prev : [...prev, value]))
-  }
-
-  const instanceProps = {
-    instances,
-    active: activeInstance,
-    onSelect: setActiveInstance,
-    onAdd: handleAddInstance,
-  }
-
-  if (view === "roadmap") {
-    return <RoadmapPage onBack={() => setView("main")} />
-  }
 
   return (
     <div className="flex min-h-svh w-full items-center justify-center bg-background p-6">
       <div className="flex w-full max-w-md flex-col items-center gap-8">
-        <HushMark />
+        <HushLogo className="h-10 w-10" />
         <h1 className="text-2xl font-semibold tracking-tight">
           {titleFor(view)}
         </h1>
@@ -70,28 +74,32 @@ export function AuthFlow({ onSignedIn }: AuthFlowProps) {
               onSignIn={() => setView("sign-in")}
               onLink={() => setView("link")}
               onSignUp={() => setView("sign-up")}
-              onOpenRoadmap={() => setView("roadmap")}
+              onOpenRoadmap={onOpenRoadmap}
               instanceProps={instanceProps}
+              versionLabel={versionLabel}
             />
           ) : view === "sign-in" ? (
             <SignInPanel
               onBack={() => setView("main")}
-              onContinue={onSignedIn}
-              onOpenRoadmap={() => setView("roadmap")}
+              onContinue={signIn}
+              onOpenRoadmap={onOpenRoadmap}
               instanceProps={instanceProps}
+              versionLabel={versionLabel}
             />
           ) : view === "link" ? (
             <LinkDevicePanel
               onBack={() => setView("main")}
-              onOpenRoadmap={() => setView("roadmap")}
+              onOpenRoadmap={onOpenRoadmap}
               instanceProps={instanceProps}
+              versionLabel={versionLabel}
             />
           ) : (
             <SignUpPanel
               onBack={() => setView("main")}
-              onComplete={onSignedIn}
-              onOpenRoadmap={() => setView("roadmap")}
+              onComplete={signUp}
+              onOpenRoadmap={onOpenRoadmap}
               instanceProps={instanceProps}
+              versionLabel={versionLabel}
             />
           )}
         </Card>
@@ -108,32 +116,17 @@ function titleFor(view: AuthView): string {
       return "Log in to Hush"
     case "sign-up":
       return "Welcome to Hush"
-    case "roadmap":
-      return "Roadmap"
   }
-}
-
-function HushMark() {
-  return (
-    <div className="flex size-10 items-center justify-center rounded-md text-2xl font-black leading-none tracking-tight">
-      h.
-    </div>
-  )
-}
-
-interface InstanceProps {
-  instances: string[]
-  active: string
-  onSelect: (value: string) => void
-  onAdd: (value: string) => void
 }
 
 function PanelFooter({
   instanceProps,
   onOpenRoadmap,
+  versionLabel,
 }: {
   instanceProps: InstanceProps
   onOpenRoadmap?: () => void
+  versionLabel: string
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -154,7 +147,7 @@ function PanelFooter({
         </button>
       </p>
       <p className="text-center font-mono text-[10px] text-muted-foreground/70">
-        {VERSION_LABEL}
+        {versionLabel}
       </p>
     </div>
   )
@@ -166,12 +159,14 @@ function MainPanel({
   onSignUp,
   onOpenRoadmap,
   instanceProps,
+  versionLabel,
 }: {
   onSignIn: () => void
   onLink: () => void
   onSignUp: () => void
   onOpenRoadmap?: () => void
   instanceProps: InstanceProps
+  versionLabel: string
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -201,6 +196,7 @@ function MainPanel({
       <PanelFooter
         instanceProps={instanceProps}
         onOpenRoadmap={onOpenRoadmap}
+        versionLabel={versionLabel}
       />
     </div>
   )
@@ -211,17 +207,35 @@ function SignInPanel({
   onContinue,
   onOpenRoadmap,
   instanceProps,
+  versionLabel,
 }: {
   onBack: () => void
-  onContinue: () => void
+  onContinue: (mnemonic: string) => Promise<void> | void
   onOpenRoadmap?: () => void
   instanceProps: InstanceProps
+  versionLabel: string
 }) {
   const [words, setWords] = React.useState<string[]>(() =>
     Array.from({ length: 12 }, () => "")
   )
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
   const filled = words.filter((w) => w.trim().length > 0).length
   const valid = filled === 12
+
+  const handleSubmit = async () => {
+    if (!valid || submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const mnemonic = words.map((w) => w.trim().toLowerCase()).join(" ")
+      await onContinue(mnemonic)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -239,20 +253,26 @@ function SignInPanel({
           {valid ? "Looks good" : "Fill all 12 cells"}
         </span>
       </div>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
       <Separator />
       <div className="flex items-center justify-between gap-3">
-        <Button variant="ghost" onClick={onBack}>
+        <Button variant="ghost" onClick={onBack} disabled={submitting}>
           <ArrowLeftIcon />
           Back
         </Button>
-        <Button onClick={onContinue} disabled={!valid}>
+        <Button onClick={handleSubmit} disabled={!valid || submitting}>
           <ArrowRightIcon />
-          Continue
+          {submitting ? "Signing in…" : "Continue"}
         </Button>
       </div>
       <PanelFooter
         instanceProps={instanceProps}
         onOpenRoadmap={onOpenRoadmap}
+        versionLabel={versionLabel}
       />
     </div>
   )
@@ -349,10 +369,12 @@ function LinkDevicePanel({
   onBack,
   onOpenRoadmap,
   instanceProps,
+  versionLabel,
 }: {
   onBack: () => void
   onOpenRoadmap?: () => void
   instanceProps: InstanceProps
+  versionLabel: string
 }) {
   const [secondsLeft, setSecondsLeft] = React.useState(4 * 60)
   const [copied, setCopied] = React.useState(false)
@@ -441,6 +463,7 @@ function LinkDevicePanel({
       <PanelFooter
         instanceProps={instanceProps}
         onOpenRoadmap={onOpenRoadmap}
+        versionLabel={versionLabel}
       />
     </div>
   )
@@ -451,27 +474,49 @@ function SignUpPanel({
   onComplete,
   onOpenRoadmap,
   instanceProps,
+  versionLabel,
 }: {
   onBack: () => void
-  onComplete: () => void
+  onComplete: (payload: SignUpPayload) => Promise<void> | void
   onOpenRoadmap?: () => void
   instanceProps: InstanceProps
+  versionLabel: string
 }) {
   const [step, setStep] = React.useState(0)
   const [username, setUsername] = React.useState("")
   const [displayName, setDisplayName] = React.useState("")
+  const [pin, setPin] = React.useState("")
   const [pinValid, setPinValid] = React.useState(false)
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [mnemonic] = React.useState<string>(() => generateIdentityMnemonic())
+  const mnemonicWords = React.useMemo(() => mnemonic.split(" "), [mnemonic])
   const totalSteps = 4
 
-  const next = () => {
+  const next = async () => {
     if (step < totalSteps - 1) {
       setStep((s) => s + 1)
-    } else {
-      onComplete()
+      return
+    }
+    if (submitting) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onComplete({
+        username: username.trim(),
+        displayName: displayName.trim(),
+        mnemonic,
+        pin,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-up failed")
+    } finally {
+      setSubmitting(false)
     }
   }
 
   const prev = () => {
+    if (submitting) return
     if (step === 0) {
       onBack()
     } else {
@@ -501,23 +546,30 @@ function SignUpPanel({
           onDisplayName={setDisplayName}
         />
       ) : step === 1 ? (
-        <PassphraseStep />
+        <PassphraseStep words={mnemonicWords} />
       ) : step === 2 ? (
         <ConfirmStep />
       ) : (
-        <PinSetupStep onValidChange={setPinValid} />
+        <PinSetupStep onValidChange={setPinValid} onPinChange={setPin} />
       )}
+
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
 
       <Separator />
 
       <div className="flex items-center justify-between gap-3">
-        <Button variant="ghost" onClick={prev}>
+        <Button variant="ghost" onClick={prev} disabled={submitting}>
           <ArrowLeftIcon />
           Back
         </Button>
         <Button
           onClick={next}
           disabled={
+            submitting ||
             (step === 0 && !username.trim()) ||
             (step === totalSteps - 1 && !pinValid)
           }
@@ -525,7 +577,7 @@ function SignUpPanel({
           {step === totalSteps - 1 ? (
             <>
               <CheckIcon />
-              Finish
+              {submitting ? "Creating…" : "Finish"}
             </>
           ) : (
             <>
@@ -539,6 +591,7 @@ function SignUpPanel({
       <PanelFooter
         instanceProps={instanceProps}
         onOpenRoadmap={onOpenRoadmap}
+        versionLabel={versionLabel}
       />
     </div>
   )
@@ -591,12 +644,12 @@ function UsernameStep({
   )
 }
 
-function PassphraseStep() {
+function PassphraseStep({ words }: { words: string[] }) {
   const [copied, setCopied] = React.useState(false)
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(SAMPLE_BIP39.join(" "))
+      await navigator.clipboard.writeText(words.join(" "))
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -638,7 +691,7 @@ function PassphraseStep() {
           </button>
         </div>
         <div className="grid grid-cols-3 gap-2 p-3">
-          {SAMPLE_BIP39.map((word, idx) => (
+          {words.map((word, idx) => (
             <div
               key={`${word}-${idx}`}
               className="flex items-center gap-2 rounded-sm bg-background px-2 py-1.5 text-sm"
@@ -673,8 +726,10 @@ function strengthBarClass(level: number): string {
 
 function PinSetupStep({
   onValidChange,
+  onPinChange,
 }: {
   onValidChange: (valid: boolean) => void
+  onPinChange: (value: string) => void
 }) {
   const [mode, setMode] = React.useState<"pin" | "passphrase">("pin")
   const [value, setValue] = React.useState("")
@@ -689,7 +744,8 @@ function PinSetupStep({
 
   React.useEffect(() => {
     onValidChange(confirmOk)
-  }, [confirmOk, onValidChange])
+    if (confirmOk) onPinChange(value)
+  }, [confirmOk, onValidChange, onPinChange, value])
 
   const switchMode = (next: string) => {
     setMode(next as "pin" | "passphrase")
@@ -852,17 +908,3 @@ function generateFallbackCode(): string {
   return out
 }
 
-const SAMPLE_BIP39 = [
-  "river",
-  "harbor",
-  "mango",
-  "candle",
-  "violin",
-  "purple",
-  "stable",
-  "future",
-  "thunder",
-  "olive",
-  "wisdom",
-  "marble",
-]
