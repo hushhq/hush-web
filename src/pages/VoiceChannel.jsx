@@ -17,7 +17,6 @@ import Controls from '../components/Controls';
 import QualityPickerModal from '../components/QualityPickerModal';
 import DevicePickerModal from '../components/DevicePickerModal';
 import Chat from '../components/Chat';
-import MemberList from '../components/MemberList';
 import VoiceReconnectOverlay from '../components/VoiceReconnectOverlay';
 
 /** Returns inline style for a peer dot based on streaming state. */
@@ -665,16 +664,9 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
               onClick={() => onTogglePanel('members')}
               aria-hidden={!showMembers}
             />
-            <div className={`sidebar-panel-right ${showMembers ? 'sidebar-panel-open' : ''}`}>
-              <MemberList
-                members={members}
-                onlineUserIds={onlineUserIds ?? new Set()}
-                currentUserId={currentUserId}
-                myRole={myRole}
-                showToast={showToast}
-                onMemberUpdate={onMemberUpdate}
-              />
-            </div>
+            {/* Member sidebar: shell now owns members display via members-sidebar.tsx. */}
+            <div className={`sidebar-panel-right ${showMembers ? 'sidebar-panel-open' : ''}`} />
+
           </>
         ) : (
           <>
@@ -726,18 +718,8 @@ export default function VoiceChannel({ channel, serverId, getToken, wsClient, re
                 </div>
               </div>
             </div>
-            <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`}>
-              <div className="sidebar-desktop-inner">
-                <MemberList
-                  members={members}
-                  onlineUserIds={onlineUserIds ?? new Set()}
-                  currentUserId={currentUserId}
-                  myRole={myRole}
-                  showToast={showToast}
-                  onMemberUpdate={onMemberUpdate}
-                />
-              </div>
-            </div>
+            {/* Member sidebar: shell renders members via members-sidebar.tsx. */}
+            <div className={`sidebar-desktop ${showMembers ? 'sidebar-desktop-open' : ''}`} />
           </>
         )}
       </div>

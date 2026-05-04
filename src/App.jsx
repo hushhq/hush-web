@@ -5,11 +5,10 @@ import { InstanceProvider, useInstanceContext } from './contexts/InstanceContext
 import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
 import { ElectronDragRegion } from './components/desktop/ElectronDragRegion.jsx';
-import { applyThemeMode, getStoredThemeMode } from './components/UserSettingsModal';
+import { applyThemeMode, getStoredThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
-import { PostRecoveryWizard } from './components/PostRecoveryWizard';
 
 // Apply stored theme before first paint to avoid FOUC.
 applyThemeMode(getStoredThemeMode());
@@ -25,7 +24,6 @@ const Room = lazy(() => import('./pages/Room'));
 const RoadmapPage = lazy(() =>
   import('./components/roadmap-page').then((m) => ({ default: m.RoadmapPage }))
 );
-const ServerLayout = lazy(() => import('./pages/ServerLayout'));
 const AuthenticatedApp = lazy(() =>
   import('./components/authenticated-app').then((m) => ({ default: m.AuthenticatedApp }))
 );
@@ -151,8 +149,6 @@ function AppContent() {
 
   return (
     <>
-      {/* Post-recovery wizard: shown once as overlay when recovery completes */}
-      <PostRecoveryWizard />
       <Suspense fallback={fallback}>
         <Routes>
           {/* Post-login redirect: "/" → first guild or /home */}
@@ -177,10 +173,8 @@ function AppContent() {
           {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
           <Route path="/:instance/:guildSlug/:channelSlug?" element={<AuthenticatedApp />} />
 
-          {/* Legacy: /servers/:serverId/* */}
-          <Route path="/servers/:serverId/*" element={<ServerLayout />} />
-
           {/* Legacy redirects */}
+          <Route path="/servers/:serverId/*" element={<Navigate to="/home" replace />} />
           <Route path="/guilds" element={<Navigate to="/home" replace />} />
           <Route path="/channels" element={<Navigate to="/home" replace />} />
           <Route path="/channels/:channelId" element={<Navigate to="/home" replace />} />

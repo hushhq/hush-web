@@ -49,7 +49,7 @@ vi.mock('./lib/slugify', () => ({
 
 vi.mock('./components/AppBackground', () => ({ default: () => null }));
 
-vi.mock('./components/UserSettingsModal', () => ({
+vi.mock('./lib/theme', () => ({
   applyThemeMode: vi.fn(),
   getStoredThemeMode: vi.fn().mockReturnValue('dark'),
 }));

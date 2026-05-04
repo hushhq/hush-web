@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
-import { Button } from './ui';
+import { Button } from './ui/button';
 
 /**
  * Live camera-based QR scanner.

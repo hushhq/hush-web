@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import QRCode from 'qrcode';
 import { ArrowLeftIcon, CopyIcon, CheckIcon } from '@radix-ui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
-import { AuthInstanceSelector } from '../components/auth/AuthInstanceSelector.jsx';
+import { InstanceSelector } from '../components/auth/instance-selector';
+import { getInstanceDisplayName } from '../lib/authInstanceStore';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
@@ -381,12 +382,19 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
       </div>
 
       <div className="ld-instance-row">
-        <AuthInstanceSelector
-          value={selectedInstanceUrl}
-          instances={knownInstances}
-          onSelect={onSelectInstance}
-          disabled={authLoading}
-          compact
+        <InstanceSelector
+          instances={knownInstances.map((i) => getInstanceDisplayName(i.url))}
+          active={getInstanceDisplayName(selectedInstanceUrl)}
+          onSelect={(label) => {
+            const match = knownInstances.find(
+              (i) => getInstanceDisplayName(i.url) === label
+            );
+            onSelectInstance(match?.url ?? label);
+          }}
+          onAdd={(label) => {
+            const url = label.startsWith('http') ? label : `https://${label}`;
+            onSelectInstance(url);
+          }}
         />
       </div>
 

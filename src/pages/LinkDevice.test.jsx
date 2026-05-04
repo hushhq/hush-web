@@ -354,10 +354,11 @@ describe('LinkDevice', () => {
     const copyBtn = codeBlock.querySelector('.ld-code-copy');
     expect(copyBtn).not.toBeNull();
     expect(copyBtn?.disabled).toBe(false);
-    // 6. instance row holds AuthInstanceSelector
+    // 6. instance row holds the InstanceSelector — replaced legacy
+    // AuthInstanceSelector (.ais) with the shadcn InstanceSelector.
     const instanceRow = card.querySelector('.ld-instance-row');
     expect(instanceRow).not.toBeNull();
-    expect(instanceRow.querySelector('.ais')).not.toBeNull();
+    expect(instanceRow.querySelector('button')).not.toBeNull();
     // 7. footer: Back (left) + Regenerate (right), side-by-side. Back must
     // be the first child so it lands at the bottom-left edge.
     const footer = card.querySelector('.ld-footer');
