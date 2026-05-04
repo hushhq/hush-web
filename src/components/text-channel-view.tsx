@@ -60,6 +60,9 @@ interface TextChannelViewProps {
   channelKind?: "text" | "voice"
   channelContext?: { serverId: string; serverName: string }
   favoriteIds?: Set<string>
+  /** Optional real-data messages from an adapter. When omitted, falls back
+   * to mock prototype data so the component stays usable in isolation. */
+  messages?: Message[]
   onOpenThread?: (message: { author: string; initials: string; timestamp: string; body: string }) => void
   onAddFavorite?: (entry: FavoritePayload) => void
   onRemoveFavorite?: (messageId: string) => void
@@ -71,13 +74,14 @@ export function TextChannelView({
   channelKind = "text",
   channelContext,
   favoriteIds,
+  messages,
   onOpenThread,
   onAddFavorite,
   onRemoveFavorite,
 }: TextChannelViewProps) {
   const baseMessages = React.useMemo(
-    () => getMessagesForChannel(channelId),
-    [channelId]
+    () => messages ?? getMessagesForChannel(channelId),
+    [messages, channelId]
   )
   const [localMessages, setLocalMessages] = React.useState<Message[]>([])
   const [replyTo, setReplyTo] = React.useState<{

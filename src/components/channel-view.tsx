@@ -71,6 +71,9 @@ interface ChannelViewProps {
   onRemoveFavorite?: (messageId: string) => void
   members?: ServerMember[]
   voiceParticipants?: VoiceParticipantInfo[]
+  /** Adapter-supplied messages. Falls back to mock if absent. */
+  messages?: import("@/data/messages").SampleMessage[]
+  pinnedMessages?: import("@/data/messages").SampleMessage[]
 }
 
 export function ChannelView({
@@ -84,6 +87,8 @@ export function ChannelView({
   onRemoveFavorite,
   members = [],
   voiceParticipants = [],
+  messages: messagesProp,
+  pinnedMessages: pinnedProp,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [thread, setThread] = React.useState<ThreadParent | null>(null)
@@ -95,8 +100,11 @@ export function ChannelView({
   const isMobile = useIsMobile()
 
   const pinnedMessages = React.useMemo(
-    () => (channelKind === "text" ? getPinnedForChannel(channelId) : []),
-    [channelId, channelKind]
+    () =>
+      channelKind === "text"
+        ? pinnedProp ?? getPinnedForChannel(channelId)
+        : [],
+    [pinnedProp, channelId, channelKind]
   )
 
   const handleJumpToPinned = React.useCallback((messageId: string) => {
@@ -197,6 +205,7 @@ export function ChannelView({
                 favoriteIds={favoriteIds}
                 onAddFavorite={onAddFavorite}
                 onRemoveFavorite={onRemoveFavorite}
+                messages={messagesProp}
               />
             </ResizablePanel>
             <ResizableHandle />
@@ -218,6 +227,7 @@ export function ChannelView({
             channelId={channelId}
             channelName={channelName}
             onOpenThread={setThread}
+            messages={messagesProp}
           />
         )}
       </div>
