@@ -22,7 +22,13 @@ export interface VoiceParticipantMock {
 
 interface VoiceChannelViewProps {
   channelName: string
-  /** Optional LiveKit credentials. When omitted, room renders in offline preview mode. */
+  /**
+   * Production hush-web mounts the legacy <VoiceChannel /> (Signal/MLS-encrypted
+   * LiveKit + presence + reconnect) here. When omitted the prototype's offline
+   * prejoin / mock grid renders as fallback.
+   */
+  voiceBody?: React.ReactNode
+  /** Optional LiveKit credentials for the prototype offline path. */
   token?: string
   serverUrl?: string
   mockParticipants?: VoiceParticipantMock[]
@@ -30,10 +36,39 @@ interface VoiceChannelViewProps {
 
 export function VoiceChannelView({
   channelName,
+  voiceBody,
   token,
   serverUrl,
   mockParticipants = [],
 }: VoiceChannelViewProps) {
+  if (voiceBody) {
+    return (
+      <div className="relative flex h-full w-full flex-col bg-background">
+        {voiceBody}
+      </div>
+    )
+  }
+  return (
+    <PrototypeFallback
+      channelName={channelName}
+      token={token}
+      serverUrl={serverUrl}
+      mockParticipants={mockParticipants}
+    />
+  )
+}
+
+function PrototypeFallback({
+  channelName,
+  token,
+  serverUrl,
+  mockParticipants = [],
+}: {
+  channelName: string
+  token?: string
+  serverUrl?: string
+  mockParticipants?: VoiceParticipantMock[]
+}) {
   const [joined, setJoined] = React.useState(false)
   const [settings, setSettings] = React.useState<JoinSettings | null>(null)
 

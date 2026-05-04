@@ -47,6 +47,8 @@ import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 // @ts-expect-error legacy JS
 import Chat from "@/components/Chat"
 // @ts-expect-error legacy JS
+import VoiceChannel from "@/pages/VoiceChannel"
+// @ts-expect-error legacy JS
 import { useAuth } from "@/contexts/AuthContext"
 // @ts-expect-error legacy JS
 import { getDeviceId } from "@/hooks/useAuth"
@@ -98,6 +100,7 @@ interface JoinedVoice {
   channelName: string
   serverId: string
   serverName: string
+  instanceUrl: string
 }
 
 const APPS: AppEntry[] = [
@@ -310,13 +313,32 @@ export function AuthenticatedApp() {
     [allChannels, channels, params.channelSlug]
   )
 
-  // Mock voice / favorites state (UI only until backend lands).
+  // Voice state — populated by legacy <VoiceChannel /> via onVoiceStateChange.
+  // joinedVoice holds the active voice channel descriptor; mount/unmount of
+  // <VoiceChannel /> drives connect/disconnect.
   const [joinedVoice, setJoinedVoice] = React.useState<JoinedVoice | null>(null)
-  const [isMuted, setIsMuted] = React.useState(false)
-  const [isDeafened, setIsDeafened] = React.useState(false)
-  const [mutedByDeafen, setMutedByDeafen] = React.useState(false)
-  const [isVideoOn, setIsVideoOn] = React.useState(false)
-  const [isScreenSharing, setIsScreenSharing] = React.useState(false)
+  const [voiceState, setVoiceState] = React.useState({
+    isMicOn: false,
+    isDeafened: false,
+    isScreenSharing: false,
+    isWebcamOn: false,
+  })
+  const isMuted = !voiceState.isMicOn
+  const isDeafened = voiceState.isDeafened
+  const isVideoOn = voiceState.isWebcamOn
+  const isScreenSharing = voiceState.isScreenSharing
+  const voiceControlsRef = React.useRef<{
+    toggleMic?: () => void
+    toggleDeafen?: () => void
+    toggleScreenShare?: () => void
+    toggleWebcam?: () => void
+  }>({})
+  const handleVoiceStateChange = React.useCallback(
+    (next: { isMicOn: boolean; isDeafened: boolean; isScreenSharing: boolean; isWebcamOn: boolean }) => {
+      setVoiceState(next)
+    },
+    []
+  )
   const [isCommandOpen, setIsCommandOpen] = React.useState(false)
   const [isCheatSheetOpen, setIsCheatSheetOpen] = React.useState(false)
   const [isServerSettingsOpen, setIsServerSettingsOpen] = React.useState(false)
@@ -361,17 +383,18 @@ export function AuthenticatedApp() {
     (id: string) => {
       if (!activeServer) return
       const channel = allChannels.find((c) => c.id === id)
-      if (channel?.kind === "voice") {
+      if (channel?.kind === "voice" && instanceUrl) {
         setJoinedVoice({
           channelId: id,
           channelName: channel.name,
           serverId: activeServer.id,
           serverName: activeServer.name,
+          instanceUrl,
         })
       }
       navigateToServer(activeServer, id)
     },
-    [activeServer, allChannels, navigateToServer]
+    [activeServer, allChannels, navigateToServer, instanceUrl]
   )
 
   // Auto-redirect to first text channel when no channel selected (server view)
@@ -389,31 +412,34 @@ export function AuthenticatedApp() {
   }, [activeServer, params.channelSlug, params.instance, params.guildSlug, navigate])
 
   const handleToggleMute = React.useCallback(() => {
-    if (isDeafened) {
-      setIsDeafened(false)
-      setIsMuted(false)
-      setMutedByDeafen(false)
-    } else {
-      setIsMuted((p) => !p)
-      setMutedByDeafen(false)
-    }
-  }, [isDeafened])
+    voiceControlsRef.current.toggleMic?.()
+  }, [])
 
   const handleToggleDeafen = React.useCallback(() => {
-    if (isDeafened) {
-      setIsDeafened(false)
-      if (mutedByDeafen) {
-        setIsMuted(false)
-        setMutedByDeafen(false)
-      }
-    } else {
-      setIsDeafened(true)
-      if (!isMuted) {
-        setIsMuted(true)
-        setMutedByDeafen(true)
-      }
-    }
-  }, [isDeafened, isMuted, mutedByDeafen])
+    voiceControlsRef.current.toggleDeafen?.()
+  }, [])
+
+  const handleToggleVideo = React.useCallback(() => {
+    voiceControlsRef.current.toggleWebcam?.()
+  }, [])
+
+  const handleToggleScreen = React.useCallback(() => {
+    voiceControlsRef.current.toggleScreenShare?.()
+  }, [])
+
+  const handleVoiceLeave = React.useCallback(() => {
+    setJoinedVoice(null)
+    setVoiceState({
+      isMicOn: false,
+      isDeafened: false,
+      isScreenSharing: false,
+      isWebcamOn: false,
+    })
+  }, [])
+
+  const isViewingVoice =
+    joinedVoice != null && activeChannel.id === joinedVoice.channelId
+  const joinedVoiceInstanceUrl = joinedVoice?.instanceUrl ?? null
 
   const handleJumpToVoice = React.useCallback(() => {
     if (!joinedVoice) return
@@ -536,9 +562,9 @@ export function AuthenticatedApp() {
         isScreenSharing,
         onToggleMute: handleToggleMute,
         onToggleDeafen: handleToggleDeafen,
-        onToggleVideo: () => setIsVideoOn((prev) => !prev),
-        onToggleScreen: () => setIsScreenSharing((prev) => !prev),
-        onDisconnect: () => setJoinedVoice(null),
+        onToggleVideo: handleToggleVideo,
+        onToggleScreen: handleToggleScreen,
+        onDisconnect: handleVoiceLeave,
         onJump: handleJumpToVoice,
       }
     : undefined
@@ -756,7 +782,34 @@ export function AuthenticatedApp() {
             className="flex"
           >
             <SidebarInset className="md:m-2 md:ml-0 md:rounded-xl md:overflow-hidden md:shadow-sm md:mb-0! md:rounded-b-none!">
-              {channelContent}
+              {joinedVoice && joinedVoiceInstanceUrl ? (
+                <div
+                  style={{
+                    display: isViewingVoice ? "flex" : "none",
+                    height: "100%",
+                    flexDirection: "column",
+                  }}
+                >
+                  <VoiceChannel
+                    key={joinedVoice.channelId}
+                    channel={{
+                      id: joinedVoice.channelId,
+                      name: joinedVoice.channelName,
+                      type: "voice",
+                    }}
+                    serverId={joinedVoice.serverId}
+                    getToken={getToken}
+                    wsClient={wsClient}
+                    members={members}
+                    myRole={currentUserRole ?? "member"}
+                    onLeave={handleVoiceLeave}
+                    voiceControlsRef={voiceControlsRef}
+                    onVoiceStateChange={handleVoiceStateChange}
+                    baseUrl={joinedVoiceInstanceUrl}
+                  />
+                </div>
+              ) : null}
+              {!isViewingVoice ? channelContent : null}
             </SidebarInset>
           </ResizablePanel>
         </ResizablePanelGroup>

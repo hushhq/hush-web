@@ -75,6 +75,8 @@ interface ChannelViewProps {
   currentUserRole?: MemberRole
   onKickMember?: (member: ServerMember) => void | Promise<void>
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
+  /** Slot — production hush-web mounts the legacy VoiceChannel for voice channels. */
+  voiceBody?: React.ReactNode
 }
 
 export function ChannelView({
@@ -91,6 +93,7 @@ export function ChannelView({
   currentUserRole,
   onKickMember,
   onDirectMessage,
+  voiceBody,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [thread, setThread] = React.useState<ThreadParent | null>(null)
@@ -174,6 +177,7 @@ export function ChannelView({
         {channelKind === "voice" ? (
           <VoiceChannelView
             channelName={channelName}
+            voiceBody={voiceBody}
             mockParticipants={voiceParticipants}
           />
         ) : channelKind === "home" ? (
