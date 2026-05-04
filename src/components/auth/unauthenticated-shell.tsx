@@ -101,7 +101,9 @@ export function UnauthenticatedShell() {
     mnemonic: string
   }) => {
     const instanceUrl = await rememberSelectedInstance(selectedInstanceUrl)
-    await performRegister(username, displayName, mnemonic, undefined, instanceUrl)
+    // Legacy hush-web behaviour: empty display name falls back to the username.
+    const finalDisplayName = displayName.trim() || username.trim()
+    await performRegister(username, finalDisplayName, mnemonic, undefined, instanceUrl)
     // performRegister flips bootState to 'pin_setup'; PinSetupPanel mounts
     // on next render and owns the PIN commit through useAuth().setPIN.
   }
