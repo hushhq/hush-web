@@ -55,6 +55,9 @@ import { useInstanceContext } from "@/contexts/InstanceContext"
 import * as mlsStore from "@/lib/mlsStore"
 // @ts-expect-error legacy JS
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
+// @ts-expect-error legacy JS
+import { kickUser } from "@/lib/api"
+import type { ServerMember } from "@/components/members-sidebar"
 
 import {
   useGuilds,
@@ -144,12 +147,30 @@ export function AuthenticatedApp() {
       token,
       baseUrl,
     })
-  const { members } = useMembersForServer({
+  const { members, refetch: refetchMembers } = useMembersForServer({
     serverId: activeServer?.id ?? null,
     token,
     baseUrl,
     currentUserId,
   })
+
+  const currentUserRole = React.useMemo(
+    () => members.find((m) => m.id === currentUserId)?.role,
+    [members, currentUserId]
+  )
+
+  const handleKickMember = React.useCallback(
+    async (member: ServerMember) => {
+      if (!activeServer || !token) return
+      try {
+        await kickUser(token, activeServer.id, member.id, "", baseUrl)
+        await refetchMembers()
+      } catch (err) {
+        console.error("kickUser failed", err)
+      }
+    },
+    [activeServer, token, baseUrl, refetchMembers]
+  )
 
   const allChannels = React.useMemo(
     () => [
@@ -480,6 +501,8 @@ export function AuthenticatedApp() {
         serverName: activeServer.name,
       }}
       members={members}
+      currentUserRole={currentUserRole}
+      onKickMember={handleKickMember}
       messageBody={chatBody}
       favoriteIds={favoriteIds}
       onAddFavorite={handleAddFavorite}

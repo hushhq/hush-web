@@ -2,6 +2,7 @@ import * as React from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   MembersSidebar,
+  type MemberRole,
   type ServerMember,
 } from "@/components/members-sidebar"
 import {
@@ -71,6 +72,8 @@ interface ChannelViewProps {
   onRemoveFavorite?: (messageId: string) => void
   members?: ServerMember[]
   voiceParticipants?: VoiceParticipantInfo[]
+  currentUserRole?: MemberRole
+  onKickMember?: (member: ServerMember) => void | Promise<void>
 }
 
 export function ChannelView({
@@ -84,6 +87,8 @@ export function ChannelView({
   onRemoveFavorite,
   members = [],
   voiceParticipants = [],
+  currentUserRole,
+  onKickMember,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [thread, setThread] = React.useState<ThreadParent | null>(null)
@@ -229,6 +234,8 @@ export function ChannelView({
           serverName={channelContext?.serverName ?? channelName}
           members={members}
           isMobile={isMobile}
+          currentUserRole={currentUserRole}
+          onKickMember={onKickMember}
         />
       ) : null}
     </div>

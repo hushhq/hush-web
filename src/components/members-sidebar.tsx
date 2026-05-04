@@ -29,6 +29,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog.tsx"
 import { cn } from "@/lib/utils"
 
 export type MemberPresence = "online" | "idle" | "dnd" | "offline"
@@ -48,9 +58,27 @@ interface MembersSidebarProps {
   serverName: string
   members: ServerMember[]
   isMobile: boolean
+  /** Current user's role on this server. Drives permission-gated actions. */
+  currentUserRole?: MemberRole
+  /** Real handler when present; undefined → kick item disabled. */
+  onKickMember?: (member: ServerMember) => void | Promise<void>
 }
 
 const ROLE_ORDER: MemberRole[] = ["owner", "admin", "moderator", "member"]
+
+const ROLE_PRIORITY: Record<MemberRole, number> = {
+  owner: 4,
+  admin: 3,
+  moderator: 2,
+  bot: 1,
+  member: 1,
+}
+
+function canKick(actor: MemberRole | undefined, target: MemberRole): boolean {
+  if (!actor) return false
+  if (actor === "member" || actor === "bot") return false
+  return ROLE_PRIORITY[actor] > ROLE_PRIORITY[target]
+}
 
 const ROLE_LABEL: Record<MemberRole, string> = {
   owner: "Owner",
@@ -76,13 +104,21 @@ export function MembersSidebar({
   serverName,
   members,
   isMobile,
+  currentUserRole,
+  onKickMember,
 }: MembersSidebarProps) {
   const grouped = ROLE_ORDER.map((role) => ({
     role,
     items: members.filter((m) => m.role === role),
   })).filter((group) => group.items.length > 0)
 
-  const body = <MembersList grouped={grouped} />
+  const body = (
+    <MembersList
+      grouped={grouped}
+      currentUserRole={currentUserRole}
+      onKickMember={onKickMember}
+    />
+  )
 
   if (isMobile) {
     return (
@@ -130,8 +166,16 @@ const ROLE_BADGE_LABEL: Record<MemberRole, string> = {
   member: "Member",
 }
 
-function MemberRow({ member }: { member: ServerMember }) {
+interface MemberRowProps {
+  member: ServerMember
+  currentUserRole?: MemberRole
+  onKickMember?: (member: ServerMember) => void | Promise<void>
+}
+
+function MemberRow({ member, currentUserRole, onKickMember }: MemberRowProps) {
   const [profileOpen, setProfileOpen] = React.useState(false)
+  const [kickOpen, setKickOpen] = React.useState(false)
+  const showKick = canKick(currentUserRole, member.role) && Boolean(onKickMember)
 
   return (
     <Popover open={profileOpen} onOpenChange={setProfileOpen}>
@@ -180,11 +224,16 @@ function MemberRow({ member }: { member: ServerMember }) {
             <CopyIcon />
             Copy user ID
           </ContextMenuItem>
-          {member.role !== "owner" ? (
+          {showKick ? (
             <>
               <ContextMenuSeparator />
-              {/* TODO(yarin, 2026-05-04): wire to instanceApi.kickMember */}
-              <ContextMenuItem variant="destructive" disabled>
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setKickOpen(true)
+                }}
+              >
                 <BanIcon />
                 Kick from server
               </ContextMenuItem>
@@ -200,6 +249,30 @@ function MemberRow({ member }: { member: ServerMember }) {
       >
         <ProfileCard member={member} />
       </PopoverContent>
+      {showKick ? (
+        <AlertDialog open={kickOpen} onOpenChange={setKickOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Kick {member.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {member.name} will be removed from the server. They can rejoin
+                via invite.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  void onKickMember?.(member)
+                }}
+              >
+                Kick
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </Popover>
   )
 }
@@ -245,7 +318,17 @@ interface GroupedMembers {
   items: ServerMember[]
 }
 
-function MembersList({ grouped }: { grouped: GroupedMembers[] }) {
+interface MembersListProps {
+  grouped: GroupedMembers[]
+  currentUserRole?: MemberRole
+  onKickMember?: (member: ServerMember) => void | Promise<void>
+}
+
+function MembersList({
+  grouped,
+  currentUserRole,
+  onKickMember,
+}: MembersListProps) {
   return (
     <div className="flex flex-col gap-4 p-3">
       {grouped.map((group) => (
@@ -259,7 +342,11 @@ function MembersList({ grouped }: { grouped: GroupedMembers[] }) {
           <ul className="flex flex-col">
             {group.items.map((member) => (
               <li key={member.id}>
-                <MemberRow member={member} />
+                <MemberRow
+                  member={member}
+                  currentUserRole={currentUserRole}
+                  onKickMember={onKickMember}
+                />
               </li>
             ))}
           </ul>
