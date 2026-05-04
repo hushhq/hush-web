@@ -832,6 +832,11 @@ export function AuthenticatedApp() {
         onGoHome={() => navigate("/home")}
         onOpenCheatSheet={() => setIsCheatSheetOpen(true)}
         isDark={isDark}
+        onDiscoverServers={() => navigate("/explore")}
+        onOpenSettings={() => setIsUserSettingsOpen(true)}
+        onSignOut={async () => {
+          await performLogout()
+        }}
       />
       <CheatSheet open={isCheatSheetOpen} onOpenChange={setIsCheatSheetOpen} />
       <ServerSettingsDialog

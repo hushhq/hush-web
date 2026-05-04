@@ -52,6 +52,9 @@ interface CommandPaletteProps {
   onGoHome: () => void
   onOpenCheatSheet: () => void
   isDark: boolean
+  onDiscoverServers?: () => void
+  onOpenSettings?: () => void
+  onSignOut?: () => void | Promise<void>
 }
 
 export function CommandPalette({
@@ -66,6 +69,9 @@ export function CommandPalette({
   onGoHome,
   onOpenCheatSheet,
   isDark,
+  onDiscoverServers,
+  onOpenSettings,
+  onSignOut,
 }: CommandPaletteProps) {
   const [query, setQuery] = React.useState("")
   const isSearching = query.trim().length > 0
@@ -137,21 +143,27 @@ export function CommandPalette({
 
           <CommandSeparator />
 
-          <CommandGroup heading="Azioni Server">
-            <CommandItem onSelect={runAction(() => {})}>
+          <CommandGroup heading="Server actions">
+            {/* TODO(yarin, 2026-05-04): create server flow lands with explore page port */}
+            <CommandItem disabled>
               <PlusIcon />
               <span>Create server</span>
             </CommandItem>
-            <CommandItem onSelect={runAction(() => {})}>
+            <CommandItem
+              disabled={!onDiscoverServers}
+              onSelect={runAction(() => onDiscoverServers?.())}
+            >
               <CompassIcon />
               <span>Discover servers</span>
             </CommandItem>
-            <CommandItem onSelect={runAction(() => {})}>
+            {/* TODO(yarin, 2026-05-04): per-channel invite item; use channel-sidebar dropdown for now */}
+            <CommandItem disabled>
               <UserPlusIcon />
               <span>Invite user</span>
             </CommandItem>
+            {/* TODO(yarin, 2026-05-04): instance-level ban needs admin guard + user picker */}
             <CommandItem
-              onSelect={runAction(() => {})}
+              disabled
               className="text-destructive data-selected:bg-destructive/10 data-selected:text-destructive"
             >
               <ShieldAlertIcon />
@@ -177,12 +189,18 @@ export function CommandPalette({
               <span>Keyboard shortcuts</span>
               <CommandShortcut>⌘ /</CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={runAction(() => {})}>
+            <CommandItem
+              disabled={!onOpenSettings}
+              onSelect={runAction(() => onOpenSettings?.())}
+            >
               <SettingsIcon />
               <span>Open settings</span>
             </CommandItem>
             <CommandItem
-              onSelect={runAction(() => {})}
+              disabled={!onSignOut}
+              onSelect={runAction(() => {
+                void onSignOut?.()
+              })}
               className="text-destructive data-selected:bg-destructive/10 data-selected:text-destructive"
             >
               <LogOutIcon />
