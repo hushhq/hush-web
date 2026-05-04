@@ -8262,3 +8262,171 @@ html[data-desktop] .ld-container {
     @apply font-sans;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ * UI Port Foundation (2026-05-04)
+ *
+ * Additive layer required by hush-test components ported into hush-web.
+ * Lives at the bottom so it overrides upstream rules where intended.
+ *
+ * Sections:
+ *  - Success token (light + dark)
+ *  - Animations: jump-flash, voice-pulse, voice-bar-{1,2,3}
+ *  - ProseMirror placeholder positioning
+ *  - Highlight.js theme-aware syntax tokens (used by code blocks)
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+  --success: oklch(0.7 0.18 150);
+}
+
+.dark,
+:root {
+  --success: oklch(0.7 0.18 150);
+}
+
+@theme inline {
+  --color-success: var(--success);
+}
+
+@keyframes jump-flash {
+  0%,
+  30% {
+    background-color: color-mix(in oklch, var(--primary) 15%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+[data-jump-flash="true"] {
+  animation: jump-flash 1.6s ease-out;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0
+      color-mix(in oklch, var(--primary) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px
+      color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+}
+
+@keyframes voice-bar-1 {
+  0%,
+  100% {
+    height: 25%;
+  }
+  50% {
+    height: 90%;
+  }
+}
+
+@keyframes voice-bar-2 {
+  0%,
+  100% {
+    height: 60%;
+  }
+  50% {
+    height: 30%;
+  }
+}
+
+@keyframes voice-bar-3 {
+  0%,
+  100% {
+    height: 35%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+.ProseMirror p.is-editor-empty:first-child {
+  position: relative;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--muted-foreground);
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@layer base {
+  .hljs-comment,
+  .hljs-quote {
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-built_in,
+  .hljs-name,
+  .hljs-tag {
+    color: oklch(0.55 0.22 290);
+  }
+  .dark .hljs-keyword,
+  .dark .hljs-selector-tag,
+  .dark .hljs-built_in,
+  .dark .hljs-name,
+  .dark .hljs-tag {
+    color: oklch(0.78 0.18 290);
+  }
+  .hljs-string,
+  .hljs-attr,
+  .hljs-template-tag,
+  .hljs-template-variable,
+  .hljs-addition {
+    color: oklch(0.5 0.16 150);
+  }
+  .dark .hljs-string,
+  .dark .hljs-attr,
+  .dark .hljs-template-tag,
+  .dark .hljs-template-variable,
+  .dark .hljs-addition {
+    color: oklch(0.78 0.16 150);
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-function .hljs-title {
+    color: oklch(0.6 0.18 60);
+    font-weight: 600;
+  }
+  .dark .hljs-title,
+  .dark .hljs-section,
+  .dark .hljs-function .hljs-title {
+    color: oklch(0.82 0.16 60);
+  }
+  .hljs-number,
+  .hljs-literal,
+  .hljs-symbol,
+  .hljs-bullet {
+    color: oklch(0.55 0.22 30);
+  }
+  .dark .hljs-number,
+  .dark .hljs-literal,
+  .dark .hljs-symbol,
+  .dark .hljs-bullet {
+    color: oklch(0.78 0.18 30);
+  }
+  .hljs-variable,
+  .hljs-attribute,
+  .hljs-meta {
+    color: oklch(0.55 0.18 230);
+  }
+  .dark .hljs-variable,
+  .dark .hljs-attribute,
+  .dark .hljs-meta {
+    color: oklch(0.78 0.16 230);
+  }
+}
