@@ -61,7 +61,14 @@ export function UnauthenticatedShell() {
     rememberSelectedInstance,
   } = useAuthInstanceSelection() as AuthInstanceState
 
-  if (bootState === "needs_pin") return <PinUnlockPanel />
+  // When user clicks "Not you? Sign in" on the PIN unlock screen, force the
+  // AuthFlow recovery view even though bootState would otherwise route to
+  // PinUnlockPanel. Submitting a different mnemonic creates a new session.
+  const [forceRecovery, setForceRecovery] = React.useState(false)
+
+  if (bootState === "needs_pin" && !forceRecovery) {
+    return <PinUnlockPanel onSwitchAccount={() => setForceRecovery(true)} />
+  }
   if (bootState === "pin_setup") return <PinSetupPanel />
 
   const instanceProps = {
