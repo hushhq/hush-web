@@ -63,6 +63,7 @@ import {
   createGuildInvite,
   leaveGuild,
   deleteGuild,
+  createOrFindDM,
 } from "@/lib/api"
 import type {
   MemberRole,
@@ -252,6 +253,25 @@ export function AuthenticatedApp() {
       return currentUserRole
     },
     [activeServer, currentUserRole]
+  )
+
+  const handleDirectMessage = React.useCallback(
+    async (member: ServerMember) => {
+      if (!activeServer || !token || !instanceUrl) return
+      try {
+        const dm = (await createOrFindDM(token, member.id, baseUrl)) as {
+          id: string
+          channelId: string
+        }
+        await refreshGuilds(instanceUrl)
+        const host = activeServer.instanceHost ?? new URL(instanceUrl).host
+        const guildRouteRef = buildGuildRouteRef(member.name, dm.id)
+        navigate(`/${host}/${guildRouteRef}/${dm.channelId}`)
+      } catch (err) {
+        console.error("createOrFindDM failed", err)
+      }
+    },
+    [activeServer, token, baseUrl, instanceUrl, refreshGuilds, navigate]
   )
 
   const handleCreateInvite = React.useCallback(async (): Promise<string | null> => {
@@ -597,6 +617,7 @@ export function AuthenticatedApp() {
       members={members}
       currentUserRole={currentUserRole}
       onKickMember={handleKickMember}
+      onDirectMessage={handleDirectMessage}
       messageBody={chatBody}
       favoriteIds={favoriteIds}
       onAddFavorite={handleAddFavorite}

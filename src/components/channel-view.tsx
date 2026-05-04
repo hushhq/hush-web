@@ -74,6 +74,7 @@ interface ChannelViewProps {
   voiceParticipants?: VoiceParticipantInfo[]
   currentUserRole?: MemberRole
   onKickMember?: (member: ServerMember) => void | Promise<void>
+  onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
 
 export function ChannelView({
@@ -89,6 +90,7 @@ export function ChannelView({
   voiceParticipants = [],
   currentUserRole,
   onKickMember,
+  onDirectMessage,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [thread, setThread] = React.useState<ThreadParent | null>(null)
@@ -236,6 +238,7 @@ export function ChannelView({
           isMobile={isMobile}
           currentUserRole={currentUserRole}
           onKickMember={onKickMember}
+          onDirectMessage={onDirectMessage}
         />
       ) : null}
     </div>

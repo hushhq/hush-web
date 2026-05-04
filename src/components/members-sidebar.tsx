@@ -62,6 +62,8 @@ interface MembersSidebarProps {
   currentUserRole?: MemberRole
   /** Real handler when present; undefined → kick item disabled. */
   onKickMember?: (member: ServerMember) => void | Promise<void>
+  /** Open or create a direct message with the given member. */
+  onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
 
 const ROLE_ORDER: MemberRole[] = ["owner", "admin", "moderator", "member"]
@@ -106,6 +108,7 @@ export function MembersSidebar({
   isMobile,
   currentUserRole,
   onKickMember,
+  onDirectMessage,
 }: MembersSidebarProps) {
   const grouped = ROLE_ORDER.map((role) => ({
     role,
@@ -117,6 +120,7 @@ export function MembersSidebar({
       grouped={grouped}
       currentUserRole={currentUserRole}
       onKickMember={onKickMember}
+      onDirectMessage={onDirectMessage}
     />
   )
 
@@ -170,9 +174,15 @@ interface MemberRowProps {
   member: ServerMember
   currentUserRole?: MemberRole
   onKickMember?: (member: ServerMember) => void | Promise<void>
+  onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
 
-function MemberRow({ member, currentUserRole, onKickMember }: MemberRowProps) {
+function MemberRow({
+  member,
+  currentUserRole,
+  onKickMember,
+  onDirectMessage,
+}: MemberRowProps) {
   const [profileOpen, setProfileOpen] = React.useState(false)
   const [kickOpen, setKickOpen] = React.useState(false)
   const showKick = canKick(currentUserRole, member.role) && Boolean(onKickMember)
@@ -200,8 +210,12 @@ function MemberRow({ member, currentUserRole, onKickMember }: MemberRowProps) {
             <UserIcon />
             View profile
           </ContextMenuItem>
-          {/* TODO(yarin, 2026-05-04): DM channel backend not implemented */}
-          <ContextMenuItem disabled>
+          <ContextMenuItem
+            disabled={!onDirectMessage}
+            onSelect={() => {
+              void onDirectMessage?.(member)
+            }}
+          >
             <MessageSquareIcon />
             Send message
           </ContextMenuItem>
@@ -322,12 +336,14 @@ interface MembersListProps {
   grouped: GroupedMembers[]
   currentUserRole?: MemberRole
   onKickMember?: (member: ServerMember) => void | Promise<void>
+  onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }
 
 function MembersList({
   grouped,
   currentUserRole,
   onKickMember,
+  onDirectMessage,
 }: MembersListProps) {
   return (
     <div className="flex flex-col gap-4 p-3">
@@ -346,6 +362,7 @@ function MembersList({
                   member={member}
                   currentUserRole={currentUserRole}
                   onKickMember={onKickMember}
+                  onDirectMessage={onDirectMessage}
                 />
               </li>
             ))}
