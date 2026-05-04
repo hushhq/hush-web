@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { HushLogo } from "@/components/brand/HushLogo"
 // @ts-expect-error legacy JS
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/contexts/AuthContext"
 
 const MAX_ATTEMPTS = 10
 

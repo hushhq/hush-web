@@ -46,7 +46,9 @@ import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 // @ts-expect-error legacy JS
 import Chat from "@/components/Chat"
 // @ts-expect-error legacy JS
-import { useAuth, getDeviceId } from "@/hooks/useAuth"
+import { useAuth } from "@/contexts/AuthContext"
+// @ts-expect-error legacy JS
+import { getDeviceId } from "@/hooks/useAuth"
 // @ts-expect-error legacy JS
 import { useInstanceContext } from "@/contexts/InstanceContext"
 // @ts-expect-error legacy JS

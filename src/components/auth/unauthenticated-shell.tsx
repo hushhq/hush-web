@@ -13,7 +13,7 @@ import { AuthFlow } from "@/components/auth/auth-flow"
 import { PinUnlockPanel } from "@/components/auth/pin-unlock-panel"
 import { PinSetupPanel } from "@/components/auth/pin-setup-panel"
 // @ts-expect-error legacy JS
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/contexts/AuthContext"
 // @ts-expect-error legacy JS
 import { useBootController } from "@/hooks/useBootController"
 // @ts-expect-error legacy JS
@@ -37,10 +37,7 @@ interface AuthInstanceState {
 export function UnauthenticatedShell() {
   const navigate = useNavigate()
   const { bootState } = useBootController() as { bootState: string }
-  const {
-    performRegister,
-    performRecovery,
-  } = useAuth() as {
+  const auth = useAuth() as {
     performRegister: (
       username: string,
       displayName: string,
@@ -53,7 +50,13 @@ export function UnauthenticatedShell() {
       revokeOtherDevices: boolean,
       instanceUrl: string
     ) => Promise<void>
+    user: { id: string } | null
+    hasSession: boolean
+    needsPinSetup: boolean
+    needsUnlock: boolean
+    hasVault: boolean
   }
+  const { performRegister, performRecovery } = auth
   const {
     selectedInstanceUrl,
     knownInstances,
