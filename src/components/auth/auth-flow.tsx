@@ -14,7 +14,6 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator.tsx"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils.ts"
 
 import { InstanceSelector } from "@/components/auth/instance-selector"
@@ -488,10 +487,17 @@ function SignUpPanel({
   const [displayName, setDisplayName] = React.useState("")
   const [usernameAvailable, setUsernameAvailable] = React.useState<boolean | null>(null)
   const [usernameChecking, setUsernameChecking] = React.useState(false)
+  const [confirmValid, setConfirmValid] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [mnemonic] = React.useState<string>(() => generateIdentityMnemonic())
+  const [mnemonic, setMnemonic] = React.useState<string>(() => generateIdentityMnemonic())
   const mnemonicWords = React.useMemo(() => mnemonic.split(" "), [mnemonic])
+
+  const startOver = () => {
+    setMnemonic(generateIdentityMnemonic())
+    setConfirmValid(false)
+    setStep(0)
+  }
   // 3 wizard steps: username, recovery phrase reveal, confirm. PIN setup is
   // a separate post-register UI driven by bootController.
   const totalSteps = 3
@@ -555,7 +561,10 @@ function SignUpPanel({
       ) : step === 1 ? (
         <PassphraseStep words={mnemonicWords} />
       ) : (
-        <ConfirmStep />
+        <ConfirmStep
+          words={mnemonicWords}
+          onValidChange={setConfirmValid}
+        />
       )}
 
       {error ? (
@@ -567,16 +576,28 @@ function SignUpPanel({
       <Separator />
 
       <div className="flex items-center justify-between gap-3">
-        <Button variant="ghost" onClick={prev} disabled={submitting}>
-          <ArrowLeftIcon />
-          Back
-        </Button>
+        {step === totalSteps - 1 ? (
+          <Button
+            variant="ghost"
+            onClick={startOver}
+            disabled={submitting}
+          >
+            <RefreshCwIcon />
+            Start over
+          </Button>
+        ) : (
+          <Button variant="ghost" onClick={prev} disabled={submitting}>
+            <ArrowLeftIcon />
+            Back
+          </Button>
+        )}
         <Button
           onClick={next}
           disabled={
             submitting ||
             (step === 0 &&
-              (!username.trim() || usernameChecking || usernameAvailable !== true))
+              (!username.trim() || usernameChecking || usernameAvailable !== true)) ||
+            (step === totalSteps - 1 && !confirmValid)
           }
         >
           {step === totalSteps - 1 ? (
@@ -789,23 +810,98 @@ function PassphraseStep({ words }: { words: string[] }) {
   )
 }
 
-function ConfirmStep() {
+function pickRandomPositions(max: number, count: number): number[] {
+  const pool = Array.from({ length: max }, (_, i) => i)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool.slice(0, count).sort((a, b) => a - b)
+}
+
+/**
+ * Confirms the user has saved the recovery phrase by asking for 3 random
+ * positions instead of all 12 words. Mirrors hush-web's MnemonicConfirm
+ * pattern; mockup originally re-typed all 12.
+ */
+function ConfirmStep({
+  words,
+  onValidChange,
+}: {
+  words: string[]
+  onValidChange: (valid: boolean) => void
+}) {
+  const [positions] = React.useState<number[]>(() =>
+    pickRandomPositions(words.length, 3)
+  )
+  const [inputs, setInputs] = React.useState<string[]>(["", "", ""])
+
+  const fieldState = React.useCallback(
+    (i: number): "idle" | "correct" | "wrong" => {
+      const value = inputs[i]?.trim()
+      if (!value) return "idle"
+      const expected = words[positions[i]]?.toLowerCase()
+      return value.toLowerCase() === expected ? "correct" : "wrong"
+    },
+    [inputs, positions, words]
+  )
+
+  const allCorrect = inputs.every((_, i) => fieldState(i) === "correct")
+
+  React.useEffect(() => {
+    onValidChange(allCorrect)
+  }, [allCorrect, onValidChange])
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Confirm your phrase</h2>
+        <h2 className="text-base font-semibold">Verify your phrase</h2>
         <p className="text-sm text-muted-foreground">
-          Re-enter your 12 words to make sure you saved them correctly.
+          Enter the requested words to confirm you saved your recovery phrase.
         </p>
       </div>
-      <Textarea
-        rows={4}
-        placeholder="word1 word2 word3 …"
-        autoCapitalize="off"
-        autoCorrect="off"
-        spellCheck={false}
-        className="font-mono text-sm"
-      />
+      <div className="flex flex-col gap-3">
+        {positions.map((wordIndex, i) => {
+          const state = fieldState(i)
+          return (
+            <div key={wordIndex} className="flex flex-col gap-2">
+              <Label htmlFor={`confirm-word-${i}`}>
+                Word #{wordIndex + 1}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id={`confirm-word-${i}`}
+                  type="text"
+                  value={inputs[i]}
+                  onChange={(event) => {
+                    const next = [...inputs]
+                    next[i] = event.target.value
+                    setInputs(next)
+                  }}
+                  placeholder="Type the word…"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="font-mono"
+                  aria-invalid={state === "wrong"}
+                />
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "w-4 text-center text-sm font-medium",
+                    state === "correct" && "text-success",
+                    state === "wrong" && "text-destructive",
+                    state === "idle" && "invisible"
+                  )}
+                >
+                  {state === "correct" ? "✓" : state === "wrong" ? "✗" : ""}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
