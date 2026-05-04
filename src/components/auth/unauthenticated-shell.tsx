@@ -37,11 +37,8 @@ interface AuthInstanceState {
 export function UnauthenticatedShell() {
   const navigate = useNavigate()
   const { bootState } = useBootController() as { bootState: string }
-  const {
-    performRegister,
-    performRecovery,
-    setPIN,
-  } = useAuth() as {
+  const auth = useAuth() as {
+    user: { id: string } | null
     performRegister: (
       username: string,
       displayName: string,
@@ -56,12 +53,33 @@ export function UnauthenticatedShell() {
     ) => Promise<void>
     setPIN: (pin: string) => Promise<void>
   }
+  const { performRegister, performRecovery, setPIN, user } = auth
   const {
     selectedInstanceUrl,
     knownInstances,
     chooseInstance,
     rememberSelectedInstance,
   } = useAuthInstanceSelection() as AuthInstanceState
+
+  // After performRegister resolves, AuthContext state has not yet flushed —
+  // setPIN's user-id check would still see the stale null. Defer the PIN
+  // commit to an effect that fires once user.id is available.
+  const [pendingPin, setPendingPin] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!pendingPin || !user?.id) return
+    let cancelled = false
+    setPIN(pendingPin)
+      .catch((err) => {
+        console.warn("setPIN deferred failed", err)
+      })
+      .finally(() => {
+        if (!cancelled) setPendingPin(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pendingPin, user?.id, setPIN])
 
   if (bootState === "needs_pin") return <PinUnlockPanel />
   if (bootState === "pin_setup") return <PinSetupPanel />
@@ -99,7 +117,8 @@ export function UnauthenticatedShell() {
   }) => {
     const instanceUrl = await rememberSelectedInstance(selectedInstanceUrl)
     await performRegister(username, displayName, mnemonic, undefined, instanceUrl)
-    if (pin) await setPIN(pin)
+    // Defer setPIN until user.id has flushed into context state.
+    if (pin) setPendingPin(pin)
   }
 
   return (
