@@ -33,6 +33,11 @@ interface PinOtpProps {
   autoFocus?: boolean
   ariaLabel: string
   ariaInvalid?: boolean
+  /** Optional hook fired when the user types the final digit. The PinOtp
+   *  always blurs its underlying input on completion so the iOS caret
+   *  artifact disappears as soon as the dots fill — callers can layer
+   *  extra behavior (auto-submit, focus-shift to confirm field, etc.). */
+  onComplete?: (value: string) => void
 }
 
 export function PinOtp({
@@ -44,6 +49,7 @@ export function PinOtp({
   autoFocus,
   ariaLabel,
   ariaInvalid,
+  onComplete,
 }: PinOtpProps) {
   return (
     <InputOTP
@@ -56,6 +62,18 @@ export function PinOtp({
       inputMode="numeric"
       value={value}
       onChange={(next) => onChange(sanitizePinDigits(next))}
+      onComplete={(next) => {
+        // iOS Safari ignores `caretColor: transparent` in some webkit
+        // builds, leaving a 1-px vertical line visible inside the dot
+        // group once typing reaches the end. Blurring the underlying
+        // input as soon as PIN_LENGTH is reached removes the caret and
+        // dismisses the keypad while React still owns the value state.
+        if (typeof document !== "undefined") {
+          const active = document.activeElement
+          if (active instanceof HTMLElement) active.blur()
+        }
+        onComplete?.(next)
+      }}
       disabled={disabled}
       autoComplete={autoComplete}
       autoFocus={autoFocus}
