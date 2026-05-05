@@ -47,6 +47,7 @@ import {
   getSessionKeyIfAlive,
   readWrappedIdentity,
   unwrapIdentity,
+  clearSessionKey as clearVaultSessionStore,
   markAlive as markVaultSessionAlive,
 } from '../lib/vaultSessionKey';
 import {
@@ -680,7 +681,14 @@ export function useAuth() {
     clearInactivityDeadline();
     clearTranscriptCache();
     const userId = currentUserIdRef.current;
-    if (userId) clearVaultSessionKey(userId).catch(() => {});
+    if (userId) {
+      clearVaultSessionKey(userId).catch(() => {});
+      // P21 step 4 — drop the cross-reload session key store too, so
+      // the next reload requires PIN re-entry as the timeout intends.
+      // Without this the boot path would happily resume from the IDB
+      // record and defeat the inactivity policy.
+      clearVaultSessionStore(userId).catch(() => {});
+    }
     setVaultState('locked');
   }, [clearInactivityDeadline]);
 
@@ -1396,7 +1404,14 @@ export function useAuth() {
     clearVaultTimeoutEffects();
     clearTranscriptCache();
     const userId = currentUserIdRef.current;
-    if (userId) clearVaultSessionKey(userId).catch(() => {});
+    if (userId) {
+      clearVaultSessionKey(userId).catch(() => {});
+      // P21 step 4 — manual lock must invalidate the cross-reload
+      // session key store so the next reload prompts for PIN. Without
+      // this, the user would press "Lock" then a reload would silently
+      // resume — defeating the user's intent.
+      clearVaultSessionStore(userId).catch(() => {});
+    }
     setVaultState('locked');
   }, [clearVaultTimeoutEffects]);
 
@@ -1430,6 +1445,28 @@ export function useAuth() {
     db.close();
     setHasLocalVault(true);
     clearPinSetup();
+    // P21 step 4 — rotate the cross-reload session key on PIN change.
+    // Wipe the old IDB record (any stolen copy from before the PIN
+    // change is now useless) and re-seal under a fresh CryptoKey.
+    // For first-time PIN setup the wipe is a no-op and the re-seal
+    // just refreshes whatever the unlock path already wrote.
+    // Sequenced so the wipe completes before re-seal — without that,
+    // `sealIdentityIntoSession` would reuse the existing CryptoKey
+    // and the rotation would be a no-op. Fire-and-forget so the PIN
+    // submit UX never blocks on IDB.
+    const userIdSnapshot = user.id;
+    const privateKeySnapshot = identityKeyRef.current.privateKey;
+    const publicKeySnapshot = identityKeyRef.current.publicKey;
+    clearVaultSessionStore(userIdSnapshot)
+      .catch(() => {})
+      .then(() =>
+        writeVaultSessionForUnlock(
+          userIdSnapshot,
+          privateKeySnapshot,
+          publicKeySnapshot,
+        ),
+      )
+      .catch(() => {});
   }, [user, clearPinSetup]);
 
   /**
@@ -1499,6 +1536,20 @@ export function useAuth() {
 
     // 3. Clear desktop vault session key (no-op in browser).
     if (userId) clearVaultSessionKey(userId).catch(() => {});
+
+    // 3b. P21 step 4 — clear the cross-reload vault session key
+    // store. Without this, the IDB session DB and the per-tab marker
+    // would survive scorched-earth logout and leak the previous
+    // user's session to whoever opens the tab next.
+    if (userId) {
+      try {
+        await clearVaultSessionStore(userId);
+      } catch {
+        // best-effort — sessionStorage.clear at step 4 below will
+        // still nuke the marker, and the IDB delete in step 4 below
+        // is also a fallback.
+      }
+    }
 
     // 4. Delete all hush IDB databases.
     const deviceId = getDeviceId();
@@ -1668,7 +1719,15 @@ export function useAuth() {
     if (!userId) return false;
     const config = getEffectiveVaultConfig(userId);
     const policy = config?.timeout ?? 'browser_close';
-    if (policy === 'refresh') return false;
+    if (policy === 'refresh') {
+      // P21 step 4 — under `refresh` the policy explicitly demands a
+      // fresh PIN on every reload, so wipe the IDB record proactively.
+      // Otherwise it would persist as dead disk data, and a switch
+      // *to* `refresh` from a more permissive policy could leave a
+      // stale entry sitting until the next sign-out.
+      clearVaultSessionStore(userId).catch(() => {});
+      return false;
+    }
 
     const identity = await tryVaultSessionResume(userId, config);
     if (!identity) return false;

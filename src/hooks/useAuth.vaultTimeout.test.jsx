@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { clearSessionKey as clearVaultSessionStore } from '../lib/vaultSessionKey';
 
 vi.mock('../lib/api', () => ({
   fetchWithAuth: vi.fn(),
@@ -117,6 +118,11 @@ describe('useAuth - vault timeout', () => {
     localStorage.clear();
     vaultBlobs.clear();
     vaultConfigs.clear();
+    // Wipe the cross-reload vault session DB between cases.
+    // Fire-and-forget — awaiting deleteDatabase on a connection that
+    // a fire-and-forget seal from the previous test still holds open
+    // makes fake-indexeddb stall. The DB rebuilds on next open.
+    clearVaultSessionStore('user-1').catch(() => {});
     vi.useRealTimers();
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,

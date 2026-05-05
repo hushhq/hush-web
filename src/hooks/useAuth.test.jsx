@@ -785,6 +785,33 @@ describe('useAuth - performLogout', () => {
     expect(sessionStorage.getItem('test_key')).toBeNull();
   });
 
+  it('clears the cross-reload session key store on scorched-earth logout (P21 step 4)', async () => {
+    // Without this contract, signing out would leave the IDB session
+    // DB and the per-tab marker behind — leaking the previous user's
+    // session to whoever opens the tab next.
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    await waitFor(async () => {
+      expect(await readWrappedIdentity('user-1')).not.toBeNull();
+    });
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: true, status: 204 });
+    await act(async () => {
+      await result.current.performLogout();
+    });
+
+    expect(await readWrappedIdentity('user-1')).toBeNull();
+    expect(isMarkerAlive('user-1')).toBe(false);
+  });
+
   it('calls deleteVaultDatabase for the logged-in user', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -967,6 +994,51 @@ describe('useAuth - session rehydration', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.vaultState).toBe('locked');
     expect(result.current.needsUnlock).toBe(true);
+  });
+
+  it('wipes the session-key store at boot under "refresh" policy (P21 step 4)', async () => {
+    // `refresh` semantically demands a fresh PIN on every reload, so
+    // the IDB session DB must be wiped proactively. Otherwise it
+    // persists as dead disk data and a switch *to* `refresh` from a
+    // more permissive policy would leave a stale entry sitting until
+    // the next sign-out.
+    const userId = 'user-step4-refresh';
+    sessionStorage.setItem(JWT_KEY, 'valid-jwt');
+    localStorage.setItem(`hush_vault_user_${userId}`, 'aabb');
+    const fakeBlob = new Uint8Array(44);
+    fakeBlob.set(new Uint8Array(32).fill(1), 12);
+    _vaultBlobs.set(userId, fakeBlob);
+
+    vi.mocked(vaultMod.getVaultConfig).mockReturnValue({
+      timeout: 'refresh',
+      pinType: 'pin',
+    });
+
+    await clearSessionKey(userId);
+    await sealIdentityIntoSession(
+      userId,
+      new TextEncoder().encode(
+        JSON.stringify({
+          v: 1,
+          priv: Array.from(new Uint8Array(32).fill(7)),
+          pub: Array.from(new Uint8Array(32).fill(8)),
+        }),
+      ),
+    );
+    expect(await readWrappedIdentity(userId)).not.toBeNull();
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
+      mockFetchOk({ id: userId, username: 'iris', displayName: 'Iris' }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.vaultState).toBe('locked');
+
+    // Boot wipe: refresh policy must have removed the IDB record.
+    await waitFor(async () => {
+      expect(await readWrappedIdentity(userId)).toBeNull();
+    });
   });
 
   it('resumes from the session-key store under "browser_close" when the per-tab alive marker is set (P21 step 3)', async () => {
@@ -1186,6 +1258,46 @@ describe('useAuth - setPIN', () => {
 
     expect(caught?.message).toMatch(/no identity key/i);
   });
+
+  it('rotates the cross-reload session key store on PIN change (P21 step 4)', async () => {
+    // PIN change must invalidate the existing CryptoKey so any stolen
+    // copy of the IDB record from before the change becomes useless.
+    // Verify by sealing once, capturing the wrapped bundle, calling
+    // setPIN, and asserting the stored bundle differs.
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performRegister(
+        'rotateuser',
+        'Rotate User',
+        'word '.repeat(12).trim(),
+      );
+    });
+    await waitFor(() => expect(result.current.vaultState).toBe('unlocked'));
+
+    // Wait for the fire-and-forget unlock seal.
+    let beforeBundle = null;
+    await waitFor(async () => {
+      beforeBundle = await readWrappedIdentity(result.current.user.id);
+      expect(beforeBundle).not.toBeNull();
+    });
+
+    await act(async () => {
+      await result.current.setPIN('first-pin');
+    });
+
+    // The PIN-change re-seal is also fire-and-forget.
+    await waitFor(async () => {
+      const afterBundle = await readWrappedIdentity(result.current.user.id);
+      expect(afterBundle).not.toBeNull();
+      // Different IV per AES-GCM seal proves a fresh wrap actually
+      // ran; under rotation the underlying CryptoKey rotates too.
+      expect(Array.from(afterBundle.iv)).not.toEqual(
+        Array.from(beforeBundle.iv),
+      );
+    });
+  });
 });
 
 describe('useAuth - skipPinSetup', () => {
@@ -1226,6 +1338,34 @@ describe('useAuth - lockVault', () => {
     await waitFor(() => expect(result.current.vaultState).toBe('locked'));
 
     expect(vaultMod.deleteVaultDatabase).not.toHaveBeenCalled();
+  });
+
+  it('clears the cross-reload session key store on manual lock (P21 step 4)', async () => {
+    // Without this contract, pressing "Lock" then reloading would
+    // resume from IDB and silently undo the lock.
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await waitFor(() => expect(result.current.vaultState).toBe('unlocked'));
+    // Wait for fire-and-forget seal to land before locking.
+    await waitFor(async () => {
+      expect(await readWrappedIdentity('user-1')).not.toBeNull();
+    });
+
+    act(() => result.current.lockVault());
+    await waitFor(() => expect(result.current.vaultState).toBe('locked'));
+
+    // The IDB record + per-tab marker must both be wiped.
+    await waitFor(async () => {
+      expect(await readWrappedIdentity('user-1')).toBeNull();
+    });
+    expect(isMarkerAlive('user-1')).toBe(false);
   });
 
   it('removes a stale refresh handler when vault timeout changes while unlocked', async () => {
