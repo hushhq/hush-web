@@ -84,7 +84,6 @@ vi.mock('./components/roadmap-page', () => ({
 }));
 vi.mock('./pages/Invite', () => ({ default: () => <div>Invite</div> }));
 vi.mock('./pages/LinkDevice.jsx', () => ({ default: () => <div>LinkDevice</div> }));
-vi.mock('./pages/Room', () => ({ default: () => <div>Room</div> }));
 vi.mock('./pages/ServerLayout', () => ({ default: () => <div>ServerLayout</div> }));
 vi.mock('./pages/ExplorePage', () => ({ default: () => <div>ExplorePage</div> }));
 

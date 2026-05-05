@@ -56,7 +56,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RealChat } from "@/components/chat-real"
-import VoiceChannelImpl from "@/pages/VoiceChannel"
+import { VoiceChannelView } from "@/components/voice-channel-view"
 import { useAuth } from "@/contexts/AuthContext"
 import { getDeviceId } from "@/hooks/useAuth"
 import { useInstanceContext } from "@/contexts/InstanceContext"
@@ -112,7 +112,10 @@ interface VoiceControls {
   toggleMic?: () => void
   toggleDeafen?: () => void
   toggleScreenShare?: () => void
+  switchScreenSource?: () => void
   toggleWebcam?: () => void
+  isScreenSharing?: boolean
+  isWebcamOn?: boolean
 }
 
 interface VoiceState {
@@ -121,25 +124,6 @@ interface VoiceState {
   isScreenSharing: boolean
   isWebcamOn: boolean
 }
-
-interface VoiceChannelProps {
-  channel: {
-    id: string
-    name: string
-    type: "voice"
-  }
-  serverId: string
-  getToken: () => string | null
-  wsClient: unknown
-  members: ServerMember[]
-  myRole: MemberRole
-  onLeave: () => void | Promise<void>
-  voiceControlsRef: React.RefObject<VoiceControls>
-  onVoiceStateChange: (state: VoiceState) => void
-  baseUrl: string
-}
-
-const VoiceChannel = VoiceChannelImpl as React.ComponentType<VoiceChannelProps>
 
 function systemIconFor(type: SystemChannelType): React.ReactNode {
   return type === "moderation" ? <ShieldAlertIcon /> : <ScrollTextIcon />
@@ -479,9 +463,9 @@ export function AuthenticatedApp() {
     [activeChannel, systemChannelRows]
   )
 
-  // Voice state — populated by legacy <VoiceChannel /> via onVoiceStateChange.
+  // Voice state — populated by <VoiceChannelView /> via onVoiceStateChange.
   // joinedVoice holds the active voice channel descriptor; mount/unmount of
-  // <VoiceChannel /> drives connect/disconnect.
+  // <VoiceChannelView /> drives connect/disconnect.
   const [joinedVoice, setJoinedVoice] = React.useState<JoinedVoice | null>(null)
   const [voiceState, setVoiceState] = React.useState({
     isMicOn: false,
@@ -927,7 +911,6 @@ export function AuthenticatedApp() {
       favoriteIds={favoriteIds}
       onAddFavorite={handleAddFavorite}
       onRemoveFavorite={handleRemoveFavorite}
-      voiceParticipants={[]}
     />
   ) : (
     <ChannelView
@@ -1076,7 +1059,7 @@ export function AuthenticatedApp() {
                     flexDirection: "column",
                   }}
                 >
-                  <VoiceChannel
+                  <VoiceChannelView
                     key={joinedVoice.channelId}
                     channel={{
                       id: joinedVoice.channelId,

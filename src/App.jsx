@@ -20,7 +20,6 @@ const UnauthenticatedShell = lazy(() =>
 );
 const Invite = lazy(() => import('./pages/Invite'));
 const LinkDevice = lazy(() => import('./pages/LinkDevice.jsx'));
-const Room = lazy(() => import('./pages/Room'));
 const RoadmapPage = lazy(() =>
   import('./components/roadmap-page').then((m) => ({ default: m.RoadmapPage }))
 );
@@ -135,7 +134,7 @@ function AppContent() {
           <Route path="/join/:instance/:code" element={<Invite />} />
           <Route path="/invite/:code" element={<Invite />} />
           <Route path="/link-device" element={<LinkDevice />} />
-          <Route path="/room/:roomName" element={<Room />} />
+          <Route path="/room/:roomName" element={<Navigate to="/" replace />} />
           <Route path="/roadmap" element={<RoadmapRoute />} />
 
           {/* Everything else → login/PIN screen */}
@@ -180,7 +179,7 @@ function AppContent() {
           <Route path="/channels/:channelId" element={<Navigate to="/home" replace />} />
 
           {/* Utility pages */}
-          <Route path="/room/:roomName" element={<Room />} />
+          <Route path="/room/:roomName" element={<Navigate to="/" replace />} />
           <Route path="/roadmap" element={<RoadmapRoute />} />
         </Routes>
       </Suspense>

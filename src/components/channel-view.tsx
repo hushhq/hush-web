@@ -34,7 +34,6 @@ import { HomeView } from "@/components/home-view"
 type ChannelKind = "text" | "voice" | "home"
 
 const EMPTY_MEMBERS: ServerMember[] = []
-const EMPTY_VOICE_PARTICIPANTS: VoiceParticipantInfo[] = []
 
 type ThreadParent = {
   author: string
@@ -60,15 +59,6 @@ interface FavoritePayload {
   serverName: string
 }
 
-interface VoiceParticipantInfo {
-  id: string
-  name: string
-  initials: string
-  isMuted?: boolean
-  isDeafened?: boolean
-  isSpeaking?: boolean
-}
-
 interface ChannelViewProps {
   channelId: string
   channelName: string
@@ -79,14 +69,11 @@ interface ChannelViewProps {
   onAddFavorite?: (entry: FavoritePayload) => void
   onRemoveFavorite?: (messageId: string) => void
   members?: ServerMember[]
-  voiceParticipants?: VoiceParticipantInfo[]
   currentUserRole?: MemberRole
   onKickMember?: (member: ServerMember, reason: string) => void | Promise<void>
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
   /** Slot — production hush-web mounts the legacy Chat for text channels. */
   messageBody?: React.ReactNode
-  /** Slot — production hush-web mounts the legacy VoiceChannel for voice channels. */
-  voiceBody?: React.ReactNode
   /** Override the header icon (default routes by `channelKind`). Used
    *  when the channel is a system feed (server-log / moderation) or a
    *  home aggregate (favorites) so the surface gets its bespoke icon
@@ -104,12 +91,10 @@ export function ChannelView({
   onAddFavorite,
   onRemoveFavorite,
   members = EMPTY_MEMBERS,
-  voiceParticipants = EMPTY_VOICE_PARTICIPANTS,
   currentUserRole,
   onKickMember,
   onDirectMessage,
   messageBody,
-  voiceBody,
   headerIcon,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
@@ -238,11 +223,9 @@ export function ChannelView({
       </header>
       <div className="min-h-0 flex-1 overflow-hidden">
         {channelKind === "voice" ? (
-          <VoiceChannelView
-            channelName={channelName}
-            voiceBody={voiceBody}
-            mockParticipants={voiceParticipants}
-          />
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
+            <span className="text-sm">Connecting to {channelName}…</span>
+          </div>
         ) : channelKind === "home" ? (
           // messageBody slot wins for home surfaces (favorites,
           // catch-up) so the parent supplies its own scroll body
