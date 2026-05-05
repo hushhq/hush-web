@@ -280,19 +280,26 @@ export function ChannelSidebar({
               onSelect={onSelectChannel}
             />
           ) : null}
-          {categories.length > 0 || channels.some((c) => c.categoryId === null) ? (
-            <ChannelsSection
-              categories={categories}
-              channels={channels}
-              activeChannelId={activeChannelId}
-              onSelect={onSelectChannel}
-              onCategoriesChange={onCategoriesChange}
-              onChannelsChange={onChannelsChange}
-              onCreateChannel={onCreateChannel}
-              onDeleteChannel={onDeleteChannel}
-              canAdministrate={canAdministrate}
-            />
-          ) : null}
+          {/* Always render ChannelsSection. Hiding it when both lists are
+              empty was the bug behind two visible symptoms:
+                1. right-click on the empty channel-list area never opened
+                   the New category / New text channel / New voice channel
+                   menu — the ContextMenuTrigger wasn't in the DOM.
+                2. channels with a parentId pointing at a category we
+                   somehow filtered out became invisible (orphan channels);
+                   the command palette shows them but the sidebar didn't.
+              The empty-state SidebarGroup is small and harmless. */}
+          <ChannelsSection
+            categories={categories}
+            channels={channels}
+            activeChannelId={activeChannelId}
+            onSelect={onSelectChannel}
+            onCategoriesChange={onCategoriesChange}
+            onChannelsChange={onChannelsChange}
+            onCreateChannel={onCreateChannel}
+            onDeleteChannel={onDeleteChannel}
+            canAdministrate={canAdministrate}
+          />
           {/* maybe for future: {apps.length > 0 ? <AppsSection apps={apps} /> : null} */}
         </SidebarContent>
       </div>
@@ -680,10 +687,17 @@ function ChannelsSection({
   const channelsByCategory = React.useMemo(() => {
     const map = new Map<string | null, Channel[]>()
     map.set(null, [])
+    const knownCategoryIds = new Set(categories.map((c) => c.id))
     for (const cat of categories) map.set(cat.id, [])
     for (const ch of channels) {
-      const key = ch.categoryId
-      if (!map.has(key)) map.set(key, [])
+      // Orphan channels (parentId set but the category isn't visible to us
+      // — e.g. backend race, permission filter, or a missing template
+      // category) fold into root so they remain reachable. Otherwise they
+      // would only show in the command palette and never in the sidebar.
+      const key =
+        ch.categoryId !== null && !knownCategoryIds.has(ch.categoryId)
+          ? null
+          : ch.categoryId
       map.get(key)!.push(ch)
     }
     return map
