@@ -1,7 +1,9 @@
 import * as React from "react"
 
+import { isOutputDeviceSelectionSupported } from "@/audio"
 import { useAuth } from "@/contexts/AuthContext"
 import { getDeviceId } from "@/hooks/useAuth"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { useRoom } from "@/hooks/useRoom"
 import { useVoiceBandwidth } from "@/hooks/useVoiceBandwidth"
 import * as mlsStore from "@/lib/mlsStore"
@@ -62,6 +64,7 @@ interface PlaybackManagerLike {
   bindContainer: (el: HTMLElement) => void
   unbindContainer: () => void
   setRemoteAudioMuted: (muted: boolean) => void
+  setSinkId: (sinkId: string) => Promise<void>
 }
 
 interface RoomApi {
@@ -105,18 +108,28 @@ interface RoomApi {
   playbackManager: PlaybackManagerLike | null
 }
 
-async function listDevices(kind: "audioinput" | "videoinput"): Promise<DeviceOption[]> {
+async function listDevices(
+  kind: "audioinput" | "videoinput" | "audiooutput"
+): Promise<DeviceOption[]> {
   try {
-    const probe = await navigator.mediaDevices.getUserMedia(
-      kind === "audioinput" ? { audio: true } : { video: true }
-    )
+    if (kind !== "audiooutput") {
+      const probe = await navigator.mediaDevices.getUserMedia(
+        kind === "audioinput" ? { audio: true } : { video: true }
+      )
+      probe.getTracks().forEach((t) => t.stop())
+    }
     const all = await navigator.mediaDevices.enumerateDevices()
-    probe.getTracks().forEach((t) => t.stop())
+    const fallback =
+      kind === "audioinput"
+        ? "Microphone"
+        : kind === "videoinput"
+          ? "Camera"
+          : "Speaker"
     return all
       .filter((d) => d.kind === kind && d.deviceId)
       .map((d) => ({
         deviceId: d.deviceId,
-        label: d.label || (kind === "audioinput" ? "Microphone" : "Camera"),
+        label: d.label || fallback,
       }))
   } catch {
     return []
@@ -173,7 +186,14 @@ export function VoiceChannelView({
   const [videoDevices, setVideoDevices] = React.useState<DeviceOption[]>([])
   const [showMicPicker, setShowMicPicker] = React.useState(false)
   const [showWebcamPicker, setShowWebcamPicker] = React.useState(false)
+  const [showOutputPicker, setShowOutputPicker] = React.useState(false)
+  const [outputDevices, setOutputDevices] = React.useState<DeviceOption[]>([])
   const [showQualityPicker, setShowQualityPicker] = React.useState(false)
+  const isMobile = useIsMobile()
+  const outputDeviceSelectable = React.useMemo(
+    () => !isMobile && isOutputDeviceSelectionSupported(),
+    [isMobile]
+  )
   const [isMicOn, setIsMicOn] = React.useState(false)
   const [isDeafened, setIsDeafened] = React.useState(false)
   const [isWebcamOn, setIsWebcamOn] = React.useState(false)
@@ -213,6 +233,19 @@ export function VoiceChannelView({
       pm.unbindContainer()
     }
   }, [room.playbackManager])
+
+  // Apply the saved output sink to the playback manager once prefs are
+  // loaded and a manager exists. Browsers that lack setSinkId silently
+  // skip; the manager swallows per-element failures inside setSinkId.
+  React.useEffect(() => {
+    const pm = room.playbackManager
+    if (!pm || !outputDeviceSelectable) return
+    const id = prefs?.outputDeviceId ?? null
+    if (!id) return
+    void pm.setSinkId(id).catch(() => {
+      // Output device may have been unplugged; fall back to default.
+    })
+  }, [room.playbackManager, prefs?.outputDeviceId, outputDeviceSelectable])
 
   const connectRoomFn = room.connectRoom
   const disconnectRoomFn = room.disconnectRoom
@@ -386,6 +419,37 @@ export function VoiceChannelView({
     setShowWebcamPicker(true)
   }, [])
 
+  const handleOpenOutputPicker = React.useCallback(async () => {
+    if (!outputDeviceSelectable) return
+    setOutputDevices(await listDevices("audiooutput"))
+    setShowOutputPicker(true)
+  }, [outputDeviceSelectable])
+
+  const handlePickOutput = React.useCallback(
+    async (deviceId: string) => {
+      setShowOutputPicker(false)
+      const next: VoiceDevicePrefs = {
+        audioDeviceId: prefs?.audioDeviceId ?? null,
+        videoDeviceId: prefs?.videoDeviceId ?? null,
+        outputDeviceId: deviceId,
+        audioEnabled: prefs?.audioEnabled ?? true,
+        videoEnabled: prefs?.videoEnabled ?? false,
+        dontAskAgain: prefs?.dontAskAgain ?? true,
+        updatedAt: Date.now(),
+      }
+      setPrefs(next)
+      if (currentUserId) {
+        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+      }
+      try {
+        await room.playbackManager?.setSinkId(deviceId)
+      } catch (err) {
+        console.error("[VoiceChannel] output device switch failed:", err)
+      }
+    },
+    [currentUserId, prefs, room.playbackManager]
+  )
+
   const handlePickMic = React.useCallback(
     async (deviceId: string) => {
       setShowMicPicker(false)
@@ -534,8 +598,10 @@ export function VoiceChannelView({
             onToggleWebcam={handleToggleWebcam}
             onToggleScreen={handleToggleScreen}
             onSwitchScreenSource={handleSwitchScreen}
+            outputDeviceSelectable={outputDeviceSelectable}
             onPickMicDevice={handleOpenMicPicker}
             onPickWebcamDevice={handleOpenWebcamPicker}
+            onPickOutputDevice={handleOpenOutputPicker}
             onLeave={handleLeave}
           />
         ) : null}
@@ -583,6 +649,16 @@ export function VoiceChannelView({
         selectedDeviceId={prefs?.videoDeviceId ?? null}
         onSelect={(id) => void handlePickWebcam(id)}
         onCancel={() => setShowWebcamPicker(false)}
+      />
+
+      <VoiceDevicePickerDialog
+        open={showOutputPicker}
+        title="Choose audio output"
+        description="Route remote voices to a specific speaker or headset."
+        devices={outputDevices}
+        selectedDeviceId={prefs?.outputDeviceId ?? null}
+        onSelect={(id) => void handlePickOutput(id)}
+        onCancel={() => setShowOutputPicker(false)}
       />
     </div>
   )

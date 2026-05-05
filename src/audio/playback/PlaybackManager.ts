@@ -24,15 +24,33 @@ export interface ManagedAudioTrack {
   cleanupRetry: (() => void) | null;
 }
 
+/**
+ * `true` when the current document can route remote audio to a chosen
+ * output device. Chromium-based desktop browsers and Electron expose
+ * `HTMLMediaElement.setSinkId`; Firefox and all current mobile browsers
+ * do not. Callers that surface UI for output selection MUST guard on
+ * this predicate.
+ */
+export function isOutputDeviceSelectionSupported(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof HTMLMediaElement === "undefined") return false;
+  const proto = HTMLMediaElement.prototype as unknown as {
+    setSinkId?: unknown;
+  };
+  return typeof proto.setSinkId === "function";
+}
+
 export class PlaybackManager {
   private _container: HTMLElement | null = null;
   private _tracks: Map<string, ManagedAudioTrack> = new Map();
   private _muted = false;
   private _disposed = false;
+  private _sinkId: string | null = null;
 
   get isDisposed(): boolean { return this._disposed; }
   get isMuted(): boolean { return this._muted; }
   get trackCount(): number { return this._tracks.size; }
+  get sinkId(): string | null { return this._sinkId; }
 
   /**
    * Bind the DOM container where audio elements will be mounted.
@@ -78,6 +96,17 @@ export class PlaybackManager {
     audio.style.display = 'none';
     audio.muted = this._muted;
     audio.srcObject = new MediaStream([track]);
+    if (this._sinkId) {
+      const el = audio as HTMLAudioElement & {
+        setSinkId?: (id: string) => Promise<void>;
+      };
+      if (typeof el.setSinkId === 'function') {
+        el.setSinkId(this._sinkId).catch(() => {
+          // Output device may have been unplugged between save and use;
+          // playback falls back to the system default.
+        });
+      }
+    }
 
     const managed: ManagedAudioTrack = { sid, element: audio, cleanupRetry: null };
 
@@ -120,6 +149,36 @@ export class PlaybackManager {
     this._muted = muted;
     for (const managed of this._tracks.values()) {
       managed.element.muted = muted;
+    }
+  }
+
+  /**
+   * Route remote audio playback to a specific output device. Uses the
+   * Audio Output Devices API (`HTMLMediaElement.setSinkId`) which is
+   * supported on Chromium-based desktop browsers and Electron — but not
+   * on Firefox or any mobile browser. Callers MUST gate the UI on
+   * `isOutputDeviceSelectionSupported()` before exposing this control.
+   *
+   * The chosen `sinkId` is remembered so audio elements created
+   * afterwards (a peer joins mid-call) inherit the routing without an
+   * extra round-trip through `voiceDevicePrefs`.
+   */
+  async setSinkId(sinkId: string): Promise<void> {
+    this._sinkId = sinkId;
+    const failures: unknown[] = [];
+    for (const managed of this._tracks.values()) {
+      const el = managed.element as HTMLAudioElement & {
+        setSinkId?: (id: string) => Promise<void>;
+      };
+      if (typeof el.setSinkId !== 'function') continue;
+      try {
+        await el.setSinkId(sinkId);
+      } catch (err) {
+        failures.push(err);
+      }
+    }
+    if (failures.length > 0) {
+      throw failures[0];
     }
   }
 

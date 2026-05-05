@@ -25,6 +25,11 @@ interface VoiceControlsBarProps {
   isWebcamOn: boolean
   isScreenSharing: boolean
   qualityKey: keyof typeof QUALITY_PRESETS
+  /** Show chevron next to the deafen button so the user can pick an
+   *  audio output device. Forwarded from the orchestrator after
+   *  checking `isOutputDeviceSelectionSupported()` and the mobile
+   *  guard — undefined / false hides the chevron entirely. */
+  outputDeviceSelectable?: boolean
   onToggleMic: () => void
   onToggleDeafen: () => void
   onToggleWebcam: () => void
@@ -32,6 +37,7 @@ interface VoiceControlsBarProps {
   onSwitchScreenSource: () => void
   onPickMicDevice: () => void
   onPickWebcamDevice: () => void
+  onPickOutputDevice?: () => void
   onLeave: () => void
 }
 
@@ -49,6 +55,7 @@ export function VoiceControlsBar({
   isWebcamOn,
   isScreenSharing,
   qualityKey,
+  outputDeviceSelectable = false,
   onToggleMic,
   onToggleDeafen,
   onToggleWebcam,
@@ -56,6 +63,7 @@ export function VoiceControlsBar({
   onSwitchScreenSource,
   onPickMicDevice,
   onPickWebcamDevice,
+  onPickOutputDevice,
   onLeave,
 }: VoiceControlsBarProps) {
   const screenSupported = IS_SCREEN_SHARE_SUPPORTED
@@ -75,15 +83,29 @@ export function VoiceControlsBar({
           {isMicOn ? <MicIcon /> : <MicOffIcon />}
         </SplitButton>
 
-        <ToggleButton
-          active={isDeafened}
-          activeVariant="destructive"
-          inactiveVariant="secondary"
-          ariaLabel={isDeafened ? "Undeafen" : "Deafen"}
-          onClick={onToggleDeafen}
-        >
-          {isDeafened ? <HeadphoneOffIcon /> : <HeadphonesIcon />}
-        </ToggleButton>
+        {outputDeviceSelectable && onPickOutputDevice ? (
+          <SplitButton
+            active={isDeafened}
+            activeVariant="destructive"
+            inactiveVariant="secondary"
+            ariaLabel={isDeafened ? "Undeafen" : "Deafen"}
+            onClick={onToggleDeafen}
+            onChevron={onPickOutputDevice}
+            chevronAriaLabel="Change audio output"
+          >
+            {isDeafened ? <HeadphoneOffIcon /> : <HeadphonesIcon />}
+          </SplitButton>
+        ) : (
+          <ToggleButton
+            active={isDeafened}
+            activeVariant="destructive"
+            inactiveVariant="secondary"
+            ariaLabel={isDeafened ? "Undeafen" : "Deafen"}
+            onClick={onToggleDeafen}
+          >
+            {isDeafened ? <HeadphoneOffIcon /> : <HeadphonesIcon />}
+          </ToggleButton>
+        )}
 
         <SplitButton
           active={isWebcamOn}
@@ -198,7 +220,9 @@ function SplitButton({
       className={cn(
         "flex items-center overflow-hidden rounded-full",
         active
-          ? "bg-primary text-primary-foreground"
+          ? activeVariant === "destructive"
+            ? "bg-destructive text-destructive-foreground"
+            : "bg-primary text-primary-foreground"
           : inactiveVariant === "destructive"
             ? "bg-destructive text-destructive-foreground"
             : "bg-secondary text-secondary-foreground"

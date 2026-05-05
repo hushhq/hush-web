@@ -42,6 +42,9 @@ const RECORD_KEY = "current"
 export interface VoiceDevicePrefs {
   audioDeviceId: string | null
   videoDeviceId: string | null
+  /** Optional output sink id (HTMLMediaElement.setSinkId). Only meaningful
+   *  on Chromium-based desktop browsers + Electron; ignored elsewhere. */
+  outputDeviceId?: string | null
   audioEnabled: boolean
   videoEnabled: boolean
   dontAskAgain: boolean

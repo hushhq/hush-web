@@ -57,7 +57,10 @@ export type { CaptureGraphResult, CaptureGraphOptions } from './graph/CaptureGra
 export { buildObservationTap } from './graph/ObservationTap';
 export type { ObservationTapResult, ObservationTapOptions } from './graph/ObservationTap';
 
-export { PlaybackManager } from './playback/PlaybackManager';
+export {
+  PlaybackManager,
+  isOutputDeviceSelectionSupported,
+} from './playback/PlaybackManager';
 export type { ManagedAudioTrack } from './playback/PlaybackManager';
 
 export { LevelAnalyser } from './analysis/LevelAnalyser';

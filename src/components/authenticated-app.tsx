@@ -57,6 +57,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RealChat } from "@/components/chat-real"
 import { VoiceChannelView } from "@/components/voice-channel-view"
+import { VoicePlaceholderView } from "@/components/voice/voice-placeholder-view"
 import { useAuth } from "@/contexts/AuthContext"
 import { getDeviceId } from "@/hooks/useAuth"
 import { useInstanceContext } from "@/contexts/InstanceContext"
@@ -467,6 +468,12 @@ export function AuthenticatedApp() {
   // joinedVoice holds the active voice channel descriptor; mount/unmount of
   // <VoiceChannelView /> drives connect/disconnect.
   const [joinedVoice, setJoinedVoice] = React.useState<JoinedVoice | null>(null)
+  // Channel id the user just hung up on. Suppresses the auto-rejoin
+  // effect so leaving lands on the placeholder lobby rather than
+  // immediately reconnecting. Cleared when the user navigates away
+  // from voice routes or clicks "Join call" in the placeholder.
+  const [voluntarilyLeftChannelId, setVoluntarilyLeftChannelId] =
+    React.useState<string | null>(null)
   const [voiceState, setVoiceState] = React.useState({
     isMicOn: false,
     isDeafened: false,
@@ -596,6 +603,7 @@ export function AuthenticatedApp() {
     if (!activeServer || !instanceUrl) return
     if (activeChannel.kind !== "voice") return
     if (joinedVoice && joinedVoice.channelId === activeChannel.id) return
+    if (voluntarilyLeftChannelId === activeChannel.id) return
     setJoinedVoice({
       channelId: activeChannel.id,
       channelName: activeChannel.name,
@@ -603,7 +611,22 @@ export function AuthenticatedApp() {
       serverName: activeServer.name,
       instanceUrl,
     })
-  }, [activeServer, activeChannel, instanceUrl, joinedVoice])
+  }, [activeServer, activeChannel, instanceUrl, joinedVoice, voluntarilyLeftChannelId])
+
+  // Clear the voluntary-leave guard whenever the user moves off the
+  // voice channel route — next time they come back it should auto-join.
+  React.useEffect(() => {
+    if (activeChannel.kind !== "voice") {
+      if (voluntarilyLeftChannelId) setVoluntarilyLeftChannelId(null)
+      return
+    }
+    if (
+      voluntarilyLeftChannelId != null &&
+      voluntarilyLeftChannelId !== activeChannel.id
+    ) {
+      setVoluntarilyLeftChannelId(null)
+    }
+  }, [activeChannel.kind, activeChannel.id, voluntarilyLeftChannelId])
 
   // Default to Catch-up surface when on /home with no channel slug
   React.useEffect(() => {
@@ -629,6 +652,7 @@ export function AuthenticatedApp() {
   }, [])
 
   const handleVoiceLeave = React.useCallback(() => {
+    setVoluntarilyLeftChannelId(joinedVoice?.channelId ?? null)
     setJoinedVoice(null)
     setVoiceState({
       isMicOn: false,
@@ -636,10 +660,25 @@ export function AuthenticatedApp() {
       isScreenSharing: false,
       isWebcamOn: false,
     })
-  }, [])
+  }, [joinedVoice?.channelId])
+
+  const handleJoinFromPlaceholder = React.useCallback(() => {
+    if (!activeServer || !instanceUrl) return
+    if (activeChannel.kind !== "voice") return
+    setVoluntarilyLeftChannelId(null)
+    setJoinedVoice({
+      channelId: activeChannel.id,
+      channelName: activeChannel.name,
+      serverId: activeServer.id,
+      serverName: activeServer.name,
+      instanceUrl,
+    })
+  }, [activeServer, activeChannel, instanceUrl])
 
   const isViewingVoice =
     joinedVoice != null && activeChannel.id === joinedVoice.channelId
+  const isVoiceChannelActive = activeChannel.kind === "voice"
+  const showVoicePlaceholder = isVoiceChannelActive && !isViewingVoice
   const joinedVoiceInstanceUrl = joinedVoice?.instanceUrl ?? null
   // Voice connection lives on the joined-voice instance, not the
   // currently-navigated channel's instance. When the user navigates to
@@ -1084,7 +1123,13 @@ export function AuthenticatedApp() {
                   />
                 </div>
               ) : null}
-              {!isViewingVoice ? channelContent : null}
+              {showVoicePlaceholder ? (
+                <VoicePlaceholderView
+                  channelName={activeChannel.name}
+                  onJoinCall={handleJoinFromPlaceholder}
+                />
+              ) : null}
+              {!isViewingVoice && !showVoicePlaceholder ? channelContent : null}
             </SidebarInset>
           </ResizablePanel>
         </ResizablePanelGroup>
