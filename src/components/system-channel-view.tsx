@@ -9,6 +9,7 @@ import { ScrollTextIcon, ShieldAlertIcon } from "lucide-react"
 
 import { ScrollArea } from "@/components/ui/scroll-area.tsx"
 import { Skeleton } from "@/components/ui/skeleton"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
   useSystemEvents,
   type SystemEvent,
@@ -24,7 +25,7 @@ interface SystemChannelViewProps {
 
 const HEADERS: Record<SystemEventSource, { title: string; icon: React.ReactNode; topic: string }> = {
   "server-log": {
-    title: "Server log",
+    title: "System log",
     icon: <ScrollTextIcon className="size-5 text-muted-foreground" />,
     topic: "Automatic record of server-wide events",
   },
@@ -52,6 +53,11 @@ export function SystemChannelView({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+        {/* Channel-list sidebar trigger; visible only at viewport
+            widths where the sidebar is collapsed off-canvas. Without
+            this the user has no way back to the channel list from a
+            system channel on a narrow window. */}
+        <SidebarTrigger className="md:hidden" />
         {header.icon}
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-semibold">{header.title}</span>

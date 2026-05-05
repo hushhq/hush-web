@@ -26,3 +26,21 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 if (typeof document !== 'undefined' && typeof document.elementFromPoint !== 'function') {
   document.elementFromPoint = () => null;
 }
+
+// jsdom does not implement window.matchMedia. shadcn's SidebarProvider
+// reads it on mount to detect the mobile breakpoint, so any test that
+// renders SidebarProvider (system-channel-view, channel-sidebar, etc.)
+// trips a "matchMedia is not a function" without this stub. A query-
+// shape mock is enough — no test asserts against the result.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+}

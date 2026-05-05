@@ -163,11 +163,19 @@ export function useChannelsForServer({
       raw
         .filter((c) => c.type === SYSTEM)
         .sort((a, b) => a.position - b.position)
-        .map((c) => ({
-          id: c.id,
-          name: channelDisplayName(c) || "System",
-          systemChannelType: deriveSystemChannelType(c),
-        })),
+        .map((c) => {
+          const kind = deriveSystemChannelType(c)
+          // Fallback display name when the backend ships no explicit
+          // channel name. server-log → "System log" (the user-facing
+          // canonical label across the chat surfaces), moderation →
+          // "Moderation".
+          const fallback = kind === "moderation" ? "Moderation" : "System log"
+          return {
+            id: c.id,
+            name: channelDisplayName(c) || fallback,
+            systemChannelType: kind,
+          }
+        }),
     [raw]
   )
 
@@ -218,7 +226,12 @@ export function useChannelsForServer({
           })
           .filter((x): x is RawChannel => x !== null)
         const cats = prev.filter((c) => c.type === CATEGORY)
-        return [...cats, ...reordered]
+        // System channels (server-log, moderation) are server-managed,
+        // not draggable, and not in `next` — preserve them across the
+        // optimistic rebuild or the System section disappears until
+        // the next refetch lands.
+        const systems = prev.filter((c) => c.type === SYSTEM)
+        return [...cats, ...systems, ...reordered]
       })
       void (async () => {
         for (let i = 0; i < next.length; i++) {

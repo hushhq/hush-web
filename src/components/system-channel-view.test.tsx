@@ -3,6 +3,7 @@
  * empty state, and event row rendering for both server-log and
  * moderation sources.
  */
+import * as React from "react"
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 
@@ -12,8 +13,17 @@ vi.mock("@/adapters/useSystemEvents", () => ({
 
 import { useSystemEvents } from "@/adapters/useSystemEvents"
 import { SystemChannelView } from "./system-channel-view"
+import { SidebarProvider } from "@/components/ui/sidebar"
 
 const mockHook = vi.mocked(useSystemEvents)
+
+// SystemChannelView mounts a SidebarTrigger so the user can reopen the
+// channel-list sidebar from a system channel on a narrow window. The
+// trigger reads the SidebarProvider context, so every test render
+// needs the provider — wrap once here.
+function renderWithShell(ui: React.ReactElement) {
+  return render(<SidebarProvider>{ui}</SidebarProvider>)
+}
 
 describe("SystemChannelView", () => {
   afterEach(() => {
@@ -29,7 +39,7 @@ describe("SystemChannelView", () => {
       refetch: vi.fn(),
     })
 
-    render(
+    renderWithShell(
       <SystemChannelView
         serverId="g1"
         source="server-log"
@@ -38,7 +48,7 @@ describe("SystemChannelView", () => {
       />
     )
 
-    expect(screen.getByText("Server log")).toBeInTheDocument()
+    expect(screen.getByText("System log")).toBeInTheDocument()
     expect(
       screen.getByText(/automatic record of server-wide events/i)
     ).toBeInTheDocument()
@@ -52,7 +62,7 @@ describe("SystemChannelView", () => {
       refetch: vi.fn(),
     })
 
-    render(
+    renderWithShell(
       <SystemChannelView
         serverId="g1"
         source="moderation"
@@ -72,7 +82,7 @@ describe("SystemChannelView", () => {
       refetch: vi.fn(),
     })
 
-    render(
+    renderWithShell(
       <SystemChannelView
         serverId="g1"
         source="server-log"
@@ -92,7 +102,7 @@ describe("SystemChannelView", () => {
       refetch: vi.fn(),
     })
 
-    render(
+    renderWithShell(
       <SystemChannelView
         serverId="g1"
         source="server-log"
@@ -121,7 +131,7 @@ describe("SystemChannelView", () => {
       refetch: vi.fn(),
     })
 
-    render(
+    renderWithShell(
       <SystemChannelView
         serverId="g1"
         source="server-log"

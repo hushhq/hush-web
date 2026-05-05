@@ -1194,30 +1194,29 @@ function SortableChannel({
     opacity: isDragging ? 0.3 : 1,
   }
 
+  // Mockup parity: no visible grip handle on channel rows. The whole
+  // row is the drag target via {attributes,listeners} on the outer
+  // div. Categories keep their hover-revealed handle. The reason
+  // matters beyond aesthetics: with a separate handle button the row
+  // hosts two clickable surfaces (drag handle + ChannelButton) that
+  // race for pointer events on the hover edge, which on touchpads
+  // intermittently captures a drag instead of a click. Keeping drag
+  // attached to the row only is also what the prototype validated.
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="group/channel-row flex min-w-0 items-start gap-1"
+      {...attributes}
+      {...listeners}
+      className="min-w-0"
     >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="mt-1 flex size-4 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground active:cursor-grabbing group-hover/channel-row:opacity-100"
-        aria-label={`Drag ${channel.name}`}
-      >
-        <GripVerticalIcon className="size-3" />
-      </button>
-      <div className="min-w-0 flex-1">
-        <ChannelButton
-          channel={channel}
-          isActive={isActive}
-          onSelect={onSelect}
-          onDeleteChannel={onDeleteChannel}
-          canAdministrate={canAdministrate}
-        />
-      </div>
+      <ChannelButton
+        channel={channel}
+        isActive={isActive}
+        onSelect={onSelect}
+        onDeleteChannel={onDeleteChannel}
+        canAdministrate={canAdministrate}
+      />
     </div>
   )
 }
