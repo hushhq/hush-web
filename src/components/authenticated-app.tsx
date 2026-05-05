@@ -231,18 +231,6 @@ export function AuthenticatedApp() {
     currentUserId
   )
 
-  // Augment voice-channel rows with their live participant rosters so
-  // the sidebar surfaces the same Discord-style presence the mockup
-  // demonstrates. Pure derivation — no extra state machine.
-  const channelsWithVoicePresence = React.useMemo<Channel[]>(() => {
-    if (voicePresence.size === 0) return channels
-    return channels.map((c) =>
-      c.kind === "voice" && voicePresence.has(c.id)
-        ? { ...c, participants: voicePresence.get(c.id) }
-        : c
-    )
-  }, [channels, voicePresence])
-
   const currentUserRole = React.useMemo(
     () => members.find((m) => m.id === currentUserId)?.role,
     [members, currentUserId]
@@ -694,6 +682,54 @@ export function AuthenticatedApp() {
       instanceUrl,
     })
   }, [activeServer, activeChannel, instanceUrl])
+
+  // Augment voice-channel rows with their live participant rosters so
+  // the sidebar surfaces the same Discord-style presence the mockup
+  // demonstrates. Two sources merged:
+  // - WS-driven `voicePresence` (other users via voice_state_update)
+  // - local `joinedVoice` (self) — guarantees the user always sees
+  //   their own avatar the moment they connect, without waiting for
+  //   the LiveKit webhook round-trip.
+  const channelsWithVoicePresence = React.useMemo<Channel[]>(() => {
+    const myChannelId = joinedVoice?.channelId ?? null
+    if (voicePresence.size === 0 && myChannelId == null) return channels
+    const myDisplayName =
+      user?.display_name?.trim() || user?.username?.trim() || "You"
+    const myInitials = (() => {
+      const parts = myDisplayName.split(/\s+/).filter(Boolean)
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+      return parts[0]?.[0]?.toUpperCase() ?? "?"
+    })()
+    return channels.map((c) => {
+      if (c.kind !== "voice") return c
+      const fromWs = voicePresence.get(c.id) ?? []
+      const isJoinedHere = myChannelId === c.id
+      const hasSelf = fromWs.some((p) => p.id === currentUserId)
+      const merged =
+        isJoinedHere && !hasSelf && currentUserId
+          ? [
+              ...fromWs,
+              {
+                id: currentUserId,
+                name: "You",
+                initials: myInitials,
+                isMuted: !voiceState.isMicOn,
+                isDeafened: voiceState.isDeafened,
+              },
+            ]
+          : fromWs
+      return merged.length > 0 ? { ...c, participants: merged } : c
+    })
+  }, [
+    channels,
+    voicePresence,
+    joinedVoice?.channelId,
+    currentUserId,
+    user?.display_name,
+    user?.username,
+    voiceState.isMicOn,
+    voiceState.isDeafened,
+  ])
 
   const isViewingVoice =
     joinedVoice != null && activeChannel.id === joinedVoice.channelId
