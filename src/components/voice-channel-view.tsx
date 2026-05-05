@@ -453,6 +453,12 @@ export function VoiceChannelView({
     }
   }, [room, roomName, displayName, channel.id])
 
+  // Keep the imperative voice-controls handle in sync with the latest
+  // closures. Refs do not participate in render output, so this effect
+  // is safe to refire — but it MUST NOT call onVoiceStateChange. Doing
+  // so re-enters the parent on every render, and because `handleToggle*`
+  // callbacks are rebuilt every render through the (unmemoised) `room`
+  // object, that re-entry triggers an infinite update loop.
   React.useEffect(() => {
     if (!voiceControlsRef) return
     voiceControlsRef.current = {
@@ -464,20 +470,13 @@ export function VoiceChannelView({
       isScreenSharing,
       isWebcamOn,
     }
+  })
+
+  // Boolean-only state notification: refires only when one of the four
+  // toggles actually flips, not on every render of this component.
+  React.useEffect(() => {
     onVoiceStateChange?.({ isMicOn, isDeafened, isScreenSharing, isWebcamOn })
-  }, [
-    voiceControlsRef,
-    onVoiceStateChange,
-    isMicOn,
-    isDeafened,
-    isScreenSharing,
-    isWebcamOn,
-    handleToggleMic,
-    handleToggleDeafen,
-    handleToggleScreen,
-    handleSwitchScreen,
-    handleToggleWebcam,
-  ])
+  }, [onVoiceStateChange, isMicOn, isDeafened, isScreenSharing, isWebcamOn])
 
   React.useEffect(() => {
     if (!isScreenSharing) setLocalScreenWatched(false)
