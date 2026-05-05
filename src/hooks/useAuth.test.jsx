@@ -13,6 +13,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { JWT_KEY } from './useAuth';
+import {
+  readWrappedIdentity,
+  isMarkerAlive,
+  clearSessionKey,
+} from '../lib/vaultSessionKey';
 
 // ── authInstanceStore mock (must be declared before module imports) ─────────────
 let _mockActiveInstanceUrl = '';
@@ -259,6 +264,39 @@ describe('useAuth - performChallengeResponse', () => {
     expect(storedHex).toBeTruthy();
     expect(typeof storedHex).toBe('string');
     expect(storedHex.length).toBe(64);
+  });
+
+  it('writes the wrapped identity into the vault session key store on unlock (P21 step 2)', async () => {
+    // The unlock path must seed the vault session key store so step 3
+    // can resume `vaultState='unlocked'` across reloads. We do not
+    // assert the pre-state of the marker / IDB record because the
+    // unlock path is fire-and-forget — a previous test in this file
+    // can land its write *after* `beforeEach` runs, polluting the
+    // baseline. Asserting only the post-unlock state keeps the
+    // contract testable without requiring serialization of the prior
+    // unlock writes.
+    await clearSessionKey('user-1');
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+
+    await waitFor(() => expect(result.current.user?.id).toBe('user-1'));
+    // The write is fire-and-forget so the unlock UX never blocks on
+    // IDB; the marker + IDB record settle in a follow-up microtask.
+    await waitFor(() => expect(isMarkerAlive('user-1')).toBe(true));
+    await waitFor(async () => {
+      const wrapped = await readWrappedIdentity('user-1');
+      expect(wrapped).not.toBeNull();
+      expect(wrapped.iv.byteLength).toBe(12);
+      expect(wrapped.ciphertext.byteLength).toBeGreaterThan(0);
+    });
   });
 
   it('hydrates the transcript cache BEFORE exposing vaultState=unlocked', async () => {

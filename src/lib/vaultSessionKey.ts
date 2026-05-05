@@ -154,9 +154,51 @@ export async function getSessionKeyIfAlive(
 }
 
 /**
+ * Atomic seal-and-store path for unlock callers. Opens the session DB
+ * once, reads-or-generates the CryptoKey, wraps the supplied identity
+ * bytes under it, and commits both fields in a single transaction.
+ *
+ * Avoids the ensureSessionKey → persistWrappedIdentity round-trip that
+ * does two `open + close` cycles back-to-back; under some IDB
+ * implementations (notably `fake-indexeddb` in tests) the second open
+ * can race the first close and observe a stale record.
+ */
+export async function sealIdentityIntoSession(
+  userId: string,
+  identity: Uint8Array
+): Promise<void> {
+  if (!userId) throw new Error("userId required")
+  const db = await openSessionDb(userId)
+  try {
+    let record = await readRecord(db)
+    if (!record?.cryptoKey) {
+      const cryptoKey = await crypto.subtle.generateKey(
+        KEY_ALGORITHM,
+        false,
+        KEY_USAGE
+      )
+      record = { cryptoKey, wrapped: null, createdAt: Date.now() }
+    }
+    const wrapped = await wrapIdentity(record.cryptoKey, identity)
+    await writeRecord(db, {
+      cryptoKey: record.cryptoKey,
+      wrapped,
+      createdAt: record.createdAt,
+    })
+  } finally {
+    db.close()
+  }
+}
+
+/**
  * Persists the wrapped identity bundle alongside the session CryptoKey.
  * The plaintext identity material never leaves the calling tab — the
  * caller passes `wrapIdentity` output here.
+ *
+ * For unlock-time writes prefer `sealIdentityIntoSession` which folds
+ * the generate-or-reuse + wrap + write into a single transaction; this
+ * standalone variant is kept for re-seal flows that already hold a
+ * `wrapIdentity` output and a verified CryptoKey from a prior call.
  */
 export async function persistWrappedIdentity(
   userId: string,
@@ -326,9 +368,20 @@ function readRecord(db: IDBDatabase): Promise<SessionRecord | null> {
       reject(err instanceof Error ? err : new Error(String(err)))
       return
     }
+    let result: SessionRecord | null = null
     const req = tx.objectStore(STORE_NAME).get(RECORD_KEY)
-    req.onsuccess = () => resolve((req.result as SessionRecord | undefined) ?? null)
+    req.onsuccess = () => {
+      result = (req.result as SessionRecord | undefined) ?? null
+    }
     req.onerror = () => reject(req.error ?? new Error("readRecord failed"))
+    // Wait for the transaction itself to complete before resolving.
+    // Resolving on `req.onsuccess` and immediately calling `db.close()`
+    // can leave the transaction half-flushed under some IDB
+    // implementations (fake-indexeddb in particular); the next
+    // `transaction()` then deadlocks waiting for the previous tx.
+    tx.oncomplete = () => resolve(result)
+    tx.onerror = () => reject(tx.error ?? new Error("readRecord tx failed"))
+    tx.onabort = () => reject(tx.error ?? new Error("readRecord tx aborted"))
   })
 }
 
@@ -341,8 +394,9 @@ function writeRecord(db: IDBDatabase, record: SessionRecord): Promise<void> {
       reject(err instanceof Error ? err : new Error(String(err)))
       return
     }
-    const req = tx.objectStore(STORE_NAME).put(record, RECORD_KEY)
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error ?? new Error("writeRecord failed"))
+    tx.objectStore(STORE_NAME).put(record, RECORD_KEY)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error("writeRecord failed"))
+    tx.onabort = () => reject(tx.error ?? new Error("writeRecord aborted"))
   })
 }

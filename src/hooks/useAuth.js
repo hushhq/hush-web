@@ -43,6 +43,10 @@ import {
   clearVaultSessionKey,
 } from '../lib/desktopVaultBridge';
 import {
+  sealIdentityIntoSession,
+  markAlive as markVaultSessionAlive,
+} from '../lib/vaultSessionKey';
+import {
   openHistoryStore,
   importHistorySnapshot,
 } from '../lib/mlsStore';
@@ -185,6 +189,49 @@ const PIN_DELAY_TABLE = [
 const MAX_PIN_FAILURES = 10;
 
 // ── Module-level helpers ─────────────────────────────────────────────────────
+
+/**
+ * Encodes the in-memory identity material into the byte buffer that
+ * gets sealed under the vault session key. The format is the bare
+ * JSON `{ v: 1, priv: number[], pub: number[] }`; the caller never
+ * sees these bytes — they immediately enter `wrapIdentity` and the
+ * resulting AES-GCM ciphertext is what lands in IndexedDB.
+ *
+ * @param {Uint8Array} privateKey
+ * @param {Uint8Array} publicKey
+ * @returns {Uint8Array}
+ */
+function encodeIdentityForVaultSession(privateKey, publicKey) {
+  const payload = {
+    v: 1,
+    priv: Array.from(privateKey),
+    pub: Array.from(publicKey),
+  };
+  return new TextEncoder().encode(JSON.stringify(payload));
+}
+
+/**
+ * Best-effort write of the unlocked identity to the per-tab session
+ * key store (see `src/lib/vaultSessionKey.ts`). Designed to fail
+ * silently — the caller's unlock must succeed even when IDB / WebCrypto
+ * are unavailable, so any error is logged and swallowed. Read-side
+ * wiring lands in P21 step 3; this helper is the write half.
+ *
+ * @param {string} userId
+ * @param {Uint8Array} privateKey
+ * @param {Uint8Array} publicKey
+ * @returns {Promise<void>}
+ */
+async function writeVaultSessionForUnlock(userId, privateKey, publicKey) {
+  if (!userId) return;
+  try {
+    const identityBytes = encodeIdentityForVaultSession(privateKey, publicKey);
+    await sealIdentityIntoSession(userId, identityBytes);
+    markVaultSessionAlive(userId);
+  } catch (err) {
+    console.warn('[useAuth] vault session-key write failed (non-fatal):', err);
+  }
+}
 
 /**
  * Returns or generates a stable per-device UUID stored in localStorage.
@@ -827,6 +874,12 @@ export function useAuth() {
     }
     setVaultState('unlocked');
     applyVaultTimeout(u.id);
+    // P21 step 2 — write the unlocked identity into the vault session
+    // key store so future boots can resume without PIN under the
+    // configured policy. Fire-and-forget: the unlock path must not
+    // block on IDB; writeVaultSessionForUnlock swallows its own
+    // failures via console.warn. The boot read path lands in step 3.
+    void writeVaultSessionForUnlock(u.id, privateKey, publicKey);
     return { token: jwt, user: u };
   }, [finishAuth, applyVaultTimeout]);
 
@@ -889,6 +942,12 @@ export function useAuth() {
       setVaultState('unlocked');
       localStorage.setItem(HOME_INSTANCE_KEY, baseUrl || window.location.origin);
       applyVaultTimeout(u.id);
+      // P21 step 2 — write the unlocked identity into the vault session
+      // key store. Mirrors the call in performChallengeResponse so the
+      // first-registration unlock has the same cross-reload affordance
+      // as a returning sign-in. Fire-and-forget: see notes on the
+      // performChallengeResponse call for the rationale.
+      void writeVaultSessionForUnlock(u.id, privateKey, publicKey);
       return { user: u };
     } catch (err) {
       setError(err);
@@ -1081,6 +1140,17 @@ export function useAuth() {
       setVaultState('unlocked');
       applyVaultTimeout(authResult.user.id);
       requirePinSetup();
+      // P21 step 2 — write the unlocked identity from the device-link
+      // bundle into the vault session key store. The keypair travelled
+      // through the encrypted bundle, not via PIN, so without this the
+      // newly-linked device would re-prompt for PIN on its first
+      // reload even under `never`. Fire-and-forget: see notes on the
+      // performChallengeResponse call for the rationale.
+      void writeVaultSessionForUnlock(
+        authResult.user.id,
+        bundle.rootPrivateKey,
+        bundle.rootPublicKey,
+      );
       return authResult;
     } catch (err) {
       setError(err);
@@ -1209,6 +1279,17 @@ export function useAuth() {
       }
       setVaultState('unlocked');
       applyVaultTimeout(userId);
+      // P21 step 2 — re-seal the unlocked identity into the vault
+      // session key store. PIN unlock is the most common steady-state
+      // unlock path; without this, the IDB record stays stale across
+      // multi-day sessions and the boot read in step 3 would fall
+      // back to PIN even when the user expects `never` semantics.
+      // Fire-and-forget: this write must not block the unlock UX,
+      // and writeVaultSessionForUnlock already swallows its own
+      // failures via console.warn.
+      if (publicKey) {
+        void writeVaultSessionForUnlock(userId, privateKey, publicKey);
+      }
     } catch (err) {
       const newCount = attempts.count + 1;
       savePinAttempts(userId, { count: newCount, lastAttemptAt: new Date().toISOString() });
@@ -1470,6 +1551,14 @@ export function useAuth() {
       }
       setVaultState('unlocked');
       applyVaultTimeout(userId);
+      // P21 step 2 — desktop auto-unlock keeps a freshly-resealed
+      // session-key bundle on disk so the read path in step 3 has a
+      // current entry even when the user never pressed a PIN this
+      // launch (Electron + secure-storage gate). Fire-and-forget:
+      // see notes on the performChallengeResponse call.
+      if (publicKey) {
+        void writeVaultSessionForUnlock(userId, privateKey, publicKey);
+      }
       return true;
     } catch (err) {
       console.warn('[useAuth] desktop auto-unlock failed:', err);
