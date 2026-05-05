@@ -211,15 +211,49 @@ export const NovelComposer = React.forwardRef<
     []
   )
 
+  // Wrap novel's `renderItems` to flip the slash menu above the caret.
+  // Novel hard-codes `placement: "bottom-start"` in its tippy config,
+  // which on a phone in portrait — where the composer sits at the
+  // bottom of the visualViewport behind the on-screen keyboard —
+  // pushes the menu off-screen. We can't pass tippy props through
+  // novel's API, so we look up the instance after onStart (tippy
+  // attaches `_tippy` to the reference element, which is `body` here)
+  // and override placement on the live popper.
+  const renderSlash = React.useMemo(() => {
+    return () => {
+      const inner = renderItems()
+      return {
+        ...inner,
+        onStart(props: Parameters<NonNullable<typeof inner.onStart>>[0]) {
+          inner.onStart?.(props)
+          const t = (document.body as HTMLElement & {
+            _tippy?: { setProps: (next: Record<string, unknown>) => void }
+          })._tippy
+          t?.setProps({
+            placement: "top-start",
+            popperOptions: {
+              modifiers: [
+                {
+                  name: "flip",
+                  options: { fallbackPlacements: ["bottom-start"] },
+                },
+              ],
+            },
+          })
+        },
+      }
+    }
+  }, [])
+
   const slashCommand = React.useMemo(
     () =>
       NovelCommand.configure({
         suggestion: {
           items: () => suggestionItems,
-          render: renderItems,
+          render: renderSlash,
         },
       }),
-    [suggestionItems]
+    [suggestionItems, renderSlash]
   )
 
   const groupedItems = React.useMemo(
