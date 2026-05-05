@@ -23,6 +23,9 @@ interface MessageComposerProps {
    *  attachments-ready is a valid send (envelope.text is allowed empty). */
   sendDisabled?: boolean
   attachmentDock?: React.ReactNode
+  /** Opens the GIF picker; wired to `/gif` slash command and the
+   *  toolbar GIF button when present. */
+  onOpenGif?: () => void
 }
 
 export function MessageComposer({
@@ -32,6 +35,7 @@ export function MessageComposer({
   onFilesSelected,
   sendDisabled,
   attachmentDock,
+  onOpenGif,
 }: MessageComposerProps) {
   const composerRef = React.useRef<NovelComposerHandle>(null)
   const [isEmpty, setIsEmpty] = React.useState(true)
@@ -54,6 +58,7 @@ export function MessageComposer({
           onSend={onSend}
           onEmptyChange={setIsEmpty}
           allowEmpty={Boolean(attachmentDock)}
+          onOpenGif={onOpenGif}
         />
       </div>
       <ChatToolbarAddon align="inline-end">

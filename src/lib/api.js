@@ -318,6 +318,28 @@ export async function deleteAttachment(token, attachmentId, baseUrl = '') {
 }
 
 /**
+ * Search Tenor GIFs through the server-side proxy. Hides the user's
+ * search query and IP from Google. Returns up to `limit` results
+ * (default 20, max 30 server-side).
+ *
+ * @param {string} token
+ * @param {string} query
+ * @param {number} [limit]
+ * @param {string} [baseUrl]
+ * @returns {Promise<{ results: Array<{ id: string, url: string, previewUrl: string, width: number, height: number }> }>}
+ */
+export async function searchGifs(token, query, limit = 20, baseUrl = '') {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const path = `/api/gif/search?${params.toString()}`;
+  const res = await fetchWithAuth(token, path, {}, baseUrl);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `gif search ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Get current instance metadata.
  * @param {string} token - JWT
  * @returns {Promise<{ id: string, name: string, iconUrl?: string, ownerId: string, registrationMode: string, serverCreationPolicy: string, createdAt: string, bootstrapped: boolean }>}

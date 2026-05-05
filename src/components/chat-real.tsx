@@ -29,6 +29,7 @@ import {
   ChatMessages,
 } from "@/components/chat/index"
 import { AttachmentTile } from "@/components/chat/attachment-tile"
+import { GifPickerDialog } from "@/components/chat/gif-picker-dialog"
 import {
   Empty,
   EmptyDescription,
@@ -45,7 +46,7 @@ import {
   useAttachmentUploader,
   type UploadEntry,
 } from "@/hooks/useAttachmentUploader"
-import type { AttachmentRef, MessageEnvelopeV1 } from "@/lib/messageEnvelope"
+import type { AttachmentRef, GifRef, MessageEnvelopeV1 } from "@/lib/messageEnvelope"
 
 const RECOVERY_PLACEHOLDER =
   "Message encrypted - decryption key no longer available"
@@ -152,37 +153,47 @@ export function RealChat({
     baseUrl,
   })
 
+  const [pendingGif, setPendingGif] = React.useState<GifRef | null>(null)
+  const [gifPickerOpen, setGifPickerOpen] = React.useState(false)
+
   const handleSend = React.useCallback(
     async (markdown: string) => {
       const refs = uploader.collectRefs()
       const trimmed = markdown.trim()
       // Block sends with no body and no attachments — the composer's
       // own disabled state usually catches this, but guard anyway.
-      if (!trimmed && refs.length === 0) return
+      if (!trimmed && refs.length === 0 && !pendingGif) return
+      // Composer rejects gif + attachments together so receivers do
+      // not have to render both inside one bubble.
       const envelope: MessageEnvelopeV1 = {
         v: 1,
         text: trimmed,
         ...(refs.length > 0 ? { attachments: refs } : {}),
+        ...(pendingGif && refs.length === 0 ? { gif: pendingGif } : {}),
       }
       try {
         await send(envelope)
         uploader.reset()
+        setPendingGif(null)
       } catch (err) {
         console.error("[chat-real] send failed", err)
       }
     },
-    [send, uploader]
+    [send, uploader, pendingGif]
   )
 
   const hasUploads = uploader.uploads.length > 0
   const sendDisabled = uploader.isUploading
-  const attachmentDock = hasUploads ? (
-    <AttachmentDock
-      uploads={uploader.uploads}
-      onRemove={uploader.remove}
-      onRetry={uploader.retry}
-    />
-  ) : null
+  const attachmentDock =
+    hasUploads || pendingGif ? (
+      <ComposerDock
+        uploads={uploader.uploads}
+        onRemoveUpload={uploader.remove}
+        onRetryUpload={uploader.retry}
+        gif={pendingGif}
+        onClearGif={() => setPendingGif(null)}
+      />
+    ) : null
 
   const groups = React.useMemo(() => groupConsecutive(messages), [messages])
 
@@ -276,26 +287,76 @@ export function RealChat({
         onFilesSelected={(files) => uploader.add(files)}
         sendDisabled={sendDisabled}
         attachmentDock={attachmentDock}
+        onOpenGif={() => setGifPickerOpen(true)}
+      />
+      <GifPickerDialog
+        open={gifPickerOpen}
+        onOpenChange={setGifPickerOpen}
+        getToken={getToken}
+        baseUrl={baseUrl}
+        onPick={(gif) => {
+          setPendingGif(gif)
+          setGifPickerOpen(false)
+        }}
       />
     </Chat>
     </MessageBodyContext.Provider>
   )
 }
 
-function AttachmentDock({
+function ComposerDock({
   uploads,
-  onRemove,
-  onRetry,
+  onRemoveUpload,
+  onRetryUpload,
+  gif,
+  onClearGif,
 }: {
   uploads: UploadEntry[]
-  onRemove: (id: string) => void
-  onRetry: (id: string) => void
+  onRemoveUpload: (id: string) => void
+  onRetryUpload: (id: string) => void
+  gif: GifRef | null
+  onClearGif: () => void
 }) {
   return (
-    <div className="flex w-full flex-wrap gap-2 px-1 pb-1">
+    <div className="flex w-full flex-wrap items-center gap-2 px-1 pb-1">
       {uploads.map((u) => (
-        <UploadChip key={u.localId} entry={u} onRemove={onRemove} onRetry={onRetry} />
+        <UploadChip
+          key={u.localId}
+          entry={u}
+          onRemove={onRemoveUpload}
+          onRetry={onRetryUpload}
+        />
       ))}
+      {gif ? <GifPreviewChip gif={gif} onClear={onClearGif} /> : null}
+    </div>
+  )
+}
+
+function GifPreviewChip({
+  gif,
+  onClear,
+}: {
+  gif: GifRef
+  onClear: () => void
+}) {
+  return (
+    <div className="relative inline-flex overflow-hidden rounded-md border bg-muted/40">
+      <img
+        src={gif.previewUrl}
+        alt=""
+        className="h-16 w-auto"
+        loading="lazy"
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute right-0.5 top-0.5 size-5 bg-background/80"
+        onClick={onClear}
+        aria-label="Remove GIF"
+      >
+        <XIcon className="size-3" />
+      </Button>
     </div>
   )
 }
@@ -541,6 +602,7 @@ function MessageBody({ message }: { message: ChatMessage }) {
   return (
     <>
       {hasText ? <MessageContent body={envelope.text} /> : null}
+      {envelope.gif ? <GifTile gif={envelope.gif} /> : null}
       {attachments.length > 0 && ctx ? (
         <div className="mt-2 flex flex-col gap-2">
           {attachments.map((a) => (
@@ -554,6 +616,19 @@ function MessageBody({ message }: { message: ChatMessage }) {
         </div>
       ) : null}
     </>
+  )
+}
+
+function GifTile({ gif }: { gif: GifRef }) {
+  return (
+    <img
+      src={gif.url}
+      alt=""
+      width={gif.width}
+      height={gif.height}
+      loading="lazy"
+      className="mt-2 max-w-sm rounded-md border bg-muted"
+    />
   )
 }
 
