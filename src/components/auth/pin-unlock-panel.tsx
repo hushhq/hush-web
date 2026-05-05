@@ -17,12 +17,23 @@ import { LockIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { HushLogo } from "@/components/brand/HushLogo"
 import { useAuth } from "@/contexts/AuthContext"
 
 const MAX_ATTEMPTS = 10
+/** PIN is exactly 4 digits, end-to-end. Anything shorter or longer is
+ *  rejected at the form boundary; the underlying `setPIN` /
+ *  `unlockVault` calls are still pure-string and don't enforce shape. */
+const PIN_LENGTH = 4
+/** Strip everything that isn't 0-9. Defensive against paste, IME, or any
+ *  exotic input source slipping non-digits through `inputMode=numeric`. */
+const sanitizePinDigits = (raw: string): string => raw.replace(/\D/g, "").slice(0, PIN_LENGTH)
 
 const PIN_DELAY_TABLE: Array<{ threshold: number; delayMs: number }> = [
   { threshold: 9, delayMs: 60_000 },
@@ -93,7 +104,11 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!pin || submitting || isDelayed) return
+    if (submitting || isDelayed) return
+    if (pin.length !== PIN_LENGTH) {
+      setErrorMessage(`Enter all ${PIN_LENGTH} digits`)
+      return
+    }
     setSubmitting(true)
     setErrorMessage("")
     try {
@@ -159,22 +174,28 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
             ) : null}
 
             <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col items-center gap-2">
                 <Label htmlFor="pin-input">PIN</Label>
-                <Input
+                <InputOTP
                   ref={inputRef}
                   id="pin-input"
-                  type="password"
+                  maxLength={PIN_LENGTH}
+                  pattern="^[0-9]*$"
                   inputMode="numeric"
-                  pattern="[0-9]*"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="Enter your PIN"
-                  minLength={4}
-                  autoComplete="off"
+                  onChange={(next) => setPin(sanitizePinDigits(next))}
                   disabled={submitting || isDelayed}
                   aria-label="Vault PIN"
-                />
+                  autoComplete="one-time-code"
+                  textAlign="center"
+                  data-private="true"
+                >
+                  <InputOTPGroup>
+                    {Array.from({ length: PIN_LENGTH }, (_, i) => (
+                      <InputOTPSlot key={i} index={i} className="size-12 text-lg" />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
               </div>
 
               {isDelayed ? (
@@ -191,7 +212,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={!pin || pin.length < 4 || submitting || isDelayed}
+                disabled={pin.length !== PIN_LENGTH || submitting || isDelayed}
               >
                 <LockIcon />
                 {submitting ? "Unlocking…" : "Unlock"}

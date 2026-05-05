@@ -32,8 +32,12 @@ describe("PinSetupPanel", () => {
     const u = userEvent.setup()
     render(<PinSetupPanel />)
 
-    await u.type(screen.getByPlaceholderText("Enter a PIN"), "1234")
-    await u.type(screen.getByPlaceholderText("Repeat your PIN"), "1234")
+    // PIN input is now a 4-slot OTP component — type into the labelled
+    // hidden input directly via user-event's keyboard model.
+    await u.click(screen.getByLabelText(/^choose pin$/i))
+    await u.keyboard("1234")
+    await u.click(screen.getByLabelText(/^confirm pin$/i))
+    await u.keyboard("1234")
     await u.click(screen.getByRole("button", { name: /^set pin$/i }))
 
     expect(setPIN).toHaveBeenCalledWith("1234")
@@ -43,8 +47,10 @@ describe("PinSetupPanel", () => {
     const u = userEvent.setup()
     render(<PinSetupPanel />)
 
-    await u.type(screen.getByPlaceholderText("Enter a PIN"), "1234")
-    await u.type(screen.getByPlaceholderText("Repeat your PIN"), "9999")
+    await u.click(screen.getByLabelText(/^choose pin$/i))
+    await u.keyboard("1234")
+    await u.click(screen.getByLabelText(/^confirm pin$/i))
+    await u.keyboard("9999")
 
     expect(screen.getByText(/pins do not match/i)).toBeInTheDocument()
     expect(

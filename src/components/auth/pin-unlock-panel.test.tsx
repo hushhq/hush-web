@@ -28,11 +28,14 @@ describe("PinUnlockPanel", () => {
 
   it("calls unlockVault with the entered pin on submit", async () => {
     unlockVault.mockResolvedValue(undefined)
+    const u = userEvent.setup()
     render(<PinUnlockPanel />)
 
-    const input = screen.getByPlaceholderText(/enter your pin/i)
-    await userEvent.type(input, "1234")
-    await userEvent.click(screen.getByRole("button", { name: /^unlock$/i }))
+    // PIN entry is the 4-slot OTP input; focus the labelled control and
+    // type via the keyboard model.
+    await u.click(screen.getByLabelText(/vault pin/i))
+    await u.keyboard("1234")
+    await u.click(screen.getByRole("button", { name: /^unlock$/i }))
 
     expect(unlockVault).toHaveBeenCalledWith("1234")
   })
@@ -52,10 +55,12 @@ describe("PinUnlockPanel", () => {
 
   it("shows the VAULT_WIPED recovery message after a wipe error", async () => {
     unlockVault.mockRejectedValue(Object.assign(new Error("wiped"), { code: "VAULT_WIPED" }))
+    const u = userEvent.setup()
     render(<PinUnlockPanel />)
 
-    await userEvent.type(screen.getByPlaceholderText(/enter your pin/i), "9999")
-    await userEvent.click(screen.getByRole("button", { name: /^unlock$/i }))
+    await u.click(screen.getByLabelText(/vault pin/i))
+    await u.keyboard("9999")
+    await u.click(screen.getByRole("button", { name: /^unlock$/i }))
 
     expect(
       await screen.findByText(/vault has been wiped/i)
@@ -67,12 +72,14 @@ describe("PinUnlockPanel", () => {
     const u = userEvent.setup()
     render(<PinUnlockPanel />)
 
-    const input = screen.getByPlaceholderText(/enter your pin/i)
     const submit = screen.getByRole("button", { name: /^unlock$/i })
+    const input = screen.getByLabelText(/vault pin/i)
 
     for (let i = 0; i < 3; i++) {
-      await u.clear(input)
-      await u.type(input, "0000")
+      await u.click(input)
+      // OTP component clears itself after a failed unlock attempt; just
+      // re-type the four digits each pass.
+      await u.keyboard("0000")
       await u.click(submit)
     }
 

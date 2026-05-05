@@ -17,6 +17,11 @@ import { CheckIcon } from "lucide-react"
 import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import {
   Tabs,
@@ -29,6 +34,11 @@ import { HushLogo } from "@/components/brand/HushLogo"
 import { useAuth } from "@/contexts/AuthContext"
 
 const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const
+/** PIN is exactly 4 digits, end-to-end. Setup form rejects anything
+ *  shorter, longer, or non-numeric before reaching `setPIN`. */
+const PIN_LENGTH = 4
+const sanitizePinDigits = (raw: string): string =>
+  raw.replace(/\D/g, "").slice(0, PIN_LENGTH)
 
 function passphraseStrength(value: string): number {
   if (value.length < 6) return 0
@@ -62,9 +72,11 @@ export function PinSetupPanel() {
   const [error, setError] = React.useState<string | null>(null)
 
   const isPin = mode === "pin"
-  const minLength = isPin ? 4 : 6
+  // PIN is fixed at PIN_LENGTH (4) digits. Passphrase keeps the previous
+  // 6-char minimum since it's free-form.
+  const minLength = isPin ? PIN_LENGTH : 6
   const strength = !isPin ? passphraseStrength(value) : 0
-  const valueOk = value.length >= minLength
+  const valueOk = isPin ? value.length === PIN_LENGTH : value.length >= minLength
   const confirmOk = value === confirm && valueOk
   const mismatch = confirm.length > 0 && value !== confirm
 
@@ -110,20 +122,27 @@ export function PinSetupPanel() {
                 <TabsTrigger value="passphrase">Use a passphrase</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="pin" className="flex flex-col gap-2 pt-3">
-                <Label htmlFor="psm-pin-value">PIN (min 4 digits)</Label>
-                <Input
+              <TabsContent value="pin" className="flex flex-col items-center gap-2 pt-3">
+                <Label htmlFor="psm-pin-value">PIN ({PIN_LENGTH} digits)</Label>
+                <InputOTP
                   id="psm-pin-value"
-                  type="password"
+                  maxLength={PIN_LENGTH}
+                  pattern="^[0-9]*$"
                   inputMode="numeric"
-                  pattern="[0-9]*"
                   value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder="Enter a PIN"
-                  minLength={4}
-                  autoComplete="new-password"
+                  onChange={(next) => setValue(sanitizePinDigits(next))}
                   disabled={submitting}
-                />
+                  autoComplete="new-password"
+                  textAlign="center"
+                  data-private="true"
+                  aria-label="Choose PIN"
+                >
+                  <InputOTPGroup>
+                    {Array.from({ length: PIN_LENGTH }, (_, i) => (
+                      <InputOTPSlot key={i} index={i} className="size-12 text-lg" />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
               </TabsContent>
 
               <TabsContent
@@ -169,23 +188,44 @@ export function PinSetupPanel() {
               </TabsContent>
             </Tabs>
 
-            <div className="flex flex-col gap-2">
+            <div className={cn("flex flex-col gap-2", isPin && "items-center")}>
               <Label htmlFor="pin-setup-confirm">
                 Confirm {isPin ? "PIN" : "passphrase"}
               </Label>
-              <Input
-                id="pin-setup-confirm"
-                type="password"
-                inputMode={isPin ? "numeric" : undefined}
-                pattern={isPin ? "[0-9]*" : undefined}
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder={`Repeat your ${isPin ? "PIN" : "passphrase"}`}
-                minLength={minLength}
-                autoComplete="new-password"
-                disabled={submitting}
-                aria-invalid={mismatch}
-              />
+              {isPin ? (
+                <InputOTP
+                  id="pin-setup-confirm"
+                  maxLength={PIN_LENGTH}
+                  pattern="^[0-9]*$"
+                  inputMode="numeric"
+                  value={confirm}
+                  onChange={(next) => setConfirm(sanitizePinDigits(next))}
+                  disabled={submitting}
+                  autoComplete="new-password"
+                  textAlign="center"
+                  data-private="true"
+                  aria-invalid={mismatch}
+                  aria-label="Confirm PIN"
+                >
+                  <InputOTPGroup>
+                    {Array.from({ length: PIN_LENGTH }, (_, i) => (
+                      <InputOTPSlot key={i} index={i} className="size-12 text-lg" />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+              ) : (
+                <Input
+                  id="pin-setup-confirm"
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Repeat your passphrase"
+                  minLength={minLength}
+                  autoComplete="new-password"
+                  disabled={submitting}
+                  aria-invalid={mismatch}
+                />
+              )}
               {mismatch ? (
                 <p role="alert" className="text-xs text-destructive">
                   {isPin ? "PINs do not match" : "Passphrases do not match"}
