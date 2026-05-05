@@ -1,7 +1,7 @@
 import { Volume2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { VoiceParticipantTile } from "./voice-participant-tile"
+import { VoiceStaticTile } from "./voice-static-tile"
 
 export interface VoicePresentParticipant {
   userId: string
@@ -59,7 +59,7 @@ export function VoicePlaceholderView({
       {hasOthers ? (
         <div className="grid w-full max-w-2xl auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3">
           {presentParticipants.map((p) => (
-            <VoiceParticipantTile
+            <VoiceStaticTile
               key={p.userId}
               displayName={p.displayName}
               isSelf={false}

@@ -1,12 +1,9 @@
-import {
-  GridLayout,
-  ParticipantTile,
-  useTracks,
-} from "@livekit/components-react"
+import { GridLayout, useTracks } from "@livekit/components-react"
 import "@livekit/components-styles"
 import { Track } from "livekit-client"
 
 import { cn } from "@/lib/utils"
+import { VoiceParticipantTile } from "./voice-participant-tile"
 
 interface VoiceParticipantGridProps {
   className?: string
@@ -47,7 +44,7 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
       className={cn("size-full", className)}
       style={{ ["--lk-grid-gap" as string]: "0.75rem" }}
     >
-      <ParticipantTile />
+      <VoiceParticipantTile />
     </GridLayout>
   )
 }
