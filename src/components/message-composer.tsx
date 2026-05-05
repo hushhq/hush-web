@@ -13,6 +13,7 @@ import {
   NovelComposer,
   type NovelComposerHandle,
 } from "@/components/novel-composer"
+import type { SlashAnchorRect } from "@/components/custom-slash-commands"
 import type { GifRef } from "@/lib/messageEnvelope"
 
 interface MessageComposerProps {
@@ -48,8 +49,27 @@ export function MessageComposer({
   const composerRef = React.useRef<NovelComposerHandle>(null)
   const [isEmpty, setIsEmpty] = React.useState(true)
   const [gifOpen, setGifOpen] = React.useState(false)
+  // When the slash command opens the picker, this holds the caret rect
+  // so the popover anchors next to the slash menu instead of the
+  // toolbar button. Cleared when the user opens via the toolbar button.
+  const [gifSlashAnchor, setGifSlashAnchor] =
+    React.useState<SlashAnchorRect | null>(null)
+  const gifButtonRef = React.useRef<HTMLButtonElement | null>(null)
 
   const gifAvailable = Boolean(getToken && onPickGif)
+
+  const handleSlashOpenGif = React.useCallback(
+    (anchor: SlashAnchorRect | null) => {
+      setGifSlashAnchor(anchor)
+      setGifOpen(true)
+    },
+    []
+  )
+
+  const handleGifOpenChange = React.useCallback((next: boolean) => {
+    setGifOpen(next)
+    if (!next) setGifSlashAnchor(null)
+  }, [])
 
   return (
     <ChatToolbar>
@@ -69,25 +89,31 @@ export function MessageComposer({
           onSend={onSend}
           onEmptyChange={setIsEmpty}
           allowEmpty={Boolean(attachmentDock)}
-          onOpenGif={gifAvailable ? () => setGifOpen(true) : undefined}
+          onOpenGif={gifAvailable ? handleSlashOpenGif : undefined}
         />
       </div>
       <ChatToolbarAddon align="inline-end">
         {gifAvailable ? (
           <GifPickerPopover
             open={gifOpen}
-            onOpenChange={setGifOpen}
+            onOpenChange={handleGifOpenChange}
             getToken={getToken!}
             baseUrl={baseUrl}
             onPick={(gif) => {
               onPickGif?.(gif)
               setGifOpen(false)
+              setGifSlashAnchor(null)
             }}
-            anchor={
+            anchorRect={gifSlashAnchor}
+            anchorElement={
               <ChatToolbarButton
+                ref={gifButtonRef}
                 aria-label="Pick GIF"
                 type="button"
-                onClick={() => setGifOpen((v) => !v)}
+                onClick={() => {
+                  setGifSlashAnchor(null)
+                  setGifOpen((v) => !v)
+                }}
               >
                 <ImageIcon />
               </ChatToolbarButton>

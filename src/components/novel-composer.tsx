@@ -132,8 +132,8 @@ interface NovelComposerProps {
   placeholder?: string
   onSend: (text: string) => void
   onEmptyChange?: (empty: boolean) => void
-  onOpenGif?: () => void
-  onOpenPoll?: () => void
+  onOpenGif?: HushSlashCallbacks["onOpenGif"]
+  onOpenPoll?: HushSlashCallbacks["onOpenPoll"]
   /** Allow firing onSend with an empty markdown body. Used when the
    *  parent has attachments queued and wants to send "attachments only". */
   allowEmpty?: boolean
@@ -178,8 +178,8 @@ export const NovelComposer = React.forwardRef<
   const suggestionItems = React.useMemo<HushSuggestionItem[]>(
     () =>
       createHushSlashItems({
-        onOpenGif: () => slashCallbacksRef.current.onOpenGif?.(),
-        onOpenPoll: () => slashCallbacksRef.current.onOpenPoll?.(),
+        onOpenGif: (anchor) => slashCallbacksRef.current.onOpenGif?.(anchor),
+        onOpenPoll: (anchor) => slashCallbacksRef.current.onOpenPoll?.(anchor),
       }),
     []
   )

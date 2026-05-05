@@ -20,9 +20,31 @@ export interface HushSuggestionItem extends SuggestionItem {
   group: SlashGroup
 }
 
+/** Screen-space rect of the caret at slash invocation. Used by the
+ *  parent composer to position floating popovers (GIF picker, etc.)
+ *  in line with the slash menu instead of jumping to a toolbar button. */
+export interface SlashAnchorRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 export interface HushSlashCallbacks {
-  onOpenGif?: () => void
-  onOpenPoll?: () => void
+  onOpenGif?: (anchor: SlashAnchorRect | null) => void
+  onOpenPoll?: (anchor: SlashAnchorRect | null) => void
+}
+
+function caretAnchorFromEditor(
+  editor: { view: { coordsAtPos: (pos: number) => { left: number; top: number; right: number; bottom: number } } },
+  pos: number
+): SlashAnchorRect | null {
+  try {
+    const c = editor.view.coordsAtPos(pos)
+    return { left: c.left, top: c.top, right: c.right, bottom: c.bottom }
+  } catch {
+    return null
+  }
 }
 
 export function createHushSlashItems(
@@ -35,8 +57,9 @@ export function createHushSlashItems(
       searchTerms: ["gif", "image", "media", "giphy"],
       icon: <ImageIcon className="size-4" />,
       command: ({ editor, range }) => {
+        const anchor = caretAnchorFromEditor(editor, range.from)
         editor.chain().focus().deleteRange(range).run()
-        callbacks.onOpenGif?.()
+        callbacks.onOpenGif?.(anchor)
       },
     },
     {
@@ -46,7 +69,7 @@ export function createHushSlashItems(
       icon: <BarChart3Icon className="size-4" />,
       command: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run()
-        callbacks.onOpenPoll?.()
+        callbacks.onOpenPoll?.(null)
       },
     },
     {

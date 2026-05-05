@@ -35,8 +35,14 @@ import type { GifRef } from "@/lib/messageEnvelope"
 interface GifPickerPopoverProps {
   open: boolean
   onOpenChange: (next: boolean) => void
-  /** The element the popover positions itself against. */
-  anchor: React.ReactNode
+  /** Default DOM anchor — typically the GIF toolbar button. Always
+   *  rendered so the user has a click trigger; positioning falls back
+   *  to it when `anchorRect` is null. */
+  anchorElement: React.ReactNode
+  /** Optional virtual anchor (caret rect from the slash command) so
+   *  the popover lines up with the slash menu instead of the toolbar
+   *  button when the user opens the picker by typing `/gif`. */
+  anchorRect?: { left: number; top: number; right: number; bottom: number } | null
   getToken: () => string | null
   baseUrl?: string
   onPick: (gif: GifRef) => void
@@ -48,7 +54,8 @@ const SEARCH_DEBOUNCE_MS = 300
 export function GifPickerPopover({
   open,
   onOpenChange,
-  anchor,
+  anchorElement,
+  anchorRect,
   getToken,
   baseUrl,
   onPick,
@@ -104,11 +111,37 @@ export function GifPickerPopover({
     [onPick, onOpenChange]
   )
 
+  // The toolbar button is always rendered (it doubles as a click
+  // trigger). The virtual anchor only mounts when the slash command
+  // supplied a caret rect; in that case it overrides positioning while
+  // open. We pin it `position: fixed` to viewport coords so Radix's
+  // PopperAnchor measures the right rect regardless of scroll.
+  const virtualAnchorStyle: React.CSSProperties | null = anchorRect
+    ? {
+        position: "fixed",
+        left: anchorRect.left,
+        top: anchorRect.top,
+        width: Math.max(1, anchorRect.right - anchorRect.left),
+        height: Math.max(1, anchorRect.bottom - anchorRect.top),
+        pointerEvents: "none",
+      }
+    : null
+
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverAnchor asChild>{anchor}</PopoverAnchor>
+      {virtualAnchorStyle ? (
+        <PopoverAnchor asChild>
+          <span aria-hidden="true" style={virtualAnchorStyle} />
+        </PopoverAnchor>
+      ) : (
+        <PopoverAnchor asChild>{anchorElement}</PopoverAnchor>
+      )}
+      {/* When the virtual anchor is active, the toolbar button still
+          needs to render outside the Popover's anchor slot so the user
+          can click it. Render it inline as a sibling. */}
+      {virtualAnchorStyle ? anchorElement : null}
       <PopoverContent
-        align="end"
+        align="start"
         side="top"
         sideOffset={8}
         className="w-[336px] p-2"
