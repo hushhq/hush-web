@@ -53,43 +53,33 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
   const tileCount = isLonely ? 2 : tracks.length
   const { cols, rows } = pickGridShape(tileCount)
 
-  // Fixed 16:9 tiles. The inner grid box is locked to an aspect ratio
-  // of `(cols*16) / (rows*9)`, so each 1fr × 1fr cell resolves to a
-  // 16:9 box regardless of how the box is scaled. We wrap the grid in
-  // a flex container that centres it, and clamp the grid with
-  // `max-h-full max-w-full` so it scales down to fit the smaller
-  // dimension of the channel view — never overflows into a scroll,
-  // never stretches a webcam past its native ratio.
-  const aspectRatio = `${cols * 16} / ${rows * 9}`
+  // Tiles fill the available cell — no fixed 16:9 lock on the grid
+  // box. Cells take whatever shape the grid template gives them, and
+  // each tile uses `object-cover` for video so a wider-than-16:9 cell
+  // crops a slim slice off the sides instead of stretching the
+  // webcam. This trades a sliver of visual content for tiles that
+  // make full use of the channel-view real estate.
   return (
     <div
-      className={cn(
-        "flex size-full items-center justify-center p-3",
-        className
-      )}
+      className={cn("grid size-full gap-3 p-3", className)}
+      style={{
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+      }}
     >
-      <div
-        className="grid max-h-full max-w-full gap-3"
-        style={{
-          aspectRatio,
-          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-        }}
-      >
-        {tracks.map((trackRef, idx) => (
-          <div
-            key={`${trackRef.participant.identity}-${trackRef.source}-${idx}`}
-            className="min-h-0 min-w-0"
-          >
-            <VoiceParticipantTile trackRef={trackRef} />
-          </div>
-        ))}
-        {isLonely ? (
-          <div className="min-h-0 min-w-0">
-            <VoiceLonelyTile />
-          </div>
-        ) : null}
-      </div>
+      {tracks.map((trackRef, idx) => (
+        <div
+          key={`${trackRef.participant.identity}-${trackRef.source}-${idx}`}
+          className="min-h-0 min-w-0"
+        >
+          <VoiceParticipantTile trackRef={trackRef} />
+        </div>
+      ))}
+      {isLonely ? (
+        <div className="min-h-0 min-w-0">
+          <VoiceLonelyTile />
+        </div>
+      ) : null}
     </div>
   )
 }
