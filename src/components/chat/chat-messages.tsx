@@ -12,6 +12,8 @@
  * @see {@link ChatEvent} for rendering individual messages inside this container.
  */
 
+import * as React from "react";
+
 import { cn } from "@/lib/utils";
 
 export type ChatMessagesProps = React.ComponentProps<"div">;
@@ -45,20 +47,19 @@ export type ChatMessagesProps = React.ComponentProps<"div">;
  * </ChatMessages>
  * ```
  */
-export function ChatMessages({
-  children,
-  className,
-  ...props
-}: ChatMessagesProps) {
-  return (
-    <div
-      className={cn(
-        "flex-1 flex flex-col-reverse overflow-auto overscroll-contain py-2",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
+export const ChatMessages = React.forwardRef<HTMLDivElement, ChatMessagesProps>(
+  function ChatMessages({ children, className, ...props }, ref) {
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "flex-1 flex flex-col-reverse overflow-auto overscroll-contain py-2",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  },
+);

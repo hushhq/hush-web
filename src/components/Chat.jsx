@@ -9,6 +9,11 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyDescription } from '@/components/u
 /** Maximum plaintext byte length before encryption (UTF-8 encoded).
  * Conservative: 4000 bytes < (8192 MLS budget - 16 GCM tag - 80 MLS framing).
  * Accounts for multi-byte UTF-8 characters (CJK, emoji use 3-4 bytes each).
+ *
+ * Note: this is the *user-visible* plaintext budget. Wire payload now
+ * gets a small JSON envelope wrapper (`{"v":1,"text":...}`), so sends
+ * close to this ceiling can still fail with ENVELOPE_TOO_LARGE during
+ * encrypt. The optimistic row is marked failed in that case.
  */
 const MAX_PLAINTEXT_BYTES = 4000;
 
@@ -17,6 +22,11 @@ const COUNTER_SHOW_THRESHOLD = 0.8;
 const CHANNEL_MESSAGES_PAGE_LIMIT = 50;
 import * as api from '../lib/api';
 import { useMLS } from '../hooks/useMLS';
+import {
+  encodeEnvelopeV1,
+  decodeEnvelopeV1FromString,
+  envelopeFromText,
+} from '../lib/messageEnvelope';
 
 function base64ToUint8Array(base64) {
   const bin = atob(base64);
@@ -62,15 +72,30 @@ function consumePendingSend(channelId, senderId, serverTimestamp) {
   return match.content;
 }
 
+/**
+ * Decode a wire plaintext into the human-readable text we render. Strict
+ * v1 cutover means the wire MUST carry an envelope; anything else is
+ * treated as a legacy cache row (older raw plaintext stored before the
+ * cutover) and unwrapped as `envelopeFromText`. Returns `{ text, decoded }`
+ * where `decoded === false` when the input was not a valid envelope.
+ */
+function unwrapPlaintext(raw, allowLegacyFallback) {
+  const result = decodeEnvelopeV1FromString(raw);
+  if (result.ok) return { text: result.envelope.text, decoded: true };
+  if (allowLegacyFallback) return { text: raw, decoded: true };
+  return { text: null, decoded: false };
+}
+
 async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCachedMessage, setCachedMessage }) {
   const ts = new Date(m.timestamp).getTime();
   if (typeof getCachedMessage === 'function') {
     const cached = await getCachedMessage(m.id);
     if (cached) {
+      const { text } = unwrapPlaintext(cached.content, true);
       return {
         id: m.id,
         sender: cached.senderId ?? m.senderId,
-        content: cached.content,
+        content: text,
         timestamp: cached.timestamp,
         decryptionFailed: false,
       };
@@ -82,16 +107,20 @@ async function decryptMessageRow(m, currentUserId, { decryptFromChannel, getCach
       if (typeof setCachedMessage === 'function') {
         await setCachedMessage(m.id, { content: pendingContent, senderId: m.senderId, timestamp: ts });
       }
-      return { id: m.id, sender: m.senderId, content: pendingContent, timestamp: ts, decryptionFailed: false };
+      const { text } = unwrapPlaintext(pendingContent, true);
+      return { id: m.id, sender: m.senderId, content: text, timestamp: ts, decryptionFailed: false };
     }
   }
   let content = null;
   let decryptionFailed = false;
   try {
     const ct = base64ToUint8Array(m.ciphertext);
-    content = await decryptFromChannel(ct);
-    if (typeof setCachedMessage === 'function') {
-      await setCachedMessage(m.id, { content, senderId: m.senderId, timestamp: ts });
+    const wirePlain = await decryptFromChannel(ct);
+    const decoded = unwrapPlaintext(wirePlain, true);
+    content = decoded.text;
+    decryptionFailed = !decoded.decoded;
+    if (typeof setCachedMessage === 'function' && decoded.decoded) {
+      await setCachedMessage(m.id, { content: wirePlain, senderId: m.senderId, timestamp: ts });
     }
   } catch (err) {
     console.warn('[chat] Decrypt failed for msg', m.id, 'from', m.senderId, err);
@@ -120,7 +149,12 @@ async function encryptAndSendMLS(wsClient, channelId, plaintext, encryptForChann
   if (!wsClient?.isConnected?.()) {
     throw new Error('Connection lost. Reconnect and retry.');
   }
-  const { ciphertext } = await encryptForChannel(plaintext);
+  // Strict v1 cutover: wrap user plaintext into the JSON envelope so
+  // every receiver decodes a known shape. Throws ENVELOPE_TOO_LARGE if
+  // the wrapped payload would exceed MAX_ENVELOPE_BYTES.
+  const wireBytes = encodeEnvelopeV1(envelopeFromText(plaintext));
+  const wireText = new TextDecoder('utf-8').decode(wireBytes);
+  const { ciphertext } = await encryptForChannel(wireText);
   if (!wsClient?.isConnected?.()) {
     throw new Error('Connection lost. Reconnect and retry.');
   }
@@ -348,9 +382,12 @@ export default function Chat({
       if (ciphertext) {
         try {
           const ct = base64ToUint8Array(ciphertext);
-          content = await decryptFromChannelRef.current(ct);
-          if (setCachedMessageRef.current) {
-            setCachedMessageRef.current(id, { content, senderId, timestamp: ts });
+          const wirePlain = await decryptFromChannelRef.current(ct);
+          const decoded = unwrapPlaintext(wirePlain, true);
+          content = decoded.text;
+          decryptionFailed = !decoded.decoded;
+          if (setCachedMessageRef.current && decoded.decoded) {
+            setCachedMessageRef.current(id, { content: wirePlain, senderId, timestamp: ts });
           }
         } catch (err) {
           console.warn('[chat] realtime decrypt failed', {

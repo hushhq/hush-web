@@ -52,7 +52,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import ChatImpl from "@/components/Chat"
+import { RealChat } from "@/components/chat-real"
 import VoiceChannelImpl from "@/pages/VoiceChannel"
 import { useAuth } from "@/contexts/AuthContext"
 import { getDeviceId } from "@/hooks/useAuth"
@@ -119,18 +119,6 @@ interface VoiceState {
   isWebcamOn: boolean
 }
 
-interface ChatProps {
-  channelId: string
-  serverId: string
-  currentUserId: string
-  getToken: () => string | null
-  getStore: () => unknown
-  getHistoryStore: () => unknown
-  wsClient: unknown
-  members: ServerMember[]
-  baseUrl: string
-}
-
 interface VoiceChannelProps {
   channel: {
     id: string
@@ -148,7 +136,6 @@ interface VoiceChannelProps {
   baseUrl: string
 }
 
-const Chat = ChatImpl as React.ComponentType<ChatProps>
 const VoiceChannel = VoiceChannelImpl as React.ComponentType<VoiceChannelProps>
 
 function systemIconFor(type: SystemChannelType): React.ReactNode {
@@ -854,8 +841,9 @@ export function AuthenticatedApp() {
     activeChannel.kind === "text" &&
     activeChannel.id &&
     !isSystemChannel ? (
-      <Chat
+      <RealChat
         channelId={activeChannel.id}
+        channelName={activeChannel.name}
         serverId={activeServer.id}
         currentUserId={currentUserId}
         getToken={getToken}

@@ -22,6 +22,7 @@ import { withChannelMLSMutex, textChannelKey } from '../lib/channelMLSMutex';
 /**
  * @param {object} opts
  * @param {() => Promise<IDBDatabase|null>} opts.getStore - Opens IndexedDB for the current user
+ * @param {() => Promise<IDBDatabase|null>} [opts.getHistoryStore] - Optional history-tier IDB factory
  * @param {() => string|null} opts.getToken - Returns the JWT for API calls
  * @param {string} [opts.channelId] - Required for encryptForChannel/decryptFromChannel
  * @param {object} [opts._deps] - Optional dep injection for testing
