@@ -53,33 +53,44 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
   const tileCount = isLonely ? 2 : tracks.length
   const { cols, rows } = pickGridShape(tileCount)
 
-  // Tiles fill the available cell — no fixed 16:9 lock on the grid
-  // box. Cells take whatever shape the grid template gives them, and
-  // each tile uses `object-cover` for video so a wider-than-16:9 cell
-  // crops a slim slice off the sides instead of stretching the
-  // webcam. This trades a sliver of visual content for tiles that
-  // make full use of the channel-view real estate.
+  // Tiles are locked to 16:9 via the grid container's aspect ratio:
+  // every 1fr × 1fr cell resolves to a 16:9 box no matter how the
+  // grid is scaled. `max-h-full max-w-full` clamps to the smaller
+  // container dimension so we never overflow into a scroll. The
+  // outer flex centres the grid in whatever room is left over.
+  // Padding kept minimal so tiles claim as much real estate as the
+  // channel view allows; the only gap that survives is the inter-tile
+  // separation.
+  const aspectRatio = `${cols * 16} / ${rows * 9}`
   return (
     <div
-      className={cn("grid size-full gap-3 p-3", className)}
-      style={{
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-      }}
+      className={cn(
+        "flex size-full items-center justify-center",
+        className
+      )}
     >
-      {tracks.map((trackRef, idx) => (
-        <div
-          key={`${trackRef.participant.identity}-${trackRef.source}-${idx}`}
-          className="min-h-0 min-w-0"
-        >
-          <VoiceParticipantTile trackRef={trackRef} />
-        </div>
-      ))}
-      {isLonely ? (
-        <div className="min-h-0 min-w-0">
-          <VoiceLonelyTile />
-        </div>
-      ) : null}
+      <div
+        className="grid max-h-full max-w-full gap-2"
+        style={{
+          aspectRatio,
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }}
+      >
+        {tracks.map((trackRef, idx) => (
+          <div
+            key={`${trackRef.participant.identity}-${trackRef.source}-${idx}`}
+            className="min-h-0 min-w-0"
+          >
+            <VoiceParticipantTile trackRef={trackRef} />
+          </div>
+        ))}
+        {isLonely ? (
+          <div className="min-h-0 min-w-0">
+            <VoiceLonelyTile />
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
