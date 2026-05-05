@@ -270,19 +270,21 @@ export function AuthenticatedApp() {
   const canAdministrate =
     currentUserRole === "owner" || currentUserRole === "admin"
 
+  // Backend mints text/voice/category through the same endpoint with `type`
+  // discriminator. Categories never carry a parentId; channels can be nested
+  // under a category by passing it.
   const handleCreateChannel = React.useCallback(
-    async (kind: "text" | "voice", name: string, parentId?: string | null) => {
+    async (
+      kind: "text" | "voice" | "category",
+      name: string,
+      parentId?: string | null
+    ) => {
       if (!activeServer || !token) return
       const body =
-        parentId == null
+        kind === "category" || parentId == null
           ? { name, type: kind }
           : { name, type: kind, parentId }
-      await createGuildChannel(
-        token,
-        activeServer.id,
-        body,
-        baseUrl
-      )
+      await createGuildChannel(token, activeServer.id, body, baseUrl)
       await refetchChannels()
     },
     [activeServer, token, baseUrl, refetchChannels]

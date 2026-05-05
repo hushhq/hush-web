@@ -8,6 +8,7 @@ import {
   MicOffIcon,
   Volume2Icon,
   PlusIcon,
+  FolderPlusIcon,
   ScrollTextIcon,
   ShieldAlertIcon,
   LogOutIcon,
@@ -110,6 +111,11 @@ import {
 import { cn } from "@/lib/utils"
 
 type ChannelKind = "text" | "voice"
+/** Kinds that the create-from-context-menu flow can produce. Categories are
+ *  not first-class `Channel` rows (they live in `ChannelCategory`), but the
+ *  backend mints them through the same `createGuildChannel` endpoint with
+ *  `type: "category"`. The shell maps the response back into the right list. */
+type CreateChannelKind = "text" | "voice" | "category"
 
 type VoiceParticipant = {
   id: string
@@ -198,7 +204,7 @@ interface ChannelSidebarProps {
   onOpenUserSettings?: () => void
   /** Create a new channel of the given kind. Resolves on success. */
   onCreateChannel?: (
-    kind: ChannelKind,
+    kind: CreateChannelKind,
     name: string,
     parentId?: string | null
   ) => Promise<void>
@@ -603,7 +609,7 @@ interface ChannelsSectionProps {
   onCategoriesChange?: (next: ChannelCategory[]) => void
   onChannelsChange?: (next: Channel[]) => void
   onCreateChannel?: (
-    kind: ChannelKind,
+    kind: CreateChannelKind,
     name: string,
     parentId?: string | null
   ) => Promise<void>
@@ -622,24 +628,29 @@ function ChannelsSection({
   onDeleteChannel,
   canAdministrate = false,
 }: ChannelsSectionProps) {
-  const [createOpen, setCreateOpen] = React.useState<ChannelKind | null>(null)
+  const [createOpen, setCreateOpen] = React.useState<CreateChannelKind | null>(null)
   const [createParentId, setCreateParentId] = React.useState<string | null>(null)
   const [createName, setCreateName] = React.useState("")
   const [createBusy, setCreateBusy] = React.useState(false)
   const [createError, setCreateError] = React.useState<string | null>(null)
 
-  const openCreate = React.useCallback((kind: ChannelKind, parentId: string | null = null) => {
-    setCreateOpen(kind)
-    setCreateParentId(parentId)
-    setCreateName("")
-    setCreateError(null)
-  }, [])
+  const openCreate = React.useCallback(
+    (kind: CreateChannelKind, parentId: string | null = null) => {
+      setCreateOpen(kind)
+      setCreateParentId(parentId)
+      setCreateName("")
+      setCreateError(null)
+    },
+    []
+  )
 
   const submitCreate = React.useCallback(async () => {
     if (!createOpen || !onCreateChannel) return
     const name = createName.trim()
     if (!name) {
-      setCreateError("Channel name required")
+      setCreateError(
+        createOpen === "category" ? "Category name required" : "Channel name required"
+      )
       return
     }
     setCreateBusy(true)
@@ -649,7 +660,9 @@ function ChannelsSection({
       setCreateOpen(null)
       setCreateParentId(null)
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create channel")
+      const fallback =
+        createOpen === "category" ? "Failed to create category" : "Failed to create channel"
+      setCreateError(err instanceof Error ? err.message : fallback)
     } finally {
       setCreateBusy(false)
     }
@@ -821,6 +834,16 @@ function ChannelsSection({
             disabled={!canAdministrate || !onCreateChannel}
             onSelect={(event) => {
               event.preventDefault()
+              openCreate("category")
+            }}
+          >
+            <FolderPlusIcon className="size-4" />
+            New category
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!canAdministrate || !onCreateChannel}
+            onSelect={(event) => {
+              event.preventDefault()
               openCreate("text")
             }}
           >
@@ -862,10 +885,16 @@ function ChannelsSection({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              New {createOpen === "voice" ? "voice" : "text"} channel
+              {createOpen === "category"
+                ? "New category"
+                : createOpen === "voice"
+                  ? "New voice channel"
+                  : "New text channel"}
             </DialogTitle>
             <DialogDescription>
-              Lowercase letters, numbers, and dashes recommended.
+              {createOpen === "category"
+                ? "Group related channels under a label. Categories can be reordered after creation."
+                : "Lowercase letters, numbers, and dashes recommended."}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -876,13 +905,15 @@ function ChannelsSection({
             }}
           >
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cs-create-channel-name">Channel name</Label>
+              <Label htmlFor="cs-create-channel-name">
+                {createOpen === "category" ? "Category name" : "Channel name"}
+              </Label>
               <Input
                 id="cs-create-channel-name"
                 value={createName}
                 onChange={(event) => setCreateName(event.target.value)}
                 disabled={createBusy}
-                placeholder="general"
+                placeholder={createOpen === "category" ? "general" : "general"}
               />
             </div>
             {createError ? (
@@ -898,7 +929,13 @@ function ChannelsSection({
                 Cancel
               </Button>
               <Button type="submit" disabled={createBusy || !createName.trim()}>
-                {createBusy ? "Creating…" : "Create"}
+                {createBusy
+                  ? "Creating…"
+                  : createOpen === "category"
+                    ? "Create category"
+                    : createOpen === "voice"
+                      ? "Create voice channel"
+                      : "Create text channel"}
               </Button>
             </DialogFooter>
           </form>

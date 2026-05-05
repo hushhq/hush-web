@@ -887,7 +887,7 @@ export async function getGuildChannels(token, serverId, baseUrl = '') {
  * Create a channel in a guild (admin+).
  * @param {string} token - JWT
  * @param {string} serverId - Guild UUID
- * @param {{ name: string, type: 'text'|'voice', parentId?: string, position?: number }} body
+ * @param {{ name: string, type: 'text'|'voice'|'category', parentId?: string, position?: number }} body
  * @returns {Promise<object>} Created channel
  */
 export async function createGuildChannel(token, serverId, body, baseUrl = '') {
