@@ -21,7 +21,7 @@ import {
   type EditorInstance,
 } from "novel"
 import { Extension } from "@tiptap/core"
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile, useIsTouchDevice } from "@/hooks/use-mobile"
 import { Markdown } from "tiptap-markdown"
 import { CodeIcon, BoldIcon, ItalicIcon } from "lucide-react"
 import { common, createLowlight } from "lowlight"
@@ -93,19 +93,36 @@ function normalizeFenceLanguages(markdown: string): string {
 
 interface SubmitOnEnterOptions {
   onSubmit: () => void
+  /** Returns true on real touch-only devices. When true, plain Enter
+   *  inserts a soft break (newline) instead of sending — soft-keyboard
+   *  users expect to send via the on-screen send button. Hardware-
+   *  keyboard users (desktop, laptop, even a desktop window resized
+   *  to phone width) keep "Enter sends". Read on every keypress so a
+   *  late device-capability change is honored without remounting. */
+  isTouchDevice: () => boolean
 }
 
 const SubmitOnEnter = Extension.create<SubmitOnEnterOptions>({
   name: "submitOnEnter",
   priority: 1000,
   addOptions() {
-    return { onSubmit: () => {} }
+    return { onSubmit: () => {}, isTouchDevice: () => false }
   },
   addKeyboardShortcuts() {
     return {
-      // Plain Enter always sends, even inside a code block. Multi-line
-      // snippets compose with Shift+Enter (handled below).
-      Enter: () => {
+      // Plain Enter sends on hardware-keyboard devices; on touch-only
+      // devices it inserts a structural newline (matching the desktop
+      // Shift+Enter behaviour below) and the user sends via the on-
+      // screen send button.
+      Enter: ({ editor }) => {
+        if (this.options.isTouchDevice()) {
+          return editor.commands.first(({ commands }) => [
+            () => commands.newlineInCode(),
+            () => commands.splitListItem("taskItem"),
+            () => commands.splitListItem("listItem"),
+            () => commands.splitBlock({ keepMarks: false }),
+          ])
+        }
         this.options.onSubmit()
         return true
       },
@@ -164,6 +181,9 @@ export const NovelComposer = React.forwardRef<
   const editorRef = React.useRef<EditorInstance | null>(null)
   const handleSendRef = React.useRef<() => void>(() => {})
   const isMobile = useIsMobile()
+  const isTouchDevice = useIsTouchDevice()
+  const isTouchDeviceRef = React.useRef(isTouchDevice)
+  isTouchDeviceRef.current = isTouchDevice
   const computedPlaceholder =
     placeholder ??
     (isMobile
@@ -307,6 +327,7 @@ export const NovelComposer = React.forwardRef<
           slashCommand,
           SubmitOnEnter.configure({
             onSubmit: () => handleSendRef.current(),
+            isTouchDevice: () => isTouchDeviceRef.current,
           }),
         ]}
         onUpdate={({ editor }) => {
