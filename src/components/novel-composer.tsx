@@ -120,6 +120,11 @@ const SubmitOnEnter = Extension.create<SubmitOnEnterOptions>({
 export interface NovelComposerHandle {
   send: () => void
   isEmpty: () => boolean
+  /** Insert raw text at the current cursor position. Used by the
+   *  emoji picker — the picked unicode character lands in the editor
+   *  exactly where the user was typing. */
+  insertText: (text: string) => void
+  focus: () => void
 }
 
 interface NovelComposerProps {
@@ -239,6 +244,14 @@ export const NovelComposer = React.forwardRef<
       isEmpty: () => {
         const editor = editorRef.current
         return !editor || editor.getText().trim().length === 0
+      },
+      insertText: (text: string) => {
+        const editor = editorRef.current
+        if (!editor || !text) return
+        editor.chain().focus().insertContent(text).run()
+      },
+      focus: () => {
+        editorRef.current?.commands.focus()
       },
     }),
     [handleSend]

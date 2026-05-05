@@ -7,6 +7,7 @@ import {
   ChatToolbarButton,
   ChatToolbarAttachmentButton,
 } from "@/components/chat/index"
+import { EmojiPickerPopover } from "@/components/chat/emoji-picker-popover"
 import {
   NovelComposer,
   type NovelComposerHandle,
@@ -62,9 +63,14 @@ export function MessageComposer({
         />
       </div>
       <ChatToolbarAddon align="inline-end">
-        <ChatToolbarButton aria-label="Add emoji">
-          <SmilePlusIcon />
-        </ChatToolbarButton>
+        <EmojiPickerPopover
+          trigger={
+            <ChatToolbarButton aria-label="Add emoji" type="button">
+              <SmilePlusIcon />
+            </ChatToolbarButton>
+          }
+          onSelect={(native) => composerRef.current?.insertText(native)}
+        />
         <ChatToolbarButton
           aria-label="Send"
           disabled={(isEmpty && !attachmentDock) || sendDisabled}
