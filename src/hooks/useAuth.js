@@ -49,6 +49,8 @@ import {
   unwrapIdentity,
   clearSessionKey as clearVaultSessionStore,
   markAlive as markVaultSessionAlive,
+  isMarkerAlive as isVaultSessionMarkerAlive,
+  createVaultSessionPresence,
 } from '../lib/vaultSessionKey';
 import {
   openHistoryStore,
@@ -286,10 +288,25 @@ async function tryVaultSessionResume(userId, effectiveConfig) {
   if (!userId) return null;
   const policy = effectiveConfig?.timeout ?? 'browser_close';
   try {
-    // The BroadcastChannel-based refcount lands in a follow-up step;
-    // for now `aliveTabExists` is always false on this tab's boot.
+    // P21 step 5 — under `browser_close` only, probe sibling tabs via
+    // BroadcastChannel when the per-tab marker is missing. The marker
+    // catches soft-refresh inside the same tab; the probe catches a
+    // fresh tab opening while another tab of this user is still live.
+    // Other policies don't need the probe: `never` reuses regardless,
+    // `refresh` always wipes, numeric is gated by the inactivity
+    // deadline.
+    let aliveTabExists = false;
+    let probe = null;
+    if (policy === 'browser_close' && !isVaultSessionMarkerAlive(userId)) {
+      probe = createVaultSessionPresence(userId);
+      try {
+        aliveTabExists = await probe.joinAndCheckSiblings();
+      } finally {
+        probe.close();
+      }
+    }
     const sessionKey = await getSessionKeyIfAlive(userId, policy, {
-      aliveTabExists: false,
+      aliveTabExists,
     });
     if (!sessionKey) return null;
     const wrapped = await readWrappedIdentity(userId);
@@ -1540,15 +1557,11 @@ export function useAuth() {
     // 3b. P21 step 4 — clear the cross-reload vault session key
     // store. Without this, the IDB session DB and the per-tab marker
     // would survive scorched-earth logout and leak the previous
-    // user's session to whoever opens the tab next.
+    // user's session to whoever opens the tab next. Fire-and-forget:
+    // sessionStorage.clear at step 4 below already wipes the marker,
+    // and the wider IDB wipe handles any leftover DB.
     if (userId) {
-      try {
-        await clearVaultSessionStore(userId);
-      } catch {
-        // best-effort — sessionStorage.clear at step 4 below will
-        // still nuke the marker, and the IDB delete in step 4 below
-        // is also a fallback.
-      }
+      clearVaultSessionStore(userId).catch(() => {});
     }
 
     // 4. Delete all hush IDB databases.
@@ -2004,6 +2017,25 @@ export function useAuth() {
       navigator.storage.persist().catch(() => { /* best-effort */ });
     }
   }, []);
+
+  // ── Vault session presence (P21 step 5) ───────────────────────────────────
+  //
+  // Holds a BroadcastChannel open for the lifetime of an unlocked tab so
+  // other tabs of the same user can probe "is anyone alive?" before the
+  // vault-session boot resume. Without this, a fresh tab opening under
+  // `browser_close` while another tab is already unlocked would miss the
+  // sibling and force a PIN prompt — defeating the policy's "stays
+  // unlocked while any tab of mine is open" promise.
+  useEffect(() => {
+    if (vaultState !== 'unlocked' || !user?.id) return;
+    const presence = createVaultSessionPresence(user.id);
+    const onPageHide = () => presence.close();
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      presence.close();
+    };
+  }, [vaultState, user?.id]);
 
   // ── Visibility change re-verification ─────────────────────────────────────
 

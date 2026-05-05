@@ -61,9 +61,38 @@ const DB_NAME_PREFIX = "hush-vault-session-"
 const STORE_NAME = "session"
 const RECORD_KEY = "current"
 const MARKER_KEY_PREFIX = "hush_vault_session_alive_"
+const PRESENCE_CHANNEL_PREFIX = "hush_vault_session_"
+const PRESENCE_PROBE_TIMEOUT_MS = 80
 const KEY_USAGE: KeyUsage[] = ["encrypt", "decrypt"]
 const KEY_ALGORITHM = { name: "AES-GCM", length: 256 } as const
 const IV_BYTES = 12
+
+interface PresenceMessage {
+  type: "joining" | "alive" | "leaving"
+}
+
+/**
+ * Per-tab presence record on the shared BroadcastChannel for a user.
+ * Used to discriminate "the last tab of this user is closing"
+ * (`browser_close` semantics) from "another tab of this user is still
+ * alive on this device" (`browser_close` resume).
+ */
+export interface VaultSessionPresence {
+  /**
+   * Broadcasts `{type: "joining"}` and waits for an `{type: "alive"}`
+   * reply from any sibling tab on the same channel. Resolves true on
+   * the first reply received within `timeoutMs`, false otherwise.
+   *
+   * Idempotent: subsequent calls reuse the same channel — no need to
+   * tear down and recreate between probes.
+   */
+  joinAndCheckSiblings(timeoutMs?: number): Promise<boolean>
+  /**
+   * Broadcasts `{type: "leaving"}` and closes the channel. Safe to
+   * call from `pagehide`; subsequent calls are no-ops.
+   */
+  close(): void
+}
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
@@ -298,6 +327,91 @@ export async function unwrapIdentity(
     bundle.ciphertext as BufferSource
   )
   return new Uint8Array(plaintext)
+}
+
+// ─── Multi-tab presence (BroadcastChannel) ────────────────────────────────
+
+/**
+ * Creates a per-tab presence subscription on the shared
+ * `hush_vault_session_${userId}` BroadcastChannel. The returned object
+ * answers sibling probes with `{type: "alive"}` for as long as it
+ * stays open; `joinAndCheckSiblings` posts `{type: "joining"}` and
+ * waits up to `timeoutMs` for replies.
+ *
+ * Returns a no-op stub when `BroadcastChannel` is unavailable
+ * (legacy Safari, certain test environments). The caller treats
+ * "no replies" as "no sibling alive" — `browser_close` then falls
+ * back to the per-tab marker.
+ */
+export function createVaultSessionPresence(
+  userId: string
+): VaultSessionPresence {
+  if (!userId || typeof BroadcastChannel === "undefined") {
+    return {
+      joinAndCheckSiblings: async () => false,
+      close: () => {},
+    }
+  }
+
+  const channel = new BroadcastChannel(`${PRESENCE_CHANNEL_PREFIX}${userId}`)
+  let closed = false
+
+  // Persistent reply handler: any sibling that posts `joining` gets an
+  // immediate `alive` reply from this tab. Posting on a closed channel
+  // throws, hence the inner try/catch even though `closed` gates the
+  // broader path — `pagehide` and React unmount can race.
+  const onMessage = (event: MessageEvent<PresenceMessage>) => {
+    const msg = event.data
+    if (!msg || closed) return
+    if (msg.type === "joining") {
+      try {
+        channel.postMessage({ type: "alive" })
+      } catch {
+        // channel closed mid-send; nothing to do
+      }
+    }
+  }
+  channel.addEventListener("message", onMessage)
+
+  return {
+    joinAndCheckSiblings(timeoutMs = PRESENCE_PROBE_TIMEOUT_MS) {
+      if (closed) return Promise.resolve(false)
+      return new Promise<boolean>((resolve) => {
+        let resolved = false
+        const probeListener = (event: MessageEvent<PresenceMessage>) => {
+          if (resolved) return
+          if (event.data?.type === "alive") {
+            resolved = true
+            channel.removeEventListener("message", probeListener)
+            resolve(true)
+          }
+        }
+        channel.addEventListener("message", probeListener)
+        try {
+          channel.postMessage({ type: "joining" })
+        } catch {
+          // channel closed; nothing left to wait for
+        }
+        setTimeout(() => {
+          if (resolved) return
+          resolved = true
+          channel.removeEventListener("message", probeListener)
+          resolve(false)
+        }, timeoutMs)
+      })
+    },
+    close() {
+      if (closed) return
+      closed = true
+      try {
+        channel.postMessage({ type: "leaving" })
+      } catch {
+        // closing anyway
+      }
+      channel.removeEventListener("message", onMessage)
+      channel.close()
+    },
+  }
 }
 
 // ─── Per-tab alive marker ──────────────────────────────────────────────────

@@ -808,7 +808,11 @@ describe('useAuth - performLogout', () => {
       await result.current.performLogout();
     });
 
-    expect(await readWrappedIdentity('user-1')).toBeNull();
+    // The session-key wipe is fire-and-forget so the logout UX never
+    // blocks on IDB; the IDB deleteDatabase resolves on a later tick.
+    await waitFor(async () => {
+      expect(await readWrappedIdentity('user-1')).toBeNull();
+    });
     expect(isMarkerAlive('user-1')).toBe(false);
   });
 

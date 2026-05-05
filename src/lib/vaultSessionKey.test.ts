@@ -18,6 +18,7 @@ import {
   markAlive,
   clearMarker,
   isMarkerAlive,
+  createVaultSessionPresence,
 } from "./vaultSessionKey"
 
 const USER = "user-vsk-1"
@@ -202,6 +203,65 @@ describe("vaultSessionKey — clearSessionKey", () => {
 
   it("is a noop when there is no record to wipe", async () => {
     await expect(clearSessionKey(USER)).resolves.toBeUndefined()
+  })
+})
+
+describe("vaultSessionKey — multi-tab presence (P21 step 5)", () => {
+  it("returns false from joinAndCheckSiblings when no other presence is open", async () => {
+    const probe = createVaultSessionPresence(USER)
+    try {
+      const aliveSibling = await probe.joinAndCheckSiblings(40)
+      expect(aliveSibling).toBe(false)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it("returns true when a sibling presence is alive on the same channel", async () => {
+    if (typeof BroadcastChannel === "undefined") return
+    const sibling = createVaultSessionPresence(USER)
+    try {
+      const probe = createVaultSessionPresence(USER)
+      try {
+        const aliveSibling = await probe.joinAndCheckSiblings(120)
+        expect(aliveSibling).toBe(true)
+      } finally {
+        probe.close()
+      }
+    } finally {
+      sibling.close()
+    }
+  })
+
+  it("isolates presence per-userId", async () => {
+    if (typeof BroadcastChannel === "undefined") return
+    const sibling = createVaultSessionPresence(USER)
+    try {
+      const probe = createVaultSessionPresence("user-vsk-different")
+      try {
+        const aliveSibling = await probe.joinAndCheckSiblings(40)
+        expect(aliveSibling).toBe(false)
+      } finally {
+        probe.close()
+      }
+    } finally {
+      sibling.close()
+    }
+  })
+
+  it("close is idempotent and stops responding to subsequent probes", async () => {
+    if (typeof BroadcastChannel === "undefined") return
+    const sibling = createVaultSessionPresence(USER)
+    sibling.close()
+    sibling.close()
+
+    const probe = createVaultSessionPresence(USER)
+    try {
+      const aliveSibling = await probe.joinAndCheckSiblings(40)
+      expect(aliveSibling).toBe(false)
+    } finally {
+      probe.close()
+    }
   })
 })
 
