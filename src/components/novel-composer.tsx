@@ -389,7 +389,7 @@ export const NovelComposer = React.forwardRef<
             ),
           },
         }}
-        className="w-full"
+        className="max-h-32 w-full overflow-y-auto"
       >
         <EditorCommand className="z-50 max-h-72 w-72 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
           <EditorCommandEmpty className="px-2 py-1.5 text-xs text-muted-foreground">
