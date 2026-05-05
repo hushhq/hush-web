@@ -143,22 +143,94 @@ Storage layout (per-user):
 
 | Surface | Key | Value | Lifecycle |
 |-|-|-|-|
-| IndexedDB store `vault_session` | `userId` | `{ cryptoKey: CryptoKey, wrapped: { iv, ciphertext }, createdAt: number }` | Persists until explicit `clearSessionKey` or PIN change |
-| sessionStorage | `hush_vault_session_alive_${userId}` | `"1"` | Per-tab; dies on tab close |
+| IndexedDB store `vault_session` | `userId` | `{ cryptoKey: CryptoKey, wrapped: { iv, ciphertext }, createdAt: number, refcount: number }` | Persists until explicit `clearSessionKey` or PIN change. The `refcount` tracks live tabs and gates `browser_close` wipe — see "Multi-tab refcount" below. |
+| sessionStorage | `hush_vault_session_alive_${userId}` | `"1"` | Per-tab; dies on tab close. Used as a *boot-time* discriminator (this tab is reloading vs. opening fresh). Not load-bearing for `never`. |
+| BroadcastChannel | `hush_vault_session_${userId}` | `{type: "joining"\|"alive"\|"leaving"}` | Coordinates the refcount across same-origin tabs. Messages live only while subscribed. |
 
 The non-extractable `CryptoKey` is stored directly in IDB (the spec
 allows storing CryptoKey objects via structured clone — they remain
 non-extractable across persistence).
+
+## Policy semantics (corrected)
+
+Earlier drafts of this doc treated `never` as "reuse if marker present,
+else clear+regen" — that collapses to `browser_close` because
+`sessionStorage` dies on tab close. That was wrong. The four policies
+must observably differ; here is what each means after this phase
+ships.
+
+| Policy | Survives soft refresh? | Survives backgrounding/reap? | Survives tab close? | Survives last-tab close (browser close)? | Survives explicit logout / PIN change? |
+|-|-|-|-|-|-|
+| `never` | YES | YES | YES (other tabs alive or even with all tabs closed) | YES | NO |
+| `browser_close` | YES | YES | YES if other tabs of this user alive; NO if last tab | NO | NO |
+| `refresh` | NO (clears on every reload) | NO | NO | NO | NO |
+| numeric (1m..4h) | YES if deadline > now | YES if deadline > now | YES if deadline > now | YES if deadline > now | NO |
+
+Key consequences:
+
+- `never` does **not** consult the alive marker. Once the IDB entry
+  exists, it is reused on every boot regardless of marker state. Only
+  explicit clears (logout, PIN change) wipe it.
+- `browser_close` consults the **refcount**, not the marker, to decide
+  whether the last tab has closed. The marker is still useful for
+  detecting "this tab is rebooting from a soft refresh" (refcount bump
+  vs. fresh-tab join), but it is not the gating signal for cross-tab
+  liveness.
+- `refresh` ignores both: every boot wipes IDB unconditionally.
+- numeric continues to use the inactivity deadline as today, with the
+  IDB entry only readable when `now < deadline`.
+
+## Multi-tab refcount
+
+The IDB record is keyed by `userId` only — there is one shared
+encrypted bundle per identity, not one per tab. To answer "is this
+the last tab closing?" without per-tab keys we use a
+`BroadcastChannel`-based liveness count:
+
+1. On boot, after `getSessionKeyIfAlive(userId)`:
+   - Subscribe to `hush_vault_session_${userId}`.
+   - Broadcast `{type: "joining"}`.
+   - Listen for `{type: "alive"}` replies for ~80 ms (single setTimeout).
+2. On any received `{type: "joining"}` or `{type: "alive"}` from
+   another tab, reply `{type: "alive"}`.
+3. When the tab is unloading (`pagehide`), broadcast `{type: "leaving"}`.
+4. The IDB record's `refcount` mirrors observed liveness:
+   - On join: increment.
+   - On observed `leaving`: decrement.
+   - When `refcount` would drop to 0 under `browser_close`: synchronously
+     `clearSessionKey(userId)` from the `pagehide` handler before the
+     tab dies.
+   - Under `never`: refcount transitions to 0 are ignored — the IDB
+     record persists.
+5. New-tab cold-start with no liveness replies and `refcount > 0`
+   in IDB indicates a stale count (e.g., previous tab killed by OS
+   without firing `pagehide`). Reset `refcount = 1` and continue;
+   under `browser_close` this tab's eventual close will then act as
+   "last tab".
+
+This gives `browser_close` real semantics ("vault stays unlocked while
+**any** tab of mine is open, locks when the last tab closes")
+without ever giving up the per-userId IDB record shape. Closing one
+tab while another is alive does **not** wipe the IDB record because
+the alive tab's `{type: "alive"}` reply is observed before `pagehide`
+of the closing tab clears.
+
+`pagehide` is preferred over `beforeunload` for the leaving broadcast
+because mobile Safari fires `pagehide` on background-and-reap but not
+`beforeunload`. The broadcast must be synchronous; the IDB clear under
+`browser_close` is best-effort (some browsers reject async work in
+`pagehide`).
 
 ## State machine
 
 Boot, per `applyVaultTimeout(userId)`:
 
 ```
-       +--- "never"          --> reuse if marker present, else clear+regen
-       +--- "browser_close"  --> reuse if marker present, else clear+regen
+       +--- "never"          --> reuse IDB if present, ignore marker + refcount
+       +--- "browser_close"  --> reuse IDB if present, on tab close decrement
+       |                         refcount; if reaches 0, clearSessionKey
 boot --+--- "refresh"        --> clear unconditionally (drop on every reload)
-       +--- numeric (1m..4h) --> reuse if marker present AND deadline > now
+       +--- numeric (1m..4h) --> reuse IDB if present AND deadline > now
                                  else clear+regen
 ```
 
@@ -169,9 +241,12 @@ Unlock flow change (`performChallengeResponse`):
 3. `wrapIdentity(sessionKey, derivedKey)` and persist `{ iv, ciphertext }`
    in the IDB record.
 4. Set `sessionStorage["hush_vault_session_alive_${userId}"] = "1"`.
+5. Subscribe to BroadcastChannel and announce `joining`; bump
+   `refcount`.
 
-Auto-resume flow on boot (when marker is alive and policy permits):
-1. `getSessionKeyIfAlive(userId)` — returns CryptoKey or null.
+Auto-resume flow on boot when policy permits (i.e. always for `never`,
+when refcount/deadline allow for the others):
+1. `getSessionKeyIfAlive(userId, policy)` — returns CryptoKey or null.
 2. Read `{ iv, ciphertext }` from IDB.
 3. `unwrapIdentity(sessionKey, bundle)` — yields the in-memory
    wrapping key without prompting for PIN.
@@ -179,8 +254,10 @@ Auto-resume flow on boot (when marker is alive and policy permits):
 
 Lock flow (`lockVault`, `lockVaultForTimeout`, scorched-earth logout):
 1. Existing in-memory key wipe.
-2. `clearSessionKey(userId)`.
+2. `clearSessionKey(userId)` — wipes IDB entry. Other tabs receive
+   `lockBroadcast` and lock too (already in place).
 3. Remove sessionStorage alive marker.
+4. Unsubscribe BroadcastChannel.
 
 PIN change flow:
 1. Existing PIN-change crypto path runs.
@@ -188,20 +265,25 @@ PIN change flow:
    session key. (We could rewrap in place, but the simpler "force
    re-unlock after PIN change" matches the legacy contract: PIN change
    today already triggers a re-unlock prompt.)
+3. Broadcast lock to other tabs (existing path).
 
 ## Edge cases worth specifying explicitly
 
-1. **Marker present, IDB entry missing** → treat as fresh boot. Clear
-   marker, force PIN.
-2. **IDB entry present, marker missing** → policy decides:
-   - `never`/`browser_close`: this can only happen on tab close, so
-     we wipe the IDB entry on next boot when no marker. Effectively
-     "browser_close" semantics emerge naturally from the marker.
-   - `refresh`: always wiped at boot regardless.
-3. **Multiple tabs of the same user** → each tab gets its own marker.
-   Closing one tab does not affect the others. The IDB entry is
-   shared; the last tab to close before browser exit lets the marker
-   die naturally.
+1. **Marker present, IDB entry missing** → treat as fresh boot for all
+   policies except `never`. For `never`, this means an explicit clear
+   happened mid-session (logout from another tab); honour it and
+   force PIN.
+2. **IDB entry present, no marker, no liveness replies** → fresh tab
+   join. Under `never`: reuse IDB. Under `browser_close`: also reuse
+   (last-tab-out semantics fire on this tab's eventual `pagehide`,
+   not on its boot). Under `refresh`: wipe.
+3. **Multiple tabs of the same user** → each tab subscribes to the
+   shared BroadcastChannel and contributes to the refcount. Closing
+   one tab decrements refcount but never wipes IDB while another tab
+   is alive. Last tab to close under `browser_close` wipes the IDB
+   record from its `pagehide` handler. Under `never` the IDB record
+   simply persists; refcount is observed but its value is irrelevant
+   to the wipe decision.
 4. **iOS Safari / mobile memory pressure → IDB wipe**. We cannot
    prevent this. Behaviour degrades gracefully: missing IDB entry
    forces PIN. Document this in the ans21 verdict so users on iOS know
@@ -238,14 +320,20 @@ PIN change flow:
     `ensureSessionKey` produces a different `CryptoKey` instance.
 
 - `src/hooks/useAuth.test.jsx` — extend:
-  - **never**: marker present + alive bundle → boots straight into
-    `vaultState='unlocked'` without PIN.
-  - **browser_close**: marker absent → boots locked.
-  - **refresh**: marker present → still wipes at boot, boots locked.
-  - **numeric (15m)**: marker present + deadline > now → resumes
+  - **never**, no marker, IDB present → resumes `vaultState='unlocked'`
+    without PIN. (Locks the corrected semantic vs. the earlier draft.)
+  - **never**, IDB present, simulated explicit `clearSessionKey` from
+    a sibling tab → forces PIN.
+  - **browser_close**, with simulated alive sibling → resumes unlocked.
+  - **browser_close**, no sibling and `pagehide` fired previously
+    (refcount → 0) → boots locked.
+  - **refresh**: IDB present at boot → still wiped, boots locked.
+  - **numeric (15m)**: IDB present + deadline > now → resumes
     unlocked. Deadline < now → wipes + locks.
   - **PIN change**: clears session key → next unlock requires PIN.
   - **scorched-earth logout**: clears session key + IDB entry verified.
+  - **multi-tab refcount**: simulate two-tab boot, close first;
+    second tab's IDB entry must remain intact under `browser_close`.
 
 - `src/components/user-settings-dialog.test.tsx` — already covers the
   Select wiring; no change unless the labels change.
@@ -285,14 +373,20 @@ Each step is its own commit so the phase is bisect-able.
 - `bunx tsc --noEmit` clean.
 - `bun run test:run` green (full suite).
 - Manual smoke on Chromium + Firefox + Safari + Electron — for each
-  policy, walk the matrix:
-  - Unlock → close tab → reopen → assert PIN prompt for `browser_close`,
-    no prompt for `never`, prompt for `refresh`, idle-deadline behaviour
-    for numeric.
-  - Unlock → soft refresh → assert no PIN prompt for `browser_close`/
-    `never`/numeric (within deadline), prompt for `refresh`.
-  - Mobile background → reap → reopen — this is the user-reported
-    scenario. Expect no PIN prompt for `browser_close`/`never`.
+  policy, walk the matrix in line with the corrected semantics table:
+  - Unlock → soft refresh → assert no PIN prompt for `browser_close`,
+    `never`, and numeric (within deadline); PIN prompt for `refresh`.
+  - Unlock → close tab and reopen with **no other tabs of this user
+    open** → assert PIN prompt for `browser_close` (last-tab-out wipe),
+    no prompt for `never`, PIN prompt for `refresh`.
+  - Unlock → open a second tab → close the first tab → second tab still
+    unlocked. Soft-refresh the second tab → assert no PIN prompt for
+    `browser_close` (refcount > 0 was observed at second-tab boot, so
+    last-tab-out hasn't fired yet).
+  - Mobile background → reap → reopen — the user-reported scenario.
+    Expect no PIN prompt for `browser_close`/`never`. Note the iOS
+    IDB-eviction caveat: under heavy memory pressure, `never` may still
+    fall back to a PIN prompt; document this in the verdict.
 - `git grep -n 'sessionStorage\.\\?\\[\?["'\''`]hush_vault_derived_key'` → empty.
 
 ## Out of scope
