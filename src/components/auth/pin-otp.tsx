@@ -49,7 +49,10 @@ export function PinOtp({
     <InputOTP
       id={id}
       maxLength={PIN_LENGTH}
-      pattern="^[0-9]*$"
+      // iOS Safari opens the numeric keypad only when `pattern="[0-9]*"`
+      // (no anchors) AND `inputMode="numeric"` are both present. Anchored
+      // patterns silently fall back to the alphanumeric keyboard on iOS.
+      pattern="[0-9]*"
       inputMode="numeric"
       value={value}
       onChange={(next) => onChange(sanitizePinDigits(next))}

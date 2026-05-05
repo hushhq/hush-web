@@ -122,6 +122,7 @@ export function PinSetupPanel() {
                   disabled={submitting}
                   autoComplete="new-password"
                   ariaLabel="Choose PIN"
+                  autoFocus
                 />
               </TabsContent>
 
