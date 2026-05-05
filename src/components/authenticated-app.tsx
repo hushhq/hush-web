@@ -612,6 +612,25 @@ export function AuthenticatedApp() {
     if (first) navigateToServer(activeServer, first.id)
   }, [activeServer, params.channelSlug, channels, navigateToServer])
 
+  // Auto-join LiveKit when the URL points at a voice channel. The user
+  // expectation is that opening a voice channel — by sidebar click, deep
+  // link, refresh, or rail navigation — joins the room immediately, the
+  // same way legacy hush-web behaved. No prejoin step. handleSelectChannel
+  // already sets joinedVoice on click; this effect covers the deep-link /
+  // refresh path where the sidebar handler never fired.
+  React.useEffect(() => {
+    if (!activeServer || !instanceUrl) return
+    if (activeChannel.kind !== "voice") return
+    if (joinedVoice && joinedVoice.channelId === activeChannel.id) return
+    setJoinedVoice({
+      channelId: activeChannel.id,
+      channelName: activeChannel.name,
+      serverId: activeServer.id,
+      serverName: activeServer.name,
+      instanceUrl,
+    })
+  }, [activeServer, activeChannel, instanceUrl, joinedVoice])
+
   // Default to Catch-up surface when on /home with no channel slug
   React.useEffect(() => {
     if (activeServer || params.channelSlug) return

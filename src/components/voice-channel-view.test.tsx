@@ -1,7 +1,8 @@
 /**
  * Verifies VoiceChannelView mounts the production voiceBody slot when
- * provided (the legacy <VoiceChannel /> bridge from authenticated-app)
- * and falls back to the prototype prejoin screen when omitted.
+ * provided (the legacy <VoiceChannel /> bridge from authenticated-app),
+ * and falls back to a transient connecting state — never a prejoin —
+ * when omitted, so opening a voice channel always auto-joins LiveKit.
  */
 import { describe, it, expect, afterEach, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
@@ -35,10 +36,13 @@ describe("VoiceChannelView", () => {
     expect(screen.getByTestId("real-voice")).toBeInTheDocument()
   })
 
-  it("falls back to the prototype prejoin screen when voiceBody is omitted", () => {
+  it("renders a connecting placeholder (no prejoin) when voiceBody is omitted", () => {
     render(<VoiceChannelView channelName="standup" />)
 
-    // PrejoinScreen renders a join button labelled by the room name.
-    expect(screen.getByRole("button", { name: /join/i })).toBeInTheDocument()
+    // The prejoin screen has been removed: opening a voice channel must
+    // always auto-join LiveKit. Until the legacy mount lands the user sees
+    // a transient connecting state.
+    expect(screen.getByText(/connecting to standup/i)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /join/i })).not.toBeInTheDocument()
   })
 })
