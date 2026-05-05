@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 // Custom middleware to force correct MIME type for WASM files
 const wasmContentTypePlugin = {
@@ -27,6 +28,13 @@ const wasmContentTypePlugin = {
   },
 };
 
+// HTTPS dev server gated behind VITE_HTTPS=true. Required when reaching the
+// dev server from a LAN IP (mobile testing) because `crypto.subtle`,
+// `navigator.clipboard`, and other secure-context APIs are unavailable on
+// plain HTTP outside localhost. Default off so localhost dev stays
+// cert-warning-free.
+const httpsEnabled = process.env.VITE_HTTPS === 'true';
+
 export default defineConfig({
   plugins: [
     wasmContentTypePlugin,
@@ -34,6 +42,7 @@ export default defineConfig({
     topLevelAwait(),
     tailwindcss(),
     react(),
+    ...(httpsEnabled ? [basicSsl()] : []),
   ],
   resolve: {
     alias: {
