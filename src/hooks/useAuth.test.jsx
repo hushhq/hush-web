@@ -17,6 +17,8 @@ import {
   readWrappedIdentity,
   isMarkerAlive,
   clearSessionKey,
+  sealIdentityIntoSession,
+  markAlive as markVaultSessionAlive,
 } from '../lib/vaultSessionKey';
 
 // ── authInstanceStore mock (must be declared before module imports) ─────────────
@@ -887,6 +889,120 @@ describe('useAuth - session rehydration', () => {
 
     expect(result.current.vaultState).toBe('unlocked');
     expect(result.current.needsPinSetup).toBe(true);
+  });
+
+  it('resumes vaultState=unlocked from the session-key store under "never" with valid JWT (P21 step 3)', async () => {
+    // Pre-seed the cross-reload session key store as if a previous
+    // unlock had already sealed the identity. With a `never` policy
+    // and a still-valid JWT, the boot effect must resume directly to
+    // `vaultState='unlocked'` without prompting for PIN.
+    const userId = 'user-step3-never';
+    sessionStorage.setItem(JWT_KEY, 'valid-jwt');
+    localStorage.setItem(`hush_vault_user_${userId}`, 'aabb');
+    const fakeBlob = new Uint8Array(44);
+    fakeBlob.set(new Uint8Array(32).fill(1), 12);
+    _vaultBlobs.set(userId, fakeBlob);
+
+    vi.mocked(vaultMod.getVaultConfig).mockReturnValue({
+      timeout: 'never',
+      pinType: 'pin',
+    });
+
+    await clearSessionKey(userId);
+    const identityBytes = new TextEncoder().encode(
+      JSON.stringify({
+        v: 1,
+        priv: Array.from(new Uint8Array(32).fill(7)),
+        pub: Array.from(new Uint8Array(32).fill(8)),
+      }),
+    );
+    await sealIdentityIntoSession(userId, identityBytes);
+    // No alive marker — `never` must not consult it.
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
+      mockFetchOk({ id: userId, username: 'fox', displayName: 'Fox' }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.vaultState).toBe('unlocked'));
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.isVaultUnlocked).toBe(true);
+    expect(result.current.needsUnlock).toBe(false);
+  });
+
+  it('does NOT resume from the session-key store under "browser_close" when no marker and no sibling tab is alive (P21 step 3)', async () => {
+    // browser_close survives soft refresh inside the same tab (marker
+    // present) but not a cold tab open. With marker absent the boot
+    // must fall back to PIN.
+    const userId = 'user-step3-bc';
+    sessionStorage.setItem(JWT_KEY, 'valid-jwt');
+    localStorage.setItem(`hush_vault_user_${userId}`, 'aabb');
+    const fakeBlob = new Uint8Array(44);
+    fakeBlob.set(new Uint8Array(32).fill(1), 12);
+    _vaultBlobs.set(userId, fakeBlob);
+
+    vi.mocked(vaultMod.getVaultConfig).mockReturnValue({
+      timeout: 'browser_close',
+      pinType: 'pin',
+    });
+
+    await clearSessionKey(userId);
+    await sealIdentityIntoSession(
+      userId,
+      new TextEncoder().encode(
+        JSON.stringify({
+          v: 1,
+          priv: Array.from(new Uint8Array(32).fill(7)),
+          pub: Array.from(new Uint8Array(32).fill(8)),
+        }),
+      ),
+    );
+    // No marker, no sibling — refcount probe returns false.
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
+      mockFetchOk({ id: userId, username: 'gus', displayName: 'Gus' }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.vaultState).toBe('locked');
+    expect(result.current.needsUnlock).toBe(true);
+  });
+
+  it('resumes from the session-key store under "browser_close" when the per-tab alive marker is set (P21 step 3)', async () => {
+    // Same as above, but with an alive marker — soft refresh inside
+    // the same tab. Must resume to `vaultState='unlocked'`.
+    const userId = 'user-step3-bc-alive';
+    sessionStorage.setItem(JWT_KEY, 'valid-jwt');
+    localStorage.setItem(`hush_vault_user_${userId}`, 'aabb');
+    const fakeBlob = new Uint8Array(44);
+    fakeBlob.set(new Uint8Array(32).fill(1), 12);
+    _vaultBlobs.set(userId, fakeBlob);
+
+    vi.mocked(vaultMod.getVaultConfig).mockReturnValue({
+      timeout: 'browser_close',
+      pinType: 'pin',
+    });
+
+    await clearSessionKey(userId);
+    await sealIdentityIntoSession(
+      userId,
+      new TextEncoder().encode(
+        JSON.stringify({
+          v: 1,
+          priv: Array.from(new Uint8Array(32).fill(7)),
+          pub: Array.from(new Uint8Array(32).fill(8)),
+        }),
+      ),
+    );
+    markVaultSessionAlive(userId);
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
+      mockFetchOk({ id: userId, username: 'hank', displayName: 'Hank' }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.vaultState).toBe('unlocked'));
   });
 
   it('does not auto-unlock vault from leftover sessionStorage wrapping key (ans23 / F3)', async () => {

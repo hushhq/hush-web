@@ -44,6 +44,9 @@ import {
 } from '../lib/desktopVaultBridge';
 import {
   sealIdentityIntoSession,
+  getSessionKeyIfAlive,
+  readWrappedIdentity,
+  unwrapIdentity,
   markAlive as markVaultSessionAlive,
 } from '../lib/vaultSessionKey';
 import {
@@ -230,6 +233,71 @@ async function writeVaultSessionForUnlock(userId, privateKey, publicKey) {
     markVaultSessionAlive(userId);
   } catch (err) {
     console.warn('[useAuth] vault session-key write failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Decodes the JSON envelope produced by `encodeIdentityForVaultSession`.
+ * Returns null when the bytes do not match the v1 shape — the caller
+ * MUST treat that as "no usable session" and fall back to PIN.
+ *
+ * @param {Uint8Array} bytes
+ * @returns {{ privateKey: Uint8Array, publicKey: Uint8Array }|null}
+ */
+function decodeIdentityFromVaultSession(bytes) {
+  try {
+    const text = new TextDecoder().decode(bytes);
+    const obj = JSON.parse(text);
+    if (
+      !obj ||
+      obj.v !== 1 ||
+      !Array.isArray(obj.priv) ||
+      !Array.isArray(obj.pub)
+    ) {
+      return null;
+    }
+    return {
+      privateKey: new Uint8Array(obj.priv),
+      publicKey: new Uint8Array(obj.pub),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Attempts to read a previously-sealed identity from the vault session
+ * key store and return the decoded keypair. Honours the configured
+ * vault timeout policy via `getSessionKeyIfAlive` — if the policy
+ * forbids cross-reload resume on this boot (e.g. `refresh`, or
+ * `browser_close` with no alive marker and no live sibling tab), the
+ * function returns null and the caller falls back to PIN.
+ *
+ * Best-effort by design: any failure (missing IDB record, tampered
+ * bundle, browser without WebCrypto) yields null and a warning rather
+ * than throwing, so the boot path still succeeds with a PIN prompt.
+ *
+ * @param {string} userId
+ * @param {{ timeout?: string|number }|null} effectiveConfig
+ * @returns {Promise<{ privateKey: Uint8Array, publicKey: Uint8Array }|null>}
+ */
+async function tryVaultSessionResume(userId, effectiveConfig) {
+  if (!userId) return null;
+  const policy = effectiveConfig?.timeout ?? 'browser_close';
+  try {
+    // The BroadcastChannel-based refcount lands in a follow-up step;
+    // for now `aliveTabExists` is always false on this tab's boot.
+    const sessionKey = await getSessionKeyIfAlive(userId, policy, {
+      aliveTabExists: false,
+    });
+    if (!sessionKey) return null;
+    const wrapped = await readWrappedIdentity(userId);
+    if (!wrapped) return null;
+    const identityBytes = await unwrapIdentity(sessionKey, wrapped);
+    return decodeIdentityFromVaultSession(identityBytes);
+  } catch (err) {
+    console.warn('[useAuth] vault session-key resume failed (non-fatal):', err);
+    return null;
   }
 }
 
@@ -1568,6 +1636,84 @@ export function useAuth() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [performChallengeResponse, applyVaultTimeout, clearPinSetup]);
 
+  // ── Vault session-key auto-unlock (P21 step 3) ────────────────────────────
+
+  /**
+   * Attempts to resume an unlocked vault from the cross-reload session
+   * key store (`src/lib/vaultSessionKey.ts`). Honours the configured
+   * vault timeout policy:
+   *
+   *   - `never`         — reuse IDB record on every boot.
+   *   - `browser_close` — reuse only when the per-tab alive marker is
+   *                       still set (soft refresh in the same tab) or
+   *                       a sibling tab signals liveness (refcount
+   *                       wiring lands later in P21).
+   *   - `refresh`       — never reuse; the boot wipe in step 4 will
+   *                       clear the IDB record.
+   *   - numeric         — reuse if the inactivity deadline > now.
+   *
+   * When `existingJwt` is null (sessionStorage cleared by tab close),
+   * the helper hands the unwrapped keypair to `performChallengeResponse`
+   * to mint a fresh JWT. When the JWT survived (soft refresh), the
+   * helper unlocks in-memory only.
+   *
+   * Best-effort: any failure → returns false → caller falls back to
+   * PIN.
+   *
+   * @param {string} userId
+   * @param {string|null} existingJwt
+   * @returns {Promise<boolean>} true if vault was auto-unlocked
+   */
+  const tryVaultSessionAutoUnlock = useCallback(async (userId, existingJwt) => {
+    if (!userId) return false;
+    const config = getEffectiveVaultConfig(userId);
+    const policy = config?.timeout ?? 'browser_close';
+    if (policy === 'refresh') return false;
+
+    const identity = await tryVaultSessionResume(userId, config);
+    if (!identity) return false;
+    const { privateKey, publicKey } = identity;
+
+    if (!existingJwt) {
+      if (!publicKey) return false;
+      try {
+        const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
+        // performChallengeResponse owns identityKeyRef, token, user,
+        // vaultState, transcript cache hydration, applyVaultTimeout,
+        // and re-seals the session key store on its way out.
+        await performChallengeResponse(privateKey, publicKey, homeInstance);
+        return true;
+      } catch (err) {
+        console.warn('[useAuth] vault session-key challenge-response failed:', err);
+        return false;
+      }
+    }
+
+    // JWT still valid — unlock in memory only.
+    identityKeyRef.current = { privateKey, publicKey };
+    setHasLocalVault(true);
+    clearPinSetup();
+    try {
+      await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
+    } catch (cacheErr) {
+      console.warn(
+        '[useAuth] vault session-key auto-unlock: transcript cache load failed:',
+        cacheErr,
+      );
+      clearTranscriptCache();
+    }
+    setVaultState('unlocked');
+    applyVaultTimeout(userId);
+    // Refresh the marker + IDB record so the next reload sees a
+    // current entry. Fire-and-forget — see notes on
+    // performChallengeResponse.
+    if (publicKey) {
+      void writeVaultSessionForUnlock(userId, privateKey, publicKey);
+    }
+    return true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [performChallengeResponse, applyVaultTimeout, clearPinSetup, getEffectiveVaultConfig]);
+
   // ── Startup: session rehydration ──────────────────────────────────────────
 
   useEffect(() => {
@@ -1593,8 +1739,16 @@ export function useAuth() {
             const result = await checkVaultExistsInIDB(vaultUserId);
             if (idbCheckCancelled) return;
             if (result.exists) {
-              const unlocked = await tryDesktopAutoUnlock(vaultUserId, null);
+              // Try the vault session-key store first — under `never`
+              // / `browser_close` (with marker) / numeric (within
+              // deadline), this resumes unlocked without PIN. Falls
+              // back to desktop auto-unlock, then PIN.
+              let unlocked = await tryVaultSessionAutoUnlock(vaultUserId, null);
               if (idbCheckCancelled) return;
+              if (!unlocked) {
+                unlocked = await tryDesktopAutoUnlock(vaultUserId, null);
+                if (idbCheckCancelled) return;
+              }
               if (!unlocked) {
                 setHasLocalVault(true);
                 setVaultState('locked');
@@ -1646,8 +1800,12 @@ export function useAuth() {
                 localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, result.publicKeyHex);
               }
               localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, userId);
-              const unlocked = await tryDesktopAutoUnlock(userId, null);
+              let unlocked = await tryVaultSessionAutoUnlock(userId, null);
               if (idbCancelled) return;
+              if (!unlocked) {
+                unlocked = await tryDesktopAutoUnlock(userId, null);
+                if (idbCancelled) return;
+              }
               if (!unlocked) {
                 setHasLocalVault(true);
                 setVaultState('locked');
@@ -1733,8 +1891,12 @@ export function useAuth() {
                 db.close();
                 if (cancelled) return;
                 if (blob) {
-                  const unlocked = await tryDesktopAutoUnlock(u.id, stored);
+                  let unlocked = await tryVaultSessionAutoUnlock(u.id, stored);
                   if (cancelled) return;
+                  if (!unlocked) {
+                    unlocked = await tryDesktopAutoUnlock(u.id, stored);
+                    if (cancelled) return;
+                  }
                   if (!unlocked) {
                     clearPinSetup();
                     setVaultState('locked');
