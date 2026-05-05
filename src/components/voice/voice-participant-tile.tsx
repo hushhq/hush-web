@@ -48,6 +48,7 @@ export function VoiceParticipantTile({
 }: VoiceParticipantTileProps) {
   const ref = useEnsureTrackRef(trackRef)
   const { elementProps } = useParticipantTile<HTMLDivElement>({
+    trackRef: ref,
     htmlProps: { className: "lk-participant-tile" },
   })
   const isVideo =

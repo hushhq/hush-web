@@ -799,6 +799,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const publishWebcam = useCallback(
     async (deviceId = null) => {
       if (!roomRef.current) throw new Error('Room not connected');
+      if (roomRef.current.localParticipant === null) {
+        throw new Error('Room localParticipant unavailable (mid-connect)');
+      }
       await trackPublishWebcam(roomRef.current, { localTracksRef }, deviceId);
       scheduleLocalTracksUpdate();
     },
@@ -816,6 +819,13 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const publishMic = useCallback(
     async (deviceId = null) => {
       if (!roomRef.current) throw new Error('Room not connected');
+      // livekit-client populates `localParticipant` on connect; before
+      // that it is `null`. We bail out only on the explicit-null case
+      // (real Room mid-connect) so the test MockRoom (which omits the
+      // field entirely) keeps working.
+      if (roomRef.current.localParticipant === null) {
+        throw new Error('Room localParticipant unavailable (mid-connect)');
+      }
       const mode = resolveMode({ isMobileWebAudio: isMobileWebAudio() });
       const profile = CAPTURE_PROFILES[mode];
       try {
