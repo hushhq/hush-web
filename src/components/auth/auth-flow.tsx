@@ -57,8 +57,12 @@ export function AuthFlow({
   const [view, setView] = React.useState<AuthView>("main")
 
   return (
-    <div className="flex min-h-svh w-full items-start justify-center bg-background p-4 sm:items-center sm:p-6">
-      <div className="flex w-full max-w-md flex-col items-center gap-6 py-4 sm:gap-8 sm:py-0">
+    <div className="flex min-h-svh w-full flex-col bg-background px-4 py-4 sm:px-6">
+      {/* `my-auto` centers when content fits the viewport; collapses to
+          regular block flow (top-anchored, scrollable) when content is
+          taller than the viewport. Works on every screen size without a
+          breakpoint switch. */}
+      <div className="my-auto flex w-full max-w-md flex-col items-center gap-6 self-center sm:gap-8">
         <HushLogo className="h-10 w-10" />
         <h1 className="text-2xl font-semibold tracking-tight">
           {titleFor(view)}
