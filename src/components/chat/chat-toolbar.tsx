@@ -279,7 +279,7 @@ export interface ChatToolbarAttachmentProps extends React.ComponentProps<"div"> 
 /**
  * Displays a file attachment preview as a square card with a file icon,
  * file name, and a small remove button in the top-right corner.
- * Discord-style attachment preview for the toolbar.
+ * Compact attachment preview for the toolbar.
  *
  * @example
  * ```tsx

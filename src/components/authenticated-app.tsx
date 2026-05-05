@@ -684,7 +684,7 @@ export function AuthenticatedApp() {
   }, [activeServer, activeChannel, instanceUrl])
 
   // Augment voice-channel rows with their live participant rosters so
-  // the sidebar surfaces the same Discord-style presence the mockup
+  // the sidebar surfaces the live presence stack the mockup
   // demonstrates. Two sources merged:
   // - WS-driven `voicePresence` (other users via voice_state_update)
   // - local `joinedVoice` (self) — guarantees the user always sees

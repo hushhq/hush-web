@@ -18,6 +18,12 @@ export type SlashGroup = "actions" | "formatting"
 
 export interface HushSuggestionItem extends SuggestionItem {
   group: SlashGroup
+  /** Optional small label rendered next to the title (e.g. "Beta").
+   *  Kept *out* of the underlying `title` string so cmdk's value /
+   *  filter logic gets a clean alphanumeric value — parens-in-title
+   *  produced a click regression where keyboard-Enter selected the
+   *  item but a mouse click did not. */
+  badge?: string
 }
 
 /** Screen-space rect of the caret at slash invocation. Used by the
@@ -52,9 +58,9 @@ export function createHushSlashItems(
 ): HushSuggestionItem[] {
   const items = createSuggestionItems([
     {
-      title: "GIF (beta)",
+      title: "GIF",
       description: "Insert a GIF from GIPHY",
-      searchTerms: ["gif", "image", "media", "giphy"],
+      searchTerms: ["gif", "image", "media", "giphy", "beta"],
       icon: <ImageIcon className="size-4" />,
       command: ({ editor, range }) => {
         const anchor = caretAnchorFromEditor(editor, range.from)
@@ -146,9 +152,19 @@ export function createHushSlashItems(
     },
   ])
 
+  // Side-table of muted badges keyed by item title. Kept outside the
+  // `createSuggestionItems` payload because `SuggestionItem` is sealed
+  // upstream and rejects extra fields, and pasting "Beta" into the
+  // title string itself caused a click regression where cmdk's value
+  // tracking and pointer-down handler disagreed once parens entered
+  // the title.
+  const BADGES: Record<string, string | undefined> = {
+    GIF: "Beta",
+  }
   return items.map((item, index) => ({
     ...item,
     group: index < 2 ? "actions" : "formatting",
+    badge: BADGES[item.title],
   }))
 }
 

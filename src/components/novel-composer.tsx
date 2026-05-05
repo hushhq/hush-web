@@ -468,22 +468,6 @@ export const NovelComposer = React.forwardRef<
   )
 })
 
-/**
- * Mute any trailing parenthetical in a slash-item title (e.g.
- * "GIF (beta)") so the badge reads as secondary text without forcing
- * us to thread JSX titles through the suggestion plumbing.
- */
-function renderTitleWithMutedSuffix(title: string): React.ReactNode {
-  const match = title.match(/^(.*?)\s*(\([^)]*\))\s*$/)
-  if (!match) return title
-  return (
-    <>
-      {match[1]}{" "}
-      <span className="font-normal text-muted-foreground">{match[2]}</span>
-    </>
-  )
-}
-
 function SlashSection({
   title,
   items,
@@ -507,8 +491,13 @@ function SlashSection({
             {item.icon}
           </span>
           <div className="flex flex-col">
-            <span className="font-medium">
-              {renderTitleWithMutedSuffix(item.title)}
+            <span className="flex items-center gap-1.5 font-medium">
+              {item.title}
+              {item.badge ? (
+                <span className="rounded bg-muted px-1 py-px text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                  {item.badge}
+                </span>
+              ) : null}
             </span>
             <span className="text-xs text-muted-foreground">
               {item.description}

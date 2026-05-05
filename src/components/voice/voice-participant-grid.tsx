@@ -1,4 +1,4 @@
-import { GridLayout, useTracks } from "@livekit/components-react"
+import { useTracks } from "@livekit/components-react"
 import "@livekit/components-styles"
 import { Track } from "livekit-client"
 
@@ -11,24 +11,34 @@ interface VoiceParticipantGridProps {
 }
 
 /**
+ * Layout pick: row count given a tile count, optimised for landscape
+ * 16:9 webcam content. Stays vertical at 1–2 tiles so cells are wider
+ * than they are tall, then expands to a 2-col grid for 3–4, 3-col for
+ * 5–9, 4-col beyond. Keeps tiles roughly the same shape across counts.
+ */
+function pickGridShape(count: number): { cols: number; rows: number } {
+  if (count <= 1) return { cols: 1, rows: 1 }
+  if (count === 2) return { cols: 1, rows: 2 }
+  if (count <= 4) return { cols: 2, rows: 2 }
+  if (count <= 9) return { cols: 3, rows: 3 }
+  return { cols: 4, rows: 4 }
+}
+
+/**
  * Voice channel participant grid.
  *
- * Built directly on `@livekit/components-react`'s `GridLayout` +
- * `ParticipantTile`, fed by `useTracks` against the shared
- * `RoomContext` provided by the voice orchestrator. The orchestrator
- * binds its existing `useRoom`-managed `Room` instance into that
- * context, so every component-react hook reads from the same Room our
- * MLS frame transformer is wired into — no separate connection, no
- * separate subscription model, no shadow state.
+ * `useTracks` against the shared `RoomContext` (set by the voice
+ * orchestrator over our MLS-aware `useRoom` Room) drives the tile
+ * list. The default `GridLayout` from @livekit/components-react picks
+ * a 2×1 layout for two participants on landscape screens — that shape
+ * is fine for 4×3 webcams but reads poorly for 16:9 laptop / desktop
+ * cameras stacked side-by-side. We render a custom CSS grid here
+ * instead so every tile keeps a 16:9 aspect ratio and 2 tiles stack
+ * vertically.
  *
- * Track sources requested:
- * - `Camera` with placeholder: surfaces audio-only participants as
- *   avatar tiles so a user joining without video still appears.
- * - `ScreenShare` without placeholder: only renders when somebody is
- *   actually sharing a screen.
- *
- * Rendering, speaking ring, mute / deafen badges, fullscreen toggle,
- * and Avatar fallback come from `ParticipantTile` for free.
+ * When the user is alone (`tracks.length <= 1`), we sub in a "lonely"
+ * tile beneath the user's own so the grid still shows two cells and
+ * there is a visible cue that nobody else has joined yet.
  */
 export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
   const tracks = useTracks(
@@ -39,36 +49,47 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
     { onlySubscribed: false }
   )
 
-  // When the user is the only participant in the room, the GridLayout
-  // collapses to a single tile and the surface feels empty. Render a
-  // sibling "lonely" tile so the grid still has two cells, the user's
-  // own tile keeps a sane size, and there is a visible cue that we're
-  // waiting for someone else to join.
-  if (tracks.length <= 1) {
-    return (
-      <div
-        className={cn(
-          "grid h-full w-full grid-cols-2 gap-3 p-3",
-          className
-        )}
-      >
-        {tracks[0] ? (
-          <VoiceParticipantTile trackRef={tracks[0]} />
-        ) : (
-          <div />
-        )}
-        <VoiceLonelyTile />
-      </div>
-    )
-  }
+  const isLonely = tracks.length <= 1
+  const tileCount = isLonely ? 2 : tracks.length
+  const { cols, rows } = pickGridShape(tileCount)
 
+  // Fixed 16:9 tiles. The inner grid box is locked to an aspect ratio
+  // of `(cols*16) / (rows*9)`, so each 1fr × 1fr cell resolves to a
+  // 16:9 box regardless of how the box is scaled. We wrap the grid in
+  // a flex container that centres it, and clamp the grid with
+  // `max-h-full max-w-full` so it scales down to fit the smaller
+  // dimension of the channel view — never overflows into a scroll,
+  // never stretches a webcam past its native ratio.
+  const aspectRatio = `${cols * 16} / ${rows * 9}`
   return (
-    <GridLayout
-      tracks={tracks}
-      className={cn("size-full", className)}
-      style={{ ["--lk-grid-gap" as string]: "0.75rem" }}
+    <div
+      className={cn(
+        "flex size-full items-center justify-center p-3",
+        className
+      )}
     >
-      <VoiceParticipantTile />
-    </GridLayout>
+      <div
+        className="grid max-h-full max-w-full gap-3"
+        style={{
+          aspectRatio,
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }}
+      >
+        {tracks.map((trackRef, idx) => (
+          <div
+            key={`${trackRef.participant.identity}-${trackRef.source}-${idx}`}
+            className="min-h-0 min-w-0"
+          >
+            <VoiceParticipantTile trackRef={trackRef} />
+          </div>
+        ))}
+        {isLonely ? (
+          <div className="min-h-0 min-w-0">
+            <VoiceLonelyTile />
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }

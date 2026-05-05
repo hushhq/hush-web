@@ -49,7 +49,7 @@ export const milestones: Milestone[] = [
     title: "Servers & Channels",
     status: "active",
     summary:
-      "Discord-like community structure. Servers, text and voice channels, categories, invites, drag-and-drop reordering.",
+      "Community structure. Servers, text and voice channels, categories, invites, drag-and-drop reordering.",
   },
   {
     id: "E",
