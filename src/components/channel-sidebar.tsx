@@ -8,7 +8,6 @@ import {
   MicOffIcon,
   Volume2Icon,
   PlusIcon,
-  FolderPlusIcon,
   ScrollTextIcon,
   ShieldAlertIcon,
   LogOutIcon,
@@ -184,7 +183,7 @@ interface ChannelSidebarProps {
   systemChannels: SystemChannel[]
   categories: ChannelCategory[]
   channels: Channel[]
-  apps: AppEntry[]
+  apps?: AppEntry[]
   directMessages?: DirectMessage[]
   activeChannelId: string
   onSelectChannel: (id: string) => void
@@ -221,7 +220,9 @@ export function ChannelSidebar({
   systemChannels,
   categories,
   channels,
-  apps,
+  // apps prop reserved for a future integrations row; rendering is gated
+  // on backend support and currently disabled.
+  apps: _apps,
   directMessages,
   activeChannelId,
   onSelectChannel,
@@ -452,11 +453,6 @@ function ServerHeader({
                 >
                   <PlusIcon className="size-4" />
                   Invite people
-                </DropdownMenuItem>
-                {/* TODO(yarin, 2026-05-04): backend integrations not implemented */}
-                <DropdownMenuItem disabled>
-                  <PuzzleIcon className="size-4" />
-                  Manage integrations
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -821,11 +817,6 @@ function ChannelsSection({
           </SidebarGroup>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
-          {/* TODO(yarin, 2026-05-04): backend categories CRUD endpoint missing */}
-          <ContextMenuItem disabled>
-            <FolderPlusIcon className="size-4" />
-            New category
-          </ContextMenuItem>
           <ContextMenuItem
             disabled={!canAdministrate || !onCreateChannel}
             onSelect={(event) => {
@@ -888,9 +879,6 @@ function ChannelsSection({
               <Label htmlFor="cs-create-channel-name">Channel name</Label>
               <Input
                 id="cs-create-channel-name"
-                // autoFocus: dialog is user-initiated, focusing the only input on open
-                // is the expected interaction for a name entry form.
-                autoFocus
                 value={createName}
                 onChange={(event) => setCreateName(event.target.value)}
                 disabled={createBusy}

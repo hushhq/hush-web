@@ -15,7 +15,13 @@
 import * as React from "react"
 import { getGuildChannels, moveChannel } from "@/lib/api"
 
-import type { Channel, ChannelCategory, ChannelKind } from "./types"
+import type {
+  AdapterSystemChannel,
+  Channel,
+  ChannelCategory,
+  ChannelKind,
+  SystemChannelType,
+} from "./types"
 
 interface RawChannel {
   id: string
@@ -26,6 +32,7 @@ interface RawChannel {
   position: number
   unreadCount?: number
   mentionCount?: number
+  systemChannelType?: string | null
 }
 
 interface UseChannelsArgs {
@@ -37,6 +44,7 @@ interface UseChannelsArgs {
 interface UseChannelsResult {
   categories: ChannelCategory[]
   channels: Channel[]
+  systemChannels: AdapterSystemChannel[]
   loading: boolean
   error: Error | null
   refetch: () => Promise<void>
@@ -45,6 +53,7 @@ interface UseChannelsResult {
 }
 
 const CATEGORY = "category"
+const SYSTEM = "system"
 
 function parseMetadataName(json: string): string | null {
   try {
@@ -77,6 +86,20 @@ function isRawMessageChannel(
   channel: RawChannel
 ): channel is RawChannel & { type: ChannelKind } {
   return channel.type === "text" || channel.type === "voice"
+}
+
+/**
+ * Resolve a system channel's discriminator. Backends that ship the
+ * `systemChannelType` field win; otherwise we fall back to a name match
+ * so legacy payloads still route correctly.
+ */
+function deriveSystemChannelType(channel: RawChannel): SystemChannelType {
+  const explicit = channel.systemChannelType?.toLowerCase().trim()
+  if (explicit === "moderation") return "moderation"
+  if (explicit === "server-log" || explicit === "audit") return "server-log"
+  const name = (channel.name ?? "").toLowerCase()
+  if (name.includes("mod")) return "moderation"
+  return "server-log"
 }
 
 export function useChannelsForServer({
@@ -131,6 +154,19 @@ export function useChannelsForServer({
           categoryId: c.parentId,
           unreadCount: c.unreadCount,
           mentionCount: c.mentionCount,
+        })),
+    [raw]
+  )
+
+  const systemChannels = React.useMemo<AdapterSystemChannel[]>(
+    () =>
+      raw
+        .filter((c) => c.type === SYSTEM)
+        .sort((a, b) => a.position - b.position)
+        .map((c) => ({
+          id: c.id,
+          name: channelDisplayName(c) || "System",
+          systemChannelType: deriveSystemChannelType(c),
         })),
     [raw]
   )
@@ -209,6 +245,7 @@ export function useChannelsForServer({
   return {
     categories,
     channels,
+    systemChannels,
     loading,
     error,
     refetch,

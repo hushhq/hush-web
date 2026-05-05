@@ -4,12 +4,15 @@
  */
 import * as React from "react"
 import { useInstanceContext } from "@/contexts/InstanceContext"
+import { useAuth } from "@/contexts/AuthContext"
 
 import {
+  type MemberRole,
   type RawGuild,
   type Server,
   deriveInitials,
   instanceHostFromUrl,
+  permissionLevelToRole,
 } from "./types"
 
 interface UseGuildsResult {
@@ -19,11 +22,24 @@ interface UseGuildsResult {
   findById: (id: string) => Server | null
 }
 
+function deriveServerRole(
+  guild: RawGuild,
+  currentUserId: string | null
+): MemberRole | undefined {
+  if (typeof guild.permissionLevel === "number") {
+    return permissionLevelToRole(guild.permissionLevel)
+  }
+  if (currentUserId && guild.ownerId === currentUserId) return "owner"
+  return undefined
+}
+
 export function useGuilds(): UseGuildsResult {
   const { mergedGuilds, guildsLoaded } = useInstanceContext() as {
     mergedGuilds: RawGuild[]
     guildsLoaded: boolean
   }
+  const { user } = useAuth() as { user: { id?: string } | null }
+  const currentUserId = user?.id ?? null
 
   const servers = React.useMemo<Server[]>(
     () =>
@@ -36,10 +52,11 @@ export function useGuilds(): UseGuildsResult {
             name,
             initials: deriveInitials(name),
             instanceHost: instanceHostFromUrl(g.instanceUrl),
+            role: deriveServerRole(g, currentUserId),
             raw: g,
           }
         }),
-    [mergedGuilds]
+    [mergedGuilds, currentUserId]
   )
 
   const findById = React.useCallback(

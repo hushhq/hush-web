@@ -3,7 +3,6 @@ import {
   ChevronsUpDownIcon,
   LogOutIcon,
   SettingsIcon,
-  BellIcon,
 } from "lucide-react"
 
 import {
@@ -80,10 +79,6 @@ export function UserMenu({ user, onOpenSettings }: UserMenuProps) {
               <DropdownMenuItem onSelect={() => onOpenSettings?.()}>
                 <SettingsIcon className="size-4" />
                 Preferences
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <BellIcon className="size-4" />
-                Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

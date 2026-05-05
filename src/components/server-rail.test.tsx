@@ -81,6 +81,23 @@ describe("ServerRail", () => {
     expect(screen.queryByText(/^leave server$/i)).not.toBeInTheDocument()
   })
 
+  it("shows Delete on non-active owned servers (P1-1 contract)", async () => {
+    // Right-click a non-active server (srv-2) where the user is owner.
+    // Before the role-per-server fix, this surface wrongly fell back to
+    // "Open server first" because getServerRole returned undefined.
+    setup({
+      getServerRole: (id) => (id === "srv-2" ? "owner" : "member"),
+      onDeleteServer: vi.fn(),
+    })
+
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("button", { name: "Beta" }),
+    })
+
+    expect(screen.getByText(/delete server/i)).toBeInTheDocument()
+  })
+
   // Dialog-confirm flow tested via integration in App.test.jsx — Radix
   // AlertDialog uses portals which complicate user-event clicks here.
 })

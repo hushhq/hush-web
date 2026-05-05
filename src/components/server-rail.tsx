@@ -4,11 +4,7 @@ import {
   PlusIcon,
   CompassIcon,
   HomeIcon,
-  BellOffIcon,
-  BellIcon,
-  CheckCheckIcon,
   SettingsIcon,
-  ShieldIcon,
   LogOutIcon,
 } from "lucide-react"
 
@@ -30,9 +26,6 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx"
 import type { MemberRole } from "@/components/members-sidebar"
@@ -216,11 +209,13 @@ function RailServer({
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const isOwner = role === "owner"
-  const canUseServerActions = active
-  const canDelete = canUseServerActions && isOwner && Boolean(onDelete)
-  const canLeave = canUseServerActions && !isOwner && Boolean(onLeave)
+  const isMember = role === "member" || role === "moderator"
+  // Without a known role we can't safely show destructive items; settings
+  // remains available because the dialog itself enforces backend permissions.
+  const canDelete = isOwner && Boolean(onDelete)
+  const canLeave = isMember && Boolean(onLeave)
   const canOpenSettings =
-    canUseServerActions && (role === "owner" || role === "admin")
+    role === "owner" || role === "admin" || (active && !role)
 
   return (
     <ContextMenu>
@@ -254,32 +249,6 @@ function RailServer({
         <ContextMenuLabel className="text-xs text-muted-foreground">
           {server.name}
         </ContextMenuLabel>
-        {/* TODO(yarin, 2026-05-04): mute presets need notification mute backend */}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger disabled>
-            <BellOffIcon className="size-4" />
-            Mute server
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuItem disabled>For 15 minutes</ContextMenuItem>
-            <ContextMenuItem disabled>For 1 hour</ContextMenuItem>
-            <ContextMenuItem disabled>For 8 hours</ContextMenuItem>
-            <ContextMenuItem disabled>Until tomorrow</ContextMenuItem>
-            <ContextMenuSeparator />
-            <ContextMenuItem disabled>Until I turn it back on</ContextMenuItem>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        {/* TODO(yarin, 2026-05-04): per-server notification prefs not implemented */}
-        <ContextMenuItem disabled>
-          <BellIcon className="size-4" />
-          Notification settings
-        </ContextMenuItem>
-        {/* TODO(yarin, 2026-05-04): wire to wsClient mark-read on all channels */}
-        <ContextMenuItem disabled>
-          <CheckCheckIcon className="size-4" />
-          Mark server as read
-        </ContextMenuItem>
-        <ContextMenuSeparator />
         <ContextMenuItem
           disabled={!canOpenSettings || !onOpenSettings}
           onSelect={(event) => {
@@ -288,12 +257,7 @@ function RailServer({
           }}
         >
           <SettingsIcon className="size-4" />
-          {active ? "Server settings" : "Open server first"}
-        </ContextMenuItem>
-        {/* TODO(yarin, 2026-05-04): privacy prefs not implemented */}
-        <ContextMenuItem disabled>
-          <ShieldIcon className="size-4" />
-          Privacy settings
+          Server settings
         </ContextMenuItem>
         <ContextMenuSeparator />
         {canDelete ? (

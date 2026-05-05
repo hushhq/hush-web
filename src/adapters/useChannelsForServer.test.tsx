@@ -51,6 +51,50 @@ describe("useChannelsForServer", () => {
       kind: "text",
       categoryId: "cat-1",
     })
+    expect(result.current.systemChannels).toEqual([
+      { id: "sys-1", name: "server-log", systemChannelType: "server-log" },
+    ])
+  })
+
+  it("derives the system channel type from name when not explicit", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "sys-mod", name: "moderation", type: "system", parentId: null, position: 1 },
+      { id: "sys-log", name: "server-log", type: "system", parentId: null, position: 0 },
+    ])
+
+    const { result } = renderHook(() => useChannelsForServer(ARGS))
+
+    await waitFor(() => {
+      expect(result.current.systemChannels).toHaveLength(2)
+    })
+    expect(result.current.systemChannels.map((c) => c.systemChannelType)).toEqual([
+      "server-log",
+      "moderation",
+    ])
+  })
+
+  it("respects an explicit systemChannelType field on the payload", async () => {
+    getGuildChannels.mockResolvedValue([
+      {
+        id: "sys-1",
+        name: "Audit feed",
+        type: "system",
+        systemChannelType: "moderation",
+        parentId: null,
+        position: 0,
+      },
+    ])
+
+    const { result } = renderHook(() => useChannelsForServer(ARGS))
+
+    await waitFor(() => {
+      expect(result.current.systemChannels).toHaveLength(1)
+    })
+    expect(result.current.systemChannels[0]).toMatchObject({
+      id: "sys-1",
+      name: "Audit feed",
+      systemChannelType: "moderation",
+    })
   })
 
   it("decodes plaintext metadata names when the API omits name", async () => {

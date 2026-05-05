@@ -12,6 +12,15 @@ contributor (or future-me) can pick up the work cold.
   server, invite, DM, system channels, voice via legacy mount, command
   palette, settings dialogs), legacy delete (~3000 LOC removed), test port
   with 957+ green tests, two audit passes with finding-driven fixes.
+- **Closed (close-out PR)**: backend `type:"system"` channels are now
+  first-class in `useChannelsForServer` (P0-3); per-server role propagates
+  from the guild list payload through `useGuilds.role` (P1-1); rail menu
+  destructive items work for non-active servers; settings-dialog target
+  follows `settingsTargetServerId`, not the active server; placeholder /
+  inert affordances pruned across rail / palette / sidebar / members /
+  user-menu / settings dialogs (P1-5, UI-DEAD-END-SCAN); kick contract is
+  test-covered (P1-2 / P2-5); auto-focus dropped from create-channel
+  dialog (P2-4).
 - **Open**: a manual end-to-end smoke pass (Phase #19) is the only
   blocking item I cannot perform myself, plus the user-reported
   "buttons don't work / right-click menus aren't there" symptom which I

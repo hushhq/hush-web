@@ -10,8 +10,6 @@ import {
   LogOutIcon,
   PlusIcon,
   CompassIcon,
-  UserPlusIcon,
-  ShieldAlertIcon,
   KeyboardIcon,
 } from "lucide-react"
 
@@ -159,19 +157,6 @@ export function CommandPalette({
             >
               <CompassIcon />
               <span>Discover servers</span>
-            </CommandItem>
-            {/* TODO(yarin, 2026-05-04): per-channel invite item; use channel-sidebar dropdown for now */}
-            <CommandItem disabled>
-              <UserPlusIcon />
-              <span>Invite user</span>
-            </CommandItem>
-            {/* TODO(yarin, 2026-05-04): instance-level ban needs admin guard + user picker */}
-            <CommandItem
-              disabled
-              className="text-destructive data-selected:bg-destructive/10 data-selected:text-destructive"
-            >
-              <ShieldAlertIcon />
-              <span>Ban user</span>
             </CommandItem>
           </CommandGroup>
 

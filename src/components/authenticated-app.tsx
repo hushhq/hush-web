@@ -18,16 +18,13 @@ import { useNavigate, useParams } from "react-router-dom"
 import {
   ScrollTextIcon,
   ShieldAlertIcon,
-  PuzzleIcon,
   InboxIcon,
   StarIcon,
 } from "lucide-react"
+import type { AdapterSystemChannel, SystemChannelType } from "@/adapters"
 
 import { ChannelSidebar } from "@/components/channel-sidebar"
-import type {
-  AppEntry,
-  SystemChannel,
-} from "@/components/channel-sidebar"
+import type { SystemChannel } from "@/components/channel-sidebar"
 import { ChannelView } from "@/components/channel-view"
 import { SystemChannelView } from "@/components/system-channel-view"
 import { ServerRail } from "@/components/server-rail"
@@ -154,17 +151,19 @@ interface VoiceChannelProps {
 const Chat = ChatImpl as React.ComponentType<ChatProps>
 const VoiceChannel = VoiceChannelImpl as React.ComponentType<VoiceChannelProps>
 
-const APPS: AppEntry[] = [
-  // Backend support pending — kept as visual placeholder per design spec.
-  { id: "linear", name: "Linear", icon: <PuzzleIcon /> },
-  { id: "github", name: "GitHub", icon: <PuzzleIcon /> },
-]
+function systemIconFor(type: SystemChannelType): React.ReactNode {
+  return type === "moderation" ? <ShieldAlertIcon /> : <ScrollTextIcon />
+}
 
-const SYSTEM_CHANNELS: SystemChannel[] = [
-  // Backend support pending — kept as visual placeholder per design spec.
-  { id: "server-log", name: "Server log", icon: <ScrollTextIcon /> },
-  { id: "moderation", name: "Moderation", icon: <ShieldAlertIcon /> },
-]
+function adaptSystemChannelsForSidebar(
+  rows: AdapterSystemChannel[]
+): SystemChannel[] {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    icon: systemIconFor(row.systemChannelType),
+  }))
+}
 
 const HOME_SYSTEM_CHANNELS: SystemChannel[] = [
   { id: "catch-up", name: "Catch up", icon: <InboxIcon /> },
@@ -228,6 +227,7 @@ export function AuthenticatedApp() {
   const {
     categories,
     channels,
+    systemChannels: systemChannelRows,
     onCategoriesChange,
     onChannelsChange,
     refetch: refetchChannels,
@@ -236,6 +236,11 @@ export function AuthenticatedApp() {
     token,
     baseUrl,
   })
+
+  const sidebarSystemChannels = React.useMemo<SystemChannel[]>(
+    () => adaptSystemChannelsForSidebar(systemChannelRows),
+    [systemChannelRows]
+  )
   const { members, refetch: refetchMembers } = useMembersForServer({
     serverId: activeServer?.id ?? null,
     token,
@@ -326,12 +331,19 @@ export function AuthenticatedApp() {
     [servers, getTokenForInstance, refreshGuilds, activeServer, navigate]
   )
 
+  // Role resolution per server: prefer the active server's full member list
+  // (richest data), then the role propagated on the guild-list payload
+  // (`permissionLevel` int or `ownerId === currentUserId`). Servers we have
+  // no signal for return undefined; callers must treat that as "unknown",
+  // not "member".
   const getServerRole = React.useCallback(
     (serverId: string): MemberRole | undefined => {
-      if (serverId !== activeServer?.id) return undefined
-      return currentUserRole
+      if (serverId === activeServer?.id && currentUserRole) {
+        return currentUserRole
+      }
+      return servers.find((s) => s.id === serverId)?.role
     },
-    [activeServer, currentUserRole]
+    [activeServer, currentUserRole, servers]
   )
 
   const handleDirectMessage = React.useCallback(
@@ -413,9 +425,9 @@ export function AuthenticatedApp() {
       )) as { id: string }
       await refreshGuilds(targetInstanceUrl)
       const host = new URL(targetInstanceUrl).host
-      navigate(
-        `/${host}/${buildGuildRouteRef(name, server.id)}/${SYSTEM_CHANNELS[0].id}`
-      )
+      // Land on the new server root; AuthenticatedApp's effect below will
+      // forward to its first text channel once the channel list resolves.
+      navigate(`/${host}/${buildGuildRouteRef(name, server.id)}`)
       setCreateServerName("")
       setIsCreateServerOpen(false)
     } catch (err) {
@@ -435,28 +447,44 @@ export function AuthenticatedApp() {
 
   const allChannels = React.useMemo(
     (): ShellChannel[] => [
-      ...SYSTEM_CHANNELS.map((c) => ({
+      ...systemChannelRows.map((c) => ({
         id: c.id,
         name: c.name,
         kind: "system" as const,
       })),
       ...channels.map((c) => ({ id: c.id, name: c.name, kind: c.kind })),
     ],
-    [channels]
+    [systemChannelRows, channels]
   )
 
-  // Fallback chain: exact slug match → read-only system channel. A newly
-  // opened server must never mount Chat on an empty placeholder while template
-  // channels are still loading.
-  const activeChannel = React.useMemo(
-    (): ShellChannel =>
-      allChannels.find((c) => c.id === params.channelSlug) ??
-      {
-        id: SYSTEM_CHANNELS[0].id,
-        name: SYSTEM_CHANNELS[0].name,
-        kind: "system" as const,
-      },
-    [allChannels, params.channelSlug]
+  // Fallback chain: exact slug match → first read-only system channel
+  // (real backend id) → first text/voice → blank stub. A newly opened
+  // server must never mount Chat on an unknown placeholder.
+  const activeChannel = React.useMemo<ShellChannel>(() => {
+    const match = allChannels.find((c) => c.id === params.channelSlug)
+    if (match) return match
+    const firstSystem = systemChannelRows[0]
+    if (firstSystem) {
+      return { id: firstSystem.id, name: firstSystem.name, kind: "system" }
+    }
+    const firstChannel = channels[0]
+    if (firstChannel) {
+      return {
+        id: firstChannel.id,
+        name: firstChannel.name,
+        kind: firstChannel.kind,
+      }
+    }
+    return { id: "", name: "Channel", kind: "text" }
+  }, [allChannels, channels, params.channelSlug, systemChannelRows])
+
+  const activeSystemChannelType = React.useMemo<SystemChannelType | null>(
+    () =>
+      activeChannel.kind === "system"
+        ? systemChannelRows.find((c) => c.id === activeChannel.id)
+            ?.systemChannelType ?? "server-log"
+        : null,
+    [activeChannel, systemChannelRows]
   )
 
   // Voice state — populated by legacy <VoiceChannel /> via onVoiceStateChange.
@@ -797,8 +825,8 @@ export function AuthenticatedApp() {
   const isCatchUp = isHomeSurface && params.channelSlug === "catch-up"
   const isFavoritesSurface = isHomeSurface && params.channelSlug === "favorites"
 
-  // Guard against SYSTEM_CHANNELS (server-log/moderation placeholders) — those
-  // ids have no backend channel and would crash MLS group lookup in Chat.jsx.
+  // System channels are server-side audit/log feeds — never mount the MLS
+  // chat over them. SystemChannelView handles their dedicated render.
   const isSystemChannel = activeChannel.kind === "system"
   const chatBody =
     activeServer &&
@@ -834,7 +862,7 @@ export function AuthenticatedApp() {
   ) : activeServer && isSystemChannel ? (
     <SystemChannelView
       serverId={activeServer.id}
-      source={activeChannel.id === "moderation" ? "moderation" : "server-log"}
+      source={activeSystemChannelType ?? "server-log"}
       token={token}
       baseUrl={baseUrl}
     />
@@ -885,12 +913,11 @@ export function AuthenticatedApp() {
             ? <ChannelSidebar
                 serverName={activeServer.name}
                 serverPlan="Server"
-                systemChannels={SYSTEM_CHANNELS}
+                systemChannels={sidebarSystemChannels}
                 categories={categories}
                 channels={channels}
                 onCategoriesChange={onCategoriesChange}
                 onChannelsChange={onChannelsChange}
-                apps={APPS}
                 activeChannelId={activeChannel.id}
                 onSelectChannel={handleSelectChannel}
                 user={sidebarUser}
@@ -940,12 +967,11 @@ export function AuthenticatedApp() {
                 <ChannelSidebar
                   serverName={activeServer.name}
                   serverPlan="Server"
-                  systemChannels={SYSTEM_CHANNELS}
+                  systemChannels={sidebarSystemChannels}
                   categories={categories}
                   channels={channels}
                   onCategoriesChange={onCategoriesChange}
                   onChannelsChange={onChannelsChange}
-                  apps={APPS}
                   activeChannelId={activeChannel.id}
                   onSelectChannel={handleSelectChannel}
                   user={sidebarUser}
@@ -1108,25 +1134,30 @@ export function AuthenticatedApp() {
           </form>
         </DialogContent>
       </Dialog>
-      <ServerSettingsDialog
-        open={isServerSettingsOpen}
-        onOpenChange={setIsServerSettingsOpen}
-        serverName={
-          servers.find((server) => server.id === settingsTargetServerId)?.name ??
-          activeServer?.name ??
-          "Server"
-        }
-        onDeleteServer={
-          activeServer &&
-          settingsTargetServerId === activeServer.id &&
-          currentUserRole === "owner"
-            ? async () => {
-                await handleDeleteServer(activeServer.id)
-                setIsServerSettingsOpen(false)
-              }
-            : undefined
-        }
-      />
+      {(() => {
+        const targetServerId = settingsTargetServerId
+        const targetServer = targetServerId
+          ? servers.find((s) => s.id === targetServerId)
+          : null
+        const targetRole = targetServerId
+          ? getServerRole(targetServerId)
+          : undefined
+        return (
+          <ServerSettingsDialog
+            open={isServerSettingsOpen}
+            onOpenChange={setIsServerSettingsOpen}
+            serverName={targetServer?.name ?? activeServer?.name ?? "Server"}
+            onDeleteServer={
+              targetServerId && targetRole === "owner"
+                ? async () => {
+                    await handleDeleteServer(targetServerId)
+                    setIsServerSettingsOpen(false)
+                  }
+                : undefined
+            }
+          />
+        )
+      })()}
       <UserSettingsDialog
         open={isUserSettingsOpen}
         onOpenChange={setIsUserSettingsOpen}
@@ -1183,7 +1214,6 @@ function HomeSidebar({
       directMessages={directMessages}
       categories={[] as ChannelCategory[]}
       channels={[] as Channel[]}
-      apps={[]}
       activeChannelId={activeChannelId}
       onSelectChannel={onSelectChannel}
       user={user}

@@ -30,6 +30,23 @@ export interface ChannelCategory {
   name: string
 }
 
+/**
+ * Backend `type: "system"` channel — server-log / moderation feed.
+ * Carries a real backend id (so navigating to it works), plus a
+ * `systemChannelType` discriminator the SystemChannelView keys on.
+ *
+ * Unlike `Channel`, system channels are read-only and have no MLS group;
+ * they must never be passed to the chat mount. Keeping them in their own
+ * type prevents accidental fanout.
+ */
+export type SystemChannelType = "server-log" | "moderation"
+
+export interface AdapterSystemChannel {
+  id: string
+  name: string
+  systemChannelType: SystemChannelType
+}
+
 export type MemberPresence = "online" | "idle" | "dnd" | "offline"
 export type MemberRole = "owner" | "admin" | "moderator" | "member" | "bot"
 
@@ -47,6 +64,13 @@ export interface Server {
   initials: string
   /** Instance host (URL hostname) — used to build route URLs. */
   instanceHost: string | null
+  /**
+   * Current user's role on this server, when derivable from the guild list
+   * payload alone (`permissionLevel` int or `ownerId === currentUserId`).
+   * `undefined` means we don't know yet — caller should fall back to per-server
+   * member lookup if it cares (only the active server has full member data).
+   */
+  role?: MemberRole
   /** Raw guild reference for handlers that need the underlying object. */
   raw: RawGuild
 }
@@ -56,6 +80,8 @@ export interface RawGuild {
   name?: string
   _localName?: string
   instanceUrl: string | null
+  ownerId?: string
+  permissionLevel?: number
 }
 
 /**

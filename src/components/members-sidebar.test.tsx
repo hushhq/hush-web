@@ -123,4 +123,12 @@ describe("MembersSidebar", () => {
     const item = screen.getByText(/send message/i).closest("[role='menuitem']")
     expect(item).toHaveAttribute("data-disabled")
   })
+
+  // Kick reason contract (P1-2) is exercised at the AlertDialog / submit
+  // handler level — currently not unit-testable in jsdom because Radix
+  // AlertDialog focus-scope inside a ContextMenu portal trips
+  // jsdom HTMLElement.focus on opening. The submitKick guard
+  // (kickReason.trim() blocks empty) lives in members-sidebar.tsx:194-204
+  // and is covered by integration smoke. TODO: re-enable once we move to
+  // happy-dom or a Playwright contract test.
 })
