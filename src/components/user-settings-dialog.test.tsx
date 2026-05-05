@@ -123,7 +123,7 @@ describe("UserSettingsDialog", () => {
     await u.click(screen.getByRole("button", { name: /^security$/i }))
 
     expect(
-      screen.getByText(/will remain decrypted in memory/i)
+      screen.getByText(/non-extractable wrapping key stays on this device/i)
     ).toBeInTheDocument()
   })
 

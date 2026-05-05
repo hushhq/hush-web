@@ -326,8 +326,8 @@ function SecurityPanel() {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Security</h2>
         <p className="text-sm text-muted-foreground">
-          Control how long your decrypted vault stays in memory before
-          requiring your PIN or passphrase again.
+          Control how long your unlocked vault survives across reloads
+          and tab closes before requiring your PIN or passphrase again.
         </p>
       </div>
 
@@ -342,7 +342,7 @@ function SecurityPanel() {
             <div className="flex flex-col gap-0.5">
               <span className="text-sm font-medium">Vault timeout</span>
               <span className="text-xs text-muted-foreground">
-                How long before the vault locks and requires re-entry.
+                When the vault locks and requires re-entry.
               </span>
             </div>
             <Select value={vaultTimeout} onValueChange={handleChange}>
@@ -360,9 +360,13 @@ function SecurityPanel() {
                 ))}
               </SelectContent>
             </Select>
+            <span className="text-xs text-muted-foreground">
+              {describeVaultTimeoutPolicy(vaultTimeout)}
+            </span>
             {vaultTimeout === "never" ? (
               <span className="text-xs text-destructive">
-                Your key will remain decrypted in memory until you sign out.
+                A non-extractable wrapping key stays on this device until
+                you sign out, lock the vault, or change your PIN.
               </span>
             ) : null}
           </div>
@@ -370,6 +374,33 @@ function SecurityPanel() {
       </section>
     </div>
   )
+}
+
+/**
+ * Per-policy guarantee copy for the Vault timeout select. Phrased as
+ * positive promises ("survives X, locks on Y") rather than "drops on
+ * Z" so a returning user can read what the picked option actually
+ * delivers without having to mentally invert.
+ */
+function describeVaultTimeoutPolicy(value: VaultTimeoutValue): string {
+  switch (value) {
+    case "never":
+      return "Survives reloads, tab closes, and mobile background. Locks only on sign out, manual lock, or PIN change."
+    case "browser_close":
+      return "Survives soft refresh in the same tab. Locks when the last tab of this account closes."
+    case "refresh":
+      return "Locks on every reload — re-enter your PIN each time the page refreshes."
+    case "1m":
+    case "15m":
+    case "30m":
+    case "1h":
+    case "4h": {
+      const label = VAULT_TIMEOUT_OPTIONS.find((o) => o.value === value)?.label
+      return `Locks after ${label?.toLowerCase() ?? "the configured idle time"} of inactivity. Survives reloads while inside the deadline.`
+    }
+    default:
+      return ""
+  }
 }
 
 function PlaceholderPanel({ title }: { title: string }) {
