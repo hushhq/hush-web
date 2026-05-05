@@ -47,20 +47,43 @@ interface MediaDeviceOption {
   label: string
 }
 
-async function enumerate(): Promise<{
-  audio: MediaDeviceOption[]
-  video: MediaDeviceOption[]
-}> {
-  const probe = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: true,
-  })
-  const devices = await navigator.mediaDevices.enumerateDevices()
+/**
+ * Enumerate media devices without holding the camera.
+ *
+ * Prior versions probed `{audio:true, video:true}` so device labels
+ * were populated even when the user later joined with the camera off.
+ * On macOS that briefly lit the green webcam LED on every prejoin —
+ * confusing because the user had not turned the camera on yet. We now
+ * probe only the kinds the caller actually needs:
+ *
+ * - `audio: true` always (the user joins audio-on by default and we
+ *   want microphone labels resolved up front).
+ * - `video: true` only when caller passes `withVideoLabels=true`,
+ *   which the prejoin dialog does *after* the user toggles the camera
+ *   row on.
+ *
+ * When `withVideoLabels=false`, video device labels may be empty
+ * strings (browser security default); the picker falls back to
+ * "Camera" / "Camera 1" etc. and refreshes labels the moment the
+ * camera is toggled on.
+ */
+async function enumerate({
+  withVideoLabels,
+}: {
+  withVideoLabels: boolean
+}): Promise<{ audio: MediaDeviceOption[]; video: MediaDeviceOption[] }> {
+  const constraints: MediaStreamConstraints = withVideoLabels
+    ? { audio: true, video: true }
+    : { audio: true }
+  const probe = await navigator.mediaDevices.getUserMedia(constraints)
   probe.getTracks().forEach((t) => t.stop())
-  const toOption = (label: string) => (d: MediaDeviceInfo) => ({
-    deviceId: d.deviceId,
-    label: d.label || label,
-  })
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  const toOption =
+    (fallback: string) =>
+    (d: MediaDeviceInfo, index: number): MediaDeviceOption => ({
+      deviceId: d.deviceId,
+      label: d.label || `${fallback} ${index + 1}`,
+    })
   return {
     audio: devices
       .filter((d) => d.kind === "audioinput" && d.deviceId)
@@ -103,18 +126,25 @@ export function VoicePrejoinDialog({
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
+  // Track whether we have already paid the cost of probing the camera
+  // for labels; once we do, we should not redo it on every videoEnabled
+  // flip — the OS LED would re-flash.
+  const [videoLabelsLoaded, setVideoLabelsLoaded] = React.useState(false)
+
   React.useEffect(() => {
     if (!open) return
     let cancelled = false
     setIsLoading(true)
     setError(null)
-    enumerate()
+    const wantsVideo = videoEnabled && !videoLabelsLoaded
+    enumerate({ withVideoLabels: wantsVideo })
       .then((result) => {
         if (cancelled) return
         setAudioDevices(result.audio)
         setVideoDevices(result.video)
         setAudioDeviceId((prev) => prev ?? result.audio[0]?.deviceId)
         setVideoDeviceId((prev) => prev ?? result.video[0]?.deviceId)
+        if (wantsVideo) setVideoLabelsLoaded(true)
       })
       .catch((err) => {
         if (cancelled) return
@@ -130,7 +160,7 @@ export function VoicePrejoinDialog({
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, videoEnabled, videoLabelsLoaded])
 
   React.useEffect(() => {
     if (!open || !videoEnabled || !videoDeviceId) {
