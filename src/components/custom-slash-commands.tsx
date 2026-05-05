@@ -30,9 +30,9 @@ export function createHushSlashItems(
 ): HushSuggestionItem[] {
   const items = createSuggestionItems([
     {
-      title: "GIF",
-      description: "Insert a GIF from the picker",
-      searchTerms: ["gif", "image", "media"],
+      title: "GIF (beta)",
+      description: "Insert a GIF from GIPHY",
+      searchTerms: ["gif", "image", "media", "giphy"],
       icon: <ImageIcon className="size-4" />,
       command: ({ editor, range }) => {
         editor.chain().focus().deleteRange(range).run()

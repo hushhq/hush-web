@@ -318,18 +318,22 @@ export async function deleteAttachment(token, attachmentId, baseUrl = '') {
 }
 
 /**
- * Search Tenor GIFs through the server-side proxy. Hides the user's
- * search query and IP from Google. Returns up to `limit` results
- * (default 20, max 30 server-side).
+ * Search Giphy through the server-side proxy. Hides the user's IP
+ * and key from Giphy and returns the upstream response shape verbatim
+ * so `@giphy/react-components` Grid can consume it directly. Empty
+ * query → trending; non-empty → search. Pagination via `offset`.
  *
  * @param {string} token
- * @param {string} query
- * @param {number} [limit]
- * @param {string} [baseUrl]
- * @returns {Promise<{ results: Array<{ id: string, url: string, previewUrl: string, width: number, height: number }> }>}
+ * @param {{ q?: string, offset?: number, limit?: number, baseUrl?: string }} opts
+ * @returns {Promise<import("@giphy/js-fetch-api").GifsResult>}
  */
-export async function searchGifs(token, query, limit = 20, baseUrl = '') {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
+export async function searchGifs(token, opts = {}) {
+  const { q = '', offset = 0, limit = 25, baseUrl = '' } = opts;
+  const params = new URLSearchParams({
+    q,
+    offset: String(offset),
+    limit: String(limit),
+  });
   const path = `/api/gif/search?${params.toString()}`;
   const res = await fetchWithAuth(token, path, {}, baseUrl);
   if (!res.ok) {

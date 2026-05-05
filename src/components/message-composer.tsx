@@ -1,5 +1,5 @@
 import * as React from "react"
-import { SmilePlusIcon, SendHorizonalIcon } from "lucide-react"
+import { SmilePlusIcon, SendHorizonalIcon, ImageIcon } from "lucide-react"
 
 import {
   ChatToolbar,
@@ -8,10 +8,12 @@ import {
   ChatToolbarAttachmentButton,
 } from "@/components/chat/index"
 import { EmojiPickerPopover } from "@/components/chat/emoji-picker-popover"
+import { GifPickerPopover } from "@/components/chat/gif-picker-popover"
 import {
   NovelComposer,
   type NovelComposerHandle,
 } from "@/components/novel-composer"
+import type { GifRef } from "@/lib/messageEnvelope"
 
 interface MessageComposerProps {
   channelName: string
@@ -24,9 +26,12 @@ interface MessageComposerProps {
    *  attachments-ready is a valid send (envelope.text is allowed empty). */
   sendDisabled?: boolean
   attachmentDock?: React.ReactNode
-  /** Opens the GIF picker; wired to `/gif` slash command and the
-   *  toolbar GIF button when present. */
-  onOpenGif?: () => void
+  /** Required for the GIF picker network calls. */
+  getToken?: () => string | null
+  baseUrl?: string
+  /** Fires when the user picks a GIF. Parent stages the GifRef into
+   *  the next outbound envelope. */
+  onPickGif?: (gif: GifRef) => void
 }
 
 export function MessageComposer({
@@ -36,10 +41,15 @@ export function MessageComposer({
   onFilesSelected,
   sendDisabled,
   attachmentDock,
-  onOpenGif,
+  getToken,
+  baseUrl,
+  onPickGif,
 }: MessageComposerProps) {
   const composerRef = React.useRef<NovelComposerHandle>(null)
   const [isEmpty, setIsEmpty] = React.useState(true)
+  const [gifOpen, setGifOpen] = React.useState(false)
+
+  const gifAvailable = Boolean(getToken && onPickGif)
 
   return (
     <ChatToolbar>
@@ -59,10 +69,31 @@ export function MessageComposer({
           onSend={onSend}
           onEmptyChange={setIsEmpty}
           allowEmpty={Boolean(attachmentDock)}
-          onOpenGif={onOpenGif}
+          onOpenGif={gifAvailable ? () => setGifOpen(true) : undefined}
         />
       </div>
       <ChatToolbarAddon align="inline-end">
+        {gifAvailable ? (
+          <GifPickerPopover
+            open={gifOpen}
+            onOpenChange={setGifOpen}
+            getToken={getToken!}
+            baseUrl={baseUrl}
+            onPick={(gif) => {
+              onPickGif?.(gif)
+              setGifOpen(false)
+            }}
+            anchor={
+              <ChatToolbarButton
+                aria-label="Pick GIF"
+                type="button"
+                onClick={() => setGifOpen((v) => !v)}
+              >
+                <ImageIcon />
+              </ChatToolbarButton>
+            }
+          />
+        ) : null}
         <EmojiPickerPopover
           trigger={
             <ChatToolbarButton aria-label="Add emoji" type="button">

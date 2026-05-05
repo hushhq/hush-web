@@ -29,7 +29,6 @@ import {
   ChatMessages,
 } from "@/components/chat/index"
 import { AttachmentTile } from "@/components/chat/attachment-tile"
-import { GifPickerDialog } from "@/components/chat/gif-picker-dialog"
 import {
   Empty,
   EmptyDescription,
@@ -154,7 +153,6 @@ export function RealChat({
   })
 
   const [pendingGif, setPendingGif] = React.useState<GifRef | null>(null)
-  const [gifPickerOpen, setGifPickerOpen] = React.useState(false)
 
   const handleSend = React.useCallback(
     async (markdown: string) => {
@@ -287,17 +285,9 @@ export function RealChat({
         onFilesSelected={(files) => uploader.add(files)}
         sendDisabled={sendDisabled}
         attachmentDock={attachmentDock}
-        onOpenGif={() => setGifPickerOpen(true)}
-      />
-      <GifPickerDialog
-        open={gifPickerOpen}
-        onOpenChange={setGifPickerOpen}
         getToken={getToken}
         baseUrl={baseUrl}
-        onPick={(gif) => {
-          setPendingGif(gif)
-          setGifPickerOpen(false)
-        }}
+        onPickGif={(gif) => setPendingGif(gif)}
       />
     </Chat>
     </MessageBodyContext.Provider>
