@@ -64,8 +64,18 @@ export function VoiceParticipantTile({
       <TrackRefContext.Provider value={ref}>
         <div
           {...elementProps}
+          // The lk-participant-tile class hard-codes
+          // `border-radius: var(--lk-border-radius)`; without
+          // overriding via inline style the lk rule wins over
+          // Tailwind's `rounded-md` because the lk stylesheet ships
+          // last in the cascade. Inline style is the deterministic
+          // override and avoids `!important` hammering everywhere.
+          style={{
+            ...elementProps.style,
+            borderRadius: "var(--radius-md, 0.5rem)",
+          }}
           className={cn(
-            "relative flex size-full items-center justify-center overflow-hidden rounded-md border bg-card transition-all",
+            "relative flex size-full items-center justify-center overflow-hidden border bg-card transition-all",
             "data-[lk-speaking=true]:border-primary/60 data-[lk-speaking=true]:ring-2 data-[lk-speaking=true]:ring-primary/40",
             className,
             elementProps.className

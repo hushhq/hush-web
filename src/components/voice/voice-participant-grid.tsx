@@ -4,6 +4,7 @@ import { Track } from "livekit-client"
 
 import { cn } from "@/lib/utils"
 import { VoiceParticipantTile } from "./voice-participant-tile"
+import { VoiceLonelyTile } from "./voice-lonely-tile"
 
 interface VoiceParticipantGridProps {
   className?: string
@@ -37,6 +38,29 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
     ],
     { onlySubscribed: false }
   )
+
+  // When the user is the only participant in the room, the GridLayout
+  // collapses to a single tile and the surface feels empty. Render a
+  // sibling "lonely" tile so the grid still has two cells, the user's
+  // own tile keeps a sane size, and there is a visible cue that we're
+  // waiting for someone else to join.
+  if (tracks.length <= 1) {
+    return (
+      <div
+        className={cn(
+          "grid h-full w-full grid-cols-2 gap-3 p-3",
+          className
+        )}
+      >
+        {tracks[0] ? (
+          <VoiceParticipantTile trackRef={tracks[0]} />
+        ) : (
+          <div />
+        )}
+        <VoiceLonelyTile />
+      </div>
+    )
+  }
 
   return (
     <GridLayout
