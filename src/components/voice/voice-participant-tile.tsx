@@ -65,55 +65,81 @@ export function VoiceParticipantTile({
         <div
           {...elementProps}
           className={cn(
-            "relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border bg-card transition-all",
+            "relative flex size-full items-center justify-center overflow-hidden rounded-md border bg-card transition-all",
             "data-[lk-speaking=true]:border-primary/60 data-[lk-speaking=true]:ring-2 data-[lk-speaking=true]:ring-primary/40",
             className,
             elementProps.className
           )}
         >
           {isVideo ? (
-            <VideoTrack
-              trackRef={ref}
-              className={cn(
-                "absolute inset-0 size-full object-cover",
-                isLocal &&
-                  ref.source === Track.Source.Camera &&
-                  "scale-x-[-1]"
-              )}
-            />
+            <>
+              <VideoTrack
+                trackRef={ref}
+                className={cn(
+                  "absolute inset-0 size-full object-cover",
+                  isLocal &&
+                    ref.source === Track.Source.Camera &&
+                    "scale-x-[-1]"
+                )}
+              />
+              <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 py-2 text-xs text-white">
+                <TrackMutedIndicator
+                  trackRef={{
+                    participant: ref.participant,
+                    source: Track.Source.Microphone,
+                  }}
+                  show="muted"
+                  className="flex size-4 items-center justify-center text-destructive [&_svg]:size-3.5"
+                >
+                  <MicOffIcon />
+                </TrackMutedIndicator>
+                {isScreenShare ? (
+                  <span className="truncate font-medium">
+                    {displayName}'s screen
+                  </span>
+                ) : (
+                  <ParticipantName className="truncate font-medium" />
+                )}
+                {isLocal ? (
+                  <span className="ml-auto rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                    you
+                  </span>
+                ) : null}
+              </div>
+            </>
           ) : (
-            <Avatar className="size-20">
-              <AvatarFallback className="text-xl font-semibold">
-                {getInitials(displayName)}
-              </AvatarFallback>
-            </Avatar>
+            <div className="flex flex-col items-center gap-3 px-4 text-center">
+              <Avatar className="size-20">
+                <AvatarFallback className="text-xl font-semibold">
+                  {getInitials(displayName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex items-center gap-1.5">
+                <TrackMutedIndicator
+                  trackRef={{
+                    participant: ref.participant,
+                    source: Track.Source.Microphone,
+                  }}
+                  show="muted"
+                  className="flex size-4 items-center justify-center text-destructive [&_svg]:size-3.5"
+                >
+                  <MicOffIcon />
+                </TrackMutedIndicator>
+                {isScreenShare ? (
+                  <span className="max-w-[14rem] truncate text-sm font-medium">
+                    {displayName}'s screen
+                  </span>
+                ) : (
+                  <ParticipantName className="max-w-[14rem] truncate text-sm font-medium" />
+                )}
+                {isLocal ? (
+                  <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    you
+                  </span>
+                ) : null}
+              </div>
+            </div>
           )}
-
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 py-2 text-xs text-white">
-            <TrackMutedIndicator
-              trackRef={{
-                participant: ref.participant,
-                source: Track.Source.Microphone,
-              }}
-              show="muted"
-              className="flex size-4 items-center justify-center text-destructive [&_svg]:size-3.5"
-            >
-              <MicOffIcon />
-            </TrackMutedIndicator>
-            {isScreenShare ? (
-              <span className="truncate font-medium">
-                {displayName}'s screen
-              </span>
-            ) : (
-              <ParticipantName className="truncate font-medium" />
-            )}
-            {isLocal ? (
-              <span className="ml-auto rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-                you
-              </span>
-            ) : null}
-          </div>
-
         </div>
       </TrackRefContext.Provider>
     </ParticipantContextIfNeeded>
