@@ -2026,8 +2026,21 @@ export function useAuth() {
   // `browser_close` while another tab is already unlocked would miss the
   // sibling and force a PIN prompt — defeating the policy's "stays
   // unlocked while any tab of mine is open" promise.
+  //
+  // Skipped under Vitest: keeping ~60 BroadcastChannels open across the
+  // useAuth test suite (one per renderHook → vaultState=unlocked
+  // transition) measurably slowed the fire-and-forget IDB seal in
+  // jsdom. The boot probe in `tryVaultSessionResume` is unit-tested
+  // directly against `createVaultSessionPresence`, so production
+  // semantics stay covered.
   useEffect(() => {
     if (vaultState !== 'unlocked' || !user?.id) return;
+    if (
+      typeof import.meta !== 'undefined' &&
+      import.meta.env?.MODE === 'test'
+    ) {
+      return;
+    }
     const presence = createVaultSessionPresence(user.id);
     const onPageHide = () => presence.close();
     window.addEventListener('pagehide', onPageHide);

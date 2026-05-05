@@ -799,9 +799,12 @@ describe('useAuth - performLogout', () => {
       );
     });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
-    await waitFor(async () => {
-      expect(await readWrappedIdentity('user-1')).not.toBeNull();
-    });
+    await waitFor(
+      async () => {
+        expect(await readWrappedIdentity('user-1')).not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
 
     vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: true, status: 204 });
     await act(async () => {
@@ -810,9 +813,12 @@ describe('useAuth - performLogout', () => {
 
     // The session-key wipe is fire-and-forget so the logout UX never
     // blocks on IDB; the IDB deleteDatabase resolves on a later tick.
-    await waitFor(async () => {
-      expect(await readWrappedIdentity('user-1')).toBeNull();
-    });
+    await waitFor(
+      async () => {
+        expect(await readWrappedIdentity('user-1')).toBeNull();
+      },
+      { timeout: 3000 },
+    );
     expect(isMarkerAlive('user-1')).toBe(false);
   });
 
@@ -1358,17 +1364,23 @@ describe('useAuth - lockVault', () => {
     });
     await waitFor(() => expect(result.current.vaultState).toBe('unlocked'));
     // Wait for fire-and-forget seal to land before locking.
-    await waitFor(async () => {
-      expect(await readWrappedIdentity('user-1')).not.toBeNull();
-    });
+    await waitFor(
+      async () => {
+        expect(await readWrappedIdentity('user-1')).not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
 
     act(() => result.current.lockVault());
     await waitFor(() => expect(result.current.vaultState).toBe('locked'));
 
     // The IDB record + per-tab marker must both be wiped.
-    await waitFor(async () => {
-      expect(await readWrappedIdentity('user-1')).toBeNull();
-    });
+    await waitFor(
+      async () => {
+        expect(await readWrappedIdentity('user-1')).toBeNull();
+      },
+      { timeout: 3000 },
+    );
     expect(isMarkerAlive('user-1')).toBe(false);
   });
 

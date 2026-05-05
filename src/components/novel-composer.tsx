@@ -184,15 +184,17 @@ export const NovelComposer = React.forwardRef<
   const isTouchDevice = useIsTouchDevice()
   const isTouchDeviceRef = React.useRef(isTouchDevice)
   isTouchDeviceRef.current = isTouchDevice
+  // Placeholder picked at first mount only — orientation / breakpoint
+  // changes must NOT remount the editor (which would drop an
+  // in-progress draft when the user rotates the phone or the soft
+  // keyboard opens). The desktop hint is the cheaper fallback to
+  // commit to up front; CSS hides it on narrow viewports if needed.
+  const initialIsMobileRef = React.useRef(isMobile)
   const computedPlaceholder =
     placeholder ??
-    (isMobile
+    (initialIsMobileRef.current
       ? ""
       : `Message #${channelName} · / commands · Shift+Enter new block`)
-  const [editorKey, setEditorKey] = React.useState(0)
-  React.useEffect(() => {
-    setEditorKey((prev) => prev + 1)
-  }, [isMobile])
   const slashCallbacksRef = React.useRef<HushSlashCallbacks>({
     onOpenGif,
     onOpenPoll,
@@ -321,7 +323,6 @@ export const NovelComposer = React.forwardRef<
   return (
     <EditorRoot>
       <EditorContent
-        key={editorKey}
         immediatelyRender={false}
         extensions={[
           StarterKit.configure({
