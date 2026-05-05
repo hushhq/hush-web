@@ -12,7 +12,10 @@ vi.mock("@/adapters/useSystemEvents", () => ({
 }))
 
 import { useSystemEvents } from "@/adapters/useSystemEvents"
-import { SystemChannelView } from "./system-channel-view"
+import {
+  SystemChannelView,
+  SYSTEM_CHANNEL_HEADERS,
+} from "./system-channel-view"
 import { SidebarProvider } from "@/components/ui/sidebar"
 
 const mockHook = vi.mocked(useSystemEvents)
@@ -31,47 +34,22 @@ describe("SystemChannelView", () => {
     mockHook.mockReset()
   })
 
-  it("renders the server-log header", () => {
-    mockHook.mockReturnValue({
-      events: [],
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-    })
-
-    renderWithShell(
-      <SystemChannelView
-        serverId="g1"
-        source="server-log"
-        token="tok"
-        baseUrl="https://a.example.com"
-      />
+  // The system view no longer renders its own header — ChannelView
+  // wraps it and supplies the icon/title/topic from
+  // SYSTEM_CHANNEL_HEADERS. Keep the per-source metadata covered here
+  // so a regression on the lookup table fails loudly.
+  it("exposes header metadata for the server-log source", () => {
+    expect(SYSTEM_CHANNEL_HEADERS["server-log"].title).toBe("System log")
+    expect(SYSTEM_CHANNEL_HEADERS["server-log"].topic).toMatch(
+      /automatic record of server-wide events/i
     )
-
-    expect(screen.getByText("System log")).toBeInTheDocument()
-    expect(
-      screen.getByText(/automatic record of server-wide events/i)
-    ).toBeInTheDocument()
   })
 
-  it("renders the moderation header", () => {
-    mockHook.mockReturnValue({
-      events: [],
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-    })
-
-    renderWithShell(
-      <SystemChannelView
-        serverId="g1"
-        source="moderation"
-        token="tok"
-        baseUrl="https://a.example.com"
-      />
+  it("exposes header metadata for the moderation source", () => {
+    expect(SYSTEM_CHANNEL_HEADERS.moderation.title).toBe("Moderation")
+    expect(SYSTEM_CHANNEL_HEADERS.moderation.topic).toMatch(
+      /audit log of moderator actions/i
     )
-
-    expect(screen.getByText("Moderation")).toBeInTheDocument()
   })
 
   it("shows the empty state when no events are present", () => {

@@ -1,8 +1,7 @@
-import { StarIcon, HashIcon, Volume2Icon, XIcon } from "lucide-react"
+import { HashIcon, Volume2Icon, XIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button.tsx"
-import { Separator } from "@/components/ui/separator.tsx"
 import { MessageContent } from "@/components/message-content"
 
 interface FavoriteEntry {
@@ -30,19 +29,12 @@ export function FavoritesView({
   onJump,
   onRemove,
 }: FavoritesViewProps) {
+  // Header is owned by ChannelView when this surface is mounted via
+  // the shared channel shell (current production routing). Render
+  // body-only here so the SidebarTrigger + truncation handling stays
+  // consistent across every channel kind.
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <StarIcon className="size-4 text-muted-foreground" />
-        <span className="font-semibold">Favorites</span>
-        <Separator
-          orientation="vertical"
-          className="mx-2 data-[orientation=vertical]:h-4"
-        />
-        <span className="truncate text-sm text-muted-foreground">
-          Messages you saved across servers
-        </span>
-      </header>
       {favorites.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           <p>No favorites yet. Use the “…” menu on a message to save it.</p>

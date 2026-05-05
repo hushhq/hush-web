@@ -26,7 +26,10 @@ import type { AdapterSystemChannel, SystemChannelType } from "@/adapters"
 import { ChannelSidebar } from "@/components/channel-sidebar"
 import type { SystemChannel } from "@/components/channel-sidebar"
 import { ChannelView } from "@/components/channel-view"
-import { SystemChannelView } from "@/components/system-channel-view"
+import {
+  SystemChannelView,
+  SYSTEM_CHANNEL_HEADERS,
+} from "@/components/system-channel-view"
 import { ServerRail } from "@/components/server-rail"
 import { CheatSheet } from "@/components/cheat-sheet"
 import { ServerSettingsDialog } from "@/components/server-settings-dialog"
@@ -856,10 +859,19 @@ export function AuthenticatedApp() {
     ) : null
 
   const channelContent = isFavoritesSurface ? (
-    <FavoritesView
-      favorites={favorites}
-      onJump={handleJumpToFavorite}
-      onRemove={handleRemoveFavorite}
+    <ChannelView
+      channelId="favorites"
+      channelName="Favorites"
+      channelKind="home"
+      channelTopic="Messages you saved across servers"
+      headerIcon={<StarIcon className="size-5 text-muted-foreground" />}
+      messageBody={
+        <FavoritesView
+          favorites={favorites}
+          onJump={handleJumpToFavorite}
+          onRemove={handleRemoveFavorite}
+        />
+      }
     />
   ) : isCatchUp ? (
     <ChannelView
@@ -869,12 +881,35 @@ export function AuthenticatedApp() {
       channelTopic="Mentions, replies, threads, DMs"
     />
   ) : activeServer && isSystemChannel ? (
-    <SystemChannelView
-      serverId={activeServer.id}
-      source={activeSystemChannelType ?? "server-log"}
-      token={token}
-      baseUrl={baseUrl}
-    />
+    (() => {
+      const sysSource = activeSystemChannelType ?? "server-log"
+      const sysHeader = SYSTEM_CHANNEL_HEADERS[sysSource]
+      return (
+        <ChannelView
+          channelId={activeChannel.id}
+          channelName={sysHeader.title}
+          channelKind="text"
+          channelTopic={sysHeader.topic}
+          channelContext={{
+            serverId: activeServer.id,
+            serverName: activeServer.name,
+          }}
+          headerIcon={sysHeader.icon}
+          members={members}
+          currentUserRole={currentUserRole}
+          onKickMember={handleKickMember}
+          onDirectMessage={handleDirectMessage}
+          messageBody={
+            <SystemChannelView
+              serverId={activeServer.id}
+              source={sysSource}
+              token={token}
+              baseUrl={baseUrl}
+            />
+          }
+        />
+      )
+    })()
   ) : activeServer ? (
     <ChannelView
       channelId={activeChannel.id}

@@ -82,6 +82,11 @@ interface ChannelViewProps {
   messageBody?: React.ReactNode
   /** Slot — production hush-web mounts the legacy VoiceChannel for voice channels. */
   voiceBody?: React.ReactNode
+  /** Override the header icon (default routes by `channelKind`). Used
+   *  when the channel is a system feed (server-log / moderation) or a
+   *  home aggregate (favorites) so the surface gets its bespoke icon
+   *  while still living inside the shared header shell. */
+  headerIcon?: React.ReactNode
 }
 
 export function ChannelView({
@@ -100,6 +105,7 @@ export function ChannelView({
   onDirectMessage,
   messageBody,
   voiceBody,
+  headerIcon,
 }: ChannelViewProps) {
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [thread, setThread] = React.useState<ThreadParent | null>(null)
@@ -145,22 +151,31 @@ export function ChannelView({
     <div className="flex h-full min-h-0 w-full">
       <div className="flex h-full min-w-0 flex-1 flex-col">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <SidebarTrigger className="md:hidden" />
-        <ChannelHeaderIcon kind={channelKind} />
-        <span className="font-semibold">{channelName}</span>
-        {channelTopic ? (
-          <>
-            <Separator
-              orientation="vertical"
-              className="mx-2 data-[orientation=vertical]:h-4"
-            />
-            <span className="truncate text-sm text-muted-foreground">
-              {channelTopic}
-            </span>
-          </>
-        ) : null}
+        <SidebarTrigger className="md:hidden shrink-0" />
+        <span className="shrink-0">
+          {headerIcon ?? <ChannelHeaderIcon kind={channelKind} />}
+        </span>
+        {/* Title + optional topic, both bound to the same min-w-0
+            container so they share the header's flexible width and
+            collapse with ellipsis instead of wrapping under the
+            sidebar/members icons. The right-side icon cluster keeps a
+            stable position because this region absorbs every overflow. */}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate font-semibold">{channelName}</span>
+          {channelTopic ? (
+            <>
+              <Separator
+                orientation="vertical"
+                className="mx-1 shrink-0 data-[orientation=vertical]:h-4"
+              />
+              <span className="truncate text-sm text-muted-foreground">
+                {channelTopic}
+              </span>
+            </>
+          ) : null}
+        </div>
         {channelKind !== "home" ? (
-          <div className="ml-auto flex items-center gap-1 text-muted-foreground">
+          <div className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground">
             {channelKind === "text" ? (
               <PinnedMessagesPopover
                 channelName={channelName}
@@ -187,7 +202,10 @@ export function ChannelView({
             mockParticipants={voiceParticipants}
           />
         ) : channelKind === "home" ? (
-          <HomeView />
+          // messageBody slot wins for home surfaces (favorites,
+          // catch-up) so the parent supplies its own scroll body
+          // while still using the shared header chrome.
+          messageBody ?? <HomeView />
         ) : thread && isMobile ? (
           <ThreadPanel
             channelName={channelName}
