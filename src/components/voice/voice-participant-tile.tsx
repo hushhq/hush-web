@@ -86,12 +86,12 @@ export function VoiceParticipantTile({
             <>
               <VideoTrack
                 trackRef={ref}
-                className={cn(
-                  "absolute inset-0 size-full object-cover",
-                  isLocal &&
-                    ref.source === Track.Source.Camera &&
-                    "scale-x-[-1]"
-                )}
+                className="absolute inset-0 size-full object-cover"
+                style={
+                  isLocal && ref.source === Track.Source.Camera
+                    ? { transform: "scaleX(-1)" }
+                    : undefined
+                }
               />
               <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-3 py-2 text-xs text-white">
                 <TrackMutedIndicator
