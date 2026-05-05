@@ -1,5 +1,9 @@
 import * as React from "react"
 
+import { RoomContext } from "@livekit/components-react"
+import "@livekit/components-styles"
+import type { Room } from "livekit-client"
+
 import { isOutputDeviceSelectionSupported } from "@/audio"
 import { useAuth } from "@/contexts/AuthContext"
 import { getDeviceId } from "@/hooks/useAuth"
@@ -106,6 +110,10 @@ interface RoomApi {
   watchScreen: (producerId: string) => void
   unwatchScreen: (producerId: string) => void
   playbackManager: PlaybackManagerLike | null
+  /** The underlying livekit-client `Room` instance the MLS frame
+   *  transformer is attached to. Passed into `RoomContext.Provider`
+   *  so `@livekit/components-react` hooks read from the same Room. */
+  room: Room | null
 }
 
 async function listDevices(
@@ -565,26 +573,15 @@ export function VoiceChannelView({
           hasFailed={room.voiceReconnectFailed}
           onRejoin={handleRejoin}
         />
-        <VoiceParticipantGrid
-          localTracks={room.localTracks}
-          remoteTracks={room.remoteTracks}
-          availableScreens={room.availableScreens}
-          watchedScreens={room.watchedScreens}
-          loadingScreens={room.loadingScreens}
-          isScreenSharing={isScreenSharing}
-          localScreenWatched={localScreenWatched}
-          participants={room.participants ?? []}
-          currentUserId={currentUserId}
-          currentDisplayName={displayName}
-          activeSpeakerIds={room.activeSpeakerIds ?? []}
-          localSpeaking={room.localSpeaking ?? false}
-          isMicOn={isMicOn}
-          isDeafened={isDeafened}
-          onWatchScreen={room.watchScreen}
-          onUnwatchScreen={room.unwatchScreen}
-          onWatchLocalScreen={() => setLocalScreenWatched(true)}
-          onUnwatchLocalScreen={() => setLocalScreenWatched(false)}
-        />
+        {room.room ? (
+          <RoomContext.Provider value={room.room}>
+            <VoiceParticipantGrid className="p-4" />
+          </RoomContext.Provider>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Connecting…
+          </div>
+        )}
         {hasJoined ? (
           <VoiceControlsBar
             isReady={room.isReady}

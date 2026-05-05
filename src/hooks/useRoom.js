@@ -492,7 +492,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // renderer is app://localhost, so voice must target the active
         // auth instance's /livekit/ reverse proxy instead.
         const livekitUrl = buildLiveKitUrl(voiceBaseUrl);
-        await room.connect(livekitUrl, token, { autoSubscribe: false });
+        await room.connect(livekitUrl, token, { autoSubscribe: true });
 
         if (isStale()) {
           room.disconnect();
@@ -1003,5 +1003,10 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     loadingScreens,
     watchScreen,
     unwatchScreen,
+    // Underlying livekit-client Room instance. Exposed so the orchestrator
+    // can hand it to `@livekit/components-react`'s `RoomContext.Provider`,
+    // letting the prebuilt GridLayout / ParticipantTile components read
+    // tracks from the same Room we wired the MLS frame transformer into.
+    room: roomRef.current,
   };
 }
