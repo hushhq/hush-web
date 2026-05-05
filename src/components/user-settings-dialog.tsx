@@ -1,4 +1,18 @@
-import { LogOutIcon, UserIcon } from "lucide-react"
+import {
+  BellIcon,
+  CircleUserIcon,
+  KeyboardIcon,
+  LanguagesIcon,
+  LockIcon,
+  LogOutIcon,
+  MicIcon,
+  PaletteIcon,
+  PlugZapIcon,
+  ShieldIcon,
+  SparklesIcon,
+  UserIcon,
+  WrenchIcon,
+} from "lucide-react"
 
 import { Separator } from "@/components/ui/separator.tsx"
 import { ConfirmAction } from "@/components/confirm-action"
@@ -26,12 +40,13 @@ export function UserSettingsDialog({
   account,
   onSignOut,
 }: UserSettingsDialogProps) {
-  // Only sections backed by real handlers ship today. Anything blocked on
-  // backend support (notifications, integrations, profile editing, 2FA,
-  // language, AI, advanced…) is hidden until that endpoint lands; the user
-  // is never offered an action that has no effect.
+  // Mockup-parity 1:1: every section the prototype renders ships
+  // here too, even when the backend has no handler — those panels
+  // surface a "coming soon" placeholder. Hiding sections silently
+  // diverges from the reference and confuses returning users.
   const groups: SettingsGroup[] = [
     { id: "account", label: "Account" },
+    { id: "app", label: "App settings" },
     { id: "session", label: "Session" },
   ]
 
@@ -42,6 +57,83 @@ export function UserSettingsDialog({
       label: "My account",
       icon: <UserIcon />,
       content: <AccountPanel account={account} />,
+    },
+    {
+      id: "profile",
+      groupId: "account",
+      label: "Profile",
+      icon: <CircleUserIcon />,
+      content: <PlaceholderPanel title="Profile" />,
+    },
+    {
+      id: "privacy",
+      groupId: "account",
+      label: "Privacy & safety",
+      icon: <ShieldIcon />,
+      content: <PlaceholderPanel title="Privacy & safety" />,
+    },
+    {
+      id: "security",
+      groupId: "account",
+      label: "Security",
+      icon: <LockIcon />,
+      content: <PlaceholderPanel title="Security" />,
+    },
+    {
+      id: "appearance",
+      groupId: "app",
+      label: "Appearance",
+      icon: <PaletteIcon />,
+      content: <PlaceholderPanel title="Appearance" />,
+    },
+    {
+      id: "voice",
+      groupId: "app",
+      label: "Voice & video",
+      icon: <MicIcon />,
+      content: <PlaceholderPanel title="Voice & video" />,
+    },
+    {
+      id: "notifications",
+      groupId: "app",
+      label: "Notifications",
+      icon: <BellIcon />,
+      content: <PlaceholderPanel title="Notifications" />,
+    },
+    {
+      id: "keybinds",
+      groupId: "app",
+      label: "Keybinds",
+      icon: <KeyboardIcon />,
+      content: <PlaceholderPanel title="Keybinds" />,
+    },
+    {
+      id: "language",
+      groupId: "app",
+      label: "Language",
+      icon: <LanguagesIcon />,
+      content: <PlaceholderPanel title="Language" />,
+    },
+    {
+      id: "integrations",
+      groupId: "app",
+      label: "Integrations",
+      icon: <PlugZapIcon />,
+      content: <PlaceholderPanel title="Integrations" />,
+    },
+    {
+      id: "ai",
+      groupId: "app",
+      label: "AI assistant",
+      icon: <SparklesIcon />,
+      content: <PlaceholderPanel title="AI assistant" />,
+    },
+    {
+      id: "advanced",
+      groupId: "app",
+      label: "Advanced",
+      icon: <WrenchIcon />,
+      content: <PlaceholderPanel title="Advanced" />,
     },
     {
       id: "logout",
@@ -104,6 +196,32 @@ function LogoutPanel({
             </button>
           }
         />
+      </div>
+    </div>
+  )
+}
+
+function PlaceholderPanel({ title }: { title: string }) {
+  // Body-shape parity with the prototype so the panel looks like
+  // real shipping content rather than an empty area. Backend-blocked
+  // panels swap in real controls section-by-section as endpoints land.
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="text-sm text-muted-foreground">
+          Coming soon — controls land when the backend exposes them.
+        </p>
+      </div>
+      <Separator />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="aspect-video rounded-lg bg-muted/50"
+            aria-hidden="true"
+          />
+        ))}
       </div>
     </div>
   )
