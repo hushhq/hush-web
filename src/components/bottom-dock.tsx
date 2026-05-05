@@ -27,7 +27,7 @@ export function BottomDock({
   voice,
 }: BottomDockProps) {
   return (
-    <div className="hidden w-full flex-col gap-1 md:flex">
+    <div className="flex w-full flex-col gap-1">
       {voice ? <VoicePip {...voice} /> : null}
       <Card className="gap-0 rounded-lg border py-0 ring-0 dark:shadow-sm">
         <UserMenu user={user} onOpenSettings={onOpenUserSettings} />
