@@ -1,5 +1,5 @@
 import * as React from "react"
-import { SmilePlusIcon, SendHorizonalIcon, ImageIcon } from "lucide-react"
+import { SmilePlusIcon, SendHorizonalIcon } from "lucide-react"
 
 import {
   ChatToolbar,
@@ -49,12 +49,11 @@ export function MessageComposer({
   const composerRef = React.useRef<NovelComposerHandle>(null)
   const [isEmpty, setIsEmpty] = React.useState(true)
   const [gifOpen, setGifOpen] = React.useState(false)
-  // When the slash command opens the picker, this holds the caret rect
-  // so the popover anchors next to the slash menu instead of the
-  // toolbar button. Cleared when the user opens via the toolbar button.
+  // The /gif slash command is the only entry point for the picker, so
+  // we always position the popover at the caret. No toolbar button is
+  // rendered — keeps the toolbar uncluttered.
   const [gifSlashAnchor, setGifSlashAnchor] =
     React.useState<SlashAnchorRect | null>(null)
-  const gifButtonRef = React.useRef<HTMLButtonElement | null>(null)
 
   const gifAvailable = Boolean(getToken && onPickGif)
 
@@ -92,34 +91,21 @@ export function MessageComposer({
           onOpenGif={gifAvailable ? handleSlashOpenGif : undefined}
         />
       </div>
+      {gifAvailable ? (
+        <GifPickerPopover
+          open={gifOpen}
+          onOpenChange={handleGifOpenChange}
+          getToken={getToken!}
+          baseUrl={baseUrl}
+          onPick={(gif) => {
+            onPickGif?.(gif)
+            setGifOpen(false)
+            setGifSlashAnchor(null)
+          }}
+          anchorRect={gifSlashAnchor}
+        />
+      ) : null}
       <ChatToolbarAddon align="inline-end">
-        {gifAvailable ? (
-          <GifPickerPopover
-            open={gifOpen}
-            onOpenChange={handleGifOpenChange}
-            getToken={getToken!}
-            baseUrl={baseUrl}
-            onPick={(gif) => {
-              onPickGif?.(gif)
-              setGifOpen(false)
-              setGifSlashAnchor(null)
-            }}
-            anchorRect={gifSlashAnchor}
-            anchorElement={
-              <ChatToolbarButton
-                ref={gifButtonRef}
-                aria-label="Pick GIF"
-                type="button"
-                onClick={() => {
-                  setGifSlashAnchor(null)
-                  setGifOpen((v) => !v)
-                }}
-              >
-                <ImageIcon />
-              </ChatToolbarButton>
-            }
-          />
-        ) : null}
         <EmojiPickerPopover
           trigger={
             <ChatToolbarButton aria-label="Add emoji" type="button">

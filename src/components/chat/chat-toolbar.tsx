@@ -224,13 +224,13 @@ export interface ChatToolbarButtonProps extends React.ComponentProps<
  * </ChatToolbarButton>
  * ```
  */
-export function ChatToolbarButton({
-  children,
-  className,
-  ...props
-}: ChatToolbarButtonProps) {
+export const ChatToolbarButton = React.forwardRef<
+  HTMLButtonElement,
+  ChatToolbarButtonProps
+>(function ChatToolbarButton({ children, className, ...props }, ref) {
   return (
     <Button
+      ref={ref}
       variant="ghost"
       className={cn(
         "size-9 @md/chat:size-9 [&_svg:not([class*='size-'])]:size-5 [&_svg:not([class*='size-'])]:@md/chat:size-5 [&_svg]:stroke-[1.7px]",
@@ -242,7 +242,7 @@ export function ChatToolbarButton({
       {children}
     </Button>
   );
-}
+});
 
 export interface ChatToolbarAttachmentButtonProps extends Omit<
   ChatToolbarButtonProps,

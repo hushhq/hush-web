@@ -35,14 +35,12 @@ import type { GifRef } from "@/lib/messageEnvelope"
 interface GifPickerPopoverProps {
   open: boolean
   onOpenChange: (next: boolean) => void
-  /** Default DOM anchor — typically the GIF toolbar button. Always
-   *  rendered so the user has a click trigger; positioning falls back
-   *  to it when `anchorRect` is null. */
-  anchorElement: React.ReactNode
-  /** Optional virtual anchor (caret rect from the slash command) so
-   *  the popover lines up with the slash menu instead of the toolbar
-   *  button when the user opens the picker by typing `/gif`. */
-  anchorRect?: { left: number; top: number; right: number; bottom: number } | null
+  /** Caret rect captured by the /gif slash command. Required — the
+   *  popover has no other entry point (no toolbar button), so the
+   *  caller must supply a position. When null while `open` is true,
+   *  the popover falls back to the document body's top-left, which is
+   *  effectively a no-op for the user. */
+  anchorRect: { left: number; top: number; right: number; bottom: number } | null
   getToken: () => string | null
   baseUrl?: string
   onPick: (gif: GifRef) => void
@@ -54,7 +52,6 @@ const SEARCH_DEBOUNCE_MS = 300
 export function GifPickerPopover({
   open,
   onOpenChange,
-  anchorElement,
   anchorRect,
   getToken,
   baseUrl,
@@ -111,12 +108,11 @@ export function GifPickerPopover({
     [onPick, onOpenChange]
   )
 
-  // The toolbar button is always rendered (it doubles as a click
-  // trigger). The virtual anchor only mounts when the slash command
-  // supplied a caret rect; in that case it overrides positioning while
-  // open. We pin it `position: fixed` to viewport coords so Radix's
-  // PopperAnchor measures the right rect regardless of scroll.
-  const virtualAnchorStyle: React.CSSProperties | null = anchorRect
+  // Virtual anchor pinned to the caret rect provided by the slash
+  // command. position:fixed so Radix's PopperAnchor measures viewport
+  // coords regardless of editor scroll. pointerEvents:none so the
+  // invisible anchor never intercepts clicks.
+  const virtualAnchorStyle: React.CSSProperties = anchorRect
     ? {
         position: "fixed",
         left: anchorRect.left,
@@ -125,21 +121,13 @@ export function GifPickerPopover({
         height: Math.max(1, anchorRect.bottom - anchorRect.top),
         pointerEvents: "none",
       }
-    : null
+    : { position: "fixed", left: 0, top: 0, width: 1, height: 1, pointerEvents: "none" }
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      {virtualAnchorStyle ? (
-        <PopoverAnchor asChild>
-          <span aria-hidden="true" style={virtualAnchorStyle} />
-        </PopoverAnchor>
-      ) : (
-        <PopoverAnchor asChild>{anchorElement}</PopoverAnchor>
-      )}
-      {/* When the virtual anchor is active, the toolbar button still
-          needs to render outside the Popover's anchor slot so the user
-          can click it. Render it inline as a sibling. */}
-      {virtualAnchorStyle ? anchorElement : null}
+      <PopoverAnchor asChild>
+        <span aria-hidden="true" style={virtualAnchorStyle} />
+      </PopoverAnchor>
       <PopoverContent
         align="start"
         side="top"
