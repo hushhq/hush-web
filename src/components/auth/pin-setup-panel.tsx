@@ -17,11 +17,6 @@ import { CheckIcon } from "lucide-react"
 import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import {
   Tabs,
@@ -31,14 +26,10 @@ import {
 } from "@/components/ui/tabs.tsx"
 import { cn } from "@/lib/utils.ts"
 import { HushLogo } from "@/components/brand/HushLogo"
+import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
 import { useAuth } from "@/contexts/AuthContext"
 
 const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const
-/** PIN is exactly 4 digits, end-to-end. Setup form rejects anything
- *  shorter, longer, or non-numeric before reaching `setPIN`. */
-const PIN_LENGTH = 4
-const sanitizePinDigits = (raw: string): string =>
-  raw.replace(/\D/g, "").slice(0, PIN_LENGTH)
 
 function passphraseStrength(value: string): number {
   if (value.length < 6) return 0
@@ -124,25 +115,14 @@ export function PinSetupPanel() {
 
               <TabsContent value="pin" className="flex flex-col items-center gap-2 pt-3">
                 <Label htmlFor="psm-pin-value">PIN ({PIN_LENGTH} digits)</Label>
-                <InputOTP
+                <PinOtp
                   id="psm-pin-value"
-                  maxLength={PIN_LENGTH}
-                  pattern="^[0-9]*$"
-                  inputMode="numeric"
                   value={value}
-                  onChange={(next) => setValue(sanitizePinDigits(next))}
+                  onChange={setValue}
                   disabled={submitting}
                   autoComplete="new-password"
-                  textAlign="center"
-                  data-private="true"
-                  aria-label="Choose PIN"
-                >
-                  <InputOTPGroup>
-                    {Array.from({ length: PIN_LENGTH }, (_, i) => (
-                      <InputOTPSlot key={i} index={i} className="size-12 text-lg" />
-                    ))}
-                  </InputOTPGroup>
-                </InputOTP>
+                  ariaLabel="Choose PIN"
+                />
               </TabsContent>
 
               <TabsContent
@@ -193,26 +173,15 @@ export function PinSetupPanel() {
                 Confirm {isPin ? "PIN" : "passphrase"}
               </Label>
               {isPin ? (
-                <InputOTP
+                <PinOtp
                   id="pin-setup-confirm"
-                  maxLength={PIN_LENGTH}
-                  pattern="^[0-9]*$"
-                  inputMode="numeric"
                   value={confirm}
-                  onChange={(next) => setConfirm(sanitizePinDigits(next))}
+                  onChange={setConfirm}
                   disabled={submitting}
                   autoComplete="new-password"
-                  textAlign="center"
-                  data-private="true"
-                  aria-invalid={mismatch}
-                  aria-label="Confirm PIN"
-                >
-                  <InputOTPGroup>
-                    {Array.from({ length: PIN_LENGTH }, (_, i) => (
-                      <InputOTPSlot key={i} index={i} className="size-12 text-lg" />
-                    ))}
-                  </InputOTPGroup>
-                </InputOTP>
+                  ariaInvalid={mismatch}
+                  ariaLabel="Confirm PIN"
+                />
               ) : (
                 <Input
                   id="pin-setup-confirm"

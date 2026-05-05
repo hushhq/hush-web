@@ -17,23 +17,12 @@ import { LockIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { HushLogo } from "@/components/brand/HushLogo"
+import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
 import { useAuth } from "@/contexts/AuthContext"
 
 const MAX_ATTEMPTS = 10
-/** PIN is exactly 4 digits, end-to-end. Anything shorter or longer is
- *  rejected at the form boundary; the underlying `setPIN` /
- *  `unlockVault` calls are still pure-string and don't enforce shape. */
-const PIN_LENGTH = 4
-/** Strip everything that isn't 0-9. Defensive against paste, IME, or any
- *  exotic input source slipping non-digits through `inputMode=numeric`. */
-const sanitizePinDigits = (raw: string): string => raw.replace(/\D/g, "").slice(0, PIN_LENGTH)
 
 const PIN_DELAY_TABLE: Array<{ threshold: number; delayMs: number }> = [
   { threshold: 9, delayMs: 60_000 },
@@ -65,15 +54,10 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const [attemptCount, setAttemptCount] = React.useState(0)
   const [delayRemaining, setDelayRemaining] = React.useState(0)
   const [isDelayed, setIsDelayed] = React.useState(false)
-  const inputRef = React.useRef<HTMLInputElement>(null)
   const countdownRef = React.useRef<number | null>(null)
 
   const username = user?.display_name ?? user?.username ?? "your account"
   const initial = (username.charAt(0) ?? "?").toUpperCase()
-
-  React.useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
 
   React.useEffect(
     () => () => {
@@ -176,26 +160,14 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
             <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
               <div className="flex flex-col items-center gap-2">
                 <Label htmlFor="pin-input">PIN</Label>
-                <InputOTP
-                  ref={inputRef}
+                <PinOtp
                   id="pin-input"
-                  maxLength={PIN_LENGTH}
-                  pattern="^[0-9]*$"
-                  inputMode="numeric"
                   value={pin}
-                  onChange={(next) => setPin(sanitizePinDigits(next))}
+                  onChange={setPin}
                   disabled={submitting || isDelayed}
-                  aria-label="Vault PIN"
-                  autoComplete="one-time-code"
-                  textAlign="center"
-                  data-private="true"
-                >
-                  <InputOTPGroup>
-                    {Array.from({ length: PIN_LENGTH }, (_, i) => (
-                      <InputOTPSlot key={i} index={i} className="size-12 text-lg" />
-                    ))}
-                  </InputOTPGroup>
-                </InputOTP>
+                  ariaLabel="Vault PIN"
+                  autoFocus
+                />
               </div>
 
               {isDelayed ? (
