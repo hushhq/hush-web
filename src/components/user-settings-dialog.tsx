@@ -1,3 +1,4 @@
+import * as React from "react"
 import {
   BellIcon,
   CircleUserIcon,
@@ -15,12 +16,21 @@ import {
 } from "lucide-react"
 
 import { Separator } from "@/components/ui/separator.tsx"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ConfirmAction } from "@/components/confirm-action"
 import {
   SettingsDialog,
   type SettingsGroup,
   type SettingsSection,
 } from "@/components/settings-dialog"
+import { useAuth } from "@/contexts/AuthContext"
+import { getVaultConfig } from "@/lib/identityVault"
 
 interface UserAccountInfo {
   displayName: string
@@ -77,7 +87,7 @@ export function UserSettingsDialog({
       groupId: "account",
       label: "Security",
       icon: <LockIcon />,
-      content: <PlaceholderPanel title="Security" />,
+      content: <SecurityPanel />,
     },
     {
       id: "appearance",
@@ -197,6 +207,164 @@ function LogoutPanel({
           }
         />
       </div>
+    </div>
+  )
+}
+
+// Vault timeout policy — controls when the in-memory MLS key is wiped
+// and the user must re-enter the PIN/passphrase. Values mirror the
+// shape `useAuth.updateVaultTimeout` accepts; the labels match what the
+// legacy UserSettingsModal exposed so returning users see the same
+// choices.
+type VaultTimeoutValue =
+  | "browser_close"
+  | "refresh"
+  | "1m"
+  | "15m"
+  | "30m"
+  | "1h"
+  | "4h"
+  | "never"
+
+const VAULT_TIMEOUT_OPTIONS: { value: VaultTimeoutValue; label: string }[] = [
+  { value: "browser_close", label: "On browser close" },
+  { value: "refresh", label: "On refresh" },
+  { value: "1m", label: "1 minute" },
+  { value: "15m", label: "15 minutes" },
+  { value: "30m", label: "30 minutes" },
+  { value: "1h", label: "1 hour" },
+  { value: "4h", label: "4 hours" },
+  { value: "never", label: "Never" },
+]
+
+const LEGACY_VAULT_TIMEOUT_KEY = "hush_vault_timeout"
+
+function formatVaultTimeoutValue(
+  timeout: string | number | null | undefined
+): VaultTimeoutValue {
+  if (typeof timeout === "number") {
+    if (timeout === 60) return "1h"
+    if (timeout === 240) return "4h"
+    if (timeout === 1) return "1m"
+    if (timeout === 15) return "15m"
+    if (timeout === 30) return "30m"
+    return "browser_close"
+  }
+  if (
+    timeout === "browser_close" ||
+    timeout === "refresh" ||
+    timeout === "never"
+  ) {
+    return timeout
+  }
+  return "browser_close"
+}
+
+function parseVaultTimeoutValue(
+  value: VaultTimeoutValue
+): "browser_close" | "refresh" | "never" | number {
+  switch (value) {
+    case "browser_close":
+    case "refresh":
+    case "never":
+      return value
+    case "1m":
+      return 1
+    case "15m":
+      return 15
+    case "30m":
+      return 30
+    case "1h":
+      return 60
+    case "4h":
+      return 240
+  }
+}
+
+function readStoredVaultTimeout(userId: string | undefined): VaultTimeoutValue {
+  const config = userId ? getVaultConfig(userId) : null
+  if (config?.timeout !== undefined && config.timeout !== null) {
+    return formatVaultTimeoutValue(config.timeout)
+  }
+  return formatVaultTimeoutValue(
+    localStorage.getItem(LEGACY_VAULT_TIMEOUT_KEY)
+  )
+}
+
+function SecurityPanel() {
+  const { user, updateVaultTimeout } = useAuth() as {
+    user: { id?: string } | null
+    updateVaultTimeout?: (
+      timeout: "browser_close" | "refresh" | "never" | number
+    ) => void
+  }
+  const userId = user?.id
+  const [vaultTimeout, setVaultTimeout] = React.useState<VaultTimeoutValue>(
+    () => readStoredVaultTimeout(userId)
+  )
+
+  // Refresh when the active user changes (account switch within a session).
+  React.useEffect(() => {
+    setVaultTimeout(readStoredVaultTimeout(userId))
+  }, [userId])
+
+  const handleChange = (next: string) => {
+    const value = next as VaultTimeoutValue
+    setVaultTimeout(value)
+    if (typeof updateVaultTimeout === "function") {
+      updateVaultTimeout(parseVaultTimeoutValue(value))
+      return
+    }
+    localStorage.setItem(LEGACY_VAULT_TIMEOUT_KEY, value)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">Security</h2>
+        <p className="text-sm text-muted-foreground">
+          Control how long your decrypted vault stays in memory before
+          requiring your PIN or passphrase again.
+        </p>
+      </div>
+
+      <Separator />
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Vault
+        </h3>
+        <div className="rounded-lg border bg-card">
+          <div className="flex flex-col gap-3 px-4 py-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">Vault timeout</span>
+              <span className="text-xs text-muted-foreground">
+                How long before the vault locks and requires re-entry.
+              </span>
+            </div>
+            <Select value={vaultTimeout} onValueChange={handleChange}>
+              <SelectTrigger
+                aria-label="Vault timeout"
+                className="w-full sm:w-72"
+              >
+                <SelectValue placeholder="Select timeout" />
+              </SelectTrigger>
+              <SelectContent>
+                {VAULT_TIMEOUT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {vaultTimeout === "never" ? (
+              <span className="text-xs text-destructive">
+                Your key will remain decrypted in memory until you sign out.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
