@@ -103,13 +103,9 @@ const SubmitOnEnter = Extension.create<SubmitOnEnterOptions>({
   },
   addKeyboardShortcuts() {
     return {
-      // Plain Enter: send the message — except inside a code block
-      // where Enter must insert a real newline (otherwise multi-line
-      // snippets are impossible).
-      Enter: ({ editor }) => {
-        if (editor.isActive("codeBlock")) {
-          return editor.commands.newlineInCode()
-        }
+      // Plain Enter always sends, even inside a code block. Multi-line
+      // snippets compose with Shift+Enter (handled below).
+      Enter: () => {
         this.options.onSubmit()
         return true
       },
