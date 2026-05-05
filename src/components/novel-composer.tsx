@@ -103,13 +103,24 @@ const SubmitOnEnter = Extension.create<SubmitOnEnterOptions>({
   },
   addKeyboardShortcuts() {
     return {
-      Enter: () => {
+      // Plain Enter: send the message — except inside a code block
+      // where Enter must insert a real newline (otherwise multi-line
+      // snippets are impossible).
+      Enter: ({ editor }) => {
+        if (editor.isActive("codeBlock")) {
+          return editor.commands.newlineInCode()
+        }
         this.options.onSubmit()
         return true
       },
+      // Shift+Enter: structural newline. Order matters — taskItem
+      // first so checkbox lists continue across rows, then plain
+      // listItem (bullet/ordered), then a generic block split as the
+      // fallback for paragraphs / headings / quotes.
       "Shift-Enter": ({ editor }) =>
         editor.commands.first(({ commands }) => [
           () => commands.newlineInCode(),
+          () => commands.splitListItem("taskItem"),
           () => commands.splitListItem("listItem"),
           () => commands.splitBlock({ keepMarks: false }),
         ]),
