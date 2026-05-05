@@ -126,12 +126,43 @@ export function ServerRail({
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--rail-width) flex-col items-center bg-sidebar py-3 pl-2 md:flex">
       <div className="flex flex-col items-center gap-2 pb-2">
-        <RailIcon
-          label="Home"
-          icon={<HomeIcon className="size-5" />}
-          active={activeRailId === "home"}
-          onClick={() => onSelect("home")}
-        />
+        {/* Right-click (desktop) / long-press (touch) on Home exposes
+            create/discover so the affordance lives next to where the user
+            is looking, not only at the bottom of the rail. */}
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <span>
+              <RailIcon
+                label="Home"
+                icon={<HomeIcon className="size-5" />}
+                active={activeRailId === "home"}
+                onClick={() => onSelect("home")}
+              />
+            </span>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-56">
+            <ContextMenuItem
+              disabled={!onCreateServer}
+              onSelect={(event) => {
+                event.preventDefault()
+                onCreateServer?.()
+              }}
+            >
+              <PlusIcon className="size-4" />
+              Add server
+            </ContextMenuItem>
+            <ContextMenuItem
+              disabled={!onDiscoverServers}
+              onSelect={(event) => {
+                event.preventDefault()
+                onDiscoverServers?.()
+              }}
+            >
+              <CompassIcon className="size-4" />
+              Discover servers
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
         <RailDivider />
       </div>
       <div className="relative min-h-0 w-full flex-1">

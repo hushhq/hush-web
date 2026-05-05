@@ -954,6 +954,8 @@ export function AuthenticatedApp() {
                 onDeleteChannel={handleDeleteChannel}
                 onCreateInvite={handleCreateInvite}
                 canAdministrate={canAdministrate}
+                onCreateServer={openCreateServerDialog}
+                onDiscoverServers={() => navigate("/explore")}
               />
             : <HomeSidebar
                 user={sidebarUser}
@@ -971,6 +973,8 @@ export function AuthenticatedApp() {
                 voice={voiceProps}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                 directMessages={homeDMs}
+                onCreateServer={openCreateServerDialog}
+                onDiscoverServers={() => navigate("/explore")}
               />
           : null}
         <ResizablePanelGroup
@@ -1008,6 +1012,8 @@ export function AuthenticatedApp() {
                   onDeleteChannel={handleDeleteChannel}
                   onCreateInvite={handleCreateInvite}
                   canAdministrate={canAdministrate}
+                  onCreateServer={openCreateServerDialog}
+                  onDiscoverServers={() => navigate("/explore")}
                 />
               ) : (
                 <HomeSidebar
@@ -1216,6 +1222,8 @@ function HomeSidebar({
   voice,
   onOpenUserSettings,
   directMessages,
+  onCreateServer,
+  onDiscoverServers,
 }: {
   user: { name: string; email: string; initials: string }
   railEntries: { id: string; name: string; initials: string }[]
@@ -1226,6 +1234,8 @@ function HomeSidebar({
   voice?: React.ComponentProps<typeof ChannelSidebar>["voice"]
   onOpenUserSettings?: () => void
   directMessages: HomeDM[]
+  onCreateServer?: () => void
+  onDiscoverServers?: () => void
 }) {
   return (
     <ChannelSidebar
@@ -1244,6 +1254,8 @@ function HomeSidebar({
       voice={voice}
       onOpenUserSettings={onOpenUserSettings}
       serverMenuEnabled={false}
+      onCreateServer={onCreateServer}
+      onDiscoverServers={onDiscoverServers}
     />
   )
 }

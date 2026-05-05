@@ -9,6 +9,7 @@ import {
   Volume2Icon,
   PlusIcon,
   FolderPlusIcon,
+  CompassIcon,
   ScrollTextIcon,
   ShieldAlertIcon,
   LogOutIcon,
@@ -216,6 +217,11 @@ interface ChannelSidebarProps {
   canAdministrate?: boolean
   /** Home/DM surfaces reuse this shell but must not expose server actions. */
   serverMenuEnabled?: boolean
+  /** Open the create-server dialog (mobile rail dropdown surfaces this since
+   *  the desktop bottom rail with [+]/Discover icons is not visible). */
+  onCreateServer?: () => void
+  /** Navigate to the discover-servers route. */
+  onDiscoverServers?: () => void
 }
 
 const CHANNELS_SECTION_LABEL = "Channels"
@@ -246,6 +252,8 @@ export function ChannelSidebar({
   onCreateInvite,
   canAdministrate = false,
   serverMenuEnabled = true,
+  onCreateServer,
+  onDiscoverServers,
 }: ChannelSidebarProps) {
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
 
@@ -263,6 +271,8 @@ export function ChannelSidebar({
             onCreateInvite={onCreateInvite}
             canAdministrate={canAdministrate}
             menuEnabled={serverMenuEnabled}
+            onCreateServer={onCreateServer}
+            onDiscoverServers={onDiscoverServers}
           />
         </SidebarHeader>
         <SidebarContent className="show-native-scrollbar">
@@ -349,6 +359,8 @@ function ServerHeader({
   onCreateInvite,
   canAdministrate,
   menuEnabled,
+  onCreateServer,
+  onDiscoverServers,
 }: {
   name: string
   plan?: string
@@ -359,6 +371,8 @@ function ServerHeader({
   onCreateInvite?: () => Promise<string | null>
   canAdministrate?: boolean
   menuEnabled?: boolean
+  onCreateServer?: () => void
+  onDiscoverServers?: () => void
 }) {
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   const [inviteOpen, setInviteOpen] = React.useState(false)
@@ -443,6 +457,25 @@ function ServerHeader({
                   </DropdownMenuItem>
                 ))}
               </div>
+              {/* Mobile-only: mirror the desktop rail bottom dock so users
+                  on a phone can create or discover servers without a
+                  dedicated FAB. Items render at the end of the rail
+                  dropdown after the home + server entries. */}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!onCreateServer}
+                onSelect={() => onCreateServer?.()}
+              >
+                <PlusIcon className="size-4" />
+                Add server
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!onDiscoverServers}
+                onSelect={() => onDiscoverServers?.()}
+              >
+                <CompassIcon className="size-4" />
+                Discover servers
+              </DropdownMenuItem>
               {menuEnabled ? <DropdownMenuSeparator /> : null}
             </div>
             {menuEnabled ? (
