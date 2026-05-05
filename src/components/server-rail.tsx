@@ -4,7 +4,11 @@ import {
   PlusIcon,
   CompassIcon,
   HomeIcon,
+  BellIcon,
+  BellOffIcon,
+  CheckCheckIcon,
   SettingsIcon,
+  ShieldIcon,
   LogOutIcon,
 } from "lucide-react"
 
@@ -26,6 +30,9 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx"
 import type { MemberRole } from "@/components/members-sidebar"
@@ -209,11 +216,11 @@ function RailServer({
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const isOwner = role === "owner"
-  const isMember = role === "member" || role === "moderator"
-  // Without a known role we can't safely show destructive items; settings
-  // remains available because the dialog itself enforces backend permissions.
+  // Anyone non-owner sees Leave; owners see Delete instead. Without a
+  // known role we still render Leave (matches prototype: every server
+  // exposes a way to disengage) but disable it if no handler is wired.
   const canDelete = isOwner && Boolean(onDelete)
-  const canLeave = isMember && Boolean(onLeave)
+  const canLeave = !isOwner && Boolean(onLeave)
   const canOpenSettings =
     role === "owner" || role === "admin" || (active && !role)
 
@@ -249,6 +256,34 @@ function RailServer({
         <ContextMenuLabel className="text-xs text-muted-foreground">
           {server.name}
         </ContextMenuLabel>
+        {/* Mute presets, notification prefs, mark-as-read and privacy
+            settings ship in the prototype but have no backend handler yet
+            (no per-server mute / read-state endpoints, no privacy prefs).
+            They render disabled so the affordance matches the prototype
+            1:1 — wire each as the corresponding backend lands. */}
+        <ContextMenuSub>
+          <ContextMenuSubTrigger disabled>
+            <BellOffIcon className="size-4" />
+            Mute server
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem disabled>For 15 minutes</ContextMenuItem>
+            <ContextMenuItem disabled>For 1 hour</ContextMenuItem>
+            <ContextMenuItem disabled>For 8 hours</ContextMenuItem>
+            <ContextMenuItem disabled>Until tomorrow</ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem disabled>Until I turn it back on</ContextMenuItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuItem disabled>
+          <BellIcon className="size-4" />
+          Notification settings
+        </ContextMenuItem>
+        <ContextMenuItem disabled>
+          <CheckCheckIcon className="size-4" />
+          Mark server as read
+        </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem
           disabled={!canOpenSettings || !onOpenSettings}
           onSelect={(event) => {
@@ -258,6 +293,10 @@ function RailServer({
         >
           <SettingsIcon className="size-4" />
           Server settings
+        </ContextMenuItem>
+        <ContextMenuItem disabled>
+          <ShieldIcon className="size-4" />
+          Privacy settings
         </ContextMenuItem>
         <ContextMenuSeparator />
         {canDelete ? (

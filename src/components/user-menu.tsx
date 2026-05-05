@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  BellIcon,
   ChevronsUpDownIcon,
   LogOutIcon,
   SettingsIcon,
@@ -79,6 +80,12 @@ export function UserMenu({ user, onOpenSettings }: UserMenuProps) {
               <DropdownMenuItem onSelect={() => onOpenSettings?.()}>
                 <SettingsIcon className="size-4" />
                 Preferences
+              </DropdownMenuItem>
+              {/* Notifications has no per-user prefs backend yet — render
+                  disabled to keep parity with the prototype. */}
+              <DropdownMenuItem disabled>
+                <BellIcon className="size-4" />
+                Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

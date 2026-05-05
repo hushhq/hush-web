@@ -1,11 +1,13 @@
 import * as React from "react"
 import {
+  AtSignIcon,
   BanIcon,
   CopyIcon,
   CrownIcon,
   MessageSquareIcon,
   ShieldIcon,
   UserIcon,
+  UserPlusIcon,
 } from "lucide-react"
 
 import {
@@ -241,6 +243,17 @@ function MemberRow({
           >
             <MessageSquareIcon />
             Send message
+          </ContextMenuItem>
+          {/* Mention insertion needs a composer ref bridge (the channel-view
+              composer is mounted in a sibling subtree). Friend graph has no
+              backend yet. Both render disabled to match the prototype 1:1. */}
+          <ContextMenuItem disabled>
+            <AtSignIcon />
+            Mention in channel
+          </ContextMenuItem>
+          <ContextMenuItem disabled>
+            <UserPlusIcon />
+            Add friend
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
