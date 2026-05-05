@@ -15,7 +15,7 @@
  * parse failures on the wire) render the recovery placeholder.
  */
 import * as React from "react"
-import { Loader2Icon } from "lucide-react"
+import { Loader2Icon, XIcon, AlertTriangleIcon } from "lucide-react"
 
 import {
   Chat,
@@ -28,6 +28,7 @@ import {
   ChatEventTitle,
   ChatMessages,
 } from "@/components/chat/index"
+import { AttachmentTile } from "@/components/chat/attachment-tile"
 import {
   Empty,
   EmptyDescription,
@@ -40,7 +41,11 @@ import { MessageContent } from "@/components/message-content"
 import { MessageComposer } from "@/components/message-composer"
 import { cn } from "@/lib/utils"
 import { useChannelMessages, type ChatMessage } from "@/hooks/useChannelMessages"
-import type { MessageEnvelopeV1 } from "@/lib/messageEnvelope"
+import {
+  useAttachmentUploader,
+  type UploadEntry,
+} from "@/hooks/useAttachmentUploader"
+import type { AttachmentRef, MessageEnvelopeV1 } from "@/lib/messageEnvelope"
 
 const RECOVERY_PLACEHOLDER =
   "Message encrypted - decryption key no longer available"
@@ -140,22 +145,54 @@ export function RealChat({
     }
   }, [messages, consumeScrollRestore])
 
+  const uploader = useAttachmentUploader({
+    serverId,
+    channelId,
+    getToken,
+    baseUrl,
+  })
+
   const handleSend = React.useCallback(
     async (markdown: string) => {
-      const envelope: MessageEnvelopeV1 = { v: 1, text: markdown }
+      const refs = uploader.collectRefs()
+      const trimmed = markdown.trim()
+      // Block sends with no body and no attachments — the composer's
+      // own disabled state usually catches this, but guard anyway.
+      if (!trimmed && refs.length === 0) return
+      const envelope: MessageEnvelopeV1 = {
+        v: 1,
+        text: trimmed,
+        ...(refs.length > 0 ? { attachments: refs } : {}),
+      }
       try {
         await send(envelope)
+        uploader.reset()
       } catch (err) {
-        // useChannelMessages already marked the optimistic row failed.
         console.error("[chat-real] send failed", err)
       }
     },
-    [send]
+    [send, uploader]
   )
+
+  const hasUploads = uploader.uploads.length > 0
+  const sendDisabled = uploader.isUploading
+  const attachmentDock = hasUploads ? (
+    <AttachmentDock
+      uploads={uploader.uploads}
+      onRemove={uploader.remove}
+      onRetry={uploader.retry}
+    />
+  ) : null
 
   const groups = React.useMemo(() => groupConsecutive(messages), [messages])
 
+  const messageBodyCtx = React.useMemo<MessageBodyContext>(
+    () => ({ getToken, baseUrl }),
+    [getToken, baseUrl]
+  )
+
   return (
+    <MessageBodyContext.Provider value={messageBodyCtx}>
     <Chat className="h-full">
       <ChatMessages
         ref={scrollRef as unknown as React.Ref<HTMLDivElement>}
@@ -236,8 +273,78 @@ export function RealChat({
         key={channelId}
         channelName={channelName}
         onSend={handleSend}
+        onFilesSelected={(files) => uploader.add(files)}
+        sendDisabled={sendDisabled}
+        attachmentDock={attachmentDock}
       />
     </Chat>
+    </MessageBodyContext.Provider>
+  )
+}
+
+function AttachmentDock({
+  uploads,
+  onRemove,
+  onRetry,
+}: {
+  uploads: UploadEntry[]
+  onRemove: (id: string) => void
+  onRetry: (id: string) => void
+}) {
+  return (
+    <div className="flex w-full flex-wrap gap-2 px-1 pb-1">
+      {uploads.map((u) => (
+        <UploadChip key={u.localId} entry={u} onRemove={onRemove} onRetry={onRetry} />
+      ))}
+    </div>
+  )
+}
+
+function UploadChip({
+  entry,
+  onRemove,
+  onRetry,
+}: {
+  entry: UploadEntry
+  onRemove: (id: string) => void
+  onRetry: (id: string) => void
+}) {
+  const failed = entry.status === "failed" || entry.status === "cancelled"
+  return (
+    <div
+      className={cn(
+        "flex max-w-xs items-center gap-2 rounded-md border bg-muted/40 px-2 py-1.5 text-xs",
+        failed && "border-destructive/50"
+      )}
+    >
+      {failed ? (
+        <AlertTriangleIcon className="size-3.5 shrink-0 text-destructive" />
+      ) : entry.status === "ready" ? null : (
+        <Loader2Icon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+      )}
+      <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
+      {failed ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1 text-[11px]"
+          onClick={() => onRetry(entry.localId)}
+        >
+          Retry
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-5"
+        onClick={() => onRemove(entry.localId)}
+        aria-label={`Remove ${entry.file.name}`}
+      >
+        <XIcon className="size-3" />
+      </Button>
+    </div>
   )
 }
 
@@ -412,6 +519,13 @@ function FollowupMessage({
   )
 }
 
+interface MessageBodyContext {
+  getToken: () => string | null
+  baseUrl: string
+}
+
+const MessageBodyContext = React.createContext<MessageBodyContext | null>(null)
+
 function MessageBody({ message }: { message: ChatMessage }) {
   if (message.decryptionFailed || !message.envelope) {
     return (
@@ -420,12 +534,25 @@ function MessageBody({ message }: { message: ChatMessage }) {
       </span>
     )
   }
+  const ctx = React.useContext(MessageBodyContext)
   const { envelope } = message
   const hasText = envelope.text.length > 0
+  const attachments = envelope.attachments ?? []
   return (
     <>
       {hasText ? <MessageContent body={envelope.text} /> : null}
-      {/* attachments + gif rendering lands in Phase D / E */}
+      {attachments.length > 0 && ctx ? (
+        <div className="mt-2 flex flex-col gap-2">
+          {attachments.map((a) => (
+            <AttachmentTile
+              key={a.id}
+              ref={a as AttachmentRef}
+              getToken={ctx.getToken}
+              baseUrl={ctx.baseUrl}
+            />
+          ))}
+        </div>
+      ) : null}
     </>
   )
 }

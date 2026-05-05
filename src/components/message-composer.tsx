@@ -16,20 +16,35 @@ interface MessageComposerProps {
   channelName: string
   placeholder?: string
   onSend: (text: string) => void
+  /** Files dropped from the attachment button. The parent owns upload
+   *  state + AttachmentRef collection; the composer only forwards. */
+  onFilesSelected?: (files: File[]) => void
+  /** Block send while attachments are still uploading. Empty-text +
+   *  attachments-ready is a valid send (envelope.text is allowed empty). */
+  sendDisabled?: boolean
+  attachmentDock?: React.ReactNode
 }
 
 export function MessageComposer({
   channelName,
   placeholder,
   onSend,
+  onFilesSelected,
+  sendDisabled,
+  attachmentDock,
 }: MessageComposerProps) {
   const composerRef = React.useRef<NovelComposerHandle>(null)
   const [isEmpty, setIsEmpty] = React.useState(true)
 
   return (
     <ChatToolbar>
+      {attachmentDock ? (
+        <ChatToolbarAddon align="block-start" className="w-full">
+          {attachmentDock}
+        </ChatToolbarAddon>
+      ) : null}
       <ChatToolbarAddon align="inline-start">
-        <ChatToolbarAttachmentButton />
+        <ChatToolbarAttachmentButton onFilesSelected={onFilesSelected} />
       </ChatToolbarAddon>
       <div className="order-2 flex min-w-0 flex-1 items-center self-center">
         <NovelComposer
@@ -38,6 +53,7 @@ export function MessageComposer({
           placeholder={placeholder}
           onSend={onSend}
           onEmptyChange={setIsEmpty}
+          allowEmpty={Boolean(attachmentDock)}
         />
       </div>
       <ChatToolbarAddon align="inline-end">
@@ -46,7 +62,7 @@ export function MessageComposer({
         </ChatToolbarButton>
         <ChatToolbarButton
           aria-label="Send"
-          disabled={isEmpty}
+          disabled={(isEmpty && !attachmentDock) || sendDisabled}
           onClick={() => composerRef.current?.send()}
         >
           <SendHorizonalIcon />

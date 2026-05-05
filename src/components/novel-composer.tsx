@@ -129,13 +129,24 @@ interface NovelComposerProps {
   onEmptyChange?: (empty: boolean) => void
   onOpenGif?: () => void
   onOpenPoll?: () => void
+  /** Allow firing onSend with an empty markdown body. Used when the
+   *  parent has attachments queued and wants to send "attachments only". */
+  allowEmpty?: boolean
 }
 
 export const NovelComposer = React.forwardRef<
   NovelComposerHandle,
   NovelComposerProps
 >(function NovelComposer(
-  { channelName, placeholder, onSend, onEmptyChange, onOpenGif, onOpenPoll },
+  {
+    channelName,
+    placeholder,
+    onSend,
+    onEmptyChange,
+    onOpenGif,
+    onOpenPoll,
+    allowEmpty,
+  },
   ref
 ) {
   const editorRef = React.useRef<EditorInstance | null>(null)
@@ -188,7 +199,7 @@ export const NovelComposer = React.forwardRef<
     const editor = editorRef.current
     if (!editor) return
     const plain = editor.getText().trim()
-    if (!plain) return
+    if (!plain && !allowEmpty) return
 
     editor.commands.command(({ tr, state }) => {
       state.doc.descendants((node, pos) => {
@@ -215,7 +226,7 @@ export const NovelComposer = React.forwardRef<
     onSend(markdown)
     editor.commands.clearContent()
     onEmptyChange?.(true)
-  }, [onSend, onEmptyChange])
+  }, [onSend, onEmptyChange, allowEmpty])
 
   React.useEffect(() => {
     handleSendRef.current = handleSend

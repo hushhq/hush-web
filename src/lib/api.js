@@ -253,6 +253,71 @@ export async function getChannelMessages(token, serverId, channelId, opts = {}, 
 }
 
 /**
+ * Presign an attachment upload for the given channel. Server validates
+ * size + content-type against the same allowlist enforced client-side
+ * in `attachmentLimits.ts`. Returns the freshly-minted attachment id
+ * plus the upload URL the client must PUT the ciphertext to.
+ *
+ * @param {string} token
+ * @param {string} serverId
+ * @param {string} channelId
+ * @param {{ size: number, contentType: string }} body
+ * @param {string} [baseUrl]
+ * @returns {Promise<{ id: string, uploadUrl: string, method: string, headers?: Record<string,string>, expiresAt: string }>}
+ */
+export async function presignAttachment(token, serverId, channelId, body, baseUrl = '') {
+  const path = `/api/servers/${encodeURIComponent(serverId)}/channels/${encodeURIComponent(channelId)}/attachments/presign`;
+  const res = await fetchWithAuth(token, path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, baseUrl);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `presign attachment ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Get a presigned download URL for an attachment. Server checks the
+ * caller is a member of the attachment's owning channel.
+ *
+ * @param {string} token
+ * @param {string} attachmentId
+ * @param {string} [baseUrl]
+ * @returns {Promise<{ url: string, expiresAt: string }>}
+ */
+export async function getAttachmentDownloadUrl(token, attachmentId, baseUrl = '') {
+  const path = `/api/attachments/${encodeURIComponent(attachmentId)}/download`;
+  const res = await fetchWithAuth(token, path, {}, baseUrl);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `download url ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Soft-delete an attachment. Owner-only on the server. Returns 204 on
+ * success; 404 if the row does not exist or the caller is not the
+ * owner. Backend best-effort calls Backend.Delete; orphans are reaped
+ * by the supervised purger.
+ *
+ * @param {string} token
+ * @param {string} attachmentId
+ * @param {string} [baseUrl]
+ */
+export async function deleteAttachment(token, attachmentId, baseUrl = '') {
+  const path = `/api/attachments/${encodeURIComponent(attachmentId)}`;
+  const res = await fetchWithAuth(token, path, { method: 'DELETE' }, baseUrl);
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `delete attachment ${res.status}`);
+  }
+}
+
+/**
  * Get current instance metadata.
  * @param {string} token - JWT
  * @returns {Promise<{ id: string, name: string, iconUrl?: string, ownerId: string, registrationMode: string, serverCreationPolicy: string, createdAt: string, bootstrapped: boolean }>}
