@@ -115,9 +115,12 @@ export function ChannelView({
   const [membersOpen, setMembersOpen] = React.useState(false)
   const [thread, setThread] = React.useState<ThreadParent | null>(null)
 
+  // Reset the thread pane on channel change. Key by id (not name) so
+  // two channels that happen to share a label do not leak the open
+  // thread across navigation.
   React.useEffect(() => {
     setThread(null)
-  }, [channelName, channelKind])
+  }, [channelId])
 
   const isMobile = useIsMobile()
 

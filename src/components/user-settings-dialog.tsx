@@ -211,9 +211,12 @@ function LogoutPanel({
   )
 }
 
-// Vault timeout policy — controls when the in-memory MLS key is wiped
-// and the user must re-enter the PIN/passphrase. Values mirror the
-// shape `useAuth.updateVaultTimeout` accepts; the labels match what the
+// Vault timeout policy — controls when the in-memory identity-vault
+// wrapping key (PIN/passphrase-derived) is wiped, forcing the user to
+// re-authenticate. The MLS group keys are downstream of this: locking
+// the vault drops the wrapping key, which makes the encrypted at-rest
+// vault blob unusable until the next unlock. Values mirror the shape
+// `useAuth.updateVaultTimeout` accepts; the labels match what the
 // legacy UserSettingsModal exposed so returning users see the same
 // choices.
 type VaultTimeoutValue =

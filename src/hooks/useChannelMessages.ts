@@ -751,6 +751,16 @@ export function useChannelMessages(
           m.id === localId ? { ...m, failed: false, pending: true } : m
         )
       )
+      // Mirror the dedup contract from `send`: a retried envelope
+      // re-enters the wire as a fresh own-send, so the inbound echo
+      // matcher needs the pending entry recorded the same way.
+      // Without this the retry's self-echo cannot be matched and the
+      // optimistic row sticks around as a duplicate.
+      rememberPendingSend(channelId, {
+        envelope: target.envelope,
+        senderId: currentUserId,
+        timestamp: Date.now(),
+      })
       try {
         await encryptAndSendEnvelope(
           wsClient,
@@ -770,7 +780,7 @@ export function useChannelMessages(
         )
       }
     },
-    [channelId, wsClient, messages]
+    [channelId, wsClient, messages, currentUserId]
   )
 
   const consumeScrollRestore = React.useCallback(() => {

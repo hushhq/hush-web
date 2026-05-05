@@ -3,6 +3,7 @@
  * the real WebCrypto, the network path is stubbed via XHR + fetch
  * mocks, and presign goes through the api shim.
  */
+import * as React from "react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { renderHook, act, waitFor } from "@testing-library/react"
 
@@ -127,6 +128,36 @@ describe("useAttachmentUploader", () => {
       expect(result.current.uploads[0]?.status).toBe("failed")
     })
     expect(result.current.uploads[0]?.errorMessage).toMatch(/presign 413/)
+  })
+
+  it("does not double-fire presign + upload under React StrictMode (P1.1 regression)", async () => {
+    // Strict Mode invokes state updaters twice in development. The
+    // hook used to start uploads from inside `setUploads(prev => ...)`,
+    // so each `add()` call triggered presign+encrypt+PUT twice and
+    // produced an orphaned ciphertext blob. This regression test
+    // wraps the hook in `<React.StrictMode>` and asserts the side
+    // effects fire exactly once per file.
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.StrictMode, null, children)
+    const { result } = renderHook(
+      () =>
+        useAttachmentUploader({
+          serverId: "srv-1",
+          channelId: "ch-1",
+          getToken: () => "token",
+        }),
+      { wrapper }
+    )
+
+    await act(async () => {
+      result.current.add([makeFile("once.png", 1024)])
+    })
+
+    await waitFor(() => {
+      expect(result.current.uploads[0]?.status).toBe("ready")
+    })
+    expect(mockPresignAttachment).toHaveBeenCalledTimes(1)
+    expect(MockUploadXHR.instances).toHaveLength(1)
   })
 
   it("rejects a non-allowlisted mime type without hitting the network", async () => {

@@ -76,15 +76,31 @@ export function useAttachmentUploader(
 ): UseAttachmentUploaderResult {
   const { serverId, channelId, getToken, baseUrl = "" } = opts
   const [uploads, setUploads] = React.useState<UploadEntry[]>([])
+  // Mirror of `uploads` that updates synchronously alongside every
+  // `setUploads` call so callbacks can read the latest list outside a
+  // React state updater. Required because state updaters must stay
+  // pure under Strict Mode / concurrent rendering — kicking off
+  // presign+encrypt+upload from inside the updater would duplicate
+  // every side effect when React invokes the function twice.
+  const uploadsRef = React.useRef<UploadEntry[]>([])
   const inflightRef = React.useRef<Map<string, InflightController>>(new Map())
+
+  const commitUploads = React.useCallback(
+    (updater: (prev: UploadEntry[]) => UploadEntry[]) => {
+      const next = updater(uploadsRef.current)
+      uploadsRef.current = next
+      setUploads(next)
+    },
+    []
+  )
 
   const updateEntry = React.useCallback(
     (localId: string, patch: Partial<UploadEntry>) => {
-      setUploads((prev) =>
+      commitUploads((prev) =>
         prev.map((u) => (u.localId === localId ? { ...u, ...patch } : u))
       )
     },
-    []
+    [commitUploads]
   )
 
   const startUpload = React.useCallback(
@@ -189,79 +205,82 @@ export function useAttachmentUploader(
   const add = React.useCallback(
     (files: File[]) => {
       if (!files.length) return
-      setUploads((prev) => {
-        const remainingSlots = MAX_ATTACHMENTS_PER_MESSAGE - prev.length
-        if (remainingSlots <= 0) return prev
-        const accepted: UploadEntry[] = []
-        for (const file of files.slice(0, remainingSlots)) {
-          const localId = nextLocalId()
-          if (file.size > MAX_ATTACHMENT_BYTES) {
-            accepted.push({
-              localId,
-              file,
-              status: "failed",
-              progress: 0,
-              errorMessage: `file exceeds ${MAX_ATTACHMENT_BYTES} bytes`,
-            })
-            continue
-          }
-          if (!isAttachmentContentTypeAllowed(file.type || "")) {
-            accepted.push({
-              localId,
-              file,
-              status: "failed",
-              progress: 0,
-              errorMessage: "content type not allowed",
-            })
-            continue
-          }
+      const remainingSlots =
+        MAX_ATTACHMENTS_PER_MESSAGE - uploadsRef.current.length
+      if (remainingSlots <= 0) return
+      const accepted: UploadEntry[] = []
+      for (const file of files.slice(0, remainingSlots)) {
+        const localId = nextLocalId()
+        if (file.size > MAX_ATTACHMENT_BYTES) {
           accepted.push({
             localId,
             file,
-            status: "queued",
+            status: "failed",
             progress: 0,
+            errorMessage: `file exceeds ${MAX_ATTACHMENT_BYTES} bytes`,
           })
+          continue
         }
-        const next = [...prev, ...accepted]
-        // Kick off uploads for the freshly-queued entries.
-        accepted
-          .filter((e) => e.status === "queued")
-          .forEach((e) => void startUpload(e))
-        return next
-      })
+        if (!isAttachmentContentTypeAllowed(file.type || "")) {
+          accepted.push({
+            localId,
+            file,
+            status: "failed",
+            progress: 0,
+            errorMessage: "content type not allowed",
+          })
+          continue
+        }
+        accepted.push({
+          localId,
+          file,
+          status: "queued",
+          progress: 0,
+        })
+      }
+      commitUploads((prev) => [...prev, ...accepted])
+      accepted
+        .filter((e) => e.status === "queued")
+        .forEach((e) => void startUpload(e))
     },
-    [startUpload]
+    [commitUploads, startUpload]
   )
 
-  const remove = React.useCallback((localId: string) => {
-    const ctrl = inflightRef.current.get(localId)
-    if (ctrl) {
-      ctrl.cancelled = true
-      ctrl.xhr?.abort()
-      inflightRef.current.delete(localId)
-    }
-    setUploads((prev) => prev.filter((u) => u.localId !== localId))
-  }, [])
+  const remove = React.useCallback(
+    (localId: string) => {
+      const ctrl = inflightRef.current.get(localId)
+      if (ctrl) {
+        ctrl.cancelled = true
+        ctrl.xhr?.abort()
+        inflightRef.current.delete(localId)
+      }
+      commitUploads((prev) => prev.filter((u) => u.localId !== localId))
+    },
+    [commitUploads]
+  )
 
   const retry = React.useCallback(
     (localId: string) => {
-      setUploads((prev) => {
-        const target = prev.find((u) => u.localId === localId)
-        if (!target || (target.status !== "failed" && target.status !== "cancelled")) {
-          return prev
-        }
-        const reset: UploadEntry = {
-          ...target,
-          status: "queued",
-          progress: 0,
-          errorMessage: undefined,
-          ref: undefined,
-        }
-        void startUpload(reset)
-        return prev.map((u) => (u.localId === localId ? reset : u))
-      })
+      const target = uploadsRef.current.find((u) => u.localId === localId)
+      if (
+        !target ||
+        (target.status !== "failed" && target.status !== "cancelled")
+      ) {
+        return
+      }
+      const reset: UploadEntry = {
+        ...target,
+        status: "queued",
+        progress: 0,
+        errorMessage: undefined,
+        ref: undefined,
+      }
+      commitUploads((prev) =>
+        prev.map((u) => (u.localId === localId ? reset : u))
+      )
+      void startUpload(reset)
     },
-    [startUpload]
+    [commitUploads, startUpload]
   )
 
   const reset = React.useCallback(() => {
@@ -270,8 +289,8 @@ export function useAttachmentUploader(
       ctrl.xhr?.abort()
     })
     inflightRef.current.clear()
-    setUploads([])
-  }, [])
+    commitUploads(() => [])
+  }, [commitUploads])
 
   const isUploading = uploads.some(
     (u) => u.status === "encrypting" || u.status === "uploading" || u.status === "queued"

@@ -3,8 +3,16 @@
  *
  * The Grid component handles masonry layout, infinite scroll, and lazy
  * thumbnail loading at 60fps internally — we just supply a `fetchGifs`
- * function that talks to our backend proxy at `/api/gif/search`. The
- * proxy hides the API key and the user's IP from Giphy.
+ * function that talks to our backend proxy at `/api/gif/search`.
+ *
+ * Privacy boundary — the proxy hides our API key and proxies the
+ * *search query* through hush-server, so Giphy never sees the
+ * searcher's IP nor the search string directly. The picked GIF's
+ * media URL, however, points at `media.giphy.com`: when the message
+ * renders, both the sender's *and* receiver's browsers fetch bytes
+ * directly from Giphy's CDN, exposing each viewer's IP to Giphy.
+ * Proxying media is out of scope here — see the design doc on
+ * media-proxy plans before claiming end-to-end IP privacy.
  *
  * Empty query → trending; non-empty → search (debounced 300 ms via
  * `use-debounce` so a fast typist does not flood the rate-limited beta
@@ -14,8 +22,7 @@
  * Storage contract: the picked GIF lives in the MLS message envelope
  * as a `GifRef` (id, url, previewUrl, width, height) — *not* as a
  * markdown image and *not* as an attachment ref. The server never
- * stores GIF bytes; the receiver renders directly from Giphy's CDN
- * via the public `images.original.url`.
+ * stores GIF bytes.
  */
 import * as React from "react"
 import type { IGif } from "@giphy/js-types"
