@@ -86,6 +86,7 @@ import {
   deriveInitials,
 } from "@/adapters"
 import type { Server, Channel, ChannelCategory } from "@/adapters"
+import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 
 interface FavoriteEntry {
   id: string
@@ -222,6 +223,25 @@ export function AuthenticatedApp() {
     baseUrl,
     currentUserId,
   })
+
+  const voicePresence = useVoiceChannelPresence(
+    (instanceUrl ? getWsClient(instanceUrl) : null) as Parameters<
+      typeof useVoiceChannelPresence
+    >[0],
+    currentUserId
+  )
+
+  // Augment voice-channel rows with their live participant rosters so
+  // the sidebar surfaces the same Discord-style presence the mockup
+  // demonstrates. Pure derivation — no extra state machine.
+  const channelsWithVoicePresence = React.useMemo<Channel[]>(() => {
+    if (voicePresence.size === 0) return channels
+    return channels.map((c) =>
+      c.kind === "voice" && voicePresence.has(c.id)
+        ? { ...c, participants: voicePresence.get(c.id) }
+        : c
+    )
+  }, [channels, voicePresence])
 
   const currentUserRole = React.useMemo(
     () => members.find((m) => m.id === currentUserId)?.role,
@@ -981,7 +1001,7 @@ export function AuthenticatedApp() {
                 serverPlan="Server"
                 systemChannels={sidebarSystemChannels}
                 categories={categories}
-                channels={channels}
+                channels={channelsWithVoicePresence}
                 onCategoriesChange={onCategoriesChange}
                 onChannelsChange={onChannelsChange}
                 activeChannelId={activeChannel.id}
@@ -1039,7 +1059,7 @@ export function AuthenticatedApp() {
                   serverPlan="Server"
                   systemChannels={sidebarSystemChannels}
                   categories={categories}
-                  channels={channels}
+                  channels={channelsWithVoicePresence}
                   onCategoriesChange={onCategoriesChange}
                   onChannelsChange={onChannelsChange}
                   activeChannelId={activeChannel.id}
