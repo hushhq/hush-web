@@ -17,6 +17,15 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator.tsx"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
 export interface SettingsSection {
@@ -121,7 +130,47 @@ export function SettingsDialog({
                 orientation="vertical"
                 className="data-[orientation=vertical]:h-4"
               />
-              <span className="font-medium">{active?.label}</span>
+              {/* Mobile: render the section list as a Select so users
+                  on <md viewports — where the sidebar is hidden —
+                  can still switch panels. Desktop keeps the static
+                  label since the sidebar already exposes the full
+                  list. */}
+              <span className="hidden font-medium md:inline">
+                {active?.label}
+              </span>
+              <div className="flex flex-1 justify-end md:hidden">
+                <Select
+                  value={active?.id}
+                  onValueChange={(next) => setActiveId(next)}
+                >
+                  <SelectTrigger size="sm" className="w-44">
+                    <SelectValue placeholder="Section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {grouped.map((group) => (
+                      <SelectGroup key={group.id}>
+                        {group.label ? (
+                          <SelectLabel>{group.label}</SelectLabel>
+                        ) : null}
+                        {group.items.map((section) => (
+                          <SelectItem
+                            key={section.id}
+                            value={section.id}
+                            className={cn(
+                              section.destructive && "text-destructive"
+                            )}
+                          >
+                            <span className="flex items-center gap-2">
+                              {section.icon}
+                              {section.label}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-6">
               {active?.content}
