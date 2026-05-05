@@ -7,7 +7,18 @@ import '@fontsource-variable/geist';
 import './styles/global.css';
 
 // Dev-only: console log buffer + dev toolbar + eruda mobile console.
-if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_TOOLBAR === 'true') {
+//
+// Both surfaces are now opt-in via env flags so they cannot interfere with
+// in-app gestures (the toolbar pill sits at z-index 99999 over the bottom
+// dock; eruda installs its own document-level event handlers). Set
+// `VITE_DEBUG_TOOLBAR=true` to load the log-copy/wipe pill, and
+// `VITE_ERUDA=true` to load the mobile inspector. Default off in DEV so
+// right-click context menus, drag, and other native gestures are not
+// shadowed by the debug stack.
+if (
+  import.meta.env.VITE_DEBUG_TOOLBAR === 'true' ||
+  import.meta.env.VITE_ERUDA === 'true'
+) {
   const _logBuffer = [];
   const MAX_BUFFER = 1000;
   const ts = () => new Date().toISOString().slice(11, 23);
@@ -84,8 +95,10 @@ if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_TOOLBAR === 'true') {
     location.reload();
   };
 
-  // Dev toolbar: draggable debug pill with two buttons
-  document.addEventListener('DOMContentLoaded', () => {
+  // Dev toolbar: draggable debug pill with two buttons. Only loaded when
+  // VITE_DEBUG_TOOLBAR=true; eruda alone (VITE_ERUDA=true) gives `__copyConsole`
+  // and `__clearBrowser` access without injecting a fixed-position overlay.
+  if (import.meta.env.VITE_DEBUG_TOOLBAR === 'true') document.addEventListener('DOMContentLoaded', () => {
     const STORAGE_KEY = 'hush:debug-toolbar-pos';
     const saved = (() => {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; }
@@ -172,7 +185,9 @@ if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_TOOLBAR === 'true') {
     document.body.appendChild(bar);
   });
 
-  import('eruda').then(({ default: eruda }) => eruda.init());
+  if (import.meta.env.VITE_ERUDA === 'true') {
+    import('eruda').then(({ default: eruda }) => eruda.init());
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
