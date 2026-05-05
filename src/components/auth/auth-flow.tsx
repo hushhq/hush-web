@@ -57,8 +57,8 @@ export function AuthFlow({
   const [view, setView] = React.useState<AuthView>("main")
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center bg-background p-6">
-      <div className="flex w-full max-w-md flex-col items-center gap-8">
+    <div className="flex min-h-svh w-full items-start justify-center bg-background p-4 sm:items-center sm:p-6">
+      <div className="flex w-full max-w-md flex-col items-center gap-6 py-4 sm:gap-8 sm:py-0">
         <HushLogo className="h-10 w-10" />
         <h1 className="text-2xl font-semibold tracking-tight">
           {titleFor(view)}
@@ -102,6 +102,46 @@ export function AuthFlow({
       </div>
     </div>
   )
+}
+
+/**
+ * Clipboard write with a legacy fallback. `navigator.clipboard.writeText` only
+ * works on secure contexts (HTTPS / localhost). Mobile devices hitting the dev
+ * server over a LAN IP (http://192.168.x.x:5173/) hit an insecure context and
+ * the API is undefined or rejects with NotAllowedError, which silently broke
+ * the recovery-phrase Copy button. Fall back to a hidden `<textarea>` +
+ * `document.execCommand('copy')` so the affordance keeps working off-HTTPS.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      window.isSecureContext
+    ) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fall through to legacy path
+  }
+  try {
+    const ta = document.createElement("textarea")
+    ta.value = text
+    ta.setAttribute("readonly", "")
+    ta.style.position = "fixed"
+    ta.style.top = "0"
+    ta.style.left = "0"
+    ta.style.opacity = "0"
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    const ok = document.execCommand("copy")
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
 }
 
 function titleFor(view: AuthView): string {
@@ -390,12 +430,9 @@ function LinkDevicePanel({
   }, [])
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code)
+    if (await copyToClipboard(code)) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // ignore
     }
   }
 
@@ -753,12 +790,9 @@ function PassphraseStep({ words }: { words: string[] }) {
   const [copied, setCopied] = React.useState(false)
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(words.join(" "))
+    if (await copyToClipboard(words.join(" "))) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // ignore
     }
   }
 
@@ -795,7 +829,7 @@ function PassphraseStep({ words }: { words: string[] }) {
             )}
           </button>
         </div>
-        <div className="grid grid-cols-3 gap-2 p-3">
+        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
           {words.map((word, idx) => (
             <div
               key={`${word}-${idx}`}
@@ -804,7 +838,7 @@ function PassphraseStep({ words }: { words: string[] }) {
               <span className="font-mono text-[10px] text-muted-foreground/70">
                 {String(idx + 1).padStart(2, "0")}
               </span>
-              <span className="font-mono">{word}</span>
+              <span className="truncate font-mono">{word}</span>
             </div>
           ))}
         </div>
