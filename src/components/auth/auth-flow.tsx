@@ -11,6 +11,7 @@ import {
 
 import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator.tsx"
@@ -43,6 +44,13 @@ interface AuthFlowProps {
   signIn: (mnemonic: string) => Promise<void> | void
   signUp: (payload: SignUpPayload) => Promise<void> | void
   onOpenRoadmap?: () => void
+  /**
+   * When the user reached this flow via "Not you? Sign in" on PIN unlock,
+   * the shell forwards a callback that returns them to the PIN unlock
+   * panel without losing the existing session. Absent when the flow was
+   * entered fresh (no prior session to return to).
+   */
+  onBackToPin?: () => void
   versionLabel?: string
 }
 
@@ -52,6 +60,7 @@ export function AuthFlow({
   signIn,
   signUp,
   onOpenRoadmap,
+  onBackToPin,
   versionLabel = "v0.7.0-alpha",
 }: AuthFlowProps) {
   const [view, setView] = React.useState<AuthView>("main")
@@ -73,6 +82,7 @@ export function AuthFlow({
               onSignIn={() => setView("sign-in")}
               onLink={() => setView("link")}
               onSignUp={() => setView("sign-up")}
+              onBackToPin={onBackToPin}
               onOpenRoadmap={onOpenRoadmap}
               instanceProps={instanceProps}
               versionLabel={versionLabel}
@@ -202,6 +212,7 @@ function MainPanel({
   onSignIn,
   onLink,
   onSignUp,
+  onBackToPin,
   onOpenRoadmap,
   instanceProps,
   versionLabel,
@@ -209,6 +220,7 @@ function MainPanel({
   onSignIn: () => void
   onLink: () => void
   onSignUp: () => void
+  onBackToPin?: () => void
   onOpenRoadmap?: () => void
   instanceProps: InstanceProps
   versionLabel: string
@@ -238,6 +250,21 @@ function MainPanel({
           Sign up
         </button>
       </p>
+      {onBackToPin ? (
+        // Surfaced only when the user landed here by clicking "Not you?
+        // Sign in" on the PIN unlock panel. Lets them step back to PIN
+        // entry without abandoning the existing session — important
+        // because every other route from this view destroys vault state.
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full"
+          onClick={onBackToPin}
+        >
+          <ArrowLeftIcon />
+          Back to PIN
+        </Button>
+      ) : null}
       <PanelFooter
         instanceProps={instanceProps}
         onOpenRoadmap={onOpenRoadmap}
@@ -537,9 +564,11 @@ function SignUpPanel({
   const [mnemonic, setMnemonic] = React.useState<string>(() => generateIdentityMnemonic())
   const mnemonicWords = React.useMemo(() => mnemonic.split(" "), [mnemonic])
 
+  const [passphraseSaved, setPassphraseSaved] = React.useState(false)
   const startOver = () => {
     setMnemonic(generateIdentityMnemonic())
     setConfirmValid(false)
+    setPassphraseSaved(false)
     setStep(0)
   }
   // 3 wizard steps: username, recovery phrase reveal, confirm. PIN setup is
@@ -603,7 +632,11 @@ function SignUpPanel({
           onCheckingChange={setUsernameChecking}
         />
       ) : step === 1 ? (
-        <PassphraseStep words={mnemonicWords} />
+        <PassphraseStep
+          words={mnemonicWords}
+          confirmedSaved={passphraseSaved}
+          onConfirmedSavedChange={setPassphraseSaved}
+        />
       ) : (
         <ConfirmStep
           words={mnemonicWords}
@@ -641,6 +674,7 @@ function SignUpPanel({
             submitting ||
             (step === 0 &&
               (!username.trim() || usernameChecking || usernameAvailable !== true)) ||
+            (step === 1 && !passphraseSaved) ||
             (step === totalSteps - 1 && !confirmValid)
           }
         >
@@ -790,8 +824,17 @@ function UsernameStep({
   )
 }
 
-function PassphraseStep({ words }: { words: string[] }) {
+function PassphraseStep({
+  words,
+  confirmedSaved,
+  onConfirmedSavedChange,
+}: {
+  words: string[]
+  confirmedSaved: boolean
+  onConfirmedSavedChange: (next: boolean) => void
+}) {
   const [copied, setCopied] = React.useState(false)
+  const checkboxId = React.useId()
 
   const handleCopy = async () => {
     if (await copyToClipboard(words.join(" "))) {
@@ -847,6 +890,25 @@ function PassphraseStep({ words }: { words: string[] }) {
           ))}
         </div>
       </div>
+      {/* Gate the next-step transition behind an explicit user
+          confirmation. Losing the phrase = losing the account, so a
+          deliberate checkbox click is cheap insurance against
+          accidental "Continue" presses. */}
+      <label
+        htmlFor={checkboxId}
+        className="flex cursor-pointer items-start gap-2 rounded-md border bg-card px-3 py-2 text-sm"
+      >
+        <Checkbox
+          id={checkboxId}
+          checked={confirmedSaved}
+          onCheckedChange={(value) => onConfirmedSavedChange(value === true)}
+          className="mt-0.5"
+        />
+        <span className="text-foreground">
+          I have saved my recovery phrase. I understand I cannot recover my
+          account without it.
+        </span>
+      </label>
     </div>
   )
 }

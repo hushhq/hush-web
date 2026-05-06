@@ -1,10 +1,12 @@
 import * as React from "react"
 import {
+  ArrowUpRightIcon,
   ChevronDownIcon,
   ChevronsUpDownIcon,
   GripVerticalIcon,
   HashIcon,
   HeadphoneOffIcon,
+  InfoIcon,
   MicOffIcon,
   Volume2Icon,
   PlusIcon,
@@ -63,6 +65,7 @@ import { Label } from "@/components/ui/label"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button.tsx"
+import { HushLogo } from "@/components/brand/HushLogo"
 import { BottomDock } from "@/components/bottom-dock"
 import {
   Sheet,
@@ -203,6 +206,7 @@ interface ChannelSidebarProps {
   voice?: JoinedVoiceInfo
   onOpenServerSettings?: () => void
   onOpenUserSettings?: () => void
+  onSignOut?: () => void | Promise<void>
   /** Create a new channel of the given kind. Resolves on success. */
   onCreateChannel?: (
     kind: CreateChannelKind,
@@ -252,6 +256,7 @@ export function ChannelSidebar({
   voice,
   onOpenServerSettings,
   onOpenUserSettings,
+  onSignOut,
   onCreateChannel,
   onDeleteChannel,
   onDeleteCategory,
@@ -262,6 +267,20 @@ export function ChannelSidebar({
   onDiscoverServers,
 }: ChannelSidebarProps) {
   const { isMobile, openMobile, setOpenMobile } = useSidebar()
+
+  // Mobile: closing the sheet on channel pick removes a manual close
+  // step the user would otherwise hit on every navigation. The sheet
+  // animation does not race the channel-view mount because the new
+  // channel renders behind the sheet, not as a sibling overlay.
+  const handleSelectChannelMobile = React.useCallback(
+    (id: string) => {
+      onSelectChannel(id)
+      if (isMobile) {
+        setOpenMobile(false)
+      }
+    },
+    [onSelectChannel, isMobile, setOpenMobile]
+  )
 
   const inner = (
     <>
@@ -286,37 +305,37 @@ export function ChannelSidebar({
             <SystemSection
               channels={systemChannels}
               activeChannelId={activeChannelId}
-              onSelect={onSelectChannel}
+              onSelect={handleSelectChannelMobile}
             />
           ) : null}
           {directMessages && directMessages.length > 0 ? (
             <DirectMessagesSection
               entries={directMessages}
               activeChannelId={activeChannelId}
-              onSelect={onSelectChannel}
+              onSelect={handleSelectChannelMobile}
             />
           ) : null}
-          {/* Always render ChannelsSection. Hiding it when both lists are
-              empty was the bug behind two visible symptoms:
-                1. right-click on the empty channel-list area never opened
-                   the New category / New text channel / New voice channel
-                   menu — the ContextMenuTrigger wasn't in the DOM.
-                2. channels with a parentId pointing at a category we
-                   somehow filtered out became invisible (orphan channels);
-                   the command palette shows them but the sidebar didn't.
-              The empty-state SidebarGroup is small and harmless. */}
-          <ChannelsSection
-            categories={categories}
-            channels={channels}
-            activeChannelId={activeChannelId}
-            onSelect={onSelectChannel}
-            onCategoriesChange={onCategoriesChange}
-            onChannelsChange={onChannelsChange}
-            onCreateChannel={onCreateChannel}
-            onDeleteChannel={onDeleteChannel}
-            onDeleteCategory={onDeleteCategory}
-            canAdministrate={canAdministrate}
-          />
+          {/* Render ChannelsSection only when this sidebar belongs to a
+              real server (serverMenuEnabled=true). The Home sidebar has
+              no channel surface — its content is the DM peer list above
+              — so the empty "Channels" group reads as a stray heading.
+              On server views the section always renders so right-click
+              creation + orphan-channel recovery still work even when
+              both lists are empty. */}
+          {serverMenuEnabled ? (
+            <ChannelsSection
+              categories={categories}
+              channels={channels}
+              activeChannelId={activeChannelId}
+              onSelect={handleSelectChannelMobile}
+              onCategoriesChange={onCategoriesChange}
+              onChannelsChange={onChannelsChange}
+              onCreateChannel={onCreateChannel}
+              onDeleteChannel={onDeleteChannel}
+              onDeleteCategory={onDeleteCategory}
+              canAdministrate={canAdministrate}
+            />
+          ) : null}
           {/* maybe for future: {apps.length > 0 ? <AppsSection apps={apps} /> : null} */}
         </SidebarContent>
       </div>
@@ -324,6 +343,7 @@ export function ChannelSidebar({
         user={user}
         voice={voice}
         onOpenUserSettings={onOpenUserSettings}
+        onSignOut={onSignOut}
       />
     </>
   )
@@ -387,6 +407,11 @@ function ServerHeader({
   const [inviteError, setInviteError] = React.useState<string | null>(null)
   const [inviteBusy, setInviteBusy] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
+  // The Home view (menuEnabled=false) replaces the empty server-actions
+  // dropdown with an Early Bird greeting + Info entry that opens a
+  // centered modal with the project links. State lives here so the
+  // Dialog renders alongside the existing Leave / Invite dialogs.
+  const [infoOpen, setInfoOpen] = React.useState(false)
 
   const handleInvite = React.useCallback(async () => {
     if (!onCreateInvite) return
@@ -429,16 +454,11 @@ function ServerHeader({
                   </span>
                 ) : null}
               </div>
-              <ChevronsUpDownIcon
-                className={cn("ml-auto size-4 opacity-70", !menuEnabled && "md:hidden")}
-              />
+              <ChevronsUpDownIcon className="ml-auto size-4 opacity-70" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className={cn(
-              "w-(--radix-dropdown-menu-trigger-width) min-w-56",
-              !menuEnabled && "md:hidden"
-            )}
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
             align="start"
             side="bottom"
             sideOffset={4}
@@ -517,10 +537,66 @@ function ServerHeader({
                   Leave server
                 </DropdownMenuItem>
               </>
-            ) : null}
+            ) : (
+              <>
+                {/* Home view: replace the empty server-actions block
+                    with an Early Bird greeting + a single Info entry
+                    that surfaces project links in a centered modal.
+                    Otherwise the Home title rendered an empty
+                    dropdown on desktop because every section was
+                    md:hidden + menuEnabled-gated. */}
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Hey, Early Bird! Thank you for using Hush.
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setTimeout(() => setInfoOpen(true), 0)
+                  }}
+                >
+                  <InfoIcon className="size-4" />
+                  Info
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="sr-only">
+            <DialogTitle>About Hush</DialogTitle>
+            <DialogDescription>
+              Project links for early-bird users.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-6 py-4">
+            <HushLogo className="size-20" />
+            <div className="flex items-center gap-3 text-sm font-medium text-foreground">
+              <a
+                href="https://github.com/hushhq"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
+              >
+                src
+                <ArrowUpRightIcon className="size-3.5" />
+              </a>
+              <span aria-hidden className="text-muted-foreground">
+                ·
+              </span>
+              <a
+                href="https://x.com/sonoyarin"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
+              >
+                whoami
+                <ArrowUpRightIcon className="size-3.5" />
+              </a>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -698,6 +774,25 @@ function ChannelsSection({
     },
     []
   )
+
+  // Window-level event bus: the command palette dispatches
+  // `hush:open-create-channel` with a {kind} detail when the user
+  // picks "Create channel" / "Create category". Bridging via event
+  // avoids lifting the dialog state into authenticated-app just so
+  // the palette can reach it.
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind?: CreateChannelKind }>).detail
+      const kind = detail?.kind
+      if (kind === "text" || kind === "voice" || kind === "category") {
+        openCreate(kind)
+      }
+    }
+    window.addEventListener("hush:open-create-channel", handler)
+    return () => {
+      window.removeEventListener("hush:open-create-channel", handler)
+    }
+  }, [openCreate])
 
   const submitCreate = React.useCallback(async () => {
     if (!createOpen || !onCreateChannel) return

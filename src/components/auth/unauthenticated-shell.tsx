@@ -113,6 +113,12 @@ export function UnauthenticatedShell() {
       signIn={signIn}
       signUp={signUp}
       onOpenRoadmap={() => navigate("/roadmap")}
+      // Only forward the PIN return path when the user came here by
+      // clicking "Not you? Sign in" on the unlock screen. Without an
+      // existing session there is no PIN to go back to.
+      onBackToPin={
+        forceRecovery ? () => setForceRecovery(false) : undefined
+      }
       versionLabel={`v${APP_VERSION}`}
     />
   )
