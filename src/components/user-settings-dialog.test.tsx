@@ -1,7 +1,7 @@
 /**
- * Verifies UserSettingsDialog surfaces the account info props on the
- * default tab, routes Log out → onSignOut after the confirm dialog,
- * and persists the Security → Vault timeout choice through useAuth.
+ * Verifies UserSettingsDialog surfaces account info, exposes only
+ * wired settings sections, routes Log out through confirmation, and
+ * persists the Security → Vault timeout choice through useAuth.
  */
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
@@ -51,6 +51,44 @@ describe("UserSettingsDialog", () => {
 
     expect(screen.getByText("Yarin")).toBeInTheDocument()
     expect(screen.getByText("yarin")).toBeInTheDocument()
+  })
+
+  it("removes AI assistant and disables unwired settings sections", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    expect(
+      screen.queryByRole("button", { name: /ai assistant/i })
+    ).not.toBeInTheDocument()
+
+    const disabledSections = [
+      /^profile$/i,
+      /^privacy & safety$/i,
+      /^notifications$/i,
+      /^keybinds$/i,
+      /^language$/i,
+      /^integrations$/i,
+      /^advanced$/i,
+    ]
+
+    for (const name of disabledSections) {
+      expect(screen.getByRole("button", { name })).toBeDisabled()
+    }
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    expect(
+      screen.getByRole("heading", { name: /^my account$/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("heading", { name: /^profile$/i })
+    ).not.toBeInTheDocument()
   })
 
   it("invokes onSignOut after the destructive confirm", async () => {

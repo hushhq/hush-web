@@ -126,41 +126,12 @@ export function ServerRail({
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--rail-width) flex-col items-center bg-sidebar py-3 pl-2 md:flex">
       <div className="flex flex-col items-center gap-2 pb-2">
-        {/* Right-click (desktop) / long-press (touch) on Home exposes
-            create/discover so the affordance lives next to where the user
-            is looking, not only at the bottom of the rail. */}
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <span>
-              <RailIcon
-                label="Home"
-                icon={<HomeIcon className="size-5" />}
-                active={activeRailId === "home"}
-                onClick={() => onSelect("home")}
-              />
-            </span>
-          </ContextMenuTrigger>
-          <ContextMenuContent className="w-56">
-            <ContextMenuItem
-              disabled={!onCreateServer}
-              onSelect={() => {
-                setTimeout(() => onCreateServer?.(), 0)
-              }}
-            >
-              <PlusIcon className="size-4" />
-              Add server
-            </ContextMenuItem>
-            <ContextMenuItem
-              disabled={!onDiscoverServers}
-              onSelect={() => {
-                setTimeout(() => onDiscoverServers?.(), 0)
-              }}
-            >
-              <CompassIcon className="size-4" />
-              Discover servers
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
+        <RailIcon
+          label="Home"
+          icon={<HomeIcon className="size-5" />}
+          active={activeRailId === "home"}
+          onClick={() => onSelect("home")}
+        />
         <RailDivider />
       </div>
       <div className="relative min-h-0 w-full flex-1">
@@ -215,10 +186,10 @@ export function ServerRail({
           onClick={onCreateServer}
         />
         <RailIcon
-          label="Discover"
+          label="Discover (Shipping soon)"
           icon={<CompassIcon className="size-5" />}
           muted
-          onClick={onDiscoverServers}
+          disabled
         />
       </div>
     </aside>
@@ -404,12 +375,14 @@ function RailIcon({
   icon,
   active,
   muted,
+  disabled,
   onClick,
 }: {
   label: string
   icon: React.ReactNode
   active?: boolean
   muted?: boolean
+  disabled?: boolean
   onClick?: () => void
 }) {
   return (
@@ -418,11 +391,13 @@ function RailIcon({
         <Button
           variant="ghost"
           onClick={onClick}
+          disabled={disabled}
           className={cn(
             "size-11 rounded-2xl bg-sidebar-accent p-0 text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground [&_svg:not([class*='size-'])]:size-5",
             active && "rounded-xl bg-primary text-primary-foreground",
             muted &&
-              "bg-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              "bg-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+            disabled && "opacity-60 hover:bg-transparent hover:text-muted-foreground"
           )}
           aria-label={label}
         >

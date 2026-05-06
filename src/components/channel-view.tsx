@@ -11,8 +11,6 @@ import {
   UsersIcon,
   InboxIcon,
 } from "lucide-react"
-import { PinnedMessagesPopover } from "@/components/pinned-messages-popover"
-import { getPinnedForChannel } from "@/data/messages"
 
 import {
   ResizableHandle,
@@ -109,23 +107,6 @@ export function ChannelView({
 
   const isMobile = useIsMobile()
 
-  const pinnedMessages = React.useMemo(
-    () => (channelKind === "text" ? getPinnedForChannel(channelId) : []),
-    [channelId, channelKind]
-  )
-
-  const handleJumpToPinned = React.useCallback((messageId: string) => {
-    const el = document.querySelector<HTMLElement>(
-      `[data-message-id="${messageId}"]`
-    )
-    if (!el) return
-    el.scrollIntoView({ behavior: "smooth", block: "center" })
-    el.dataset.jumpFlash = "true"
-    window.setTimeout(() => {
-      delete el.dataset.jumpFlash
-    }, 1600)
-  }, [])
-
   const toggleThread = React.useCallback((parent: ThreadParent) => {
     setThread((prev) => {
       if (
@@ -203,13 +184,9 @@ export function ChannelView({
         </div>
         {channelKind !== "home" ? (
           <div className="ml-auto flex shrink-0 items-center gap-1 text-muted-foreground">
-            {channelKind === "text" ? (
-              <PinnedMessagesPopover
-                channelName={channelName}
-                messages={pinnedMessages}
-                onJump={handleJumpToPinned}
-              />
-            ) : null}
+            {/* PinnedMessagesPopover hidden until the pin-message backend
+                ships. Re-enable once the server-side endpoint and MLS
+                envelope flag are in place. */}
             <button
               type="button"
               onClick={() => setMembersOpen((p) => !p)}

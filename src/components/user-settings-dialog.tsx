@@ -10,7 +10,6 @@ import {
   PaletteIcon,
   PlugZapIcon,
   ShieldIcon,
-  SparklesIcon,
   UserIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -50,10 +49,8 @@ export function UserSettingsDialog({
   account,
   onSignOut,
 }: UserSettingsDialogProps) {
-  // Mockup-parity 1:1: every section the prototype renders ships
-  // here too, even when the backend has no handler — those panels
-  // surface a "coming soon" placeholder. Hiding sections silently
-  // diverges from the reference and confuses returning users.
+  // Keep unfinished surfaces visible but disabled so the settings map
+  // stays recognizable while only wired panels are reachable.
   const groups: SettingsGroup[] = [
     { id: "account", label: "Account" },
     { id: "app", label: "App settings" },
@@ -73,6 +70,7 @@ export function UserSettingsDialog({
       groupId: "account",
       label: "Profile",
       icon: <CircleUserIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Profile" />,
     },
     {
@@ -80,6 +78,7 @@ export function UserSettingsDialog({
       groupId: "account",
       label: "Privacy & safety",
       icon: <ShieldIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Privacy & safety" />,
     },
     {
@@ -94,6 +93,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Appearance",
       icon: <PaletteIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Appearance" />,
     },
     {
@@ -108,6 +108,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Notifications",
       icon: <BellIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Notifications" />,
     },
     {
@@ -115,6 +116,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Keybinds",
       icon: <KeyboardIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Keybinds" />,
     },
     {
@@ -122,6 +124,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Language",
       icon: <LanguagesIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Language" />,
     },
     {
@@ -129,20 +132,15 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Integrations",
       icon: <PlugZapIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Integrations" />,
-    },
-    {
-      id: "ai",
-      groupId: "app",
-      label: "AI assistant",
-      icon: <SparklesIcon />,
-      content: <PlaceholderPanel title="AI assistant" />,
     },
     {
       id: "advanced",
       groupId: "app",
       label: "Advanced",
       icon: <WrenchIcon />,
+      disabled: true,
       content: <PlaceholderPanel title="Advanced" />,
     },
     {
@@ -412,7 +410,7 @@ function PlaceholderPanel({ title }: { title: string }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">
-          Coming soon — controls land when the backend exposes them.
+          Shipping soon. Controls land when the backend exposes them.
         </p>
       </div>
       <Separator />
@@ -446,7 +444,7 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
         <h2 className="text-lg font-semibold">My account</h2>
         <p className="text-sm text-muted-foreground">
           Identity is derived from your recovery phrase. Profile editing
-          requires backend support — coming soon.
+          requires backend support. Shipping soon.
         </p>
       </div>
 
@@ -478,4 +476,3 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
     </div>
   )
 }
-

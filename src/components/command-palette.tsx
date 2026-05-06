@@ -54,6 +54,15 @@ interface CommandPaletteProps {
   isDark: boolean
   onDiscoverServers?: () => void
   onCreateServer?: () => void
+  /**
+   * Open the create-channel / create-category dialog on the active
+   * server. Set only when (a) a server is in focus AND (b) the user
+   * can administrate it; absent otherwise so the palette items render
+   * disabled. The handler dispatches a window-level event the
+   * channel-sidebar listens to, avoiding a global state lift just to
+   * cross-component-call into the existing dialog.
+   */
+  onCreateChannel?: (kind: "text" | "voice" | "category") => void
   onOpenSettings?: () => void
   onSignOut?: () => void | Promise<void>
 }
@@ -72,6 +81,7 @@ export function CommandPalette({
   isDark,
   onDiscoverServers,
   onCreateServer,
+  onCreateChannel,
   onOpenSettings,
   onSignOut,
 }: CommandPaletteProps) {
@@ -154,11 +164,29 @@ export function CommandPalette({
               <span>Create server</span>
             </CommandItem>
             <CommandItem
-              disabled={!onDiscoverServers}
-              onSelect={runAction(() => onDiscoverServers?.())}
+              disabled={!onCreateChannel}
+              onSelect={runAction(() => onCreateChannel?.("text"))}
             >
+              <HashIcon />
+              <span>Create channel</span>
+            </CommandItem>
+            <CommandItem
+              disabled={!onCreateChannel}
+              onSelect={runAction(() => onCreateChannel?.("category"))}
+            >
+              <PlusIcon />
+              <span>Create category</span>
+            </CommandItem>
+            {/* Discover is gated behind the instance-level discovery
+                index, which is not yet shipping. Render disabled+muted
+                so the affordance signals "shipping soon" without
+                reaching the placeholder route. */}
+            <CommandItem disabled>
               <CompassIcon />
               <span>Discover servers</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                Shipping soon
+              </span>
             </CommandItem>
             {/* Per-channel invite already lives in the channel-sidebar
                 dropdown; instance-level ban requires admin guard + user
@@ -179,10 +207,17 @@ export function CommandPalette({
           <CommandSeparator />
 
           <CommandGroup heading="Preferenze">
-            <CommandItem onSelect={runAction(onToggleTheme)}>
-              {isDark ? <SunIcon /> : <MoonIcon />}
-              <span>{isDark ? "Switch to light" : "Switch to dark"}</span>
-              <CommandShortcut>D</CommandShortcut>
+            {/* Theme toggle is intentionally inert until light mode
+                returns. Render disabled+muted so the affordance reads
+                as "shipping soon" without flipping the forced dark
+                root class. The keyboard `D` shortcut was removed for
+                the same reason. */}
+            <CommandItem disabled>
+              <MoonIcon />
+              <span>Theme</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                Shipping soon
+              </span>
             </CommandItem>
             <CommandItem onSelect={runAction(onToggleMute)}>
               <MicOffIcon />

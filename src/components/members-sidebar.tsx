@@ -236,22 +236,18 @@ function MemberRow({
           </PopoverAnchor>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
-          <ContextMenuItem onSelect={() => setProfileOpen(true)}>
+          {/* Member-context actions are gated until the granular RBAC
+              + member-graph work lands (see docs/tech-debt/granular-rbac.md).
+              Render every entry disabled+muted so the affordance signals
+              "shipping soon" without exposing partially-wired surface. */}
+          <ContextMenuItem disabled>
             <UserIcon />
             View profile
           </ContextMenuItem>
-          <ContextMenuItem
-            disabled={!onDirectMessage}
-            onSelect={() => {
-              void onDirectMessage?.(member)
-            }}
-          >
+          <ContextMenuItem disabled>
             <MessageSquareIcon />
             Send message
           </ContextMenuItem>
-          {/* Mention insertion needs a composer ref bridge (the channel-view
-              composer is mounted in a sibling subtree). Friend graph has no
-              backend yet. Both render disabled to match the prototype 1:1. */}
           <ContextMenuItem disabled>
             <AtSignIcon />
             Mention in channel
@@ -261,27 +257,14 @@ function MemberRow({
             Add friend
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            onSelect={() => {
-              void navigator.clipboard?.writeText(member.id)
-            }}
-          >
+          <ContextMenuItem disabled>
             <CopyIcon />
             Copy user ID
           </ContextMenuItem>
           {showKick ? (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem
-                variant="destructive"
-                onSelect={() => {
-                  // Defer to next tick so ContextMenu finishes its
-                  // close + body pointer-events restore before the
-                  // AlertDialog mounts. Stacking two Radix overlays
-                  // leaks the body lock when both later dismiss.
-                  setTimeout(() => setKickOpen(true), 0)
-                }}
-              >
+              <ContextMenuItem variant="destructive" disabled>
                 <BanIcon />
                 Kick from server
               </ContextMenuItem>
