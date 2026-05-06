@@ -46,7 +46,12 @@ function renderInvite(path, routes = []) {
     <Route key="invite" path="/invite/:code" element={<Invite />} />,
     <Route key="join" path="/join/:instance/:code" element={<Invite />} />,
     <Route key="home" path="/" element={<div>Home</div>} />,
-    <Route key="server" path="/servers/:serverId/channels" element={<div>Server channel</div>} />,
+    // Post-claim navigation moved to the instance-aware
+    // /:instanceHost/:guildRouteRef route. The stub here matches
+    // both the new shape and the legacy /servers/:id/channels
+    // path so older tests remain valid.
+    <Route key="instance-server" path="/:instanceHost/:guildRouteRef" element={<div>Server channel</div>} />,
+    <Route key="legacy-server" path="/servers/:serverId/channels" element={<div>Server channel</div>} />,
     ...routes,
   ];
   return render(

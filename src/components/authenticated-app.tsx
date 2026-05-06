@@ -95,6 +95,7 @@ import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
 import { useTextChannelMLSCommitListener } from "@/hooks/useTextChannelMLSCommitListener"
 import { useOnlinePresence } from "@/hooks/useOnlinePresence"
+import { useTransparencyVerification } from "@/hooks/useTransparencyVerification"
 import { useServerModerationEvents } from "@/adapters/useServerModerationEvents"
 import { toast } from "sonner"
 
@@ -171,17 +172,37 @@ export function AuthenticatedApp() {
     channelSlug?: string
   }>()
   const navigate = useNavigate()
-  const { user, performLogout } = useAuth() as {
+  const {
+    user,
+    performLogout,
+    identityKeyRef,
+    setTransparencyError,
+  } = useAuth() as {
     user: { id: string; username?: string; display_name?: string } | null
     performLogout: () => Promise<void>
+    identityKeyRef: React.MutableRefObject<{
+      publicKey?: Uint8Array
+      privateKey?: Uint8Array
+    } | null>
+    setTransparencyError: (msg: string | null) => void
   }
   const handleSignOut = React.useCallback(async () => {
     await performLogout()
   }, [performLogout])
-  const { getTokenForInstance, getWsClient, refreshGuilds, dmGuilds } = useInstanceContext() as unknown as {
+  const {
+    getTokenForInstance,
+    getWsClient,
+    refreshGuilds,
+    dmGuilds,
+    instanceStates,
+  } = useInstanceContext() as unknown as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
     refreshGuilds: (instanceUrl: string) => Promise<void>
+    instanceStates: Map<
+      string,
+      { handshakeData?: { log_public_key?: string } | null }
+    >
     dmGuilds: Array<{
       id: string
       otherUser?: { id: string; username?: string; displayName?: string }
@@ -297,6 +318,28 @@ export function AuthenticatedApp() {
       toast.error(message)
       navigate("/home")
     },
+  })
+
+  // Transparency log own-key reverify. Triggers on mount, on
+  // reconnect, on each `transparency.key_change` broadcast, and on
+  // a 5-minute periodic fallback. Failure surfaces via the existing
+  // AuthContext error slot which the auth shell renders as a
+  // top-level alert.
+  const logPublicKeyHex = React.useMemo(() => {
+    if (!instanceUrl) return null
+    const entry = instanceStates.get(instanceUrl)
+    return entry?.handshakeData?.log_public_key ?? null
+  }, [instanceUrl, instanceStates])
+  const identityPublicKey = identityKeyRef.current?.publicKey ?? null
+  useTransparencyVerification({
+    wsClient: wsClient as Parameters<
+      typeof useTransparencyVerification
+    >[0]["wsClient"],
+    instanceUrl,
+    token,
+    identityPublicKey,
+    logPublicKeyHex,
+    onVerificationFailure: setTransparencyError,
   })
 
   // Authenticated-root listener for `instance_banned`. Server emits
