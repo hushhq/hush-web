@@ -18,6 +18,11 @@ vi.mock("@/lib/api", () => ({
   checkUsernameAvailable: vi.fn().mockResolvedValue({ available: true }),
 }))
 
+const navigateMock = vi.fn()
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => navigateMock,
+}))
+
 import { AuthFlow } from "./auth-flow"
 
 const INSTANCE_PROPS = {
@@ -31,6 +36,7 @@ describe("AuthFlow", () => {
   beforeEach(() => {
     INSTANCE_PROPS.onSelect.mockReset()
     INSTANCE_PROPS.onAdd.mockReset()
+    navigateMock.mockReset()
   })
 
   afterEach(() => {
@@ -80,5 +86,20 @@ describe("AuthFlow", () => {
 
     expect(screen.getByText(/recovery phrase/i)).toBeInTheDocument()
     expect(screen.getAllByRole("textbox")).toHaveLength(12)
+  })
+
+  it("routes the link-device CTA to /link-device?mode=new", async () => {
+    setup()
+
+    const u = userEvent.setup()
+    await u.click(
+      screen.getByRole("button", { name: /link to existing device/i })
+    )
+    await u.click(
+      screen.getByRole("button", { name: /continue to device linking/i })
+    )
+
+    expect(navigateMock).toHaveBeenCalledTimes(1)
+    expect(navigateMock).toHaveBeenCalledWith("/link-device?mode=new")
   })
 })

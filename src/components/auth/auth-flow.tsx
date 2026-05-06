@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -434,9 +435,6 @@ function SeedPhraseGrid({
   )
 }
 
-const FALLBACK_CODE = generateFallbackCode()
-const QR_GRID_SIZE = 21
-
 function LinkDevicePanel({
   onBack,
   onOpenRoadmap,
@@ -448,86 +446,30 @@ function LinkDevicePanel({
   instanceProps: InstanceProps
   versionLabel: string
 }) {
-  const [secondsLeft, setSecondsLeft] = React.useState(4 * 60)
-  const [copied, setCopied] = React.useState(false)
-  const [code, setCode] = React.useState(FALLBACK_CODE)
-  const [qrSeed, setQrSeed] = React.useState(0)
-
-  React.useEffect(() => {
-    const id = window.setInterval(() => {
-      setSecondsLeft((s) => (s > 0 ? s - 1 : 0))
-    }, 1000)
-    return () => window.clearInterval(id)
-  }, [])
-
-  const handleCopy = async () => {
-    if (await copyToClipboard(code)) {
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
-    }
-  }
-
-  const handleRegenerate = () => {
-    setCode(generateFallbackCode())
-    setQrSeed((s) => s + 1)
-    setSecondsLeft(4 * 60)
-  }
-
-  const minutes = Math.floor(secondsLeft / 60)
-  const seconds = String(secondsLeft % 60).padStart(2, "0")
+  const navigate = useNavigate()
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">Link this device</h2>
         <p className="text-sm text-muted-foreground">
-          Scan this QR code from a device that is already signed in to the same
-          account.
+          Pair this device with an existing Hush account by scanning a QR
+          code or entering a one-time code from a device you are already
+          signed in on.
         </p>
       </div>
 
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-muted/40 p-4">
-        <FakeQR seed={qrSeed} />
-        <span className="font-mono text-xs text-muted-foreground">
-          Expires in {minutes}:{seconds}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Separator className="flex-1" />
-        <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          Or use fallback code
-        </span>
-        <Separator className="flex-1" />
-      </div>
-
-      <div className="flex items-center rounded-md border bg-muted/30 px-3 py-3">
-        <code className="min-w-0 flex-1 truncate pl-7 text-center font-mono text-xl font-normal tracking-[0.14em]">
-          {code}
-        </code>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleCopy}
-          aria-label="Copy fallback code"
-          className="shrink-0"
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </Button>
-      </div>
+      <Button size="lg" onClick={() => navigate("/link-device?mode=new")}>
+        <Link2Icon />
+        Continue to device linking
+      </Button>
 
       <Separator />
 
-      <div className="flex items-center justify-between gap-3">
-        <Button variant="ghost" onClick={onBack}>
-          <ArrowLeftIcon />
-          Back
-        </Button>
-        <Button variant="secondary" onClick={handleRegenerate}>
-          <RefreshCwIcon />
-          Regenerate
-        </Button>
-      </div>
+      <Button variant="ghost" onClick={onBack}>
+        <ArrowLeftIcon />
+        Back
+      </Button>
 
       <PanelFooter
         instanceProps={instanceProps}
@@ -1007,51 +949,5 @@ function ConfirmStep({
       </div>
     </div>
   )
-}
-
-function FakeQR({ seed }: { seed: number }) {
-  const cells = React.useMemo(() => {
-    const N = QR_GRID_SIZE
-    return Array.from({ length: N * N }, (_, i) => {
-      const x = i % N
-      const y = Math.floor(i / N)
-      const inFinder =
-        (x < 7 && y < 7) ||
-        (x >= N - 7 && y < 7) ||
-        (x < 7 && y >= N - 7)
-      if (inFinder) {
-        const fx = x < 7 ? x : x - (N - 7)
-        const fy = y < 7 ? y : y - (N - 7)
-        const isOuter = fx === 0 || fx === 6 || fy === 0 || fy === 6
-        const isInner = fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4
-        return isOuter || isInner
-      }
-      return ((x * 37 + y * 19 + seed * 7) ^ (x * y)) % 3 === 0
-    })
-  }, [seed])
-
-  return (
-    <div
-      className="grid bg-background p-3"
-      style={{
-        gridTemplateColumns: `repeat(${QR_GRID_SIZE}, 1fr)`,
-        width: 200,
-        height: 200,
-      }}
-    >
-      {cells.map((on, i) => (
-        <div key={i} className={on ? "bg-foreground" : "bg-background"} />
-      ))}
-    </div>
-  )
-}
-
-function generateFallbackCode(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  let out = ""
-  for (let i = 0; i < 8; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return out
 }
 
