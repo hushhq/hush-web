@@ -183,6 +183,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
 
               <Button
                 type="submit"
+                size="lg"
                 className="w-full"
                 disabled={pin.length !== PIN_LENGTH || submitting || isDelayed}
               >

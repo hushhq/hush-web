@@ -1,23 +1,25 @@
 import { InboxIcon } from "lucide-react"
 
-import { ScrollArea } from "@/components/ui/scroll-area.tsx"
-
 /**
- * Catch-up surface — backend support for mentions / replies / threads / DMs
- * is pending. Renders a neutral empty state so the layout matches the
- * prototype without showing fake feed items.
+ * Catch-up surface. Backend support for mentions / replies / threads /
+ * DMs is pending; the empty state is centered on the available surface
+ * (no scroll wrapper) and carries a "Shipping soon" badge so the screen
+ * reads as intentionally empty rather than broken.
  */
 export function HomeView() {
   return (
-    <ScrollArea className="flex-1">
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-center gap-3 p-12 text-center">
+    <div className="flex h-full flex-1 items-center justify-center p-6">
+      <div className="flex w-full max-w-sm flex-col items-center gap-3 text-center">
         <InboxIcon className="size-10 text-muted-foreground/60" aria-hidden />
         <h2 className="text-base font-semibold">Nothing to catch up on</h2>
-        <p className="max-w-sm text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Mentions, replies, threads and direct messages will show up here as
           you start using your servers.
         </p>
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Shipping soon
+        </span>
       </div>
-    </ScrollArea>
+    </div>
   )
 }

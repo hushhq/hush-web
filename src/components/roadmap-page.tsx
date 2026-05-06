@@ -133,7 +133,7 @@ function ReleaseCard({ release }: { release: Release }) {
           {formatDate(release.date)}
         </span>
       </div>
-      <h3 className="text-sm font-medium lowercase">— {release.title}</h3>
+      <h3 className="text-sm font-medium lowercase">{release.title}</h3>
       <Separator className="my-3" />
       <div className="flex flex-col gap-3">
         {release.groups.map((group) => (

@@ -1,4 +1,4 @@
-import { HashIcon, Volume2Icon, XIcon } from "lucide-react"
+import { HashIcon, StarIcon, Volume2Icon, XIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button.tsx"
@@ -36,8 +36,20 @@ export function FavoritesView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {favorites.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          <p>No favorites yet. Use the “…” menu on a message to save it.</p>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="flex w-full max-w-sm flex-col items-center gap-3 text-center">
+            <StarIcon
+              className="size-10 text-muted-foreground/60"
+              aria-hidden
+            />
+            <h2 className="text-base font-semibold">No favorites yet</h2>
+            <p className="text-sm text-muted-foreground">
+              Use the &ldquo;…&rdquo; menu on a message to save it here.
+            </p>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Shipping soon
+            </span>
+          </div>
         </div>
       ) : (
         <ul className="flex flex-1 flex-col gap-2 overflow-auto overscroll-contain p-4">

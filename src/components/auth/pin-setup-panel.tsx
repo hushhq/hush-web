@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/tabs.tsx"
 import { cn } from "@/lib/utils.ts"
 import { HushLogo } from "@/components/brand/HushLogo"
-import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
+import { PIN_LENGTH } from "@/components/auth/pin-otp"
+import { PinOtpSetup } from "@/components/auth/pin-otp-setup"
 import { useAuth } from "@/contexts/AuthContext"
 
 const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const
@@ -115,12 +116,11 @@ export function PinSetupPanel() {
 
               <TabsContent value="pin" className="flex flex-col items-center gap-2 pt-3">
                 <Label htmlFor="psm-pin-value">PIN ({PIN_LENGTH} digits)</Label>
-                <PinOtp
+                <PinOtpSetup
                   id="psm-pin-value"
                   value={value}
                   onChange={setValue}
                   disabled={submitting}
-                  autoComplete="new-password"
                   ariaLabel="Choose PIN"
                   autoFocus
                 />
@@ -174,12 +174,11 @@ export function PinSetupPanel() {
                 Confirm {isPin ? "PIN" : "passphrase"}
               </Label>
               {isPin ? (
-                <PinOtp
+                <PinOtpSetup
                   id="pin-setup-confirm"
                   value={confirm}
                   onChange={setConfirm}
                   disabled={submitting}
-                  autoComplete="new-password"
                   ariaInvalid={mismatch}
                   ariaLabel="Confirm PIN"
                 />
@@ -220,6 +219,7 @@ export function PinSetupPanel() {
               </Button>
               <Button
                 type="submit"
+                size="lg"
                 disabled={!confirmOk || submitting}
                 className="flex-1"
               >

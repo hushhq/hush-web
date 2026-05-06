@@ -4,14 +4,17 @@ import { AuthProvider } from './contexts/AuthContext';
 import { InstanceProvider, useInstanceContext } from './contexts/InstanceContext';
 import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
+import { BlockedTabView } from './components/blocked-tab-view.tsx';
 import { ElectronDragRegion } from './components/desktop/ElectronDragRegion.jsx';
-import { applyThemeMode, getStoredThemeMode } from './lib/theme';
+import { applyThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
 
-// Apply stored theme before first paint to avoid FOUC.
-applyThemeMode(getStoredThemeMode());
+// Theme is force-locked to dark while light mode is being reviewed
+// (see theme-provider.tsx). Applying it pre-paint here prevents FOUC
+// on cold loads where the ThemeProvider effect hasn't mounted yet.
+applyThemeMode('dark');
 
 const UnauthenticatedShell = lazy(() =>
   import('./components/auth/unauthenticated-shell').then((m) => ({
@@ -217,49 +220,6 @@ function FaviconThemeSync() {
   return null;
 }
 
-/**
- * Full-screen overlay shown when the app detects it is open in a duplicate
- * browser tab. Prevents two tabs from sharing the same MLS/vault state.
- */
-function BlockedTabOverlay({ blockedFlow, takeOver }) {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--hush-black)',
-        color: 'var(--hush-text)',
-        textAlign: 'center',
-        padding: '24px',
-        zIndex: 9999,
-      }}
-    >
-      <p style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
-        Hush is already open in another tab.
-      </p>
-      <p style={{ fontSize: '0.9rem', color: 'var(--hush-text-muted)', marginBottom: '24px' }}>
-        {blockedFlow === 'device-link'
-          ? 'To approve this device here, take over this tab, then unlock Hush if required.'
-          : blockedFlow === 'invite'
-          ? 'To continue this invite here, take over this tab, then unlock Hush if required.'
-          : 'Close the other tab or click below to use this one instead.'}
-      </p>
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={takeOver}
-        style={{ padding: '10px 24px' }}
-      >
-        Use this one instead
-      </button>
-    </div>
-  );
-}
-
 // ── App root ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -273,7 +233,7 @@ export default function App() {
     : 'generic';
 
   if (isBlockedTab) {
-    return <BlockedTabOverlay blockedFlow={blockedFlow} takeOver={takeOver} />;
+    return <BlockedTabView blockedFlow={blockedFlow} takeOver={takeOver} />;
   }
 
   return (

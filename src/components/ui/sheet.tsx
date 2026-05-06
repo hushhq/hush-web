@@ -70,13 +70,16 @@ function SheetContent({
         {children}
         {showCloseButton && (
           <SheetPrimitive.Close data-slot="sheet-close" asChild>
+            {/* The previous ghost-icon close button was hard to spot on
+                mobile when the sheet body had its own busy header. A
+                solid background chip with explicit foreground keeps the
+                affordance legible on every surface without an outline. */}
             <Button
               variant="ghost"
-              className="absolute top-3 right-3"
               size="icon-sm"
+              className="absolute top-3 right-3 bg-background/80 text-foreground backdrop-blur hover:bg-background hover:text-foreground"
             >
-              <XIcon
-              />
+              <XIcon />
               <span className="sr-only">Close</span>
             </Button>
           </SheetPrimitive.Close>

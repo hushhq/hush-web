@@ -84,15 +84,19 @@ describe("CommandPalette", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it("invokes onToggleTheme + closes the palette", async () => {
+  // Theme toggle is intentionally inert until light mode returns
+  // (force-dark policy in theme-provider). The palette renders a
+  // disabled "Theme — Shipping soon" item; cmdk filters it from the
+  // selectable list, so a click must NOT invoke the handler. The user
+  // can re-enable later by lifting the disabled state in
+  // command-palette.tsx and dropping the force-dark short-circuit.
+  it("does not invoke onToggleTheme while the theme item is disabled", async () => {
     const onToggleTheme = vi.fn()
-    const onOpenChange = vi.fn()
-    setup({ onToggleTheme, onOpenChange })
+    setup({ onToggleTheme })
 
-    await userEvent.click(screen.getByText(/switch to dark/i))
-
-    expect(onToggleTheme).toHaveBeenCalledTimes(1)
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    const theme = screen.getByText(/^theme$/i).closest("[role='option']")
+    expect(theme).toHaveAttribute("data-disabled")
+    expect(onToggleTheme).not.toHaveBeenCalled()
   })
 
   it("invokes onSignOut from the preferences group", async () => {
@@ -104,20 +108,20 @@ describe("CommandPalette", () => {
     expect(onSignOut).toHaveBeenCalledTimes(1)
   })
 
-  it("disables Discover servers when no handler is provided", () => {
-    setup()
+  // Discover servers is unconditionally disabled+muted until the
+  // instance discovery index ships (see command-palette.tsx). The
+  // `onDiscoverServers` prop kept for future re-enable but is no
+  // longer wired to the item, so a click must be a no-op even when a
+  // handler is provided.
+  it("renders Discover servers as disabled regardless of handler", async () => {
+    const onDiscoverServers = vi.fn()
+    setup({ onDiscoverServers })
+
     const discover = screen.getByText(/discover servers/i).closest(
       "[role='option']"
     )
     expect(discover).toHaveAttribute("data-disabled")
-  })
-
-  it("invokes onDiscoverServers when handler is provided", async () => {
-    const onDiscoverServers = vi.fn()
-    setup({ onDiscoverServers })
-
     await userEvent.click(screen.getByText(/discover servers/i))
-
-    expect(onDiscoverServers).toHaveBeenCalledTimes(1)
+    expect(onDiscoverServers).not.toHaveBeenCalled()
   })
 })

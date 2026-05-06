@@ -15,7 +15,13 @@ function Avatar({
       data-slot="avatar"
       data-size={size}
       className={cn(
-        "group/avatar relative flex size-8 shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken data-[size=lg]:size-10 data-[size=sm]:size-6 dark:after:mix-blend-lighten",
+        // The previous `after:` overlay used `mix-blend-darken` /
+        // `mix-blend-lighten` on a circular border which produced a
+        // visible square-ish halo behind the avatar on certain
+        // backgrounds (the blend-mode region is the bounding box, not
+        // the rounded shape). A simple `ring-1 ring-border/50` traces
+        // the circle exactly with no blend artefacts.
+        "group/avatar relative flex size-8 shrink-0 rounded-full ring-1 ring-border/50 select-none data-[size=lg]:size-10 data-[size=sm]:size-6",
         className
       )}
       {...props}

@@ -48,7 +48,16 @@ export function getStoredThemeMode() {
 
 export function applyThemeMode(mode) {
   localStorage.setItem(THEME_MODE_KEY, mode);
-  document.documentElement.dataset.theme = resolveActiveThemeCss(mode);
+  const css = resolveActiveThemeCss(mode);
+  // Mirror onto BOTH the legacy data-theme attribute (older CSS rules)
+  // and the shadcn `.dark` / `.light` root class (global.css). Without
+  // the class swap, the shadcn token block in `:root` always wins and
+  // every component renders against the light palette regardless of
+  // the stored preference.
+  const root = document.documentElement;
+  root.dataset.theme = css;
+  root.classList.remove('light', 'dark');
+  root.classList.add(css);
 }
 
 export { DARK_THEMES, LIGHT_THEMES };
