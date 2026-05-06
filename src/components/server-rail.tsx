@@ -234,7 +234,7 @@ function RailServer({
               size="icon"
               onClick={onClick}
               className={cn(
-                "group relative size-11 rounded-2xl bg-sidebar-accent p-0 text-sm font-semibold text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
+                "group relative !size-11 rounded-2xl bg-sidebar-accent p-0 text-sm font-semibold text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
                 active && "rounded-xl bg-primary text-primary-foreground"
               )}
               aria-label={server.name}
@@ -395,7 +395,7 @@ function RailIcon({
           onClick={onClick}
           disabled={disabled}
           className={cn(
-            "size-11 rounded-2xl bg-sidebar-accent p-0 text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground [&_svg:not([class*='size-'])]:size-5",
+            "!size-11 rounded-2xl bg-sidebar-accent p-0 text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground [&_svg:not([class*='size-'])]:size-5",
             active && "rounded-xl bg-primary text-primary-foreground",
             muted &&
               "bg-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
