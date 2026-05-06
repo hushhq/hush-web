@@ -80,15 +80,24 @@ Status codes (401 / 403 / 409 / 410 / 200) preserved on both ends.
 
 ### 6. Post-join navigation
 
-`pages/Invite.jsx:109-117` (current) and the legacy equivalent both:
+`pages/Invite.jsx` and the legacy equivalent both:
 1. Store invite-metadata key for MLS decryption.
 2. Call `refreshGuilds(targetInstanceUrl)`.
-3. Navigate to `/servers/{serverId}/channels`.
+3. Navigate to the joined server.
+
+The current build navigates to `/{instanceHost}/{guildRouteRef}` (the
+instance-aware route registered in `App.jsx`). The legacy
+`/servers/{serverId}/channels` path no longer resolves to a server
+view — `App.jsx` redirects `/servers/:serverId/*` to `/home`, so the
+old hard-coded path was a regression: a successfully claimed invite
+landed on the empty home view instead of the joined server. Fixed in
+this commit by building the route via `buildGuildRouteRef` from
+`src/lib/slugify.js`.
 
 Guild list refreshes before navigation, so the new server appears in
 the sidebar without waiting for the next WS broadcast.
 
-**Verdict:** MATCHES.
+**Verdict:** MATCHES (post-fix).
 
 ### 7. Error UX
 

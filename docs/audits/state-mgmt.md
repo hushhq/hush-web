@@ -48,7 +48,7 @@ active server id; cleanup on unmount. No issues.
 |-|-|-|
 | Token cache | ✅ | `getTokenForInstance` reads `instancesRef.current.get(url)?.jwt ?? null` (line 678-680). `useCallback([])` so the function identity is stable; ref reads are always current. |
 | WS reconnect backoff | ✅ | `disconnectRuntimeEntries` clears reconnect timers + disconnects on session reset (line 686-691). |
-| Hydration race | ⚠️ NOTED | A creation action firing before hydration completes returns null token. Mitigated in Phase A #23 via 300 ms retry + clearer error in `handleCreateServer`. Other mutation handlers (`handleLeaveServer`, `handleDeleteServer`) early-return silently on `!tk`; they fire from already-loaded server contexts, so the race is not reachable in practice. |
+| Hydration race | ⚠️ NOTED | A creation action firing before hydration completes returns null token. Mitigated in Phase A #23 via 300 ms retry + clearer error in `handleCreateServer`. Other mutation handlers (`handleLeaveServer`, `handleDeleteServer`, `handleCreateChannel`, `handleDeleteChannel`, `handleCreateInvite`, `handleKickMember`) early-return silently on `!tk`. They fire from server-context surfaces where `getTokenForInstance` should already be hydrated, but a silent return on a user-triggered mutation is still a UX gap — the affordance appears to do nothing. **Follow-up:** wrap these handlers in the same retry-and-toast pattern as `handleCreateServer`, or extract a shared `requireToken(instanceUrl)` helper that surfaces a "Session not ready" toast on null. |
 
 ## Mutation handlers (`authenticated-app.tsx`)
 
@@ -64,8 +64,18 @@ active server id; cleanup on unmount. No issues.
 
 ## Findings
 
-None — every observed pattern uses correct `useCallback` deps, WS
-cleanups, and optimistic-update idempotency.
+1. **Silent early-returns on missing token (P2 follow-up).** Mutation
+   handlers other than `handleCreateServer` swallow the
+   `!getTokenForInstance(instanceUrl)` case without surfacing
+   feedback. The race is unlikely on these surfaces (the user has
+   already entered a server view, so the token is hydrated), but the
+   contract is wrong: a destructive action with no visible effect is
+   indistinguishable from a stuck UI. Either route every handler
+   through a shared `requireToken` helper that toasts on null, or
+   apply the `handleCreateServer` retry-and-toast pattern individually.
+
+2. Otherwise, every observed pattern uses correct `useCallback` deps,
+   WS cleanups, and optimistic-update idempotency.
 
 ## Notes
 

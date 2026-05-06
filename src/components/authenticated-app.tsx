@@ -668,12 +668,21 @@ export function AuthenticatedApp() {
     [activeServer, allChannels, navigateToServer, instanceUrl]
   )
 
-  // Auto-redirect to first text channel when no channel selected (server view)
+  // Auto-redirect when no channel slug in URL (server view).
+  // Mirrors activeChannel fallback: first system channel, then first
+  // regular channel. Without this, navigating to channels[0] would
+  // bypass the system-channel-first preference and land on a normal
+  // text/voice channel even when system rows exist.
   React.useEffect(() => {
     if (!activeServer || params.channelSlug) return
+    const firstSystem = systemChannelRows[0]
+    if (firstSystem) {
+      navigateToServer(activeServer, firstSystem.id)
+      return
+    }
     const first = channels[0]
     if (first) navigateToServer(activeServer, first.id)
-  }, [activeServer, params.channelSlug, channels, navigateToServer])
+  }, [activeServer, params.channelSlug, channels, systemChannelRows, navigateToServer])
 
   // Auto-join LiveKit when the URL points at a voice channel. The user
   // expectation is that opening a voice channel — by sidebar click, deep

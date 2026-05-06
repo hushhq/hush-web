@@ -5,6 +5,7 @@ import {
   LogOutIcon,
   SettingsIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import {
   Avatar,
@@ -134,7 +135,15 @@ export function UserMenu({ user, onOpenSettings, onSignOut }: UserMenuProps) {
                 // used elsewhere for destructive actions.
                 setLogoutOpen(false)
                 setLogoutBusy(true)
-                Promise.resolve(onSignOut()).finally(() => setLogoutBusy(false))
+                Promise.resolve(onSignOut())
+                  .catch((err) => {
+                    const message =
+                      err instanceof Error && err.message
+                        ? err.message
+                        : "Logout failed. Try again."
+                    toast.error(message)
+                  })
+                  .finally(() => setLogoutBusy(false))
               }}
             >
               {logoutBusy ? "Logging out..." : "Log out"}

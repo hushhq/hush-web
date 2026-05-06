@@ -13,6 +13,7 @@ import {
 } from '../lib/guildMetadataKeyStore';
 import { CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE } from '../lib/inviteLinks';
 import { getDeviceId } from '../hooks/useAuth';
+import { buildGuildRouteRef } from '../lib/slugify';
 
 const POST_CLAIM_SETUP_ERROR =
   'Membership is active, but local setup failed on this device. Retry to finish opening the server.';
@@ -113,8 +114,25 @@ export default function Invite() {
       navigate('/home', { replace: true });
       return;
     }
-    navigate(`/servers/${serverId}/channels`, { replace: true });
-  }, [navigate, refreshGuilds, storeInviteMetadataKey]);
+    // Instance-aware route: /:instanceHost/:guildRouteRef. The legacy
+    // /servers/:id/channels path now redirects to /home (App.jsx), which
+    // would land the user on the empty home view instead of the joined
+    // server. Build the host + ref ourselves; the guild name comes from
+    // the invite fragment when present, otherwise the ref falls back to
+    // the guild ID.
+    let instanceHost;
+    try {
+      instanceHost = targetInstanceUrl ? new URL(targetInstanceUrl).host : null;
+    } catch {
+      instanceHost = null;
+    }
+    if (!instanceHost) {
+      navigate('/home', { replace: true });
+      return;
+    }
+    const ref = buildGuildRouteRef(guildNameFromFragment ?? serverId, serverId);
+    navigate(`/${instanceHost}/${ref}`, { replace: true });
+  }, [navigate, refreshGuilds, storeInviteMetadataKey, guildNameFromFragment]);
 
   const startClaimRecovery = useCallback((serverId, targetInstanceUrl) => {
     setClaimRecovery({ serverId, instanceUrl: targetInstanceUrl });

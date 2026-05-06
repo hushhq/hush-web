@@ -1,8 +1,12 @@
 /**
- * Behaviour port from src/components/MemberList.test.jsx — verifies
- * permission-gated kick action: actor must outrank target. Send-message
- * is enabled only when onDirectMessage is provided. Copy user ID is
- * always available.
+ * Member context-menu actions are intentionally disabled until the
+ * underlying flows ship (DM, kick, friend, mention, copy ID, profile).
+ * The menu still renders so the affordance is visible, but every entry
+ * is `disabled` and inert. These tests assert that contract: handlers
+ * passed in must not fire, and disabled state must be present.
+ *
+ * Re-enable individual entries by removing `disabled` and wiring the
+ * handler back in members-sidebar.tsx (see lines 239-270).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"

@@ -63,6 +63,8 @@ describe("CommandPalette", () => {
         onDiscoverServers={overrides.onDiscoverServers}
         onOpenSettings={overrides.onOpenSettings}
         onSignOut={overrides.onSignOut}
+        onCreateServer={overrides.onCreateServer}
+        onCreateChannel={overrides.onCreateChannel}
       />
     )
   }
@@ -123,5 +125,38 @@ describe("CommandPalette", () => {
     expect(discover).toHaveAttribute("data-disabled")
     await userEvent.click(screen.getByText(/discover servers/i))
     expect(onDiscoverServers).not.toHaveBeenCalled()
+  })
+
+  it("invokes onCreateChannel with text when Create channel is selected", async () => {
+    const onCreateChannel = vi.fn()
+    const onOpenChange = vi.fn()
+    setup({ onCreateChannel, onOpenChange })
+
+    await userEvent.click(screen.getByText(/create channel/i))
+
+    expect(onCreateChannel).toHaveBeenCalledWith("text")
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("invokes onCreateChannel with category when Create category is selected", async () => {
+    const onCreateChannel = vi.fn()
+    setup({ onCreateChannel })
+
+    await userEvent.click(screen.getByText(/create category/i))
+
+    expect(onCreateChannel).toHaveBeenCalledWith("category")
+  })
+
+  it("disables Create channel and Create category when no handler is provided", async () => {
+    setup()
+
+    const createChannel = screen.getByText(/create channel/i).closest(
+      "[role='option']"
+    )
+    const createCategory = screen.getByText(/create category/i).closest(
+      "[role='option']"
+    )
+    expect(createChannel).toHaveAttribute("data-disabled")
+    expect(createCategory).toHaveAttribute("data-disabled")
   })
 })
