@@ -1181,6 +1181,7 @@ export function AuthenticatedApp() {
               source={sysSource}
               token={token}
               baseUrl={baseUrl}
+              wsClient={wsClient as Parameters<typeof SystemChannelView>[0]["wsClient"]}
             />
           }
         />

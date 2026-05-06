@@ -15,11 +15,20 @@ import {
   type SystemEventSource,
 } from "@/adapters/useSystemEvents"
 
+interface WsClientLike {
+  on: (event: string, handler: (msg: unknown) => void) => void
+  off?: (event: string, handler: (msg: unknown) => void) => void
+}
+
 interface SystemChannelViewProps {
   serverId: string
   source: SystemEventSource
   token: string | null
   baseUrl: string
+  /** Optional WS client. When provided, the view appends new
+   *  system events as the backend broadcasts them, so a long-lived
+   *  log surface stays current without manual refresh. */
+  wsClient?: WsClientLike | null
 }
 
 /**
@@ -48,12 +57,14 @@ export function SystemChannelView({
   source,
   token,
   baseUrl,
+  wsClient,
 }: SystemChannelViewProps) {
   const { events, loading, error } = useSystemEvents({
     serverId,
     token,
     baseUrl,
     source,
+    wsClient,
   })
   // Header chrome lives on the wrapping ChannelView; this surface
   // only renders the event list.

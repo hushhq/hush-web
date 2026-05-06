@@ -19,12 +19,31 @@ export interface SystemEvent {
   createdAt: string
 }
 
+interface WsClientLike {
+  on: (event: string, handler: (msg: unknown) => void) => void
+  off?: (event: string, handler: (msg: unknown) => void) => void
+}
+
+interface SystemMessageFrame {
+  type?: string
+  server_id?: string
+  system_message?: SystemEvent
+}
+
 interface UseSystemEventsArgs {
   serverId: string | null
   token: string | null
   baseUrl: string
   source: SystemEventSource
   limit?: number
+  /** Optional WS client. When provided AND the source is
+   *  `server-log`, the hook subscribes to `system_message` and
+   *  appends new events as they arrive. Audit-log moderation
+   *  events flow over the same `system_message` channel from the
+   *  backend, so the same listener serves both sources — but they
+   *  are filtered by `eventType` upstream so only the matching
+   *  rows land in the corresponding viewer. */
+  wsClient?: WsClientLike | null
 }
 
 interface UseSystemEventsResult {
@@ -40,6 +59,7 @@ export function useSystemEvents({
   baseUrl,
   source,
   limit = 100,
+  wsClient,
 }: UseSystemEventsArgs): UseSystemEventsResult {
   const [events, setEvents] = React.useState<SystemEvent[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -70,6 +90,27 @@ export function useSystemEvents({
   React.useEffect(() => {
     void refetch()
   }, [refetch])
+
+  React.useEffect(() => {
+    if (!wsClient || !serverId) return
+    const handler = (raw: unknown) => {
+      const data = raw as SystemMessageFrame
+      if (data?.type !== "system_message") return
+      if (!data.system_message) return
+      if (data.server_id && data.server_id !== serverId) return
+      setEvents((prev) => {
+        // Dedup against the REST snapshot — the same event may
+        // arrive twice if the catch-up fetch races the live frame.
+        const incoming = data.system_message as SystemEvent
+        if (prev.some((e) => e.id === incoming.id)) return prev
+        return [...prev, incoming]
+      })
+    }
+    wsClient.on("system_message", handler)
+    return () => {
+      wsClient.off?.("system_message", handler)
+    }
+  }, [wsClient, serverId])
 
   return { events, loading, error, refetch }
 }
