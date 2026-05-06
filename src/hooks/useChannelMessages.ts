@@ -322,6 +322,16 @@ export function useChannelMessages(
   const loadedChannelRef = React.useRef<string | null>(channelId)
   const lastAckedIdRef = React.useRef<string | null>(null)
   const latestBackendTsRef = React.useRef<number | null>(null)
+  // Per-send watchdog timers keyed by the optimistic row's temp id.
+  // The WS layer drops `message.send` silently if the socket flips to
+  // disconnected between the isConnected() pre-check and the actual
+  // socket.send call, and there is no server ack channel — so a stuck
+  // message has no signal to flip pending → failed without this. The
+  // echo handler clears the timer when it lands; otherwise the row
+  // surfaces as failed + retryable after the timeout.
+  const pendingWatchdogsRef = React.useRef<
+    Map<string, ReturnType<typeof setTimeout>>
+  >(new Map())
   const scrollRestoreRef = React.useRef<{
     oldScrollHeight: number
     oldScrollTop: number
@@ -517,6 +527,16 @@ export function useChannelMessages(
             (m) => m.pending && m.sender === currentUserId
           )
           if (idx < 0) return prev
+          // Capture the temp id before we overwrite it so the watchdog
+          // armed by `send` for this row can be cleared.
+          const matchedTempId = prev[idx].id
+          if (matchedTempId.startsWith("temp-")) {
+            const timer = pendingWatchdogsRef.current.get(matchedTempId)
+            if (timer) {
+              clearTimeout(timer)
+              pendingWatchdogsRef.current.delete(matchedTempId)
+            }
+          }
           return prev.map((m, i) =>
             i === idx
               ? { ...m, id, pending: false, failed: false, timestamp: ts }
@@ -690,6 +710,37 @@ export function useChannelMessages(
     }
   }, [wsClient, channelId, serverId, currentUserId, baseUrl])
 
+  // 8 s after a successful send, if the optimistic row still has not
+  // received its WS echo we surface it as failed instead of leaving it
+  // pending forever. The browser drops the WS frame silently when the
+  // socket closes between the isConnected() pre-check and socket.send,
+  // and there is no per-message ack channel to detect that loss
+  // otherwise.
+  const SEND_ECHO_TIMEOUT_MS = 8_000
+
+  const armSendWatchdog = React.useCallback((tempId: string) => {
+    const timer = setTimeout(() => {
+      pendingWatchdogsRef.current.delete(tempId)
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId && m.pending
+            ? { ...m, pending: false, failed: true }
+            : m
+        )
+      )
+    }, SEND_ECHO_TIMEOUT_MS)
+    pendingWatchdogsRef.current.set(tempId, timer)
+  }, [])
+
+  React.useEffect(() => {
+    return () => {
+      for (const timer of pendingWatchdogsRef.current.values()) {
+        clearTimeout(timer)
+      }
+      pendingWatchdogsRef.current.clear()
+    }
+  }, [])
+
   const send = React.useCallback(
     async (envelope: MessageEnvelopeV1): Promise<{ id: string }> => {
       if (!channelId || !wsClient) {
@@ -722,6 +773,7 @@ export function useChannelMessages(
           envelope,
           encryptForChannelRef.current
         )
+        armSendWatchdog(tempId)
         return { id: tempId }
       } catch (err) {
         console.error(
@@ -738,7 +790,7 @@ export function useChannelMessages(
         setIsSending(false)
       }
     },
-    [channelId, wsClient, currentUserId]
+    [channelId, wsClient, currentUserId, armSendWatchdog]
   )
 
   const retry = React.useCallback(
@@ -768,6 +820,7 @@ export function useChannelMessages(
           target.envelope,
           encryptForChannelRef.current
         )
+        if (localId.startsWith("temp-")) armSendWatchdog(localId)
       } catch (err) {
         console.error(
           "[useChannelMessages] retry send failed",
@@ -780,7 +833,7 @@ export function useChannelMessages(
         )
       }
     },
-    [channelId, wsClient, messages, currentUserId]
+    [channelId, wsClient, messages, currentUserId, armSendWatchdog]
   )
 
   const consumeScrollRestore = React.useCallback(() => {
