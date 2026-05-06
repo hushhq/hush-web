@@ -227,6 +227,44 @@ export function useInstances() {
   // ── mergedGuilds derivation ───────────────────────────────────────────────
 
   /**
+   * Connected-instance descriptors for cross-cutting realtime
+   * listeners. Each entry exposes the live wsClient + token +
+   * handshakeData + the server (non-DM) guild ids hosted on that
+   * instance, so root-level shells can mount per-instance and
+   * per-server listeners across every connected instance, not
+   * only the active-view one.
+   *
+   * @type {Array<{
+   *   instanceUrl: string,
+   *   wsClient: object,
+   *   token: string,
+   *   userId: string,
+   *   handshakeData: object|null,
+   *   serverIds: string[],
+   * }>}
+   */
+  const connectedInstances = useMemo(() => {
+    const out = [];
+    for (const [instanceUrl, snapshot] of instanceStates.entries()) {
+      const live = instancesRef.current.get(instanceUrl);
+      if (!live?.wsClient || !snapshot?.jwt) continue;
+      const serverIds = (snapshot.guilds ?? [])
+        .filter((g) => !g.isDm && g.id)
+        .map((g) => g.id);
+      out.push({
+        instanceUrl,
+        wsClient: live.wsClient,
+        token: snapshot.jwt,
+        userId: snapshot.userId ?? '',
+        handshakeData: snapshot.handshakeData ?? null,
+        serverIds,
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceStates]);
+
+  /**
    * Memoised DM guild array across all instances.
    * Contains only guilds where isDm === true; separated from the regular sidebar list.
    */
@@ -875,6 +913,7 @@ export function useInstances() {
     mergedGuilds,
     guildsLoaded,
     dmGuilds,
+    connectedInstances,
     bootInstance,
     registerLocalInstance,
     disconnectInstance,

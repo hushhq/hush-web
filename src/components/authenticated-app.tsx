@@ -92,12 +92,11 @@ import type {
   VoiceParticipantInfo,
 } from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
-import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
-import { useTextChannelMLSCommitListener } from "@/hooks/useTextChannelMLSCommitListener"
 import { useOnlinePresence } from "@/hooks/useOnlinePresence"
-import { useTransparencyVerification } from "@/hooks/useTransparencyVerification"
-import { useServerModerationEvents } from "@/adapters/useServerModerationEvents"
-import { toast } from "sonner"
+import { PerInstanceListeners } from "@/components/realtime/PerInstanceListeners"
+import { PerServerListeners } from "@/components/realtime/PerServerListeners"
+
+const noopRefetch = async () => {}
 
 interface FavoriteEntry {
   id: string
@@ -194,15 +193,21 @@ export function AuthenticatedApp() {
     getWsClient,
     refreshGuilds,
     dmGuilds,
-    instanceStates,
+    connectedInstances,
+    disconnectInstance,
   } = useInstanceContext() as unknown as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
     refreshGuilds: (instanceUrl: string) => Promise<void>
-    instanceStates: Map<
-      string,
-      { handshakeData?: { log_public_key?: string } | null }
-    >
+    connectedInstances: Array<{
+      instanceUrl: string
+      wsClient: unknown
+      token: string
+      userId: string
+      handshakeData: { log_public_key?: string } | null
+      serverIds: string[]
+    }>
+    disconnectInstance: (instanceUrl: string) => Promise<void>
     dmGuilds: Array<{
       id: string
       otherUser?: { id: string; username?: string; displayName?: string }
@@ -266,108 +271,64 @@ export function AuthenticatedApp() {
     hasOnlineSnapshot,
   })
 
-  // Subscribe the WS to every text channel of the active server so
-  // backend `mls.commit` and `mls.add_request` frames (broadcast to
-  // the channel room) reach this client even when the channel is
-  // not in the active view. The hook itself does not process the
-  // frames — that's the per-event listeners; it only owns transport
-  // membership for the channel rooms.
-  const textChannelIdsForMLS = React.useMemo(
-    () => channels.filter((c) => c.kind === "text").map((c) => c.id),
-    [channels],
-  )
-  useTextChannelMLSSubscriptions(
-    wsClient as Parameters<typeof useTextChannelMLSSubscriptions>[0],
-    textChannelIdsForMLS,
-  )
-
-  // Process MLS control frames for text channels: `mls.commit`
-  // (advance local group state in lockstep with peers) and
-  // `mls.add_request action=remove` (commit a leaver's removal).
-  // Voice commits are handled separately inside `useRoom.js`.
-  const tokenForActiveInstance = React.useCallback(
-    () => (instanceUrl ? getTokenForInstance(instanceUrl) : null),
-    [instanceUrl, getTokenForInstance],
-  )
-  useTextChannelMLSCommitListener({
-    wsClient: wsClient as Parameters<
-      typeof useTextChannelMLSCommitListener
-    >[0]["wsClient"],
-    currentUserId,
-    getToken: tokenForActiveInstance,
-  })
-
-  // Per-server moderation events. Refetch members on every event so
-  // role badges, mute metadata, and the roster reflect the new
-  // server-side state. When the local user is the kick/ban target,
-  // run MLS cleanup for the affected server's text channels and
-  // route them to /home so the now-stale server view is unmounted
-  // before any further auth-gated request fails.
-  useServerModerationEvents({
-    wsClient: wsClient as Parameters<
-      typeof useServerModerationEvents
-    >[0]["wsClient"],
-    serverId: activeServer?.id ?? null,
-    currentUserId,
-    refetchMembers,
-    textChannelIds: textChannelIdsForMLS,
-    onSelfRemoved: ({ event, reason }) => {
-      const serverName = activeServer?.name ?? "the server"
-      const verb = event === "kick" ? "removed from" : "banned from"
-      const message = reason
-        ? `You were ${verb} ${serverName}: ${reason}`
-        : `You were ${verb} ${serverName}.`
-      toast.error(message)
-      navigate("/home")
-    },
-  })
-
-  // Transparency log own-key reverify. Triggers on mount, on
-  // reconnect, on each `transparency.key_change` broadcast, and on
-  // a 5-minute periodic fallback. Failure surfaces via the existing
-  // AuthContext error slot which the auth shell renders as a
-  // top-level alert.
-  const logPublicKeyHex = React.useMemo(() => {
-    if (!instanceUrl) return null
-    const entry = instanceStates.get(instanceUrl)
-    return entry?.handshakeData?.log_public_key ?? null
-  }, [instanceUrl, instanceStates])
+  // Cross-cutting realtime listeners are mounted PER connected
+  // instance and PER server via the realtime shells below. Active-
+  // server-only mounting (the previous shape) silently lost
+  // moderation events, MLS commits, transparency reverifications,
+  // and instance bans for any server / instance the user wasn't
+  // currently looking at. The shells delegate to the same hooks
+  // (`useTextChannelMLSCommitListener`,
+  // `useTransparencyVerification`, `useServerModerationEvents`,
+  // `useTextChannelMLSSubscriptions`) but at the right scope.
   const identityPublicKey = identityKeyRef.current?.publicKey ?? null
-  useTransparencyVerification({
-    wsClient: wsClient as Parameters<
-      typeof useTransparencyVerification
-    >[0]["wsClient"],
-    instanceUrl,
-    token,
-    identityPublicKey,
-    logPublicKeyHex,
-    onVerificationFailure: setTransparencyError,
-  })
 
-  // Authenticated-root listener for `instance_banned`. Server emits
-  // this when an admin bans the account; without an immediate sign
-  // out the UI keeps rendering against a JWT the server is about
-  // to start rejecting.
-  React.useEffect(() => {
-    if (!wsClient) return
-    const ws = wsClient as {
-      on: (event: string, handler: (data: unknown) => void) => void
-      off: (event: string, handler: (data: unknown) => void) => void
-    }
-    const handler = (raw: unknown) => {
-      const data = raw as { reason?: string }
-      const reason = data?.reason || "Your account has been suspended."
-      toast.error(`Account suspended: ${reason}`)
-      // Defer signOut + nav so the toast renders before unmount.
-      setTimeout(() => {
-        Promise.resolve(performLogout()).finally(() => {
-          navigate("/")
+  // Self kick/ban handler. The shell already toasts; this handler
+  // routes the user away if they were viewing the affected server.
+  const handleSelfRemovedFromServer = React.useCallback(
+    (info: { instanceUrl: string; serverId: string }) => {
+      if (
+        activeServer &&
+        activeServer.id === info.serverId &&
+        activeServer.raw.instanceUrl === info.instanceUrl
+      ) {
+        navigate("/home")
+      }
+    },
+    [activeServer, navigate],
+  )
+
+  const handleInstanceBanned = React.useCallback(
+    (bannedInstanceUrl: string) => {
+      // If the affected instance is the one we are currently
+      // viewing, clear the active route and force a sign out.
+      // Otherwise just disconnect that instance and leave the user
+      // on the active session.
+      if (instanceUrl === bannedInstanceUrl) {
+        setTimeout(() => {
+          Promise.resolve(performLogout()).finally(() => navigate("/"))
+        }, 1500)
+        return
+      }
+      void disconnectInstance(bannedInstanceUrl).catch((err) => {
+        console.warn("[realtime] disconnectInstance failed", {
+          bannedInstanceUrl,
+          err: err instanceof Error ? err.message : err,
         })
-      }, 1500)
-    }
-    ws.on("instance_banned", handler)
-    return () => ws.off("instance_banned", handler)
-  }, [wsClient, performLogout, navigate])
+      })
+    },
+    [instanceUrl, performLogout, navigate, disconnectInstance],
+  )
+
+  // Resolve a server name from the merged guild list when the
+  // affected server is not the active one (so the toast is still
+  // specific instead of "the server").
+  const lookupServerNameById = React.useCallback(
+    (id: string): string | undefined => {
+      const match = servers.find((s) => s.id === id)
+      return match?.name
+    },
+    [servers],
+  )
 
   const voicePresence = useVoiceChannelPresence(
     (instanceUrl ? getWsClient(instanceUrl) : null) as Parameters<
@@ -1267,6 +1228,40 @@ export function AuthenticatedApp() {
 
   return (
     <TooltipProvider>
+      {/* Realtime fanout shells. One mount per connected instance
+          (transparency, instance_banned, mls.commit listener) and
+          one per (instance, server) pair (text-channel MLS room
+          subs + moderation events). Active-server-only mounting
+          previously caused the listener to be torn down whenever
+          the user navigated away. */}
+      {connectedInstances.map((inst) => (
+        <React.Fragment key={inst.instanceUrl}>
+          <PerInstanceListeners
+            instance={inst as Parameters<typeof PerInstanceListeners>[0]["instance"]}
+            identityPublicKey={identityPublicKey}
+            setTransparencyError={setTransparencyError}
+            onInstanceBanned={handleInstanceBanned}
+          />
+          {inst.serverIds.map((serverId) => {
+            const isActive =
+              activeServer?.id === serverId &&
+              activeServer.raw.instanceUrl === inst.instanceUrl
+            return (
+              <PerServerListeners
+                key={`${inst.instanceUrl}|${serverId}`}
+                instanceUrl={inst.instanceUrl}
+                wsClient={inst.wsClient as Parameters<typeof PerServerListeners>[0]["wsClient"]}
+                token={inst.token}
+                currentUserId={inst.userId}
+                serverId={serverId}
+                serverName={lookupServerNameById(serverId)}
+                refetchMembers={isActive ? refetchMembers : noopRefetch}
+                onSelfRemoved={handleSelfRemovedFromServer}
+              />
+            )
+          })}
+        </React.Fragment>
+      ))}
       <ServerRail
         servers={servers}
         activeRailId={activeServer?.id ?? "home"}

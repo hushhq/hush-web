@@ -1,0 +1,156 @@
+/**
+ * Verifies PerServerListeners covers an inactive (background)
+ * server: it fetches that server's text channels, refcount-
+ * subscribes them on the wsClient, and fires onSelfRemoved when
+ * the user is the kick target — none of which depended on the
+ * server being the active view.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { render, waitFor } from "@testing-library/react"
+
+vi.mock("@/lib/api", () => ({
+  getGuildChannels: vi.fn().mockResolvedValue([
+    { id: "ch-text-1", type: "text" },
+    { id: "ch-text-2", type: "text" },
+    { id: "ch-voice", type: "voice" },
+    { id: "cat", type: "category" },
+  ]),
+}))
+
+vi.mock("@/lib/mlsGroup", () => ({
+  leaveAllChannelGroups: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock("@/lib/mlsStore", () => ({
+  openStore: vi.fn().mockResolvedValue({ fake: "db" }),
+}))
+
+vi.mock("@/hooks/useAuth", () => ({
+  getDeviceId: () => "device-self",
+}))
+
+import { PerServerListeners } from "./PerServerListeners"
+
+interface FakeWs {
+  on: ReturnType<typeof vi.fn>
+  off: ReturnType<typeof vi.fn>
+  subscribeChannel: ReturnType<typeof vi.fn>
+  unsubscribeChannel: ReturnType<typeof vi.fn>
+  emit: (event: string, payload: unknown) => void
+}
+
+function makeWs(): FakeWs {
+  const handlers = new Map<string, (data: unknown) => void>()
+  return {
+    on: vi.fn((event: string, h: (d: unknown) => void) => {
+      handlers.set(event, h)
+    }),
+    off: vi.fn((event: string) => {
+      handlers.delete(event)
+    }),
+    subscribeChannel: vi.fn(),
+    unsubscribeChannel: vi.fn(),
+    emit(event, payload) {
+      handlers.get(event)?.(payload)
+    },
+  }
+}
+
+describe("PerServerListeners", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("subscribes the WS to every text channel of the inactive server it covers", async () => {
+    const ws = makeWs()
+    render(
+      <PerServerListeners
+        instanceUrl="https://i.example.com"
+        wsClient={ws as unknown as Parameters<typeof PerServerListeners>[0]["wsClient"]}
+        token="tok"
+        currentUserId="user-self"
+        serverId="srv-bg"
+        serverName="Background"
+        refetchMembers={vi.fn()}
+        onSelfRemoved={vi.fn()}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(ws.subscribeChannel).toHaveBeenCalledWith("ch-text-1")
+      expect(ws.subscribeChannel).toHaveBeenCalledWith("ch-text-2")
+    })
+    // Voice + category never subscribed.
+    expect(ws.subscribeChannel).not.toHaveBeenCalledWith("ch-voice")
+    expect(ws.subscribeChannel).not.toHaveBeenCalledWith("cat")
+  })
+
+  it("fires onSelfRemoved when the user is the kick target on this background server", async () => {
+    const onSelfRemoved = vi.fn()
+    const ws = makeWs()
+    render(
+      <PerServerListeners
+        instanceUrl="https://i.example.com"
+        wsClient={ws as unknown as Parameters<typeof PerServerListeners>[0]["wsClient"]}
+        token="tok"
+        currentUserId="user-self"
+        serverId="srv-bg"
+        serverName="Background"
+        refetchMembers={vi.fn()}
+        onSelfRemoved={onSelfRemoved}
+      />,
+    )
+
+    // Wait for the moderation hook to bind its listener.
+    await waitFor(() => expect(ws.on).toHaveBeenCalledWith("member_kicked", expect.any(Function)))
+
+    ws.emit("member_kicked", {
+      type: "member_kicked",
+      server_id: "srv-bg",
+      user_id: "user-self",
+      reason: "Spam",
+    })
+
+    await waitFor(() => {
+      expect(onSelfRemoved).toHaveBeenCalledWith({
+        instanceUrl: "https://i.example.com",
+        serverId: "srv-bg",
+        event: "kick",
+        reason: "Spam",
+      })
+    })
+  })
+
+  it("ignores moderation frames addressed to a different server", async () => {
+    const onSelfRemoved = vi.fn()
+    const refetch = vi.fn()
+    const ws = makeWs()
+    render(
+      <PerServerListeners
+        instanceUrl="https://i.example.com"
+        wsClient={ws as unknown as Parameters<typeof PerServerListeners>[0]["wsClient"]}
+        token="tok"
+        currentUserId="user-self"
+        serverId="srv-bg"
+        refetchMembers={refetch}
+        onSelfRemoved={onSelfRemoved}
+      />,
+    )
+
+    await waitFor(() => expect(ws.on).toHaveBeenCalledWith("member_kicked", expect.any(Function)))
+
+    ws.emit("member_kicked", {
+      type: "member_kicked",
+      server_id: "srv-other",
+      user_id: "user-other",
+    })
+
+    await new Promise((r) => setTimeout(r, 0))
+    expect(onSelfRemoved).not.toHaveBeenCalled()
+    expect(refetch).not.toHaveBeenCalled()
+  })
+})

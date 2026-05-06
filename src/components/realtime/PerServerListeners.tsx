@@ -1,0 +1,100 @@
+import * as React from "react"
+import { toast } from "sonner"
+
+import { useGuildChannelIds } from "@/hooks/useGuildChannelIds"
+import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
+import { useServerModerationEvents } from "@/adapters/useServerModerationEvents"
+
+interface WsClientLike {
+  on: (event: string, handler: (msg: unknown) => void) => void
+  off?: (event: string, handler: (msg: unknown) => void) => void
+  subscribeChannel: (channelId: string) => void
+  unsubscribeChannel: (channelId: string) => void
+}
+
+interface PerServerListenersProps {
+  instanceUrl: string
+  wsClient: WsClientLike
+  token: string
+  currentUserId: string
+  serverId: string
+  /** Display name of the server, used in the self-removed toast.
+   *  When unknown, the toast falls back to the generic "the
+   *  server" copy from useServerModerationEvents. */
+  serverName?: string
+  /** Fired when the active member-list snapshot for this server
+   *  needs to refetch (member_kicked / member_banned / member_muted
+   *  / member_role_changed). For inactive servers this is a no-op
+   *  because no member-list query is mounted. */
+  refetchMembers: () => Promise<void> | void
+  /** Fired when the local user is the kick / ban target for this
+   *  server. The shell already handles MLS cleanup + toast; this
+   *  callback lets the parent route the user away if they were
+   *  viewing the affected server. */
+  onSelfRemoved: (info: {
+    instanceUrl: string
+    serverId: string
+    event: "kick" | "ban"
+    reason?: string
+  }) => void
+}
+
+/**
+ * Mounts every per-server realtime listener for one (instance,
+ * server) pair, regardless of whether that server is currently in
+ * the active view:
+ *   - useGuildChannelIds — fetches text channel ids once so the
+ *     downstream subscriptions and MLS cleanup have a working set.
+ *   - useTextChannelMLSSubscriptions — joins each text channel
+ *     room on this instance's wsClient. Refcounted at the
+ *     transport layer so the active chat's subscribe does not
+ *     collide.
+ *   - useServerModerationEvents — surfaces kick/ban/mute/role for
+ *     the matched serverId. Cleans up MLS state for self kick/ban
+ *     using the channel ids fetched above. The parent decides
+ *     navigation via onSelfRemoved.
+ *
+ * Renders nothing.
+ */
+export function PerServerListeners({
+  instanceUrl,
+  wsClient,
+  token,
+  currentUserId,
+  serverId,
+  serverName,
+  refetchMembers,
+  onSelfRemoved,
+}: PerServerListenersProps) {
+  const { textChannelIds } = useGuildChannelIds({
+    serverId,
+    token,
+    baseUrl: instanceUrl,
+  })
+
+  useTextChannelMLSSubscriptions(
+    wsClient as Parameters<typeof useTextChannelMLSSubscriptions>[0],
+    textChannelIds,
+  )
+
+  useServerModerationEvents({
+    wsClient: wsClient as Parameters<
+      typeof useServerModerationEvents
+    >[0]["wsClient"],
+    serverId,
+    currentUserId,
+    refetchMembers,
+    textChannelIds,
+    onSelfRemoved: ({ event, reason }) => {
+      const named = serverName ?? "the server"
+      const verb = event === "kick" ? "removed from" : "banned from"
+      const message = reason
+        ? `You were ${verb} ${named}: ${reason}`
+        : `You were ${verb} ${named}.`
+      toast.error(message)
+      onSelfRemoved({ instanceUrl, serverId, event, reason })
+    },
+  })
+
+  return null
+}
