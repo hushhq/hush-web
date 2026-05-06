@@ -47,9 +47,11 @@ vi.mock('../../hooks/useAuth', () => ({
   getDeviceId: () => 'device-current',
 }));
 
+const resolveDeviceLinkRequest = vi.fn();
+const verifyDeviceLinkRequest = vi.fn();
 vi.mock('../../lib/api', () => ({
-  resolveDeviceLinkRequest: vi.fn(),
-  verifyDeviceLinkRequest: vi.fn(),
+  resolveDeviceLinkRequest: (...args) => resolveDeviceLinkRequest(...args),
+  verifyDeviceLinkRequest: (...args) => verifyDeviceLinkRequest(...args),
 }));
 
 vi.mock('../../lib/deviceLinking', () => ({
@@ -105,6 +107,8 @@ import ApproveDeviceLinkFlow from './ApproveDeviceLinkFlow.jsx';
 describe('ApproveDeviceLinkFlow (embedded mode)', () => {
   afterEach(() => {
     cleanup();
+    resolveDeviceLinkRequest.mockReset();
+    verifyDeviceLinkRequest.mockReset();
     authState.hasSession = true;
     authState.hasVault = true;
     authState.isVaultUnlocked = true;
@@ -151,6 +155,67 @@ describe('ApproveDeviceLinkFlow (embedded mode)', () => {
     await u.click(screen.getByRole('button', { name: /^close$/i }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes resolveDeviceLinkRequest through homeInstanceUrl in embedded mode', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk',
+      devicePublicKey: 'dk',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{ requestId: 'req', secret: 'sec' }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    // initialPayload auto-fires resolveRequest. Embedded mode must
+    // route the call to the auth (home) instance, not the current
+    // origin — the bug GPT review caught.
+    await screen.findByText(/new phone/i);
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledTimes(1);
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledWith(
+      'tok',
+      { requestId: 'req', secret: 'sec' },
+      'https://home.example.com',
+    );
+  });
+
+  it('falls back to "" when no homeInstanceUrl is provided (page mode)', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk',
+      devicePublicKey: 'dk',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="page"
+        initialPayload={{ requestId: 'req', secret: 'sec' }}
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/new phone/i);
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledWith(
+      'tok',
+      { requestId: 'req', secret: 'sec' },
+      '',
+    );
   });
 
   it('shows the locked-vault gate and routes Unlock through onVaultUnlockNeeded', async () => {

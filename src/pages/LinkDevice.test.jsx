@@ -830,14 +830,18 @@ describe('LinkDevice', () => {
     await user.click(screen.getByRole('button', { name: /approve link/i }));
 
     await waitFor(() => {
-      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith('jwt-token', {
-        claimToken: 'claim-1',
-        certificate: 'certificate-base64',
-        signingDeviceId: 'device-1',
-        relayCiphertext: 'ciphertext',
-        relayIv: 'relay-iv',
-        relayPublicKey: 'relay-public-key',
-      });
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
+        'jwt-token',
+        {
+          claimToken: 'claim-1',
+          certificate: 'certificate-base64',
+          signingDeviceId: 'device-1',
+          relayCiphertext: 'ciphertext',
+          relayIv: 'relay-iv',
+          relayPublicKey: 'relay-public-key',
+        },
+        'https://app.gethush.live',
+      );
     });
     expect(historyDb.close).toHaveBeenCalledTimes(1);
   });
@@ -1487,10 +1491,13 @@ describe('LinkDevice', () => {
       // Fresh upload path is NOT taken when resume is chosen.
       expect(mockUploadArchiveSession).not.toHaveBeenCalled();
       // Link verification happens with the resumed descriptor.
+      // Third arg is the base URL resolved from claim.instanceUrl.
       await waitFor(() => {
-        expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith('jwt-token', expect.objectContaining({
-          claimToken: 'claim-1',
-        }));
+        expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
+          'jwt-token',
+          expect.objectContaining({ claimToken: 'claim-1' }),
+          'https://app.gethush.live',
+        );
       });
     });
 

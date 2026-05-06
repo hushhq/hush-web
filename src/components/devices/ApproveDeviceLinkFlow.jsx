@@ -87,6 +87,7 @@ function formatCountdown(expiresAt, now = Date.now()) {
 export default function ApproveDeviceLinkFlow({
   mode,
   initialPayload,
+  homeInstanceUrl,
   onCancel,
   onSuccess,
   onVaultUnlockNeeded,
@@ -134,7 +135,8 @@ export default function ApproveDeviceLinkFlow({
       setResumableExport(null);
       return;
     }
-    const baseUrlForApi = claim.instanceUrl || window.location.origin;
+    const baseUrlForApi
+      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
     let cancelled = false;
     findResumableExport(baseUrlForApi)
       .then((rec) => {
@@ -156,7 +158,15 @@ export default function ApproveDeviceLinkFlow({
       setStatus('');
       setIsResolving(true);
       try {
-        const resolved = await resolveDeviceLinkRequest(token, body);
+        // Embedded callers (DevicesPanel) supply the auth/home
+        // instance URL so resolve/verify do not silently fall through
+        // to window.location.origin in a federated context. Page mode
+        // omits it intentionally — the page lives at the home origin.
+        const resolved = await resolveDeviceLinkRequest(
+          token,
+          body,
+          homeInstanceUrl ?? '',
+        );
         setClaim(resolved);
       } catch (err) {
         const rawMessage = err.message || '';
@@ -171,7 +181,7 @@ export default function ApproveDeviceLinkFlow({
         setIsResolving(false);
       }
     },
-    [token],
+    [token, homeInstanceUrl],
   );
 
   useEffect(() => {
@@ -254,7 +264,8 @@ export default function ApproveDeviceLinkFlow({
     let metadataDb = null;
     try {
       historyDb = await mlsStore.openStore(user.id, getDeviceId());
-      const baseUrlForApi = claim.instanceUrl || window.location.origin;
+      const baseUrlForApi
+      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
       try {
         const summary = await preDecryptForLinkExport({
           activeDb: historyDb,
@@ -382,7 +393,7 @@ export default function ApproveDeviceLinkFlow({
         userId: user.id,
         username: user.username,
         displayName: user.displayName,
-        instanceUrl: claim.instanceUrl || window.location.origin,
+        instanceUrl: baseUrlForApi,
         rootPrivateKey: identityKeyRef.current.privateKey,
         rootPublicKey: identityKeyRef.current.publicKey,
         archive: archivePayload,
@@ -397,12 +408,16 @@ export default function ApproveDeviceLinkFlow({
       );
 
       try {
-        await verifyDeviceLinkRequest(token, {
-          claimToken: claim.claimToken,
-          certificate: bytesToBase64(certificate),
-          signingDeviceId: getDeviceId(),
-          ...relayEnvelope,
-        });
+        await verifyDeviceLinkRequest(
+          token,
+          {
+            claimToken: claim.claimToken,
+            certificate: bytesToBase64(certificate),
+            signingDeviceId: getDeviceId(),
+            ...relayEnvelope,
+          },
+          baseUrlForApi,
+        );
       } catch (err) {
         try {
           await deleteArchive(
@@ -440,6 +455,7 @@ export default function ApproveDeviceLinkFlow({
     }
   }, [
     claim,
+    homeInstanceUrl,
     identityKeyRef,
     onSuccess,
     token,
@@ -463,7 +479,8 @@ export default function ApproveDeviceLinkFlow({
     setStatus('Resuming previous upload…');
     setIsResuming(true);
     try {
-      const baseUrlForApi = claim.instanceUrl || window.location.origin;
+      const baseUrlForApi
+      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
       const archiveDescriptor = await resumeUploadArchiveSession({
         token,
         baseUrl: baseUrlForApi,
@@ -488,7 +505,7 @@ export default function ApproveDeviceLinkFlow({
         userId: user.id,
         username: user.username,
         displayName: user.displayName,
-        instanceUrl: claim.instanceUrl || window.location.origin,
+        instanceUrl: baseUrlForApi,
         rootPrivateKey: identityKeyRef.current.privateKey,
         rootPublicKey: identityKeyRef.current.publicKey,
         archive: archivePayload,
@@ -502,12 +519,16 @@ export default function ApproveDeviceLinkFlow({
         claim.sessionPublicKey,
       );
       try {
-        await verifyDeviceLinkRequest(token, {
-          claimToken: claim.claimToken,
-          certificate: bytesToBase64(certificate),
-          signingDeviceId: getDeviceId(),
-          ...relayEnvelope,
-        });
+        await verifyDeviceLinkRequest(
+          token,
+          {
+            claimToken: claim.claimToken,
+            certificate: bytesToBase64(certificate),
+            signingDeviceId: getDeviceId(),
+            ...relayEnvelope,
+          },
+          baseUrlForApi,
+        );
       } catch (err) {
         try {
           await deleteArchive(
@@ -531,6 +552,7 @@ export default function ApproveDeviceLinkFlow({
     }
   }, [
     claim,
+    homeInstanceUrl,
     identityKeyRef,
     onSuccess,
     resumableExport,
@@ -710,7 +732,7 @@ export default function ApproveDeviceLinkFlow({
           <div className={mode === 'page' ? 'ld-summary-row' : 'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Instance</span>
             <strong className="truncate">
-              {claim.instanceUrl || window.location.origin}
+              {claim.instanceUrl || homeInstanceUrl || window.location.origin}
             </strong>
           </div>
         </div>

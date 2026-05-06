@@ -181,6 +181,7 @@ export function DevicesPanel({
         <ApproveDeviceLinkFlow
           mode="embedded"
           initialPayload={null}
+          homeInstanceUrl={homeInstanceUrl ?? null}
           onCancel={() => {
             setView("list")
             fetchDevices()
