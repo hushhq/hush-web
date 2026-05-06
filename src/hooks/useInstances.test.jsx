@@ -257,6 +257,21 @@ describe('useInstances', () => {
     });
   });
 
+  it('bootInstance subscribes to every fetched guild hub room', async () => {
+    const { useInstances } = await import('./useInstances.js');
+    setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.bootInstance(INSTANCE_A);
+    });
+
+    expect(mockSend).toHaveBeenCalledWith('subscribe.server', { server_id: 'guild-1' });
+    expect(mockSend).toHaveBeenCalledWith('subscribe.server', { server_id: 'guild-2' });
+  });
+
   it('bootInstance stamps instanceUrl on each fetched guild', async () => {
     const { useInstances } = await import('./useInstances.js');
     setupAuthMocks(JWT_A, USER_A, GUILDS_A);
@@ -555,6 +570,32 @@ describe('useInstances', () => {
       const guild = result.current.mergedGuilds.find(g => g.id === 'guild-99');
       expect(guild?.instanceUrl).toBe(INSTANCE_A);
     });
+  });
+
+  it('refreshGuilds reconciles server hub subscriptions', async () => {
+    const { useInstances } = await import('./useInstances.js');
+    setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.bootInstance(INSTANCE_A);
+    });
+
+    mockSend.mockClear();
+    apiModule.getMyGuilds.mockResolvedValueOnce([
+      { id: 'guild-2', encryptedMetadata: 'meta-2' },
+      { id: 'guild-99', encryptedMetadata: 'meta-99' },
+    ]);
+
+    await act(async () => {
+      await result.current.refreshGuilds(INSTANCE_A);
+    });
+
+    expect(mockSend).toHaveBeenCalledWith('unsubscribe.server', { server_id: 'guild-1' });
+    expect(mockSend).toHaveBeenCalledWith('subscribe.server', { server_id: 'guild-99' });
+    expect(mockSend).not.toHaveBeenCalledWith('subscribe.server', { server_id: 'guild-2' });
   });
 });
 

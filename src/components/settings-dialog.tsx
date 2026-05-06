@@ -62,7 +62,7 @@ export function SettingsDialog({
   groups,
   defaultSectionId,
 }: SettingsDialogProps) {
-  const [activeId, setActiveId] = React.useState<string>(
+  const [activeId, setActiveId] = React.useState<string>(() =>
     resolveActiveSectionId(sections, defaultSectionId)
   )
 

@@ -10,6 +10,7 @@ import { applyThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
+import { Toaster } from './components/ui/sonner';
 
 // Theme is force-locked to dark while light mode is being reviewed
 // (see theme-provider.tsx). Applying it pre-paint here prevents FOUC
@@ -245,6 +246,7 @@ export default function App() {
           <AppBackground />
           <ElectronDragRegion />
           <AppContent />
+          <Toaster position="bottom-right" richColors />
         </BootProvider>
       </InstanceProvider>
     </AuthProvider>

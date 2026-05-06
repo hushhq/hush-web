@@ -308,6 +308,47 @@ export function useInstances() {
     flushState();
   }, [flushState]); // bootInstance added via closure - intentional late binding
 
+  const syncServerSubscriptions = useCallback((entry, nextGuilds = entry?.guilds) => {
+    if (!entry?.wsClient?.isConnected?.()) return;
+
+    const nextIds = new Set(
+      (nextGuilds ?? [])
+        .map((guild) => guild?.id)
+        .filter(Boolean)
+    );
+    const currentIds = entry.subscribedServerIds instanceof Set
+      ? entry.subscribedServerIds
+      : new Set();
+
+    for (const serverId of currentIds) {
+      if (!nextIds.has(serverId)) {
+        entry.wsClient.send('unsubscribe.server', { server_id: serverId });
+      }
+    }
+    for (const serverId of nextIds) {
+      if (!currentIds.has(serverId)) {
+        entry.wsClient.send('subscribe.server', { server_id: serverId });
+      }
+    }
+
+    entry.subscribedServerIds = nextIds;
+  }, []);
+
+  const clearServerSubscriptions = useCallback((entry) => {
+    if (!entry) return;
+    const currentIds = entry.subscribedServerIds instanceof Set
+      ? entry.subscribedServerIds
+      : new Set();
+
+    if (entry.wsClient?.isConnected?.()) {
+      for (const serverId of currentIds) {
+        entry.wsClient.send('unsubscribe.server', { server_id: serverId });
+      }
+    }
+
+    entry.subscribedServerIds = new Set();
+  }, []);
+
   // ── Per-instance WS event wiring ──────────────────────────────────────────
 
   /**
@@ -325,23 +366,21 @@ export function useInstances() {
       scheduleReconnect(instanceUrl);
     });
 
-    // Subscribe to every guild's hub room on open + reconnect. Without
+    // Reconcile every guild's hub room on open + reconnect. Without
     // this frame the backend's BroadcastToServer fan-out lands in an
     // empty subscriber set and the client misses voice_state_update,
     // channel_*, and member events for any guild the user isn't
     // actively viewing. Per-adapter `subscribe.server` (in
     // useChannelsForServer) only covers the active server; this
     // hook-level pass covers every server the user is a member of.
-    const subscribeAllServers = () => {
+    const syncAllServers = () => {
       const entry = instancesRef.current.get(instanceUrl);
-      if (!entry?.guilds || !wsClient.isConnected?.()) return;
-      for (const g of entry.guilds) {
-        if (g?.id) {
-          wsClient.send('subscribe.server', { server_id: g.id });
-        }
+      if (entry) {
+        entry.subscribedServerIds = new Set();
       }
+      syncServerSubscriptions(entry);
     };
-    wsClient.on('open', subscribeAllServers);
+    wsClient.on('open', syncAllServers);
 
     // Handle guild-level WS events that require a guild list refresh.
     // After the refresh, re-subscribe to every guild — a `member_joined`
@@ -353,8 +392,8 @@ export function useInstances() {
       try {
         const guilds = await getMyGuilds(entry.jwt, instanceUrl);
         entry.guilds = mergeStampedGuilds(entry.guilds, guilds, instanceUrl);
+        syncServerSubscriptions(entry, entry.guilds);
         flushState();
-        subscribeAllServers();
       } catch (err) {
         console.error(`[useInstances] guild refresh failed for ${instanceUrl}:`, err);
       }
@@ -376,7 +415,7 @@ export function useInstances() {
       }
     };
     wsClient.on('member_left', handleMemberLeft);
-  }, [scheduleReconnect, flushState]); // disconnectInstance added via closure - stable ref
+  }, [scheduleReconnect, syncServerSubscriptions, flushState]); // disconnectInstance added via closure - stable ref
 
   // ── bootInstance ──────────────────────────────────────────────────────────
 
@@ -498,22 +537,11 @@ export function useInstances() {
         connectionState: 'connected',
         reconnectAttempt: 0,
         reconnectTimer: null,
+        subscribedServerIds: new Set(),
       });
 
+      syncServerSubscriptions(instancesRef.current.get(instanceUrl), stampedGuilds);
       flushState();
-
-      // Subscribe to every guild's hub room. The on('open') handler
-      // covers reconnect, but on the FIRST connect the open event
-      // fires before guilds have been fetched — entry.guilds is empty
-      // at that point so the subscribe loop is a no-op. Run it again
-      // here once the guild list is in place.
-      if (wsClient.isConnected?.()) {
-        for (const g of stampedGuilds) {
-          if (g?.id) {
-            wsClient.send('subscribe.server', { server_id: g.id });
-          }
-        }
-      }
     } catch (err) {
       if (!isActiveGeneration()) return;
       // Mark as offline but keep entry so reconnect can retry.
@@ -525,7 +553,7 @@ export function useInstances() {
       console.error(`[useInstances] bootInstance failed for ${instanceUrl}:`, err);
       throw err;
     }
-  }, [identityKeyRef, localUser, flushState, wireWsHandlers]);
+  }, [identityKeyRef, localUser, flushState, wireWsHandlers, syncServerSubscriptions]);
 
   // ── disconnectInstance ────────────────────────────────────────────────────
 
@@ -545,6 +573,7 @@ export function useInstances() {
     }
 
     // Disconnect WS.
+    clearServerSubscriptions(entry);
     try { entry.wsClient?.disconnect(); } catch { /* noop */ }
 
     // Remove from IDB.
@@ -558,7 +587,7 @@ export function useInstances() {
     // Remove from in-memory map and flush.
     instancesRef.current.delete(instanceUrl);
     flushState();
-  }, [flushState]);
+  }, [clearServerSubscriptions, flushState]);
 
   // ── refreshGuilds ─────────────────────────────────────────────────────────
 
@@ -576,12 +605,13 @@ export function useInstances() {
     try {
       const guilds = await getMyGuilds(entry.jwt, instanceUrl);
       entry.guilds = mergeStampedGuilds(entry.guilds, guilds, instanceUrl);
+      syncServerSubscriptions(entry, entry.guilds);
       flushState();
     } catch (err) {
       console.error(`[useInstances] refreshGuilds failed for ${instanceUrl}:`, err);
       throw err;
     }
-  }, [flushState]);
+  }, [flushState, syncServerSubscriptions]);
 
   // ── registerLocalInstance (post-auth shortcut) ──────────────────────────
 
@@ -656,11 +686,13 @@ export function useInstances() {
       connectionState: 'connected',
       reconnectAttempt: 0,
       reconnectTimer: null,
+      subscribedServerIds: new Set(),
     });
 
+    syncServerSubscriptions(instancesRef.current.get(instanceUrl), guilds);
     flushState();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flushState, wireWsHandlers]);
+  }, [flushState, wireWsHandlers, syncServerSubscriptions]);
 
   // Channel unread management.
 
@@ -721,9 +753,10 @@ export function useInstances() {
   const disconnectRuntimeEntries = useCallback(() => {
     for (const entry of instancesRef.current.values()) {
       if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer);
+      clearServerSubscriptions(entry);
       try { entry.wsClient?.disconnect(); } catch { /* noop */ }
     }
-  }, []);
+  }, [clearServerSubscriptions]);
 
   /**
    * Clears all runtime instance state for the current session.
