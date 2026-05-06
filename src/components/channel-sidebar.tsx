@@ -1146,7 +1146,7 @@ function RootChannelsZone({
         items={channels.map((c) => c.id)}
         strategy={verticalListSortingStrategy}
       >
-        <SidebarMenu>
+        <SidebarMenu className="gap-0.5">
           {channels.map((channel) => (
             <SortableChannel
               key={channel.id}
@@ -1306,7 +1306,7 @@ function SortableCategory({
               items={channels.map((c) => c.id)}
               strategy={verticalListSortingStrategy}
             >
-              <SidebarMenu>
+              <SidebarMenu className="gap-0.5">
                 {channels.map((channel) => (
                   <SortableChannel
                     key={channel.id}
