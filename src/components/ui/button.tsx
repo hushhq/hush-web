@@ -14,8 +14,17 @@ const buttonVariants = cva(
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+        // Ghost is the neutral, no-chrome variant. The previous dark-mode
+        // override (`dark:hover:bg-muted/50`) lowered the hover bg almost
+        // to the surrounding sidebar luminance, so any callsite that
+        // overrode `hover:bg-primary` (the server rail icons being the
+        // most visible offender) silently lost its hover affordance in
+        // dark mode — the hover layer alpha-blended back into the
+        // sidebar and the icon "disappeared". Token-driven `bg-muted`
+        // already adapts to dark mode without needing a half-opacity
+        // override.
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         // The previous low-alpha background variant rendered red text on
         // a faint red wash that was illegible against the AlertDialog
         // surface (delete server / channel / category). Switching to a

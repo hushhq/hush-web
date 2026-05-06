@@ -231,6 +231,7 @@ function RailServer({
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
+              size="icon"
               onClick={onClick}
               className={cn(
                 "group relative size-11 rounded-2xl bg-sidebar-accent p-0 text-sm font-semibold text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
@@ -390,6 +391,7 @@ function RailIcon({
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
+          size="icon"
           onClick={onClick}
           disabled={disabled}
           className={cn(
