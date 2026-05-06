@@ -88,6 +88,7 @@ import {
 import type { Server, Channel, ChannelCategory } from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
+import { useTextChannelMLSCommitListener } from "@/hooks/useTextChannelMLSCommitListener"
 
 interface FavoriteEntry {
   id: string
@@ -244,6 +245,22 @@ export function AuthenticatedApp() {
     wsClient as Parameters<typeof useTextChannelMLSSubscriptions>[0],
     textChannelIdsForMLS,
   )
+
+  // Process MLS control frames for text channels: `mls.commit`
+  // (advance local group state in lockstep with peers) and
+  // `mls.add_request action=remove` (commit a leaver's removal).
+  // Voice commits are handled separately inside `useRoom.js`.
+  const tokenForActiveInstance = React.useCallback(
+    () => (instanceUrl ? getTokenForInstance(instanceUrl) : null),
+    [instanceUrl, getTokenForInstance],
+  )
+  useTextChannelMLSCommitListener({
+    wsClient: wsClient as Parameters<
+      typeof useTextChannelMLSCommitListener
+    >[0]["wsClient"],
+    currentUserId,
+    getToken: tokenForActiveInstance,
+  })
 
   const voicePresence = useVoiceChannelPresence(
     (instanceUrl ? getWsClient(instanceUrl) : null) as Parameters<
