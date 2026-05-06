@@ -550,6 +550,38 @@ export function VoiceChannelView({
     onVoiceStateChange?.({ isMicOn, isDeafened, isScreenSharing, isWebcamOn })
   }, [onVoiceStateChange, isMicOn, isDeafened, isScreenSharing, isWebcamOn])
 
+  // Broadcast our mute/deafen state to peers so their compact
+  // roster + active-call tile light up the corresponding badges.
+  // Backend `internal/ws/client.go` re-broadcasts the frame to the
+  // server room with a membership check; remote clients listen via
+  // `useVoiceChannelPresence`. Only emit while joined to the
+  // channel — emitting before join would leak presence and
+  // emitting after leave would re-light a stale badge.
+  React.useEffect(() => {
+    if (!hasJoined) return
+    if (!wsClient || !currentUserId || !serverId || !channel.id) return
+    const ws = wsClient as {
+      send: (type: string, payload: Record<string, unknown>) => void
+      isConnected?: () => boolean
+    }
+    if (ws.isConnected && !ws.isConnected()) return
+    ws.send("voice.mute_state", {
+      server_id: serverId,
+      channel_id: channel.id,
+      user_id: currentUserId,
+      is_muted: !isMicOn,
+      is_deafened: isDeafened,
+    })
+  }, [
+    hasJoined,
+    wsClient,
+    serverId,
+    channel.id,
+    currentUserId,
+    isMicOn,
+    isDeafened,
+  ])
+
   React.useEffect(() => {
     if (!isScreenSharing) setLocalScreenWatched(false)
   }, [isScreenSharing])

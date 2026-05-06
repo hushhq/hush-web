@@ -85,7 +85,12 @@ import {
   useMembersForServer,
   deriveInitials,
 } from "@/adapters"
-import type { Server, Channel, ChannelCategory } from "@/adapters"
+import type {
+  Server,
+  Channel,
+  ChannelCategory,
+  VoiceParticipantInfo,
+} from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
 import { useTextChannelMLSCommitListener } from "@/hooks/useTextChannelMLSCommitListener"
@@ -873,19 +878,33 @@ export function AuthenticatedApp() {
       const fromWs = voicePresence.get(c.id) ?? []
       const isJoinedHere = myChannelId === c.id
       const hasSelf = fromWs.some((p) => p.id === currentUserId)
-      const merged =
-        isJoinedHere && !hasSelf && currentUserId
-          ? [
-              ...fromWs,
-              {
-                id: currentUserId,
-                name: "You",
-                initials: myInitials,
-                isMuted: !voiceState.isMicOn,
-                isDeafened: voiceState.isDeafened,
-              },
-            ]
-          : fromWs
+      // Local-state overrides for the current user's row keep the
+      // own mute/deafen badges responsive (no wait for the WS echo
+      // of voice.mute_state). Applied whether the self row was
+      // injected by us (no roster yet) or already arrived via
+      // voice_state_update.
+      const selfOverrides = isJoinedHere && currentUserId
+        ? {
+            isMuted: !voiceState.isMicOn,
+            isDeafened: voiceState.isDeafened,
+          }
+        : null
+      let merged: VoiceParticipantInfo[] = fromWs
+      if (isJoinedHere && !hasSelf && currentUserId) {
+        merged = [
+          ...fromWs,
+          {
+            id: currentUserId,
+            name: "You",
+            initials: myInitials,
+            ...(selfOverrides ?? {}),
+          },
+        ]
+      } else if (selfOverrides) {
+        merged = fromWs.map((p) =>
+          p.id === currentUserId ? { ...p, ...selfOverrides } : p,
+        )
+      }
       return merged.length > 0 ? { ...c, participants: merged } : c
     })
   }, [
