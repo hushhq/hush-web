@@ -1,0 +1,182 @@
+/**
+ * ApproveDeviceLinkFlow — embedded-mode coverage. The page-mode
+ * behaviour is exercised end-to-end by src/pages/LinkDevice.test.jsx
+ * (32 tests) which renders the page through the same flow component.
+ *
+ * This file pins the embedded-mode contract:
+ *   - layout shell is bare (no home-page / home-form-card classes)
+ *   - onCancel is fired by the Close/Back actions
+ *   - locked vault surfaces an Unlock button that calls
+ *     onVaultUnlockNeeded (caller-owned navigation)
+ */
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+beforeAll(() => {
+  if (!window.matchMedia) {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockReturnValue({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    });
+  }
+});
+
+const authState = {
+  user: { id: 'u1', username: 'me', displayName: 'Me' },
+  token: 'tok',
+  loading: false,
+  hasSession: true,
+  hasVault: true,
+  isVaultUnlocked: true,
+  needsUnlock: false,
+  identityKeyRef: {
+    current: { privateKey: new Uint8Array(32), publicKey: new Uint8Array(32) },
+  },
+};
+
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => authState,
+}));
+
+vi.mock('../../hooks/useAuth', () => ({
+  getDeviceId: () => 'device-current',
+}));
+
+vi.mock('../../lib/api', () => ({
+  resolveDeviceLinkRequest: vi.fn(),
+  verifyDeviceLinkRequest: vi.fn(),
+}));
+
+vi.mock('../../lib/deviceLinking', () => ({
+  bytesToBase64: () => '',
+  certifyDevice: vi.fn(),
+  decodeQRPayload: () => ({ requestId: 'r', secret: 's' }),
+  encodeTransferBundle: vi.fn(),
+  encryptRelayPayload: vi.fn(),
+  base64ToBytes: () => new Uint8Array(),
+}));
+
+vi.mock('../../lib/mlsStore', () => ({
+  openStore: vi.fn(),
+  listAllLocalPlaintexts: vi.fn().mockResolvedValue([]),
+  exportHistorySnapshot: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('../../lib/preDecryptForLinkExport', () => ({
+  preDecryptForLinkExport: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('../../lib/transcriptVault', () => ({
+  buildTranscriptBlobForExport: vi.fn(),
+  listTranscriptCacheEntries: () => [],
+}));
+
+vi.mock('../../lib/guildMetadataKeyStore', () => ({
+  exportGuildMetadataKeySnapshot: vi.fn().mockResolvedValue({}),
+  openGuildMetadataKeyStore: vi.fn(),
+}));
+
+vi.mock('../../lib/linkArchiveSession', () => ({
+  uploadArchiveSession: vi.fn(),
+  resumeUploadArchiveSession: vi.fn(),
+}));
+
+vi.mock('../../lib/linkArchiveExportStore', () => ({
+  sweepStaleExports: vi.fn().mockResolvedValue(),
+  findResumableExport: vi.fn().mockResolvedValue(null),
+  deleteExport: vi.fn(),
+}));
+
+vi.mock('../../lib/linkArchiveTransport', () => ({
+  deleteArchive: vi.fn(),
+}));
+
+vi.mock('../QRCodeScanner', () => ({
+  default: () => null,
+}));
+
+import ApproveDeviceLinkFlow from './ApproveDeviceLinkFlow.jsx';
+
+describe('ApproveDeviceLinkFlow (embedded mode)', () => {
+  afterEach(() => {
+    cleanup();
+    authState.hasSession = true;
+    authState.hasVault = true;
+    authState.isVaultUnlocked = true;
+    authState.needsUnlock = false;
+    authState.identityKeyRef = {
+      current: {
+        privateKey: new Uint8Array(32),
+        publicKey: new Uint8Array(32),
+      },
+    };
+  });
+
+  it('uses a bare flex shell, not the legacy ld-card / home-form-card layout', () => {
+    const { container } = render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={null}
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    // Embedded shell is a plain flex column. The page-mode classes
+    // (.glass, .home-form-card, .ld-card) must not leak into the
+    // embedded surface — they ship full-bleed styling that breaks
+    // the settings dialog.
+    expect(container.querySelector('.home-form-card')).toBeNull();
+    expect(container.querySelector('.ld-card')).toBeNull();
+    expect(container.querySelector('.flex.flex-col.gap-4')).not.toBeNull();
+  });
+
+  it('fires onCancel when the Close button is pressed', async () => {
+    const onCancel = vi.fn();
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={null}
+        onCancel={onCancel}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    const u = userEvent.setup();
+    await u.click(screen.getByRole('button', { name: /^close$/i }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the locked-vault gate and routes Unlock through onVaultUnlockNeeded', async () => {
+    authState.needsUnlock = true;
+    authState.isVaultUnlocked = false;
+    authState.identityKeyRef = { current: null };
+
+    const onVaultUnlockNeeded = vi.fn();
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={null}
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={onVaultUnlockNeeded}
+      />
+    );
+
+    expect(
+      screen.getByText(/this browser is recognized for your hush account/i)
+    ).toBeInTheDocument();
+
+    const u = userEvent.setup();
+    await u.click(
+      screen.getByRole('button', { name: /unlock to approve/i })
+    );
+
+    expect(onVaultUnlockNeeded).toHaveBeenCalledTimes(1);
+  });
+});

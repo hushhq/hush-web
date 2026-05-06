@@ -109,6 +109,7 @@ export function UserSettingsDialog({
         <DevicesPanel
           homeInstanceUrl={homeInstanceUrl}
           homeLogPublicKey={homeLogPublicKey}
+          onRequestClose={() => onOpenChange(false)}
         />
       ),
     },

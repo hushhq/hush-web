@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { MonitorSmartphoneIcon } from "lucide-react"
+import { ArrowLeftIcon, MonitorSmartphoneIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button.tsx"
 import { Separator } from "@/components/ui/separator.tsx"
@@ -20,6 +20,7 @@ import { getReadableDeviceLabel } from "@/lib/deviceLabel"
 import { getDeviceId } from "@/hooks/useAuth"
 import { TransparencyVerifier } from "@/lib/transparencyVerifier"
 import { bytesToHex } from "@/lib/identityVault"
+import ApproveDeviceLinkFlow from "@/components/devices/ApproveDeviceLinkFlow.jsx"
 
 interface DeviceRow {
   id: string
@@ -43,12 +44,21 @@ interface DevicesPanelProps {
    * surfaces the gap.
    */
   homeLogPublicKey?: string | null
+  /**
+   * Closes the parent settings dialog. Used by the embedded approve
+   * flow when the vault is locked: the panel cannot host the unlock
+   * UI, so it closes the dialog and lets the app shell route the
+   * user to vault unlock.
+   */
+  onRequestClose?: () => void
 }
 
 export function DevicesPanel({
   homeInstanceUrl,
   homeLogPublicKey,
+  onRequestClose,
 }: DevicesPanelProps) {
+  const [view, setView] = React.useState<"list" | "approve">("list")
   const navigate = useNavigate()
   const { token, identityKeyRef, setTransparencyError } = useAuth() as {
     token: string | null
@@ -152,6 +162,43 @@ export function DevicesPanel({
     homeInstanceUrl,
   ])
 
+  if (view === "approve") {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setView("list")
+              fetchDevices()
+            }}
+          >
+            <ArrowLeftIcon />
+            Back to devices
+          </Button>
+        </div>
+        <ApproveDeviceLinkFlow
+          mode="embedded"
+          initialPayload={null}
+          onCancel={() => {
+            setView("list")
+            fetchDevices()
+          }}
+          onSuccess={() => {
+            // Stay on the approve view so the success toast is visible;
+            // the user can use Back to return to the list, which
+            // refetches.
+          }}
+          onVaultUnlockNeeded={() => {
+            onRequestClose?.()
+            navigate("/")
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
@@ -250,10 +297,7 @@ export function DevicesPanel({
       )}
 
       <div>
-        <Button
-          variant="secondary"
-          onClick={() => navigate("/link-device")}
-        >
+        <Button variant="secondary" onClick={() => setView("approve")}>
           <MonitorSmartphoneIcon />
           Link a new device
         </Button>

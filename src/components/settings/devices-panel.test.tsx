@@ -75,6 +75,31 @@ vi.mock("@/lib/transparencyVerifier", () => ({
   },
 }))
 
+// ApproveDeviceLinkFlow has its own dedicated test suite. Stub it
+// here so the view-switch coverage in this file does not pull in
+// MLS / archive / scanner machinery and so we can assert
+// onCancel / onSuccess are wired correctly from DevicesPanel.
+vi.mock("@/components/devices/ApproveDeviceLinkFlow.jsx", () => ({
+  default: ({ mode, onCancel, onSuccess, onVaultUnlockNeeded }: {
+    mode: string
+    onCancel: () => void
+    onSuccess?: () => void
+    onVaultUnlockNeeded: () => void
+  }) => (
+    <div data-testid="approve-flow-stub" data-mode={mode}>
+      <button type="button" onClick={onCancel}>
+        stub-cancel
+      </button>
+      <button type="button" onClick={() => onSuccess?.()}>
+        stub-success
+      </button>
+      <button type="button" onClick={onVaultUnlockNeeded}>
+        stub-unlock
+      </button>
+    </div>
+  ),
+}))
+
 import { DevicesPanel } from "./devices-panel"
 
 describe("DevicesPanel", () => {
@@ -164,7 +189,7 @@ describe("DevicesPanel", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("CTA navigates to /link-device without the mode=new query", async () => {
+  it("CTA opens the embedded approve flow inside the panel", async () => {
     listDeviceKeys.mockResolvedValueOnce([])
 
     render(<DevicesPanel />)
@@ -174,8 +199,58 @@ describe("DevicesPanel", () => {
       await screen.findByRole("button", { name: /link a new device/i })
     )
 
-    expect(navigateMock).toHaveBeenCalledTimes(1)
-    expect(navigateMock).toHaveBeenCalledWith("/link-device")
+    // Stays in-modal: no router navigate, ApproveDeviceLinkFlow stub
+    // mounts in embedded mode.
+    expect(navigateMock).not.toHaveBeenCalled()
+    const stub = await screen.findByTestId("approve-flow-stub")
+    expect(stub.dataset.mode).toBe("embedded")
+  })
+
+  it("Back-to-devices returns to the list and refetches", async () => {
+    listDeviceKeys
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "row-1",
+          deviceId: "device-other",
+          label: "iPhone",
+          certifiedAt: "2026-02-01T00:00:00Z",
+          lastSeen: new Date().toISOString(),
+        },
+      ])
+
+    render(<DevicesPanel />)
+
+    const u = userEvent.setup()
+    await u.click(
+      await screen.findByRole("button", { name: /link a new device/i })
+    )
+    await screen.findByTestId("approve-flow-stub")
+
+    await u.click(
+      screen.getByRole("button", { name: /back to devices/i })
+    )
+
+    // Stub gone, list rendered with the second listDeviceKeys result.
+    expect(screen.queryByTestId("approve-flow-stub")).not.toBeInTheDocument()
+    await screen.findByText("iPhone")
+    expect(listDeviceKeys).toHaveBeenCalledTimes(2)
+  })
+
+  it("vault-locked Unlock closes the settings dialog and navigates to root", async () => {
+    listDeviceKeys.mockResolvedValueOnce([])
+    const onRequestClose = vi.fn()
+
+    render(<DevicesPanel onRequestClose={onRequestClose} />)
+
+    const u = userEvent.setup()
+    await u.click(
+      await screen.findByRole("button", { name: /link a new device/i })
+    )
+    await u.click(screen.getByRole("button", { name: /stub-unlock/i }))
+
+    expect(onRequestClose).toHaveBeenCalledTimes(1)
+    expect(navigateMock).toHaveBeenCalledWith("/")
   })
 
   it("revoke flow calls revokeDeviceKey + transparency verify", async () => {
