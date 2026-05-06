@@ -576,9 +576,7 @@ export default function ApproveDeviceLinkFlow({
   if (loading) {
     return (
       <FlowShell mode={mode}>
-        <div className={mode === 'page' ? 'ld-empty-box' : 'text-sm text-muted-foreground'}>
-          Loading…
-        </div>
+        <div className="text-sm text-muted-foreground">Loading…</div>
       </FlowShell>
     );
   }
@@ -593,11 +591,11 @@ export default function ApproveDeviceLinkFlow({
           device.
         </Subtitle>
         {initialPayload && (
-          <div className={mode === 'page' ? 'ld-status' : 'text-xs text-muted-foreground'}>
+          <div className={'text-xs text-muted-foreground'}>
             QR request detected. Unlock this browser to resume approval automatically.
           </div>
         )}
-        <div className="auth-actions flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <ShadcnButton
             variant="ghost"
             size="lg"
@@ -627,7 +625,7 @@ export default function ApproveDeviceLinkFlow({
           account you want to link.
         </Subtitle>
         {initialPayload && !hasVault && (
-          <div className={mode === 'page' ? 'ld-status' : 'text-xs text-muted-foreground'}>
+          <div className={'text-xs text-muted-foreground'}>
             QR request detected. This browser does not have a local Hush vault for that account.
           </div>
         )}
@@ -648,18 +646,18 @@ export default function ApproveDeviceLinkFlow({
 
       {!claim && !showScanner && (
         <form
-          className={mode === 'page' ? 'ld-code-form' : 'flex flex-col gap-3'}
+          className="flex flex-col gap-3"
           onSubmit={handleResolveCode}
         >
           <label
             htmlFor="device-link-code"
-            className={mode === 'page' ? 'ld-code-label' : 'text-xs font-medium uppercase tracking-wide text-muted-foreground'}
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
           >
             Link code
           </label>
           <Input
             id="device-link-code"
-            className={mode === 'page' ? 'ld-code-input' : ''}
+            className=""
             value={code}
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="ABCD1234"
@@ -690,12 +688,12 @@ export default function ApproveDeviceLinkFlow({
             Scan QR with camera
           </ShadcnButton>
           {scannerError && (
-            <Alert variant="destructive" className={mode === 'page' ? 'ld-error' : ''}>
+            <Alert variant="destructive" className={''}>
               <AlertDescription>{scannerError}</AlertDescription>
             </Alert>
           )}
           {scannerUnavailable && (
-            <div className={mode === 'page' ? 'ld-status' : 'text-xs text-muted-foreground'}>
+            <div className={'text-xs text-muted-foreground'}>
               Camera scanning is not supported in this browser. Use the manual code instead.
             </div>
           )}
@@ -712,24 +710,19 @@ export default function ApproveDeviceLinkFlow({
       )}
 
       {claim && (
-        <div
-          className={
-            mode === 'page'
-              ? 'ld-claim-summary'
-              : 'flex flex-col gap-1 rounded-lg border bg-muted/30 px-3 py-2 text-sm'
-          }
-        >
-          <div className={mode === 'page' ? 'ld-summary-row' : 'flex justify-between gap-4'}>
+        <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+          {/* claim summary */}
+          <div className={'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Device</span>
             <strong className="truncate">
               {claim.label?.trim() ? claim.label : claim.deviceId}
             </strong>
           </div>
-          <div className={mode === 'page' ? 'ld-summary-row' : 'flex justify-between gap-4'}>
+          <div className={'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Expires</span>
             <strong>{formatCountdown(claim.expiresAt, now)}</strong>
           </div>
-          <div className={mode === 'page' ? 'ld-summary-row' : 'flex justify-between gap-4'}>
+          <div className={'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Instance</span>
             <strong className="truncate">
               {claim.instanceUrl || homeInstanceUrl || window.location.origin}
@@ -739,26 +732,24 @@ export default function ApproveDeviceLinkFlow({
       )}
 
       {status && (
-        <div className={mode === 'page' ? 'ld-status' : 'text-sm text-muted-foreground'}>
-          {status}
-        </div>
+        <div className="text-sm text-muted-foreground">{status}</div>
       )}
       {error && (
-        <Alert variant="destructive" className={mode === 'page' ? 'ld-error' : ''}>
+        <Alert variant="destructive" className={''}>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       {claim && resumableExport && !isApproving && !isResuming && (
         <div
-          className={mode === 'page' ? 'ld-status' : 'rounded-md border bg-muted/30 p-3 text-sm'}
+          className="rounded-md border bg-muted/30 p-3 text-sm"
           data-testid="ld-resume-banner"
         >
           <p>
             A previous device-link upload was interrupted. Resume it to finish
             the same archive, or discard it to start a fresh upload.
           </p>
-          <div className="auth-actions mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <ShadcnButton
               variant="secondary"
               size="lg"
@@ -779,7 +770,7 @@ export default function ApproveDeviceLinkFlow({
         </div>
       )}
 
-      <div className="auth-actions flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <ShadcnButton variant="ghost" size="lg" onClick={onCancel}>
           Close
         </ShadcnButton>
@@ -807,24 +798,16 @@ export default function ApproveDeviceLinkFlow({
 function FlowShell({ mode, children }) {
   if (mode === 'page') {
     return (
-      <Card className="glass home-form-card ld-card gap-0 ring-0 py-0">
-        {children}
-      </Card>
+      <Card className="w-full max-w-md gap-4 p-6">{children}</Card>
     );
   }
   return <div className="flex flex-col gap-4">{children}</div>;
 }
 
-function Heading({ mode, children }) {
-  if (mode === 'page') {
-    return <div className="home-section-title">{children}</div>;
-  }
+function Heading({ children }) {
   return <h2 className="text-lg font-semibold">{children}</h2>;
 }
 
-function Subtitle({ mode, children }) {
-  if (mode === 'page') {
-    return <p className="ld-subtitle">{children}</p>;
-  }
+function Subtitle({ children }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }

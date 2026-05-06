@@ -65,15 +65,6 @@ function buildUnlockResumePath(location) {
   return `/?returnTo=${encodeURIComponent(current)}`;
 }
 
-function LinkDeviceBackLink() {
-  return (
-    <ShadcnButton variant="ghost" size="lg" className="ld-back-link" asChild>
-      <Link to="/">
-        <ArrowLeftIcon data-icon="inline-start" /> Back
-      </Link>
-    </ShadcnButton>
-  );
-}
 
 function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSelectInstance }) {
   const { completeDeviceLink, loading: authLoading } = useAuth();
@@ -301,55 +292,79 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
     : 'Generating link request…';
 
   return (
-    <Card className="glass home-form-card ld-card ld-new-card gap-0 ring-0 py-0">
-      <div className="home-section-title">Link this device</div>
-      <p className="ld-subtitle">
-        Scan this QR code from a device that is already signed in to the same account.
-      </p>
+    // Legacy `ld-*` classes are kept as test-only structural markers
+    // (no CSS rules attached) so the existing structural-stability
+    // suite keeps working without coupling tests to Tailwind utility
+    // classes that may legitimately churn.
+    <Card className="ld-card w-full max-w-md gap-4 p-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="home-section-title text-lg font-semibold">
+          Link this device
+        </h1>
+        <p className="ld-subtitle text-sm text-muted-foreground">
+          Scan this QR code from a device that is already signed in to the
+          same account.
+        </p>
+      </div>
 
       {connectionLost && (
-        <div className="ld-connection-lost">Connection lost. Retrying…</div>
+        <div className="ld-connection-lost rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+          Connection lost. Retrying…
+        </div>
       )}
 
       <section
-        className="ld-qr-block"
         aria-label="Device link QR area"
         data-state={hasActiveRequest ? 'active' : 'pending'}
+        className="ld-qr-block flex flex-col items-center gap-2"
       >
-        <div className="ld-qr-frame">
+        <div className="ld-qr-frame flex h-[260px] w-[260px] items-center justify-center rounded-lg border bg-background p-3">
           {hasActiveRequest && requestState.qrDataUrl ? (
             <img
-              className="ld-qr-image"
+              className="ld-qr-image h-full w-full object-contain"
               src={requestState.qrDataUrl}
               alt="Device link QR code"
             />
           ) : (
-            <div className="ld-qr-placeholder" role="status" aria-live="polite">
+            <div
+              className="ld-qr-placeholder px-2 text-center text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
               {placeholderMessage}
             </div>
           )}
         </div>
-        <div className="ld-qr-timer" aria-live="polite">
+        <div
+          className="ld-qr-timer font-mono text-xs text-muted-foreground"
+          aria-live="polite"
+        >
           {hasActiveRequest
             ? `Expires in ${formatCountdown(requestState.expiresAt, now)}`
-            : ' '}
+            : ' '}
         </div>
       </section>
 
-      <div className="ld-divider" role="separator" aria-orientation="horizontal">
-        <span className="ld-divider-line" aria-hidden="true" />
-        <span className="ld-divider-label">or use fallback code</span>
-        <span className="ld-divider-line" aria-hidden="true" />
+      <div
+        className="ld-divider flex items-center gap-3"
+        role="separator"
+        aria-orientation="horizontal"
+      >
+        <span className="h-px flex-1 bg-border" aria-hidden="true" />
+        <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          or use fallback code
+        </span>
+        <span className="h-px flex-1 bg-border" aria-hidden="true" />
       </div>
 
-      <div className="ld-code-block">
-        <div
-          className="ld-code-value"
+      <div className="ld-code-block flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+        <code
+          className="ld-code-value flex-1 truncate text-center font-mono text-xl font-normal tracking-[0.14em]"
           data-state={hasCode ? 'ready' : 'placeholder'}
           aria-label="Device link code"
         >
           {hasCode ? requestState.code : '——————'}
-        </div>
+        </code>
         <ShadcnButton
           type="button"
           variant="ghost"
@@ -358,11 +373,13 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           aria-label="Copy device link code"
           data-state={codeCopied ? 'copied' : 'idle'}
           disabled={!hasCode}
-          className="ld-code-copy"
+          className="ld-code-copy shrink-0"
         >
-          {codeCopied
-            ? <CheckIcon aria-hidden="true" />
-            : <CopyIcon aria-hidden="true" />}
+          {codeCopied ? (
+            <CheckIcon aria-hidden="true" />
+          ) : (
+            <CopyIcon aria-hidden="true" />
+          )}
         </ShadcnButton>
       </div>
 
@@ -372,7 +389,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           active={getInstanceDisplayName(selectedInstanceUrl)}
           onSelect={(label) => {
             const match = knownInstances.find(
-              (i) => getInstanceDisplayName(i.url) === label
+              (i) => getInstanceDisplayName(i.url) === label,
             );
             onSelectInstance(match?.url ?? label);
           }}
@@ -383,19 +400,31 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         />
       </div>
 
-      {status && <div className="ld-status">{status}</div>}
+      {status && (
+        <div className="ld-status text-sm text-muted-foreground">{status}</div>
+      )}
       {error && (
         <Alert variant="destructive" className="ld-error">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="auth-actions ld-footer">
-        <LinkDeviceBackLink />
+      <div className="ld-footer flex items-center gap-2">
+        <ShadcnButton
+          variant="ghost"
+          size="lg"
+          className="ld-back-link"
+          asChild
+        >
+          <Link to="/">
+            <ArrowLeftIcon data-icon="inline-start" />
+            Back
+          </Link>
+        </ShadcnButton>
         <ShadcnButton
           variant="secondary"
           size="lg"
-          className="flex-1 ld-footer-regen"
+          className="flex-1"
           onClick={() => setRefreshKey((value) => value + 1)}
         >
           Regenerate
@@ -443,8 +472,8 @@ export default function LinkDevice() {
   const unlockResumePath = useMemo(() => buildUnlockResumePath(location), [location]);
 
   return (
-    <div className="home-page ld-page">
-      <div className="home-container ld-container">
+    <div className="flex min-h-svh w-full justify-center bg-background px-4 py-6 sm:px-6">
+      <div className="my-auto flex w-full max-w-md flex-col gap-4">
         {isNewDeviceMode ? (
           <NewDeviceLinkView
             onLinked={() => navigate('/', { replace: true })}
