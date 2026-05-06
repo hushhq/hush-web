@@ -1012,6 +1012,12 @@ export async function deleteGuildChannel(token, serverId, channelId, baseUrl = '
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `delete channel ${res.status}`);
   }
+  // 200 OK ships a `deletedChannelIds` array (single channel for direct
+  // deletes, every cascaded child id for category deletes). 204 was the
+  // pre-cascade contract; tolerate it so a stale backend doesn't trip
+  // the frontend.
+  if (res.status === 204) return { deletedChannelIds: [channelId] };
+  return res.json().catch(() => ({ deletedChannelIds: [channelId] }));
 }
 
 /**

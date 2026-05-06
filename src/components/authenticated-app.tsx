@@ -206,11 +206,13 @@ export function AuthenticatedApp() {
     systemChannels: systemChannelRows,
     onCategoriesChange,
     onChannelsChange,
-    refetch: refetchChannels,
+    applyCreated: applyChannelCreated,
+    applyDeleted: applyChannelsDeleted,
   } = useChannelsForServer({
     serverId: activeServer?.id ?? null,
     token,
     baseUrl,
+    wsClient: wsClient as Parameters<typeof useChannelsForServer>[0]["wsClient"],
   })
 
   const sidebarSystemChannels = React.useMemo<SystemChannel[]>(
@@ -267,19 +269,64 @@ export function AuthenticatedApp() {
         kind === "category" || parentId == null
           ? { name, type: kind }
           : { name, type: kind, parentId }
-      await createGuildChannel(token, activeServer.id, body, baseUrl)
-      await refetchChannels()
+      // Optimistic local insert from the HTTP response keeps the UI
+      // responsive even if the matching `channel_created` WS broadcast
+      // is delayed or dropped (flaky WS, missed subscription, etc.).
+      // The WS handler dedupes by id when the broadcast lands, so
+      // applying twice is a no-op.
+      const created = (await createGuildChannel(
+        token,
+        activeServer.id,
+        body,
+        baseUrl
+      )) as Parameters<typeof applyChannelCreated>[0] | null | undefined
+      if (created?.id) {
+        applyChannelCreated(created)
+      }
     },
-    [activeServer, token, baseUrl, refetchChannels]
+    [activeServer, token, baseUrl, applyChannelCreated]
   )
 
+  // Tracks the currently-viewed channel id and the navigateToServer
+  // function for callbacks that fire before those bindings are in
+  // scope (handleDeleteChannel is declared early in the component
+  // body). Both refs are updated by effects further down.
+  const activeChannelIdRef = React.useRef<string>("")
+  const navigateToServerRef = React.useRef<
+    ((server: Server, channelId?: string) => void) | null
+  >(null)
   const handleDeleteChannel = React.useCallback(
     async (channelId: string) => {
       if (!activeServer || !token) return
-      await deleteGuildChannel(token, activeServer.id, channelId, baseUrl)
-      await refetchChannels()
+      const deleted = (await deleteGuildChannel(
+        token,
+        activeServer.id,
+        channelId,
+        baseUrl
+      )) as { deletedChannelIds?: string[] } | null | undefined
+      // Optimistic local removal; WS `channel_deleted` reconciliation
+      // is idempotent (filter is a no-op when the id is already gone).
+      // Recursive category deletes return every cascaded channel id;
+      // single-channel deletes return just the requested id (or
+      // nothing — the call site falls back to the requested id).
+      const ids =
+        Array.isArray(deleted?.deletedChannelIds) &&
+        deleted!.deletedChannelIds!.length > 0
+          ? deleted!.deletedChannelIds!
+          : [channelId]
+      applyChannelsDeleted(ids)
+      // Drop any stale reference to the deleted channel(s) locally —
+      // the active voice session and the chat surface must not stay
+      // mounted on a dead id.
+      const idSet = new Set(ids)
+      setJoinedVoice((prev) =>
+        prev && idSet.has(prev.channelId) ? null : prev
+      )
+      if (idSet.has(activeChannelIdRef.current)) {
+        navigateToServerRef.current?.(activeServer)
+      }
     },
-    [activeServer, token, baseUrl, refetchChannels]
+    [activeServer, token, baseUrl, applyChannelsDeleted]
   )
 
   const handleLeaveServer = React.useCallback(
@@ -307,8 +354,13 @@ export function AuthenticatedApp() {
       if (!tk) return
       try {
         await deleteGuild(tk, serverId, target.raw.instanceUrl)
-        await refreshGuilds(target.raw.instanceUrl)
+        // Navigate away immediately so the confirmation dialog can
+        // close and the user is no longer mounted on the dead server.
+        // Refresh the guild list in the background — awaiting it kept
+        // the dialog open through a heavy authenticated-app re-render
+        // and made the UI feel frozen.
         if (activeServer?.id === serverId) navigate("/home")
+        void refreshGuilds(target.raw.instanceUrl).catch(() => {})
       } catch (err) {
         console.error("deleteGuild failed", err)
       }
@@ -463,6 +515,13 @@ export function AuthenticatedApp() {
     return { id: "", name: "Channel", kind: "text" }
   }, [allChannels, channels, params.channelSlug, systemChannelRows])
 
+  // Mirror activeChannel.id into the ref so handleDeleteChannel
+  // (declared earlier for hooks-order reasons) can read the current
+  // value at delete time.
+  React.useEffect(() => {
+    activeChannelIdRef.current = activeChannel.id
+  }, [activeChannel.id])
+
   const activeSystemChannelType = React.useMemo<SystemChannelType | null>(
     () =>
       activeChannel.kind === "system"
@@ -563,6 +622,9 @@ export function AuthenticatedApp() {
     },
     [navigate]
   )
+  React.useEffect(() => {
+    navigateToServerRef.current = navigateToServer
+  }, [navigateToServer])
 
   const handleSelectRail = React.useCallback(
     (id: string) => {
@@ -1053,6 +1115,7 @@ export function AuthenticatedApp() {
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                 onCreateChannel={handleCreateChannel}
                 onDeleteChannel={handleDeleteChannel}
+                onDeleteCategory={handleDeleteChannel}
                 onCreateInvite={handleCreateInvite}
                 canAdministrate={canAdministrate}
                 onCreateServer={openCreateServerDialog}
@@ -1111,6 +1174,7 @@ export function AuthenticatedApp() {
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                   onCreateChannel={handleCreateChannel}
                   onDeleteChannel={handleDeleteChannel}
+                  onDeleteCategory={handleDeleteChannel}
                   onCreateInvite={handleCreateInvite}
                   canAdministrate={canAdministrate}
                   onCreateServer={openCreateServerDialog}

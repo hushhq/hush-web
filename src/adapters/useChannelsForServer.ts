@@ -35,10 +35,35 @@ interface RawChannel {
   systemChannelType?: string | null
 }
 
+interface WsClientLike {
+  on: (event: string, handler: (msg: unknown) => void) => void
+  off?: (event: string, handler: (msg: unknown) => void) => void
+  send?: (type: string, payload?: Record<string, unknown>) => void
+  isConnected?: () => boolean
+}
+
 interface UseChannelsArgs {
   serverId: string | null
   token: string | null
   baseUrl: string
+  wsClient?: WsClientLike | null
+}
+
+interface ChannelCreatedEvent {
+  type: "channel_created"
+  channel: RawChannel
+}
+
+interface ChannelDeletedEvent {
+  type: "channel_deleted"
+  channel_id: string
+}
+
+interface ChannelMovedEvent {
+  type: "channel_moved"
+  channel_id: string
+  parent_id: string | null
+  position: number
 }
 
 interface UseChannelsResult {
@@ -50,6 +75,20 @@ interface UseChannelsResult {
   refetch: () => Promise<void>
   onCategoriesChange: (next: ChannelCategory[]) => void
   onChannelsChange: (next: Channel[]) => void
+  /**
+   * Apply an optimistic local insert from a mutation HTTP response.
+   * Idempotent — when the matching `channel_created` WS event lands,
+   * the WS handler dedupes by id. Use to keep the UI responsive even
+   * when the WS broadcast is delayed or the connection is flapping.
+   */
+  applyCreated: (channel: RawChannel) => void
+  /**
+   * Apply an optimistic local delete after a successful DELETE call.
+   * Idempotent — the matching `channel_deleted` WS event becomes a no-op
+   * because the row is already gone. Recursive deletes (category +
+   * descendants) accept multiple ids.
+   */
+  applyDeleted: (channelIds: string[]) => void
 }
 
 const CATEGORY = "category"
@@ -106,6 +145,7 @@ export function useChannelsForServer({
   serverId,
   token,
   baseUrl,
+  wsClient,
 }: UseChannelsArgs): UseChannelsResult {
   const [raw, setRaw] = React.useState<RawChannel[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -132,6 +172,86 @@ export function useChannelsForServer({
   React.useEffect(() => {
     void refetch()
   }, [refetch])
+
+  // Apply backend-broadcast channel mutations as local state diffs so the
+  // mutation handlers (create/delete/move) do not need to trigger a full
+  // HTTP refetch. Refetching toggles `loading`, which forces the
+  // surrounding monolithic shell to re-render every chat / voice / sidebar
+  // subtree and produces a visible UI freeze on every creative or
+  // destructive action. The backend already broadcasts the authoritative
+  // payload (`internal/api/channels.go`), so a localized setRaw on each
+  // event is both cheaper and consistent with what other peers see.
+  React.useEffect(() => {
+    if (!wsClient || !serverId) return
+
+    // BroadcastToServer on the backend only reaches clients that have
+    // explicitly joined the server's hub room via a `subscribe.server`
+    // frame (see internal/ws/client.go). Without this frame, every
+    // channel_created / channel_deleted broadcast lands in an empty
+    // subscriber set and the client never sees mutations. We send the
+    // subscribe frame here once wsClient + serverId are known, and
+    // re-send on every `open` event so reconnects restore the
+    // subscription too.
+    const subscribe = () => {
+      if (wsClient.isConnected?.()) {
+        wsClient.send?.("subscribe.server", { server_id: serverId })
+      }
+    }
+    subscribe()
+    const onOpen = () => subscribe()
+    wsClient.on("open", onOpen)
+
+    const onCreated = (raw: unknown) => {
+      const msg = raw as ChannelCreatedEvent
+      if (msg?.type !== "channel_created" || !msg.channel?.id) return
+      setRaw((prev) => {
+        if (prev.some((c) => c.id === msg.channel.id)) return prev
+        return [...prev, msg.channel]
+      })
+    }
+
+    const onDeleted = (raw: unknown) => {
+      const msg = raw as ChannelDeletedEvent
+      if (msg?.type !== "channel_deleted" || !msg.channel_id) return
+      setRaw((prev) => {
+        if (!prev.some((c) => c.id === msg.channel_id)) return prev
+        return prev.filter((c) => c.id !== msg.channel_id)
+      })
+    }
+
+    const onMoved = (raw: unknown) => {
+      const msg = raw as ChannelMovedEvent
+      if (msg?.type !== "channel_moved" || !msg.channel_id) return
+      setRaw((prev) => {
+        const target = prev.find((c) => c.id === msg.channel_id)
+        if (!target) return prev
+        if (
+          target.parentId === msg.parent_id &&
+          target.position === msg.position
+        ) {
+          return prev
+        }
+        return prev.map((c) =>
+          c.id === msg.channel_id
+            ? { ...c, parentId: msg.parent_id, position: msg.position }
+            : c
+        )
+      })
+    }
+
+    wsClient.on("channel_created", onCreated)
+    wsClient.on("channel_deleted", onDeleted)
+    wsClient.on("channel_moved", onMoved)
+    return () => {
+      wsClient.off?.("open", onOpen)
+      wsClient.off?.("channel_created", onCreated)
+      wsClient.off?.("channel_deleted", onDeleted)
+      wsClient.off?.("channel_moved", onMoved)
+      if (wsClient.isConnected?.()) {
+        wsClient.send?.("unsubscribe.server", { server_id: serverId })
+      }
+    }
+  }, [wsClient, serverId])
 
   const categories = React.useMemo<ChannelCategory[]>(
     () =>
@@ -255,6 +375,22 @@ export function useChannelsForServer({
     [serverId, token, baseUrl, refetch]
   )
 
+  const applyCreated = React.useCallback((channel: RawChannel) => {
+    if (!channel?.id) return
+    setRaw((prev) =>
+      prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]
+    )
+  }, [])
+
+  const applyDeleted = React.useCallback((channelIds: string[]) => {
+    if (!Array.isArray(channelIds) || channelIds.length === 0) return
+    const ids = new Set(channelIds)
+    setRaw((prev) => {
+      if (!prev.some((c) => ids.has(c.id))) return prev
+      return prev.filter((c) => !ids.has(c.id))
+    })
+  }, [])
+
   return {
     categories,
     channels,
@@ -264,5 +400,7 @@ export function useChannelsForServer({
     refetch,
     onCategoriesChange,
     onChannelsChange,
+    applyCreated,
+    applyDeleted,
   }
 }
