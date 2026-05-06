@@ -140,6 +140,30 @@ describe("DevicesPanel", () => {
     expect(screen.getByText("iPhone")).toBeInTheDocument()
   })
 
+  it("shows a short readable fallback for unlabeled non-current devices", async () => {
+    listDeviceKeys.mockResolvedValueOnce([
+      {
+        id: "row-2",
+        deviceId: "abcdef0123456789ffffffffffffffff",
+        label: null,
+        certifiedAt: "2026-02-01T00:00:00Z",
+        lastSeen: new Date().toISOString(),
+      },
+    ])
+
+    render(<DevicesPanel />)
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Unknown device (abcdef01)")
+      ).toBeInTheDocument()
+    )
+    // Full hash must not be on screen — that was the readability bug.
+    expect(
+      screen.queryByText("abcdef0123456789ffffffffffffffff")
+    ).not.toBeInTheDocument()
+  })
+
   it("CTA navigates to /link-device without the mode=new query", async () => {
     listDeviceKeys.mockResolvedValueOnce([])
 

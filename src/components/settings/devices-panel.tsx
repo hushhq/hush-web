@@ -320,5 +320,12 @@ function getDeviceStaleness(
 function getDeviceDisplayLabel(device: DeviceRow, isCurrent: boolean): string {
   if (device.label) return device.label
   if (isCurrent) return getReadableDeviceLabel()
-  return device.deviceId || "Unknown device"
+  // Devices registered before the label-on-certify wiring landed
+  // surface their raw deviceId hash (~64 chars), which is unreadable.
+  // Fall back to a short identifier so the row is still
+  // distinguishable from siblings without exposing the full hash.
+  if (device.deviceId) {
+    return `Unknown device (${device.deviceId.slice(0, 8)})`
+  }
+  return "Unknown device"
 }
