@@ -66,20 +66,18 @@ export function useTransparencyVerification({
   const onFailureRef = React.useRef(onVerificationFailure)
   onFailureRef.current = onVerificationFailure
 
-  const verifierRef = React.useRef<TransparencyVerifier | null>(null)
-  React.useEffect(() => {
-    if (!instanceUrl || !logPublicKeyHex) {
-      verifierRef.current = null
-      return
-    }
-    verifierRef.current = new TransparencyVerifier(
-      instanceUrl,
-      logPublicKeyHex,
-    )
+  // Memoize the verifier on its identity inputs so every effect
+  // below re-runs when the inputs flip (e.g. handshakeData arrives
+  // after the first render). A ref previously held the verifier;
+  // the effects didn't depend on its content, so a late-arriving
+  // log public key never triggered the initial verification or
+  // the periodic interval setup.
+  const verifier = React.useMemo<TransparencyVerifier | null>(() => {
+    if (!instanceUrl || !logPublicKeyHex) return null
+    return new TransparencyVerifier(instanceUrl, logPublicKeyHex)
   }, [instanceUrl, logPublicKeyHex])
 
   const runVerification = React.useCallback(async () => {
-    const verifier = verifierRef.current
     if (!verifier) return
     if (!token || !identityPublicKey) return
     const pubKeyHex = bytesToHex(identityPublicKey)
@@ -99,14 +97,16 @@ export function useTransparencyVerification({
       // Network error — do not panic the user, but log so the next
       // event-driven check can confirm or deny.
     }
-  }, [token, identityPublicKey])
+  }, [verifier, token, identityPublicKey])
 
-  // Fire once when inputs become available.
+  // Fire once when inputs become available. Depending on
+  // `runVerification` (whose deps include verifier + token +
+  // identityPublicKey) means a late-arriving handshake key
+  // triggers this effect once it produces a non-null verifier.
   React.useEffect(() => {
-    if (!verifierRef.current) return
-    if (!token || !identityPublicKey) return
+    if (!verifier || !token || !identityPublicKey) return
     void runVerification()
-  }, [runVerification, token, identityPublicKey])
+  }, [runVerification, verifier, token, identityPublicKey])
 
   // Re-verify on reconnect and on key-change broadcast.
   React.useEffect(() => {
@@ -128,13 +128,15 @@ export function useTransparencyVerification({
   }, [wsClient, runVerification])
 
   // Periodic fallback so a session that missed a broadcast (offline
-  // window, listener gap, rare push drop) still re-verifies.
+  // window, listener gap, rare push drop) still re-verifies. The
+  // interval is bound to all three inputs that gate verification —
+  // a late `verifier` flips this from a no-op into an active
+  // 5-minute cadence.
   React.useEffect(() => {
-    if (!verifierRef.current) return
-    if (!token || !identityPublicKey) return
+    if (!verifier || !token || !identityPublicKey) return
     const id = setInterval(() => {
       void runVerification()
     }, PERIODIC_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [runVerification, token, identityPublicKey])
+  }, [runVerification, verifier, token, identityPublicKey])
 }

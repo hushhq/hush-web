@@ -29,15 +29,16 @@ describe("useOnlinePresence", () => {
     vi.clearAllMocks()
   })
 
-  it("starts with an empty set when no presence frame has arrived", () => {
+  it("starts with hasSnapshot=false and an empty set", () => {
     const ws = makeWs()
     const { result } = renderHook(() =>
       useOnlinePresence(ws as unknown as Parameters<typeof useOnlinePresence>[0]),
     )
-    expect(result.current.size).toBe(0)
+    expect(result.current.hasSnapshot).toBe(false)
+    expect(result.current.onlineUserIds.size).toBe(0)
   })
 
-  it("replaces the set on every presence.update frame", () => {
+  it("flips hasSnapshot=true on the first presence.update", () => {
     const ws = makeWs()
     const { result } = renderHook(() =>
       useOnlinePresence(ws as unknown as Parameters<typeof useOnlinePresence>[0]),
@@ -49,7 +50,8 @@ describe("useOnlinePresence", () => {
         user_ids: ["a", "b"],
       })
     })
-    expect(Array.from(result.current).sort()).toEqual(["a", "b"])
+    expect(result.current.hasSnapshot).toBe(true)
+    expect(Array.from(result.current.onlineUserIds).sort()).toEqual(["a", "b"])
 
     act(() => {
       ws.emit("presence.update", {
@@ -57,7 +59,8 @@ describe("useOnlinePresence", () => {
         user_ids: ["a"],
       })
     })
-    expect(Array.from(result.current)).toEqual(["a"])
+    expect(result.current.hasSnapshot).toBe(true)
+    expect(Array.from(result.current.onlineUserIds)).toEqual(["a"])
   })
 
   it("ignores frames whose type is not presence.update", () => {
@@ -69,10 +72,11 @@ describe("useOnlinePresence", () => {
     act(() => {
       ws.emit("presence.update", { type: "ping", user_ids: ["a"] })
     })
-    expect(result.current.size).toBe(0)
+    expect(result.current.hasSnapshot).toBe(false)
+    expect(result.current.onlineUserIds.size).toBe(0)
   })
 
-  it("treats a missing user_ids array as empty", () => {
+  it("treats a missing user_ids array as empty (still flips hasSnapshot)", () => {
     const ws = makeWs()
     const { result } = renderHook(() =>
       useOnlinePresence(ws as unknown as Parameters<typeof useOnlinePresence>[0]),
@@ -81,7 +85,8 @@ describe("useOnlinePresence", () => {
     act(() => {
       ws.emit("presence.update", { type: "presence.update" })
     })
-    expect(result.current.size).toBe(0)
+    expect(result.current.hasSnapshot).toBe(true)
+    expect(result.current.onlineUserIds.size).toBe(0)
   })
 
   it("unsubscribes on unmount", () => {

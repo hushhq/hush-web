@@ -10,6 +10,15 @@ interface PresenceUpdateFrame {
   user_ids?: string[]
 }
 
+export interface OnlinePresenceState {
+  onlineUserIds: Set<string>
+  /** True once at least one `presence.update` frame has arrived.
+   *  Consumers MUST gate offline derivation on this flag — without
+   *  it, the empty initial set would render every member offline
+   *  until the first frame lands. */
+  hasSnapshot: boolean
+}
+
 /**
  * Returns the current set of online user ids derived from the
  * backend `presence.update` broadcast (see
@@ -19,15 +28,23 @@ interface PresenceUpdateFrame {
  * incrementally diffing.
  *
  * Consumers (member rows in `useMembersForServer`, DM rows in the
- * authenticated app root) should derive presence as `set.has(userId)
- * ? "online" : "offline"`. Idle / DND states are intentionally not
- * synthesised — the backend currently exposes only connected /
- * not-connected; richer states need a server-side change.
+ * authenticated app root) MUST gate offline derivation on
+ * `hasSnapshot` — for example: `hasSnapshot ? (set.has(id) ?
+ * "online" : "offline") : "online"`. Without that gate the initial
+ * empty set would render every user offline until the first frame
+ * arrives.
+ *
+ * Idle / DND states are intentionally not synthesised — the
+ * backend currently exposes only connected / not-connected;
+ * richer states need a server-side change.
  */
 export function useOnlinePresence(
   wsClient: WsClientLike | null | undefined,
-): Set<string> {
-  const [onlineIds, setOnlineIds] = React.useState<Set<string>>(new Set())
+): OnlinePresenceState {
+  const [state, setState] = React.useState<OnlinePresenceState>({
+    onlineUserIds: new Set(),
+    hasSnapshot: false,
+  })
 
   React.useEffect(() => {
     if (!wsClient) return
@@ -35,7 +52,7 @@ export function useOnlinePresence(
       const msg = raw as PresenceUpdateFrame
       if (msg?.type !== "presence.update") return
       const ids = Array.isArray(msg.user_ids) ? msg.user_ids : []
-      setOnlineIds(new Set(ids))
+      setState({ onlineUserIds: new Set(ids), hasSnapshot: true })
     }
     wsClient.on("presence.update", handler)
     return () => {
@@ -43,5 +60,12 @@ export function useOnlinePresence(
     }
   }, [wsClient])
 
-  return onlineIds
+  // Reset snapshot state when the wsClient identity changes (e.g.
+  // active instance switch). The next `presence.update` from the
+  // new client will repopulate the set.
+  React.useEffect(() => {
+    setState({ onlineUserIds: new Set(), hasSnapshot: false })
+  }, [wsClient])
+
+  return state
 }

@@ -38,11 +38,10 @@ interface UseSystemEventsArgs {
   limit?: number
   /** Optional WS client. When provided AND the source is
    *  `server-log`, the hook subscribes to `system_message` and
-   *  appends new events as they arrive. Audit-log moderation
-   *  events flow over the same `system_message` channel from the
-   *  backend, so the same listener serves both sources — but they
-   *  are filtered by `eventType` upstream so only the matching
-   *  rows land in the corresponding viewer. */
+   *  appends new events as they arrive. The moderation source is
+   *  served by the audit-log REST endpoint, which has no live
+   *  broadcast; live `system_message` frames are NOT appended to
+   *  the moderation viewer. */
   wsClient?: WsClientLike | null
 }
 
@@ -93,6 +92,11 @@ export function useSystemEvents({
 
   React.useEffect(() => {
     if (!wsClient || !serverId) return
+    // The `system_message` broadcast feeds the server-log view,
+    // not the moderation audit log. Subscribing it for the
+    // moderation source would inject server-log rows into a
+    // viewer that REST-fetches a different stream entirely.
+    if (source !== "server-log") return
     const handler = (raw: unknown) => {
       const data = raw as SystemMessageFrame
       if (data?.type !== "system_message") return
@@ -110,7 +114,7 @@ export function useSystemEvents({
     return () => {
       wsClient.off?.("system_message", handler)
     }
-  }, [wsClient, serverId])
+  }, [wsClient, serverId, source])
 
   return { events, loading, error, refetch }
 }

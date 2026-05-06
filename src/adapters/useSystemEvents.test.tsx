@@ -89,4 +89,132 @@ describe("useSystemEvents", () => {
     })
     expect(result.current.events).toEqual([])
   })
+
+  // Live system_message append is bound to the server-log source
+  // because the audit-log REST endpoint serves the moderation
+  // viewer instead of the system_messages stream.
+  describe("live system_message", () => {
+    function makeWs() {
+      const handlers = new Map<string, (data: unknown) => void>()
+      return {
+        on: vi.fn((event: string, h: (d: unknown) => void) => {
+          handlers.set(event, h)
+        }),
+        off: vi.fn((event: string) => {
+          handlers.delete(event)
+        }),
+        emit(event: string, payload: unknown) {
+          handlers.get(event)?.(payload)
+        },
+      }
+    }
+
+    it("appends a server-log frame matching the active server", async () => {
+      getSystemMessages.mockResolvedValue([
+        { id: "ev1", eventType: "member_joined", actorId: "u1", createdAt: "t1" },
+      ])
+      const ws = makeWs()
+
+      const { result } = renderHook(() =>
+        useSystemEvents({
+          ...ARGS,
+          source: "server-log",
+          wsClient: ws as unknown as Parameters<
+            typeof useSystemEvents
+          >[0]["wsClient"],
+        }),
+      )
+      await waitFor(() => expect(result.current.events).toHaveLength(1))
+
+      ws.emit("system_message", {
+        type: "system_message",
+        server_id: "g1",
+        system_message: {
+          id: "ev2",
+          eventType: "member_left",
+          actorId: "u2",
+          createdAt: "t2",
+        },
+      })
+      await waitFor(() => expect(result.current.events).toHaveLength(2))
+    })
+
+    it("ignores frames for a different server", async () => {
+      getSystemMessages.mockResolvedValue([])
+      const ws = makeWs()
+
+      const { result } = renderHook(() =>
+        useSystemEvents({
+          ...ARGS,
+          source: "server-log",
+          wsClient: ws as unknown as Parameters<
+            typeof useSystemEvents
+          >[0]["wsClient"],
+        }),
+      )
+      await waitFor(() => expect(result.current.events).toHaveLength(0))
+
+      ws.emit("system_message", {
+        type: "system_message",
+        server_id: "g-other",
+        system_message: {
+          id: "ev1",
+          eventType: "member_joined",
+          actorId: "u1",
+          createdAt: "t1",
+        },
+      })
+      await new Promise((r) => setTimeout(r, 0))
+      expect(result.current.events).toHaveLength(0)
+    })
+
+    it("does NOT subscribe when source is moderation", async () => {
+      getAuditLog.mockResolvedValue([])
+      const ws = makeWs()
+
+      renderHook(() =>
+        useSystemEvents({
+          ...ARGS,
+          source: "moderation",
+          wsClient: ws as unknown as Parameters<
+            typeof useSystemEvents
+          >[0]["wsClient"],
+        }),
+      )
+      await new Promise((r) => setTimeout(r, 0))
+      const subs = ws.on.mock.calls.map((c) => c[0])
+      expect(subs).not.toContain("system_message")
+    })
+
+    it("dedups by id when REST and WS race", async () => {
+      getSystemMessages.mockResolvedValue([
+        { id: "ev1", eventType: "member_joined", actorId: "u1", createdAt: "t1" },
+      ])
+      const ws = makeWs()
+
+      const { result } = renderHook(() =>
+        useSystemEvents({
+          ...ARGS,
+          source: "server-log",
+          wsClient: ws as unknown as Parameters<
+            typeof useSystemEvents
+          >[0]["wsClient"],
+        }),
+      )
+      await waitFor(() => expect(result.current.events).toHaveLength(1))
+
+      ws.emit("system_message", {
+        type: "system_message",
+        server_id: "g1",
+        system_message: {
+          id: "ev1",
+          eventType: "member_joined",
+          actorId: "u1",
+          createdAt: "t1",
+        },
+      })
+      await new Promise((r) => setTimeout(r, 0))
+      expect(result.current.events).toHaveLength(1)
+    })
+  })
 })

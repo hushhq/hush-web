@@ -107,4 +107,57 @@ describe("useMembersForServer", () => {
     expect(result.current.members[0].name).toBe("Yarin Cardillo")
     expect(result.current.members[0].initials).toBe("YC")
   })
+
+  // Presence readiness contract — without this gate, the initial
+  // empty `onlineUserIds` set would render every member offline
+  // until the first `presence.update` frame arrived.
+  it("renders rows online when presence snapshot has not arrived yet", async () => {
+    getGuildMembers.mockResolvedValue([
+      { id: "u1", username: "alice", permissionLevel: 0 },
+      { id: "u2", username: "bob", permissionLevel: 0 },
+    ])
+
+    const { result } = renderHook(() =>
+      useMembersForServer({
+        serverId: "g1",
+        token: "tok",
+        baseUrl: "https://a.example.com",
+        currentUserId: "u-self",
+        onlineUserIds: new Set(),
+        hasOnlineSnapshot: false,
+      }),
+    )
+
+    await waitFor(() => expect(result.current.members).toHaveLength(2))
+    expect(result.current.members.map((m) => m.presence)).toEqual([
+      "online",
+      "online",
+    ])
+  })
+
+  it("derives presence from onlineUserIds once a snapshot has arrived", async () => {
+    getGuildMembers.mockResolvedValue([
+      { id: "u1", username: "alice", permissionLevel: 0 },
+      { id: "u2", username: "bob", permissionLevel: 0 },
+    ])
+
+    const { result } = renderHook(() =>
+      useMembersForServer({
+        serverId: "g1",
+        token: "tok",
+        baseUrl: "https://a.example.com",
+        currentUserId: "u-self",
+        onlineUserIds: new Set(["u1"]),
+        hasOnlineSnapshot: true,
+      }),
+    )
+
+    await waitFor(() => expect(result.current.members).toHaveLength(2))
+    expect(result.current.members.find((m) => m.id === "u1")?.presence).toBe(
+      "online",
+    )
+    expect(result.current.members.find((m) => m.id === "u2")?.presence).toBe(
+      "offline",
+    )
+  })
 })

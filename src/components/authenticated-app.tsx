@@ -253,15 +253,17 @@ export function AuthenticatedApp() {
     () => adaptSystemChannelsForSidebar(systemChannelRows),
     [systemChannelRows]
   )
-  const onlineUserIds = useOnlinePresence(
-    wsClient as Parameters<typeof useOnlinePresence>[0],
-  )
+  const { onlineUserIds, hasSnapshot: hasOnlineSnapshot } =
+    useOnlinePresence(
+      wsClient as Parameters<typeof useOnlinePresence>[0],
+    )
   const { members, refetch: refetchMembers } = useMembersForServer({
     serverId: activeServer?.id ?? null,
     token,
     baseUrl,
     currentUserId,
     onlineUserIds,
+    hasOnlineSnapshot,
   })
 
   // Subscribe the WS to every text channel of the active server so
@@ -738,8 +740,14 @@ export function AuthenticatedApp() {
           const name =
             g.otherUser?.displayName ?? g.otherUser?.username ?? "user"
           const peerId = g.otherUser?.id
-          const presence: "online" | "offline" =
-            peerId && onlineUserIds.has(peerId) ? "online" : "offline"
+          // Presence stays optimistic ("online") until the first
+          // `presence.update` frame so the DM list does not flicker
+          // every peer to "offline" on initial mount.
+          const presence: "online" | "offline" = !hasOnlineSnapshot
+            ? "online"
+            : peerId && onlineUserIds.has(peerId)
+              ? "online"
+              : "offline"
           return {
             id: g.channelId as string,
             name,
@@ -747,7 +755,7 @@ export function AuthenticatedApp() {
             presence,
           }
         }),
-    [dmGuilds, onlineUserIds]
+    [dmGuilds, onlineUserIds, hasOnlineSnapshot]
   )
 
   const handleSelectHomeDM = React.useCallback(

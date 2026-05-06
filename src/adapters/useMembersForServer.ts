@@ -26,10 +26,17 @@ interface UseMembersArgs {
   token: string | null
   baseUrl: string
   currentUserId: string | null
-  /** Optional set of currently-online user ids. When provided,
-   *  the returned `members[].presence` reflects WS-driven presence
-   *  state instead of the legacy hardcoded "online" string. */
+  /** Optional set of currently-online user ids. When provided AND
+   *  `hasOnlineSnapshot` is true, the returned `members[].presence`
+   *  reflects WS-driven presence state. Without a snapshot, falls
+   *  back to "online" for every row so the initial render does not
+   *  flip every member to offline before the first
+   *  `presence.update` lands. */
   onlineUserIds?: ReadonlySet<string>
+  /** True once at least one `presence.update` frame has arrived.
+   *  Required to interpret `onlineUserIds` correctly — see comment
+   *  on the field above. */
+  hasOnlineSnapshot?: boolean
 }
 
 interface UseMembersResult {
@@ -45,6 +52,7 @@ export function useMembersForServer({
   baseUrl,
   currentUserId: _currentUserId,
   onlineUserIds,
+  hasOnlineSnapshot,
 }: UseMembersArgs): UseMembersResult {
   const [raw, setRaw] = React.useState<RawMember[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -77,15 +85,16 @@ export function useMembersForServer({
       raw.map((m) => {
         const id = m.id ?? m.userId ?? ""
         const name = m.displayName ?? m.username ?? "user"
-        // Derive presence from the WS-driven online set when
-        // available. Without the set we fall back to "online" so
-        // tabs that never receive `presence.update` (legacy, tests)
-        // do not regress to a permanently-offline UI.
-        const presence: ServerMember["presence"] = onlineUserIds
-          ? onlineUserIds.has(id)
-            ? "online"
-            : "offline"
-          : "online"
+        // Derive presence from the WS-driven online set ONLY when
+        // a snapshot has actually arrived. Without that gate the
+        // initial empty set would render every member offline
+        // until the first `presence.update` frame.
+        const presence: ServerMember["presence"] =
+          onlineUserIds && hasOnlineSnapshot
+            ? onlineUserIds.has(id)
+              ? "online"
+              : "offline"
+            : "online"
         return {
           id,
           name,
@@ -97,7 +106,7 @@ export function useMembersForServer({
           }),
         }
       }),
-    [raw, onlineUserIds]
+    [raw, onlineUserIds, hasOnlineSnapshot]
   )
 
   return { members, loading, error, refetch }
