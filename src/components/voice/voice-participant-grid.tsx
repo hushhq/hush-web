@@ -9,6 +9,11 @@ import { VoiceLonelyTile } from "./voice-lonely-tile"
 
 interface VoiceParticipantGridProps {
   className?: string
+  /** Local user's deafen state. LiveKit has no track for "audio out
+   *  off" — it's a client-only flag — so the grid receives it from
+   *  the parent and forwards it to the local participant tile so a
+   *  deafened user gets the headphone-off badge on their own tile. */
+  localDeafened?: boolean
 }
 
 /**
@@ -41,7 +46,10 @@ function pickGridShape(count: number): { cols: number; rows: number } {
  * tile beneath the user's own so the grid still shows two cells and
  * there is a visible cue that nobody else has joined yet.
  */
-export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
+export function VoiceParticipantGrid({
+  className,
+  localDeafened = false,
+}: VoiceParticipantGridProps) {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -129,7 +137,12 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
               key={`${trackRef.participant.identity}-${trackRef.source}-${idx}`}
               className="size-full min-h-0 min-w-0"
             >
-              <VoiceParticipantTile trackRef={trackRef} />
+              <VoiceParticipantTile
+                trackRef={trackRef}
+                isDeafened={
+                  trackRef.participant.isLocal ? localDeafened : false
+                }
+              />
             </div>
           ))}
           {isLonely ? (

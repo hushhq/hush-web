@@ -575,7 +575,7 @@ export function VoiceChannelView({
         />
         {room.room ? (
           <RoomContext.Provider value={room.room}>
-            <VoiceParticipantGrid className="p-4" />
+            <VoiceParticipantGrid className="p-4" localDeafened={isDeafened} />
           </RoomContext.Provider>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

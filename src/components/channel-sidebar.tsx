@@ -1560,7 +1560,17 @@ function VoiceParticipantsGroup({
                 className="relative flex size-5 items-center justify-center rounded-full bg-muted text-[9px] font-medium ring-2 ring-sidebar"
               >
                 {participant.initials}
-                {participant.isMuted ? (
+                {/* Deafened wins over muted for the single badge slot:
+                    deaf implies mic muted in the LiveKit prejoin/voice
+                    controls, so showing both at the same anchor would
+                    overlap, and the headphone-off pictogram already
+                    communicates "no audio in/out". When only mic is
+                    muted (still hearing), show the mic-off badge. */}
+                {participant.isDeafened ? (
+                  <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-full bg-sidebar text-muted-foreground">
+                    <HeadphoneOffIcon className="size-2" />
+                  </span>
+                ) : participant.isMuted ? (
                   <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-full bg-sidebar text-muted-foreground">
                     <MicOffIcon className="size-2" />
                   </span>

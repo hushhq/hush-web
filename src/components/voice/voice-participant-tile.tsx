@@ -10,7 +10,7 @@ import {
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-react"
 import { isTrackReference } from "@livekit/components-core"
 import { Track } from "livekit-client"
-import { MicOffIcon } from "lucide-react"
+import { HeadphoneOffIcon, MicOffIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils"
 interface VoiceParticipantTileProps {
   trackRef?: TrackReferenceOrPlaceholder
   className?: string
+  /** Deafen state (no remote audio). LiveKit doesn't expose this as
+   *  a track — it's a client-only flag — so the parent grid passes it
+   *  in for the local participant. */
+  isDeafened?: boolean
 }
 
 function getInitials(name: string): string {
@@ -45,6 +49,7 @@ function getInitials(name: string): string {
 export function VoiceParticipantTile({
   trackRef,
   className,
+  isDeafened = false,
 }: VoiceParticipantTileProps) {
   const ref = useEnsureTrackRef(trackRef)
   const { elementProps } = useParticipantTile<HTMLDivElement>({
@@ -104,6 +109,11 @@ export function VoiceParticipantTile({
                 >
                   <MicOffIcon />
                 </TrackMutedIndicator>
+                {isDeafened ? (
+                  <span className="flex size-4 items-center justify-center text-destructive [&_svg]:size-3.5">
+                    <HeadphoneOffIcon />
+                  </span>
+                ) : null}
                 {isScreenShare ? (
                   <span className="truncate font-medium">
                     {displayName}'s screen
@@ -136,6 +146,11 @@ export function VoiceParticipantTile({
                 >
                   <MicOffIcon />
                 </TrackMutedIndicator>
+                {isDeafened ? (
+                  <span className="flex size-4 items-center justify-center text-destructive [&_svg]:size-3.5">
+                    <HeadphoneOffIcon />
+                  </span>
+                ) : null}
                 {isScreenShare ? (
                   <span className="max-w-[14rem] truncate text-sm font-medium">
                     {displayName}'s screen
