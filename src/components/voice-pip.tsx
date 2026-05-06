@@ -87,12 +87,12 @@ export function VoicePip({
               <PhoneOffIcon />
             </Button>
           </div>
-          <div className="flex items-center justify-between px-2 pt-0 pb-2">
+          <div className="grid grid-cols-4 gap-2 px-2 pt-0 pb-2">
             <Button
               variant={isMuted ? "destructive" : "secondary"}
               size="icon"
               className={cn(
-                "!size-8",
+                "h-8 !w-full",
                 !isMuted && "hover:bg-foreground/10 hover:text-foreground"
               )}
               onClick={onToggleMute}
@@ -104,7 +104,7 @@ export function VoicePip({
               variant={isDeafened ? "destructive" : "secondary"}
               size="icon"
               className={cn(
-                "!size-8",
+                "h-8 !w-full",
                 !isDeafened && "hover:bg-foreground/10 hover:text-foreground"
               )}
               onClick={onToggleDeafen}
@@ -116,7 +116,7 @@ export function VoicePip({
               variant={isVideoOn ? "default" : "secondary"}
               size="icon"
               className={cn(
-                "!size-8",
+                "h-8 !w-full",
                 !isVideoOn
                   ? "hover:bg-foreground/10 hover:text-foreground"
                   : "hover:bg-foreground/80"
@@ -130,7 +130,7 @@ export function VoicePip({
               variant={isScreenSharing ? "default" : "secondary"}
               size="icon"
               className={cn(
-                "!size-8",
+                "h-8 !w-full",
                 !isScreenSharing
                   ? "hover:bg-foreground/10 hover:text-foreground"
                   : "hover:bg-foreground/80"
