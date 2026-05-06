@@ -165,6 +165,9 @@ export function AuthenticatedApp() {
     user: { id: string; username?: string; display_name?: string } | null
     performLogout: () => Promise<void>
   }
+  const handleSignOut = React.useCallback(async () => {
+    await performLogout()
+  }, [performLogout])
   const { getTokenForInstance, getWsClient, refreshGuilds, dmGuilds } = useInstanceContext() as unknown as {
     getTokenForInstance: (url: string) => string | null
     getWsClient: (url: string) => unknown | null
@@ -444,9 +447,18 @@ export function AuthenticatedApp() {
       setCreateServerError("No active instance available")
       return
     }
-    const tk = getTokenForInstance(targetInstanceUrl)
+    // Token lookup races with `useInstances` hydration on a fresh sign-in
+    // or reconnect: the instance entry isn't in `instancesRef` yet, so
+    // `getTokenForInstance` returns null even though the user has a
+    // valid session. Brief wait + retry covers the common race without
+    // forcing the user to dismiss + re-trigger the dialog.
+    let tk = getTokenForInstance(targetInstanceUrl)
     if (!tk) {
-      setCreateServerError("No session for the active instance")
+      await new Promise((r) => setTimeout(r, 300))
+      tk = getTokenForInstance(targetInstanceUrl)
+    }
+    if (!tk) {
+      setCreateServerError("Session not ready. Please try again in a moment.")
       return
     }
 
@@ -1113,6 +1125,7 @@ export function AuthenticatedApp() {
                   if (activeServer) handleOpenServerSettings(activeServer.id)
                 }}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                onSignOut={handleSignOut}
                 onCreateChannel={handleCreateChannel}
                 onDeleteChannel={handleDeleteChannel}
                 onDeleteCategory={handleDeleteChannel}
@@ -1136,6 +1149,7 @@ export function AuthenticatedApp() {
                 }}
                 voice={voiceProps}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                onSignOut={handleSignOut}
                 directMessages={homeDMs}
                 onCreateServer={openCreateServerDialog}
                 onDiscoverServers={() => navigate("/explore")}
@@ -1172,6 +1186,7 @@ export function AuthenticatedApp() {
                     if (activeServer) handleOpenServerSettings(activeServer.id)
                   }}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  onSignOut={handleSignOut}
                   onCreateChannel={handleCreateChannel}
                   onDeleteChannel={handleDeleteChannel}
                   onDeleteCategory={handleDeleteChannel}
@@ -1196,6 +1211,7 @@ export function AuthenticatedApp() {
                   }}
                   voice={voiceProps}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+                  onSignOut={handleSignOut}
                   directMessages={homeDMs}
                 />
               )}
@@ -1274,10 +1290,18 @@ export function AuthenticatedApp() {
         isDark={isDark}
         onDiscoverServers={() => navigate("/explore")}
         onCreateServer={openCreateServerDialog}
+        onCreateChannel={
+          activeServer && canAdministrate
+            ? (kind) =>
+                window.dispatchEvent(
+                  new CustomEvent("hush:open-create-channel", {
+                    detail: { kind },
+                  })
+                )
+            : undefined
+        }
         onOpenSettings={() => setIsUserSettingsOpen(true)}
-        onSignOut={async () => {
-          await performLogout()
-        }}
+        onSignOut={handleSignOut}
       />
       <CheatSheet open={isCheatSheetOpen} onOpenChange={setIsCheatSheetOpen} />
       <Dialog open={isCreateServerOpen} onOpenChange={setIsCreateServerOpen}>
@@ -1392,6 +1416,7 @@ function HomeSidebar({
   onSelectChannel,
   voice,
   onOpenUserSettings,
+  onSignOut,
   directMessages,
   onCreateServer,
   onDiscoverServers,
@@ -1404,6 +1429,7 @@ function HomeSidebar({
   onSelectChannel: (id: string) => void
   voice?: React.ComponentProps<typeof ChannelSidebar>["voice"]
   onOpenUserSettings?: () => void
+  onSignOut?: () => void | Promise<void>
   directMessages: HomeDM[]
   onCreateServer?: () => void
   onDiscoverServers?: () => void
@@ -1424,6 +1450,7 @@ function HomeSidebar({
       onSelectRail={onSelectRail}
       voice={voice}
       onOpenUserSettings={onOpenUserSettings}
+      onSignOut={onSignOut}
       serverMenuEnabled={false}
       onCreateServer={onCreateServer}
       onDiscoverServers={onDiscoverServers}

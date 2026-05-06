@@ -38,10 +38,12 @@ import {
 interface UserMenuProps {
   user: { name: string; email: string; initials: string }
   onOpenSettings?: () => void
+  onSignOut?: () => void | Promise<void>
 }
 
-export function UserMenu({ user, onOpenSettings }: UserMenuProps) {
+export function UserMenu({ user, onOpenSettings, onSignOut }: UserMenuProps) {
   const [logoutOpen, setLogoutOpen] = React.useState(false)
+  const [logoutBusy, setLogoutBusy] = React.useState(false)
 
   return (
     <SidebarMenu>
@@ -91,9 +93,13 @@ export function UserMenu({ user, onOpenSettings }: UserMenuProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onSelect={(event) => {
-                event.preventDefault()
-                setLogoutOpen(true)
+              onSelect={() => {
+                // Defer to next tick so the DropdownMenu finishes its
+                // close + body pointer-events restore before the
+                // AlertDialog mounts. Stacking two Radix overlays leaks
+                // the body lock on dismiss and freezes the UI until
+                // a hard reload.
+                setTimeout(() => setLogoutOpen(true), 0)
               }}
             >
               <LogOutIcon className="size-4" />
@@ -112,8 +118,27 @@ export function UserMenu({ user, onOpenSettings }: UserMenuProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive">Log out</AlertDialogAction>
+            <AlertDialogCancel disabled={logoutBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={logoutBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                if (!onSignOut) {
+                  setLogoutOpen(false)
+                  return
+                }
+                // Close the dialog before the awaited signout so the
+                // Radix portal cleanup completes before the auth flow
+                // unmounts this tree. Same close-before-await pattern
+                // used elsewhere for destructive actions.
+                setLogoutOpen(false)
+                setLogoutBusy(true)
+                Promise.resolve(onSignOut()).finally(() => setLogoutBusy(false))
+              }}
+            >
+              {logoutBusy ? "Logging out..." : "Log out"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
