@@ -164,11 +164,19 @@ if (
     const mkBtn = (label, fn) => {
       const b = document.createElement('button');
       b.textContent = label;
-      b.onclick = (e) => { if (!didDrag) fn(); };
       Object.assign(b.style, {
-        padding: '3px 6px', fontSize: '10px', fontFamily: 'monospace',
+        padding: '6px 10px', fontSize: '11px', fontFamily: 'monospace',
         background: 'transparent', color: '#aaa', border: 'none',
         cursor: 'pointer', whiteSpace: 'nowrap',
+        touchAction: 'manipulation',
+      });
+      // Stop pointerdown from reaching bar (avoids drag-start on tap).
+      b.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+      // Fire on pointerup directly. iOS Safari suppresses click synthesis
+      // when the parent has `touch-action: none`, so click fallback fails.
+      b.addEventListener('pointerup', (e) => {
+        e.stopPropagation();
+        if (!isDragging && !didDrag) fn();
       });
       b.addEventListener('mouseenter', () => { b.style.color = '#fff'; });
       b.addEventListener('mouseleave', () => { b.style.color = '#aaa'; });
