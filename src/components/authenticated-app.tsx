@@ -89,6 +89,8 @@ import type { Server, Channel, ChannelCategory } from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
 import { useTextChannelMLSCommitListener } from "@/hooks/useTextChannelMLSCommitListener"
+import { useServerModerationEvents } from "@/adapters/useServerModerationEvents"
+import { toast } from "sonner"
 
 interface FavoriteEntry {
   id: string
@@ -261,6 +263,56 @@ export function AuthenticatedApp() {
     currentUserId,
     getToken: tokenForActiveInstance,
   })
+
+  // Per-server moderation events. Refetch members on every event so
+  // role badges, mute metadata, and the roster reflect the new
+  // server-side state. When the local user is the kick/ban target,
+  // run MLS cleanup for the affected server's text channels and
+  // route them to /home so the now-stale server view is unmounted
+  // before any further auth-gated request fails.
+  useServerModerationEvents({
+    wsClient: wsClient as Parameters<
+      typeof useServerModerationEvents
+    >[0]["wsClient"],
+    serverId: activeServer?.id ?? null,
+    currentUserId,
+    refetchMembers,
+    textChannelIds: textChannelIdsForMLS,
+    onSelfRemoved: ({ event, reason }) => {
+      const serverName = activeServer?.name ?? "the server"
+      const verb = event === "kick" ? "removed from" : "banned from"
+      const message = reason
+        ? `You were ${verb} ${serverName}: ${reason}`
+        : `You were ${verb} ${serverName}.`
+      toast.error(message)
+      navigate("/home")
+    },
+  })
+
+  // Authenticated-root listener for `instance_banned`. Server emits
+  // this when an admin bans the account; without an immediate sign
+  // out the UI keeps rendering against a JWT the server is about
+  // to start rejecting.
+  React.useEffect(() => {
+    if (!wsClient) return
+    const ws = wsClient as {
+      on: (event: string, handler: (data: unknown) => void) => void
+      off: (event: string, handler: (data: unknown) => void) => void
+    }
+    const handler = (raw: unknown) => {
+      const data = raw as { reason?: string }
+      const reason = data?.reason || "Your account has been suspended."
+      toast.error(`Account suspended: ${reason}`)
+      // Defer signOut + nav so the toast renders before unmount.
+      setTimeout(() => {
+        Promise.resolve(performLogout()).finally(() => {
+          navigate("/")
+        })
+      }, 1500)
+    }
+    ws.on("instance_banned", handler)
+    return () => ws.off("instance_banned", handler)
+  }, [wsClient, performLogout, navigate])
 
   const voicePresence = useVoiceChannelPresence(
     (instanceUrl ? getWsClient(instanceUrl) : null) as Parameters<
