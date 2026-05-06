@@ -94,6 +94,7 @@ import type {
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
 import { useTextChannelMLSCommitListener } from "@/hooks/useTextChannelMLSCommitListener"
+import { useOnlinePresence } from "@/hooks/useOnlinePresence"
 import { useServerModerationEvents } from "@/adapters/useServerModerationEvents"
 import { toast } from "sonner"
 
@@ -231,11 +232,15 @@ export function AuthenticatedApp() {
     () => adaptSystemChannelsForSidebar(systemChannelRows),
     [systemChannelRows]
   )
+  const onlineUserIds = useOnlinePresence(
+    wsClient as Parameters<typeof useOnlinePresence>[0],
+  )
   const { members, refetch: refetchMembers } = useMembersForServer({
     serverId: activeServer?.id ?? null,
     token,
     baseUrl,
     currentUserId,
+    onlineUserIds,
   })
 
   // Subscribe the WS to every text channel of the active server so
@@ -680,6 +685,8 @@ export function AuthenticatedApp() {
 
   // DMs (isDm guilds) surfaced separately from regular servers in HomeSidebar.
   // Click navigates to the DM guild's text channel via the standard route.
+  // Presence comes from the WS-driven online set so the dot reflects
+  // the peer's connection state in realtime.
   const homeDMs = React.useMemo(
     () =>
       dmGuilds
@@ -687,14 +694,17 @@ export function AuthenticatedApp() {
         .map((g) => {
           const name =
             g.otherUser?.displayName ?? g.otherUser?.username ?? "user"
+          const peerId = g.otherUser?.id
+          const presence: "online" | "offline" =
+            peerId && onlineUserIds.has(peerId) ? "online" : "offline"
           return {
             id: g.channelId as string,
             name,
             initials: deriveInitials(name),
-            presence: "online" as const,
+            presence,
           }
         }),
-    [dmGuilds]
+    [dmGuilds, onlineUserIds]
   )
 
   const handleSelectHomeDM = React.useCallback(

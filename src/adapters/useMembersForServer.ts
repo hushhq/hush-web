@@ -26,6 +26,10 @@ interface UseMembersArgs {
   token: string | null
   baseUrl: string
   currentUserId: string | null
+  /** Optional set of currently-online user ids. When provided,
+   *  the returned `members[].presence` reflects WS-driven presence
+   *  state instead of the legacy hardcoded "online" string. */
+  onlineUserIds?: ReadonlySet<string>
 }
 
 interface UseMembersResult {
@@ -40,6 +44,7 @@ export function useMembersForServer({
   token,
   baseUrl,
   currentUserId: _currentUserId,
+  onlineUserIds,
 }: UseMembersArgs): UseMembersResult {
   const [raw, setRaw] = React.useState<RawMember[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -72,18 +77,27 @@ export function useMembersForServer({
       raw.map((m) => {
         const id = m.id ?? m.userId ?? ""
         const name = m.displayName ?? m.username ?? "user"
+        // Derive presence from the WS-driven online set when
+        // available. Without the set we fall back to "online" so
+        // tabs that never receive `presence.update` (legacy, tests)
+        // do not regress to a permanently-offline UI.
+        const presence: ServerMember["presence"] = onlineUserIds
+          ? onlineUserIds.has(id)
+            ? "online"
+            : "offline"
+          : "online"
         return {
           id,
           name,
           initials: deriveInitials(name),
-          presence: "online",
+          presence,
           role: memberRoleFromRaw({
             permissionLevel: m.permissionLevel,
             role: m.role,
           }),
         }
       }),
-    [raw]
+    [raw, onlineUserIds]
   )
 
   return { members, loading, error, refetch }
