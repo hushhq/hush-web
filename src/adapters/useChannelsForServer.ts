@@ -184,22 +184,15 @@ export function useChannelsForServer({
   React.useEffect(() => {
     if (!wsClient || !serverId) return
 
-    // BroadcastToServer on the backend only reaches clients that have
-    // explicitly joined the server's hub room via a `subscribe.server`
-    // frame (see internal/ws/client.go). Without this frame, every
-    // channel_created / channel_deleted broadcast lands in an empty
-    // subscriber set and the client never sees mutations. We send the
-    // subscribe frame here once wsClient + serverId are known, and
-    // re-send on every `open` event so reconnects restore the
-    // subscription too.
-    const subscribe = () => {
-      if (wsClient.isConnected?.()) {
-        wsClient.send?.("subscribe.server", { server_id: serverId })
-      }
-    }
-    subscribe()
-    const onOpen = () => subscribe()
-    wsClient.on("open", onOpen)
+    // Server-room subscription ownership lives in `useInstances`,
+    // which subscribes every guild on WS open and after guild
+    // refresh. The backend hub has no per-room refcount, so a
+    // `subscribe.server` / `unsubscribe.server` from this adapter
+    // would race with the instance-level owner: this adapter's
+    // cleanup on server switch would unsubscribe a room the
+    // instance hook still considers active, silently dropping all
+    // background-server broadcasts. Sole-ownership keeps the
+    // contract simple.
 
     const onCreated = (raw: unknown) => {
       const msg = raw as ChannelCreatedEvent
@@ -243,13 +236,9 @@ export function useChannelsForServer({
     wsClient.on("channel_deleted", onDeleted)
     wsClient.on("channel_moved", onMoved)
     return () => {
-      wsClient.off?.("open", onOpen)
       wsClient.off?.("channel_created", onCreated)
       wsClient.off?.("channel_deleted", onDeleted)
       wsClient.off?.("channel_moved", onMoved)
-      if (wsClient.isConnected?.()) {
-        wsClient.send?.("unsubscribe.server", { server_id: serverId })
-      }
     }
   }, [wsClient, serverId])
 

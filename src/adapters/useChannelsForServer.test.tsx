@@ -177,4 +177,44 @@ describe("useChannelsForServer", () => {
       expect(result.current.error).not.toBeNull()
     })
   })
+
+  // Server-room subscription ownership lives in `useInstances` (P1).
+  // The adapter must NOT send `subscribe.server` / `unsubscribe.server`
+  // on mount, on `open`, or on cleanup. Without this contract the
+  // adapter's cleanup-on-server-switch silently unsubscribes a room
+  // that the instance hook still considers active, which drops every
+  // background-server broadcast (channel_*, member_*) for the rest
+  // of the session.
+  it("never sends subscribe.server or unsubscribe.server", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-1", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+
+    const send = vi.fn()
+    const wsClient = {
+      isConnected: () => true,
+      send,
+      on: vi.fn(),
+      off: vi.fn(),
+    }
+
+    const { unmount, rerender } = renderHook(
+      (args: typeof ARGS) =>
+        useChannelsForServer({ ...args, wsClient } as Parameters<
+          typeof useChannelsForServer
+        >[0]),
+      { initialProps: ARGS },
+    )
+
+    await waitFor(() => {
+      expect(getGuildChannels).toHaveBeenCalled()
+    })
+
+    rerender({ ...ARGS, serverId: "g2" })
+    unmount()
+
+    const sentTypes = send.mock.calls.map((c) => c[0])
+    expect(sentTypes).not.toContain("subscribe.server")
+    expect(sentTypes).not.toContain("unsubscribe.server")
+  })
 })
