@@ -60,11 +60,11 @@ export function VoicePip({
           aria-label="Voice connection"
           className="gap-0 rounded-lg border py-0 ring-0 dark:shadow-sm"
         >
-          <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+          <div className="flex items-center gap-2 px-2 pt-2 pb-1">
             <button
               type="button"
               onClick={onJump}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
+              className="flex min-w-0 flex-1 items-center gap-2 pl-1 text-left focus-visible:outline-none"
               aria-label="Jump to voice channel"
             >
               <Volume2Icon className="size-4 shrink-0 text-success" />
@@ -80,19 +80,19 @@ export function VoicePip({
             <Button
               variant="ghost"
               size="icon"
-              className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className="!size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={onDisconnect}
               aria-label="Disconnect"
             >
               <PhoneOffIcon />
             </Button>
           </div>
-          <div className="grid grid-cols-4 gap-1 px-2 pt-0 pb-2">
+          <div className="flex items-center justify-between px-2 pt-0 pb-2">
             <Button
               variant={isMuted ? "destructive" : "secondary"}
               size="icon"
               className={cn(
-                "size-8 w-full",
+                "!size-8",
                 !isMuted && "hover:bg-foreground/10 hover:text-foreground"
               )}
               onClick={onToggleMute}
@@ -104,7 +104,7 @@ export function VoicePip({
               variant={isDeafened ? "destructive" : "secondary"}
               size="icon"
               className={cn(
-                "size-8 w-full",
+                "!size-8",
                 !isDeafened && "hover:bg-foreground/10 hover:text-foreground"
               )}
               onClick={onToggleDeafen}
@@ -116,7 +116,7 @@ export function VoicePip({
               variant={isVideoOn ? "default" : "secondary"}
               size="icon"
               className={cn(
-                "size-8 w-full",
+                "!size-8",
                 !isVideoOn
                   ? "hover:bg-foreground/10 hover:text-foreground"
                   : "hover:bg-foreground/80"
@@ -130,7 +130,7 @@ export function VoicePip({
               variant={isScreenSharing ? "default" : "secondary"}
               size="icon"
               className={cn(
-                "size-8 w-full",
+                "!size-8",
                 !isScreenSharing
                   ? "hover:bg-foreground/10 hover:text-foreground"
                   : "hover:bg-foreground/80"
