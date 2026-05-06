@@ -80,7 +80,17 @@ export function UserMenu({ user, onOpenSettings, onSignOut }: UserMenuProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={() => onOpenSettings?.()}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  // Defer the dialog open so the DropdownMenu can
+                  // finish its close + body pointer-events restore
+                  // before the Dialog mounts. Stacking two Radix
+                  // overlays leaks the body lock on dismiss and
+                  // freezes the UI until reload. Same pattern as the
+                  // logout AlertDialog below.
+                  setTimeout(() => onOpenSettings?.(), 0)
+                }}
+              >
                 <SettingsIcon className="size-4" />
                 Preferences
               </DropdownMenuItem>

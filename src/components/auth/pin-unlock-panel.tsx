@@ -17,10 +17,12 @@ import { LockIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button.tsx"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { HushLogo } from "@/components/brand/HushLogo"
 import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
 import { useAuth } from "@/contexts/AuthContext"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 const MAX_ATTEMPTS = 10
 
@@ -49,6 +51,11 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
     user: { username?: string; display_name?: string } | null
   }
   const [pin, setPin] = React.useState("")
+  // Spaced 4-dot OTP cells are only used on mobile so the soft keypad
+  // experience stays the prototype's signature look. On desktop a
+  // normal masked input is friendlier for keyboard entry + paste from
+  // a password manager.
+  const isMobileViewport = useIsMobile()
   const [submitting, setSubmitting] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState("")
   const [attemptCount, setAttemptCount] = React.useState(0)
@@ -160,14 +167,34 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
             <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
               <div className="flex flex-col items-center gap-2">
                 <Label htmlFor="pin-input">PIN</Label>
-                <PinOtp
-                  id="pin-input"
-                  value={pin}
-                  onChange={setPin}
-                  disabled={submitting || isDelayed}
-                  ariaLabel="Vault PIN"
-                  autoFocus
-                />
+                {isMobileViewport ? (
+                  <PinOtp
+                    id="pin-input"
+                    value={pin}
+                    onChange={setPin}
+                    disabled={submitting || isDelayed}
+                    ariaLabel="Vault PIN"
+                    autoFocus
+                  />
+                ) : (
+                  <Input
+                    id="pin-input"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={PIN_LENGTH}
+                    value={pin}
+                    onChange={(e) =>
+                      setPin(e.target.value.replace(/\D/g, ""))
+                    }
+                    placeholder={`Enter ${PIN_LENGTH} digits`}
+                    autoComplete="current-password"
+                    disabled={submitting || isDelayed}
+                    aria-label="Vault PIN"
+                    autoFocus
+                    className="w-full text-center tracking-[0.5em]"
+                  />
+                )}
               </div>
 
               {isDelayed ? (

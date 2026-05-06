@@ -496,12 +496,17 @@ function ServerHeader({
                 <PlusIcon className="size-4" />
                 Add server
               </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!onDiscoverServers}
-                onSelect={() => onDiscoverServers?.()}
-              >
+              {/* Discover is gated behind the instance-level discovery
+                  index, which is not yet shipping. Render disabled+muted
+                  to match the command-palette treatment so the
+                  affordance reads as "shipping soon" without firing the
+                  legacy handler if it's still wired upstream. */}
+              <DropdownMenuItem disabled>
                 <CompassIcon className="size-4" />
                 Discover servers
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Shipping soon
+                </span>
               </DropdownMenuItem>
               {menuEnabled ? <DropdownMenuSeparator /> : null}
             </div>
@@ -512,7 +517,14 @@ function ServerHeader({
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   disabled={!onOpenServerSettings}
-                  onSelect={() => onOpenServerSettings?.()}
+                  onSelect={() => {
+                    // Defer the dialog open so the DropdownMenu can
+                    // finish its close + body pointer-events restore
+                    // before the Dialog mounts. Stacking two Radix
+                    // overlays leaks the body lock on dismiss and
+                    // freezes the UI until reload.
+                    setTimeout(() => onOpenServerSettings?.(), 0)
+                  }}
                 >
                   <SettingsIcon className="size-4" />
                   Server settings

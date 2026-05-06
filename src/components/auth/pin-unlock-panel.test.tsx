@@ -15,6 +15,14 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ unlockVault, user }),
 }))
 
+// Force the mobile branch so the OTP input renders. Desktop now uses a
+// plain masked Input — the OTP-specific keystroke + clear-on-fail flow
+// these tests assert is the mobile contract.
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => true,
+  useIsTouchDevice: () => true,
+}))
+
 import { PinUnlockPanel } from "./pin-unlock-panel"
 
 describe("PinUnlockPanel", () => {

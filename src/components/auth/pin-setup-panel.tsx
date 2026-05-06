@@ -29,6 +29,7 @@ import { HushLogo } from "@/components/brand/HushLogo"
 import { PIN_LENGTH } from "@/components/auth/pin-otp"
 import { PinOtpSetup } from "@/components/auth/pin-otp-setup"
 import { useAuth } from "@/contexts/AuthContext"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const
 
@@ -64,6 +65,11 @@ export function PinSetupPanel() {
   const [error, setError] = React.useState<string | null>(null)
 
   const isPin = mode === "pin"
+  // Segmented OTP cells are only used on mobile so the digit-by-digit
+  // tap flow lines up with the soft keypad. On desktop a normal masked
+  // input feels more natural for keyboard entry, especially when the
+  // user pastes a saved PIN from a password manager.
+  const isMobileViewport = useIsMobile()
   // PIN is fixed at PIN_LENGTH (4) digits. Passphrase keeps the previous
   // 6-char minimum since it's free-form.
   const minLength = isPin ? PIN_LENGTH : 6
@@ -116,14 +122,34 @@ export function PinSetupPanel() {
 
               <TabsContent value="pin" className="flex flex-col items-center gap-2 pt-3">
                 <Label htmlFor="psm-pin-value">PIN ({PIN_LENGTH} digits)</Label>
-                <PinOtpSetup
-                  id="psm-pin-value"
-                  value={value}
-                  onChange={setValue}
-                  disabled={submitting}
-                  ariaLabel="Choose PIN"
-                  autoFocus
-                />
+                {isMobileViewport ? (
+                  <PinOtpSetup
+                    id="psm-pin-value"
+                    value={value}
+                    onChange={setValue}
+                    disabled={submitting}
+                    ariaLabel="Choose PIN"
+                    autoFocus
+                  />
+                ) : (
+                  <Input
+                    id="psm-pin-value"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={PIN_LENGTH}
+                    value={value}
+                    onChange={(e) =>
+                      setValue(e.target.value.replace(/\D/g, ""))
+                    }
+                    placeholder={`Enter ${PIN_LENGTH} digits`}
+                    autoComplete="new-password"
+                    disabled={submitting}
+                    aria-label="Choose PIN"
+                    autoFocus
+                    className="w-full text-center tracking-[0.5em]"
+                  />
+                )}
               </TabsContent>
 
               <TabsContent
@@ -174,14 +200,34 @@ export function PinSetupPanel() {
                 Confirm {isPin ? "PIN" : "passphrase"}
               </Label>
               {isPin ? (
-                <PinOtpSetup
-                  id="pin-setup-confirm"
-                  value={confirm}
-                  onChange={setConfirm}
-                  disabled={submitting}
-                  ariaInvalid={mismatch}
-                  ariaLabel="Confirm PIN"
-                />
+                isMobileViewport ? (
+                  <PinOtpSetup
+                    id="pin-setup-confirm"
+                    value={confirm}
+                    onChange={setConfirm}
+                    disabled={submitting}
+                    ariaInvalid={mismatch}
+                    ariaLabel="Confirm PIN"
+                  />
+                ) : (
+                  <Input
+                    id="pin-setup-confirm"
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={PIN_LENGTH}
+                    value={confirm}
+                    onChange={(e) =>
+                      setConfirm(e.target.value.replace(/\D/g, ""))
+                    }
+                    placeholder={`Repeat ${PIN_LENGTH} digits`}
+                    autoComplete="new-password"
+                    disabled={submitting}
+                    aria-invalid={mismatch}
+                    aria-label="Confirm PIN"
+                    className="w-full text-center tracking-[0.5em]"
+                  />
+                )
               ) : (
                 <Input
                   id="pin-setup-confirm"

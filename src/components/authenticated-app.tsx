@@ -42,7 +42,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 import {
   Dialog,
@@ -1235,6 +1235,17 @@ export function AuthenticatedApp() {
             className="flex"
           >
             <SidebarInset className="md:m-2 md:ml-0 md:rounded-xl md:overflow-hidden md:shadow-sm md:mb-0! md:rounded-b-none!">
+              {/* Mobile-only sidebar reopen trigger for voice surfaces.
+                  ChannelView (text/system channels) renders its own
+                  SidebarTrigger inside its header, but VoiceChannelView
+                  and VoicePlaceholderView intentionally have no chrome
+                  band. Without this floating trigger, a user who lands
+                  on a voice route on mobile can't reopen the sidebar
+                  short of a hard reload. Hidden on md+ where the
+                  sidebar is permanently visible. */}
+              {(isViewingVoice || showVoicePlaceholder) ? (
+                <SidebarTrigger className="md:hidden absolute top-2 left-2 z-20" />
+              ) : null}
               {joinedVoice && joinedVoiceInstanceUrl ? (
                 <div
                   style={{

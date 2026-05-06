@@ -15,6 +15,14 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ setPIN, skipPinSetup }),
 }))
 
+// Force the mobile branch so the segmented OTP cells render. The
+// keystroke flow these tests assert is the mobile contract; desktop now
+// uses a plain masked Input.
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => true,
+  useIsTouchDevice: () => true,
+}))
+
 import { PinSetupPanel } from "./pin-setup-panel"
 
 describe("PinSetupPanel", () => {
