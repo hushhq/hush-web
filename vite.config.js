@@ -5,6 +5,7 @@ import path from 'node:path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import fs from 'node:fs';
 
 // Custom middleware to force correct MIME type for WASM files
 const wasmContentTypePlugin = {
@@ -35,6 +36,25 @@ const wasmContentTypePlugin = {
 // cert-warning-free.
 const httpsEnabled = process.env.VITE_HTTPS === 'true';
 
+// When the developer has set up a local mkcert pair under .certs/ we use
+// those files so LAN/mobile clients (with the mkcert root CA installed)
+// see a fully trusted cert and stop hitting ERR_CERT_AUTHORITY_INVALID
+// on every fetch. Falls back to the auto-generated self-signed cert
+// from @vitejs/plugin-basic-ssl when the files are not present (so a
+// fresh checkout still works without setup). Dev-only — the .certs/
+// directory is gitignored.
+const mkcertKeyPath = path.resolve(__dirname, '.certs/dev-key.pem');
+const mkcertCertPath = path.resolve(__dirname, '.certs/dev-cert.pem');
+const hasMkcertPair = httpsEnabled
+  && fs.existsSync(mkcertKeyPath)
+  && fs.existsSync(mkcertCertPath);
+const httpsServerOption = hasMkcertPair
+  ? {
+      key: fs.readFileSync(mkcertKeyPath),
+      cert: fs.readFileSync(mkcertCertPath),
+    }
+  : undefined;
+
 export default defineConfig({
   plugins: [
     wasmContentTypePlugin,
@@ -42,7 +62,10 @@ export default defineConfig({
     topLevelAwait(),
     tailwindcss(),
     react(),
-    ...(httpsEnabled ? [basicSsl()] : []),
+    // basicSsl auto-generates a self-signed cert at runtime. Skip it
+    // when an mkcert pair is on disk — Vite reads our cert/key from
+    // server.https below instead.
+    ...(httpsEnabled && !hasMkcertPair ? [basicSsl()] : []),
   ],
   resolve: {
     alias: {
@@ -59,6 +82,7 @@ export default defineConfig({
   server: {
     port: 5173,
     allowedHosts: ['hushdev.duckdns.org'],
+    https: httpsServerOption,
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
     },
