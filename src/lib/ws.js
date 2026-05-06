@@ -52,6 +52,17 @@ export function createWsClient(opts) {
   let reconnectAttempt = 0;
   /** @type {Map<string, Set<(data: object) => void>>} */
   const listeners = new Map();
+  // Refcount table for channel subscriptions. Multiple owners (active
+  // chat in `useChannelMessages`, global text-channel MLS sync hook)
+  // can both ask the WS to join the same channel room. Without
+  // refcounting, the first owner to call `unsubscribe` would tear
+  // the room down for every other owner. Subscribe frame is sent
+  // only on the 0 -> 1 transition; unsubscribe frame only on 1 -> 0.
+  // On reconnect, every channel with count > 0 is re-subscribed
+  // automatically before the `open` event resolves so listeners see
+  // the rejoined state.
+  /** @type {Map<string, number>} */
+  const channelSubscriptions = new Map();
   let authSent = false;
   /**
    * True while a reconnect is scheduled or in progress (between onclose and
@@ -129,6 +140,17 @@ export function createWsClient(opts) {
       }
 
       startPing();
+
+      // Replay every refcounted channel subscription before any
+      // listener observes `open`. A reconnect drops all server-side
+      // room state, so unless we re-emit the frames here, no chat /
+      // MLS event for this channel reaches us until something else
+      // resubscribes. Listeners that registered via subscribeChannel
+      // do not need to know reconnect happened.
+      for (const channelId of channelSubscriptions.keys()) {
+        socket.send(JSON.stringify({ type: 'subscribe', channel_id: channelId }));
+      }
+
       emit('open', { isReconnect });
 
       if (isReconnect) {
@@ -326,6 +348,47 @@ export function createWsClient(opts) {
     socket.send(JSON.stringify({ type, ...payload }));
   }
 
+  /**
+   * Refcounted channel subscribe. Increment the per-channel counter
+   * and emit a `subscribe` frame only on the 0 -> 1 transition.
+   * Multiple owners can call this safely; only one frame goes on the
+   * wire. The reconnect path replays every channel with count > 0,
+   * so callers do not need to re-subscribe on `open`.
+   *
+   * @param {string} channelId
+   */
+  function subscribeChannel(channelId) {
+    if (!channelId) return;
+    const prev = channelSubscriptions.get(channelId) ?? 0;
+    channelSubscriptions.set(channelId, prev + 1);
+    if (prev === 0 && isConnected()) {
+      socket.send(JSON.stringify({ type: 'subscribe', channel_id: channelId }));
+    }
+  }
+
+  /**
+   * Refcounted channel unsubscribe. Decrement the per-channel counter
+   * and emit an `unsubscribe` frame only on the 1 -> 0 transition.
+   * No-op when the channel has no live counter or is already at zero
+   * — a defensive guard against double-cleanup paths.
+   *
+   * @param {string} channelId
+   */
+  function unsubscribeChannel(channelId) {
+    if (!channelId) return;
+    const prev = channelSubscriptions.get(channelId) ?? 0;
+    if (prev <= 0) return;
+    const next = prev - 1;
+    if (next === 0) {
+      channelSubscriptions.delete(channelId);
+      if (isConnected()) {
+        socket.send(JSON.stringify({ type: 'unsubscribe', channel_id: channelId }));
+      }
+    } else {
+      channelSubscriptions.set(channelId, next);
+    }
+  }
+
   function on(type, callback) {
     if (!listeners.has(type)) listeners.set(type, new Set());
     listeners.get(type).add(callback);
@@ -336,5 +399,16 @@ export function createWsClient(opts) {
     if (cbs) cbs.delete(callback);
   }
 
-  return { connect, disconnect, send, isConnected, isReconnecting, getRtt, on, off };
+  return {
+    connect,
+    disconnect,
+    send,
+    subscribeChannel,
+    unsubscribeChannel,
+    isConnected,
+    isReconnecting,
+    getRtt,
+    on,
+    off,
+  };
 }

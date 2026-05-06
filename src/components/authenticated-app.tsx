@@ -87,6 +87,7 @@ import {
 } from "@/adapters"
 import type { Server, Channel, ChannelCategory } from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
+import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
 
 interface FavoriteEntry {
   id: string
@@ -228,6 +229,21 @@ export function AuthenticatedApp() {
     baseUrl,
     currentUserId,
   })
+
+  // Subscribe the WS to every text channel of the active server so
+  // backend `mls.commit` and `mls.add_request` frames (broadcast to
+  // the channel room) reach this client even when the channel is
+  // not in the active view. The hook itself does not process the
+  // frames — that's the per-event listeners; it only owns transport
+  // membership for the channel rooms.
+  const textChannelIdsForMLS = React.useMemo(
+    () => channels.filter((c) => c.kind === "text").map((c) => c.id),
+    [channels],
+  )
+  useTextChannelMLSSubscriptions(
+    wsClient as Parameters<typeof useTextChannelMLSSubscriptions>[0],
+    textChannelIdsForMLS,
+  )
 
   const voicePresence = useVoiceChannelPresence(
     (instanceUrl ? getWsClient(instanceUrl) : null) as Parameters<

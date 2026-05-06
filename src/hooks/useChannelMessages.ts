@@ -90,6 +90,14 @@ export interface UseChannelMessagesResult {
 
 interface WsClient {
   send: (type: string, payload: Record<string, unknown>) => void
+  // Refcounted channel subscription. The active chat subscribes here
+  // for `message.new` / `message.send.ack` delivery; a sibling owner
+  // (the global text-channel MLS sync hook) subscribes the same
+  // channel for MLS control frames. The transport layer consolidates
+  // both into a single wire frame and only emits `unsubscribe` when
+  // every owner has dropped the channel.
+  subscribeChannel: (channelId: string) => void
+  unsubscribeChannel: (channelId: string) => void
   on: (event: string, handler: (data: WsMessage) => void) => void
   off: (event: string, handler: (data: WsMessage) => void) => void
   isConnected: () => boolean
@@ -516,13 +524,12 @@ export function useChannelMessages(
   React.useEffect(() => {
     if (!wsClient || !channelId) return
 
-    function doSubscribe() {
-      if (wsClient!.isConnected()) {
-        wsClient!.send("subscribe", { channel_id: channelId })
-      }
-    }
-    doSubscribe()
-    wsClient.on("open", doSubscribe)
+    // Refcounted: a no-op when another owner (e.g. the global
+    // text-channel MLS sync hook) has already subscribed this
+    // channel. The transport layer takes care of replaying the
+    // subscription on reconnect, so the legacy on('open',
+    // doSubscribe) pattern is not needed here.
+    wsClient.subscribeChannel(channelId)
 
     const onMessageNew = async (data: WsMessage) => {
       if (data.channel_id !== channelId) return
@@ -674,12 +681,10 @@ export function useChannelMessages(
     wsClient.on("message.send.ack", onSendAck)
     wsClient.on("error", onError)
     return () => {
-      wsClient.off("open", doSubscribe)
       wsClient.off("message.new", onMessageNew)
       wsClient.off("message.send.ack", onSendAck)
       wsClient.off("error", onError)
-      if (wsClient.isConnected())
-        wsClient.send("unsubscribe", { channel_id: channelId })
+      wsClient.unsubscribeChannel(channelId)
     }
   }, [wsClient, channelId, currentUserId])
 

@@ -544,3 +544,105 @@ describe('createWsClient - device revoke close handling', () => {
     vi.useRealTimers();
   });
 });
+
+// ── Channel subscription refcount (P2.1) ─────────────────────────────────────
+
+describe('createWsClient - subscribeChannel/unsubscribeChannel refcount', () => {
+  let MockWs;
+
+  beforeEach(() => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+  });
+
+  afterEach(() => {
+    delete global.WebSocket;
+  });
+
+  // Helper: skip the auth frame when asserting wire frames.
+  function nonAuthFrames(ws) {
+    return ws.send.mock.calls
+      .map((c) => JSON.parse(c[0]))
+      .filter((m) => m.type !== 'auth');
+  }
+
+  it('emits a single subscribe frame when two owners subscribe the same channel', () => new Promise((resolve) => {
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken: () => 't' });
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onopen();
+      client.subscribeChannel('ch-1');
+      client.subscribeChannel('ch-1');
+      const subs = nonAuthFrames(ws).filter(
+        (m) => m.type === 'subscribe' && m.channel_id === 'ch-1',
+      );
+      expect(subs).toHaveLength(1);
+      resolve();
+    }, 10);
+  }));
+
+  it('does not emit unsubscribe until the last owner drops the channel', () => new Promise((resolve) => {
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken: () => 't' });
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onopen();
+      client.subscribeChannel('ch-1');
+      client.subscribeChannel('ch-1');
+      client.unsubscribeChannel('ch-1');
+      let unsubs = nonAuthFrames(ws).filter(
+        (m) => m.type === 'unsubscribe' && m.channel_id === 'ch-1',
+      );
+      expect(unsubs).toHaveLength(0);
+      client.unsubscribeChannel('ch-1');
+      unsubs = nonAuthFrames(ws).filter(
+        (m) => m.type === 'unsubscribe' && m.channel_id === 'ch-1',
+      );
+      expect(unsubs).toHaveLength(1);
+      resolve();
+    }, 10);
+  }));
+
+  it('replays every counted channel subscribe on reconnect open', () => {
+    vi.useFakeTimers();
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken: () => 't' });
+    client.connect();
+    vi.advanceTimersByTime(1);
+    const ws1 = MockWs.captured;
+    ws1.onopen();
+    client.subscribeChannel('ch-1');
+    client.subscribeChannel('ch-2');
+
+    // Simulate disconnect — the client schedules a reconnect timer.
+    ws1.readyState = 3;
+    ws1.onclose({ code: 1006, reason: '' });
+
+    // Run the reconnect timer; this builds a new WebSocket instance.
+    vi.advanceTimersByTime(60_000);
+    const ws2 = MockWs.captured;
+    expect(ws2).not.toBe(ws1);
+    ws2.readyState = 1;
+    ws2.onopen();
+
+    const replayed = nonAuthFrames(ws2)
+      .filter((m) => m.type === 'subscribe')
+      .map((m) => m.channel_id)
+      .sort();
+    expect(replayed).toEqual(['ch-1', 'ch-2']);
+    vi.useRealTimers();
+  });
+
+  it('treats unsubscribe of an unknown channel as a no-op', () => new Promise((resolve) => {
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken: () => 't' });
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onopen();
+      client.unsubscribeChannel('never-subscribed');
+      const unsubs = nonAuthFrames(ws).filter((m) => m.type === 'unsubscribe');
+      expect(unsubs).toHaveLength(0);
+      resolve();
+    }, 10);
+  }));
+});

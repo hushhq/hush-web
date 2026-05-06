@@ -34,6 +34,8 @@ vi.mock("@/lib/api", () => ({
 
 interface FakeWsClient {
   send: ReturnType<typeof vi.fn>
+  subscribeChannel: ReturnType<typeof vi.fn>
+  unsubscribeChannel: ReturnType<typeof vi.fn>
   on: ReturnType<typeof vi.fn>
   off: ReturnType<typeof vi.fn>
   isConnected: () => boolean
@@ -44,6 +46,8 @@ function makeWsClient(): FakeWsClient {
   const handlers = new Map<string, (data: unknown) => void>()
   return {
     send: vi.fn(),
+    subscribeChannel: vi.fn(),
+    unsubscribeChannel: vi.fn(),
     on: vi.fn((event: string, handler: (data: unknown) => void) => {
       handlers.set(event, handler)
     }),
