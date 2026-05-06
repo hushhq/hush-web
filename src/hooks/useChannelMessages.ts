@@ -103,6 +103,9 @@ interface WsMessage {
   sender_device_id?: string
   timestamp?: string
   code?: string
+  // message.send.ack fields
+  local_id?: string
+  message_id?: string
 }
 
 interface DecryptDeps {
@@ -274,7 +277,8 @@ async function encryptAndSendEnvelope(
   wsClient: WsClient | null,
   channelId: string,
   envelope: MessageEnvelopeV1,
-  encryptForChannel: (plaintext: string) => Promise<{ ciphertext: Uint8Array }>
+  encryptForChannel: (plaintext: string) => Promise<{ ciphertext: Uint8Array }>,
+  localId: string
 ): Promise<void> {
   if (!wsClient?.isConnected?.()) {
     throw new Error("Connection lost. Reconnect and retry.")
@@ -293,6 +297,7 @@ async function encryptAndSendEnvelope(
   wsClient.send("message.send", {
     channel_id: channelId,
     ciphertext: uint8ArrayToBase64(ciphertext),
+    local_id: localId,
   })
 }
 
@@ -400,6 +405,16 @@ export function useChannelMessages(
             await decryptMessageRow(row, currentUserId, decryptDepsRef.current)
           )
           knownMessageIdsRef.current.add(row.id)
+          // Yield every 5 rows so the browser can paint and run input
+          // handlers during a long history load. MLS WASM decrypt
+          // serialised on the main thread can otherwise lock the UI
+          // for hundreds of ms on a fresh channel open. The worker
+          // refactor (filed separately) is the proper fix; this just
+          // smooths the perceived stall.
+          if (i % 5 === 0) {
+            await new Promise<void>((r) => setTimeout(r, 0))
+            if (cancelled) return
+          }
         }
         if (cancelled) return
         loadedChannelRef.current = channelId
@@ -478,6 +493,9 @@ export function useChannelMessages(
         older.push(
           await decryptMessageRow(row, currentUserId, decryptDepsRef.current)
         )
+        if (i % 5 === 0) {
+          await new Promise<void>((r) => setTimeout(r, 0))
+        }
       }
       setMessages((prev) => [...older, ...prev])
     } catch (err) {
@@ -613,11 +631,52 @@ export function useChannelMessages(
       }
     }
 
+    // Server-confirmed ack carrying the originator-supplied local_id
+    // (the optimistic row's temp id) and the persisted message id.
+    // Lands ahead of the broadcast `message.new` because the server
+    // writes both to the same client.send channel and emits the ack
+    // first. We:
+    //   1. clear the watchdog so the row never trips into "failed"
+    //   2. swap the optimistic row's id from temp-* to the real id
+    //      and flip pending → false
+    //   3. record the real id in `knownMessageIdsRef` so the upcoming
+    //      broadcast `message.new` for the same id is a no-op (the
+    //      branch at the top of `onMessageNew` early-returns on
+    //      already-known ids).
+    const onSendAck = (data: WsMessage) => {
+      if (data.channel_id !== channelId) return
+      const localId = data.local_id
+      const realId = data.id || data.message_id
+      if (!localId || !realId) return
+      const ts = data.timestamp ? new Date(data.timestamp).getTime() : Date.now()
+
+      const timer = pendingWatchdogsRef.current.get(localId)
+      if (timer) {
+        clearTimeout(timer)
+        pendingWatchdogsRef.current.delete(localId)
+      }
+
+      knownMessageIdsRef.current.add(realId)
+      if (ts > (latestBackendTsRef.current ?? 0)) {
+        latestBackendTsRef.current = ts
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === localId
+            ? { ...m, id: realId, pending: false, failed: false, timestamp: ts }
+            : m
+        )
+      )
+    }
+
     wsClient.on("message.new", onMessageNew)
+    wsClient.on("message.send.ack", onSendAck)
     wsClient.on("error", onError)
     return () => {
       wsClient.off("open", doSubscribe)
       wsClient.off("message.new", onMessageNew)
+      wsClient.off("message.send.ack", onSendAck)
       wsClient.off("error", onError)
       if (wsClient.isConnected())
         wsClient.send("unsubscribe", { channel_id: channelId })
@@ -628,6 +687,23 @@ export function useChannelMessages(
     if (!wsClient || !channelId || !serverId) return
 
     const onReconnected = async () => {
+      // Drop orphan temp rows whose watchdog never fired (the socket
+      // dropped the send AND the watchdog was cancelled by an unmount
+      // / channel switch before it could trip). Reconnect implies the
+      // pre-disconnect sends are gone — anything still pending after
+      // the cutoff is dead and should surface as failed so the retry
+      // affordance shows.
+      const reconcileCutoff = Date.now() - SEND_ECHO_TIMEOUT_MS
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.pending &&
+          m.id.startsWith("temp-") &&
+          m.timestamp < reconcileCutoff
+            ? { ...m, pending: false, failed: true }
+            : m
+        )
+      )
+
       const latestTs = latestBackendTsRef.current
       if (latestTs == null) return
       const token = getTokenRef.current?.()
@@ -650,6 +726,7 @@ export function useChannelMessages(
           if (list.length === 0) break
 
           let nextCursorTs = cursorTs
+          let yieldCounter = 0
           for (const row of list) {
             const ts =
               typeof row.timestamp === "number"
@@ -667,6 +744,10 @@ export function useChannelMessages(
             if (row.senderId !== currentUserId && row.id && ts > newestNonOwnTs) {
               newestNonOwnId = row.id
               newestNonOwnTs = ts
+            }
+            yieldCounter++
+            if (yieldCounter % 5 === 0) {
+              await new Promise<void>((r) => setTimeout(r, 0))
             }
           }
 
@@ -771,7 +852,8 @@ export function useChannelMessages(
           wsClient,
           channelId,
           envelope,
-          encryptForChannelRef.current
+          encryptForChannelRef.current,
+          tempId
         )
         armSendWatchdog(tempId)
         return { id: tempId }
@@ -818,7 +900,8 @@ export function useChannelMessages(
           wsClient,
           channelId,
           target.envelope,
-          encryptForChannelRef.current
+          encryptForChannelRef.current,
+          localId
         )
         if (localId.startsWith("temp-")) armSendWatchdog(localId)
       } catch (err) {
