@@ -7,6 +7,7 @@ import {
   LockIcon,
   LogOutIcon,
   MicIcon,
+  MonitorSmartphoneIcon,
   PaletteIcon,
   PlugZapIcon,
   ShieldIcon,
@@ -30,6 +31,7 @@ import {
 } from "@/components/settings-dialog"
 import { useAuth } from "@/contexts/AuthContext"
 import { getVaultConfig } from "@/lib/identityVault"
+import { DevicesPanel } from "@/components/settings/devices-panel"
 
 interface UserAccountInfo {
   displayName: string
@@ -41,6 +43,14 @@ interface UserSettingsDialogProps {
   onOpenChange: (open: boolean) => void
   account?: UserAccountInfo
   onSignOut?: () => void | Promise<void>
+  /**
+   * URL of the auth (home) instance — the one that issued the JWT and
+   * stores the user's device list. Distinct from the currently-selected
+   * server's instance, which may be a federated peer.
+   */
+  homeInstanceUrl?: string | null
+  /** Hex transparency log public key for the home instance. */
+  homeLogPublicKey?: string | null
 }
 
 export function UserSettingsDialog({
@@ -48,6 +58,8 @@ export function UserSettingsDialog({
   onOpenChange,
   account,
   onSignOut,
+  homeInstanceUrl,
+  homeLogPublicKey,
 }: UserSettingsDialogProps) {
   // Keep unfinished surfaces visible but disabled so the settings map
   // stays recognizable while only wired panels are reachable.
@@ -87,6 +99,18 @@ export function UserSettingsDialog({
       label: "Security",
       icon: <LockIcon />,
       content: <SecurityPanel />,
+    },
+    {
+      id: "devices",
+      groupId: "account",
+      label: "Devices",
+      icon: <MonitorSmartphoneIcon />,
+      content: (
+        <DevicesPanel
+          homeInstanceUrl={homeInstanceUrl}
+          homeLogPublicKey={homeLogPublicKey}
+        />
+      ),
     },
     {
       id: "appearance",

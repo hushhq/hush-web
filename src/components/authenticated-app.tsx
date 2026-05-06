@@ -59,7 +59,7 @@ import { RealChat } from "@/components/chat-real"
 import { VoiceChannelView } from "@/components/voice-channel-view"
 import { VoicePlaceholderView } from "@/components/voice/voice-placeholder-view"
 import { useAuth } from "@/contexts/AuthContext"
-import { getDeviceId } from "@/hooks/useAuth"
+import { getDeviceId, HOME_INSTANCE_KEY } from "@/hooks/useAuth"
 import { useInstanceContext } from "@/contexts/InstanceContext"
 import * as mlsStore from "@/lib/mlsStore"
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
@@ -164,6 +164,15 @@ interface ShellChannel {
   kind: ShellChannelKind
 }
 
+function normalizeOrigin(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
 export function AuthenticatedApp() {
   const params = useParams<{
     instance?: string
@@ -216,6 +225,30 @@ export function AuthenticatedApp() {
     }>
   }
   const isMobile = useIsMobile()
+
+  // Auth (home) instance — where the JWT lives and the device list is
+  // hosted. Distinct from the currently-selected server, which may be a
+  // federated peer. Falls back to the page origin during the first paint
+  // before useInstances hydrates. Both sides of the lookup are
+  // normalized to URL.origin so trailing-slash / case differences in
+  // localStorage vs the connected snapshot don't drop the match.
+  const homeInstance = React.useMemo(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? localStorage.getItem(HOME_INSTANCE_KEY)
+        : null
+    const fallback =
+      typeof window !== "undefined" ? window.location.origin : null
+    const homeUrl = normalizeOrigin(stored) ?? normalizeOrigin(fallback)
+    if (!homeUrl) return { url: null, logPublicKey: null }
+    const match = connectedInstances.find(
+      (inst) => normalizeOrigin(inst.instanceUrl) === homeUrl
+    )
+    return {
+      url: homeUrl,
+      logPublicKey: match?.handshakeData?.log_public_key ?? null,
+    }
+  }, [connectedInstances])
 
   const { servers } = useGuilds()
 
@@ -1572,6 +1605,8 @@ export function AuthenticatedApp() {
               }
             : undefined
         }
+        homeInstanceUrl={homeInstance.url}
+        homeLogPublicKey={homeInstance.logPublicKey}
         onSignOut={async () => {
           await performLogout()
           setIsUserSettingsOpen(false)

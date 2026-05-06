@@ -28,6 +28,30 @@ vi.mock("@/contexts/AuthContext", () => ({
 }))
 vi.mock("@/lib/identityVault", () => ({
   getVaultConfig: (...args: unknown[]) => mockGetVaultConfig(...args),
+  bytesToHex: () => "deadbeef",
+}))
+
+// DevicesPanel pulls api + router + transparency + device label. Stub
+// at the module boundary so the dialog suite can assert section
+// presence without hauling in those concerns.
+vi.mock("@/lib/api", () => ({
+  listDeviceKeys: vi.fn().mockResolvedValue([]),
+  revokeDeviceKey: vi.fn(),
+}))
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => vi.fn(),
+}))
+vi.mock("@/lib/deviceLabel", () => ({
+  getReadableDeviceLabel: () => "Chrome on macOS",
+}))
+vi.mock("@/lib/transparencyVerifier", () => ({
+  TransparencyVerifier: function MockVerifier() {
+    return { verifyOwnKey: vi.fn() }
+  },
+}))
+vi.mock("@/hooks/useAuth", () => ({
+  getDeviceId: () => "device-current",
+  HOME_INSTANCE_KEY: "hush_home_instance",
 }))
 
 import { UserSettingsDialog } from "./user-settings-dialog"
@@ -140,6 +164,34 @@ describe("UserSettingsDialog", () => {
     expect(
       screen.getByRole("combobox", { name: /vault timeout/i })
     ).toHaveTextContent(/1 hour/i)
+  })
+
+  it("exposes a Devices section under Account that activates DevicesPanel", async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "u1" },
+      token: "tok",
+      identityKeyRef: { current: { publicKey: new Uint8Array() } },
+      setTransparencyError: vi.fn(),
+    })
+    mockGetVaultConfig.mockReturnValue({ timeout: 60, pinType: "pin" })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^devices$/i }))
+
+    expect(
+      screen.getByRole("heading", { name: /^devices$/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /link a new device/i })
+    ).toBeInTheDocument()
   })
 
   it("warns when the vault timeout is set to Never", async () => {
