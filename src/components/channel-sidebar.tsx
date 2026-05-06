@@ -211,6 +211,11 @@ interface ChannelSidebarProps {
   ) => Promise<void>
   /** Delete a channel. Confirmation handled by caller via wrapper if needed. */
   onDeleteChannel?: (channelId: string) => Promise<void>
+  /** Delete a category. Same backend as channel delete (categories are
+   *  channels of `type: "category"` upstream); the sidebar surfaces a
+   *  confirmation dialog because the action cascades to nested
+   *  channels server-side. */
+  onDeleteCategory?: (categoryId: string) => Promise<void>
   /** Create an invite for the active server. Returns the shareable URL. */
   onCreateInvite?: () => Promise<string | null>
   /** Whether the current user can perform admin actions (create/delete channel, invite). */
@@ -249,6 +254,7 @@ export function ChannelSidebar({
   onOpenUserSettings,
   onCreateChannel,
   onDeleteChannel,
+  onDeleteCategory,
   onCreateInvite,
   canAdministrate = false,
   serverMenuEnabled = true,
@@ -308,6 +314,7 @@ export function ChannelSidebar({
             onChannelsChange={onChannelsChange}
             onCreateChannel={onCreateChannel}
             onDeleteChannel={onDeleteChannel}
+            onDeleteCategory={onDeleteCategory}
             canAdministrate={canAdministrate}
           />
           {/* maybe for future: {apps.length > 0 ? <AppsSection apps={apps} /> : null} */}
@@ -492,9 +499,8 @@ function ServerHeader({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!canAdministrate || !onCreateInvite}
-                  onSelect={(event) => {
-                    event.preventDefault()
-                    void handleInvite()
+                  onSelect={() => {
+                    setTimeout(() => void handleInvite(), 0)
                   }}
                 >
                   <PlusIcon className="size-4" />
@@ -503,9 +509,8 @@ function ServerHeader({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
-                  onSelect={(event) => {
-                    event.preventDefault()
-                    setLeaveOpen(true)
+                  onSelect={() => {
+                    setTimeout(() => setLeaveOpen(true), 0)
                   }}
                 >
                   <LogOutIcon className="size-4" />
@@ -654,6 +659,7 @@ interface ChannelsSectionProps {
     parentId?: string | null
   ) => Promise<void>
   onDeleteChannel?: (channelId: string) => Promise<void>
+  onDeleteCategory?: (categoryId: string) => Promise<void>
   canAdministrate?: boolean
 }
 
@@ -666,6 +672,7 @@ function ChannelsSection({
   onChannelsChange,
   onCreateChannel,
   onDeleteChannel,
+  onDeleteCategory,
   canAdministrate = false,
 }: ChannelsSectionProps) {
   const [createOpen, setCreateOpen] = React.useState<CreateChannelKind | null>(null)
@@ -676,10 +683,18 @@ function ChannelsSection({
 
   const openCreate = React.useCallback(
     (kind: CreateChannelKind, parentId: string | null = null) => {
-      setCreateOpen(kind)
-      setCreateParentId(parentId)
-      setCreateName("")
-      setCreateError(null)
+      // Defer to the next tick so the ContextMenu's close animation +
+      // body pointer-events restore complete before the Dialog mounts.
+      // Opening synchronously while ContextMenu is still tearing down
+      // stacks two Radix overlays and leaves `<body>` with
+      // `pointer-events: none` once both are dismissed, freezing every
+      // subsequent click until a full page reload.
+      setTimeout(() => {
+        setCreateOpen(kind)
+        setCreateParentId(parentId)
+        setCreateName("")
+        setCreateError(null)
+      }, 0)
     },
     []
   )
@@ -864,6 +879,7 @@ function ChannelsSection({
                     activeChannelId={activeChannelId}
                     onSelect={onSelect}
                     onDeleteChannel={onDeleteChannel}
+                    onDeleteCategory={onDeleteCategory}
                     canAdministrate={canAdministrate}
                     onCreateTextChannel={
                       canAdministrate && onCreateChannel
@@ -879,30 +895,21 @@ function ChannelsSection({
         <ContextMenuContent className="w-56">
           <ContextMenuItem
             disabled={!canAdministrate || !onCreateChannel}
-            onSelect={(event) => {
-              event.preventDefault()
-              openCreate("category")
-            }}
+            onSelect={() => openCreate("category")}
           >
             <FolderPlusIcon className="size-4" />
             New category
           </ContextMenuItem>
           <ContextMenuItem
             disabled={!canAdministrate || !onCreateChannel}
-            onSelect={(event) => {
-              event.preventDefault()
-              openCreate("text")
-            }}
+            onSelect={() => openCreate("text")}
           >
             <HashIcon className="size-4" />
             New text channel
           </ContextMenuItem>
           <ContextMenuItem
             disabled={!canAdministrate || !onCreateChannel}
-            onSelect={(event) => {
-              event.preventDefault()
-              openCreate("voice")
-            }}
+            onSelect={() => openCreate("voice")}
           >
             <Volume2Icon className="size-4" />
             New voice channel
@@ -1055,6 +1062,7 @@ function SortableCategory({
   activeChannelId,
   onSelect,
   onDeleteChannel,
+  onDeleteCategory,
   canAdministrate,
   onCreateTextChannel,
 }: {
@@ -1063,6 +1071,7 @@ function SortableCategory({
   activeChannelId: string
   onSelect: (id: string) => void
   onDeleteChannel?: (channelId: string) => Promise<void>
+  onDeleteCategory?: (categoryId: string) => Promise<void>
   canAdministrate: boolean
   onCreateTextChannel?: () => void
 }) {
@@ -1098,34 +1107,85 @@ function SortableCategory({
     },
   })
 
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [deleteBusy, setDeleteBusy] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  const canDeleteCategory = canAdministrate && Boolean(onDeleteCategory)
+
+  const confirmDelete = React.useCallback(async () => {
+    if (!onDeleteCategory) return
+    // Close the dialog BEFORE awaiting the mutation. The mutation
+    // triggers a `channel_deleted` WS broadcast that drops this
+    // category from the list — which unmounts SortableCategory while
+    // the AlertDialog is still mid-close. That race leaves Radix's
+    // body `pointer-events: none` lock in place and freezes every
+    // future click until a hard reload.
+    setDeleteError(null)
+    setDeleteOpen(false)
+    setDeleteBusy(true)
+    try {
+      await onDeleteCategory(category.id)
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete category"
+      )
+      setDeleteOpen(true)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }, [category.id, onDeleteCategory])
+
   return (
     <div ref={setNodeRef} style={style}>
       <Collapsible defaultOpen className="group/category">
-        <div className="flex items-center justify-between px-2 py-1">
-          <button
-            type="button"
-            {...attributes}
-            {...listeners}
-            className="flex size-4 cursor-grab items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground active:cursor-grabbing group-hover/category:opacity-100"
-            aria-label={`Drag ${category.name}`}
-          >
-            <GripVerticalIcon className="size-3" />
-          </button>
-          <CollapsibleTrigger className="flex flex-1 items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 transition-colors hover:text-foreground">
-            <ChevronDownIcon className="size-3 transition-transform duration-200 group-data-[state=closed]/category:-rotate-90" />
-            <span>{category.name}</span>
-          </CollapsibleTrigger>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title={`Add channel to ${category.name}`}
-            className="text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground"
-            disabled={!onCreateTextChannel}
-            onClick={onCreateTextChannel}
-          >
-            <PlusIcon />
-          </Button>
-        </div>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div className="flex items-center justify-between px-2 py-1">
+              <button
+                type="button"
+                {...attributes}
+                {...listeners}
+                className="flex size-4 cursor-grab items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground active:cursor-grabbing group-hover/category:opacity-100"
+                aria-label={`Drag ${category.name}`}
+              >
+                <GripVerticalIcon className="size-3" />
+              </button>
+              <CollapsibleTrigger className="flex flex-1 items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 transition-colors hover:text-foreground">
+                <ChevronDownIcon className="size-3 transition-transform duration-200 group-data-[state=closed]/category:-rotate-90" />
+                <span>{category.name}</span>
+              </CollapsibleTrigger>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                title={`Add channel to ${category.name}`}
+                className="text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground"
+                disabled={!onCreateTextChannel}
+                onClick={onCreateTextChannel}
+              >
+                <PlusIcon />
+              </Button>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-48">
+            <ContextMenuItem
+              variant="destructive"
+              disabled={!canDeleteCategory}
+              onSelect={() => {
+                // Defer dialog open to the next tick — opening
+                // synchronously while ContextMenu is still tearing
+                // down stacks two Radix overlays and leaves `<body>`
+                // with `pointer-events: none` once both close.
+                setTimeout(() => {
+                  setDeleteError(null)
+                  setDeleteOpen(true)
+                }, 0)
+              }}
+            >
+              <TrashIcon className="size-4" />
+              Delete category
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
         <CollapsibleContent>
           <div
             ref={setDropRef}
@@ -1155,6 +1215,34 @@ function SortableCategory({
           </div>
         </CollapsibleContent>
       </Collapsible>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {category.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {channels.length > 0
+                ? `This permanently deletes the category and the ${channels.length} channel${channels.length === 1 ? "" : "s"} inside it, along with their messages. Cannot be undone.`
+                : "This permanently deletes the category. Cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? (
+            <div className="text-sm text-destructive">{deleteError}</div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteBusy}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmDelete()
+              }}
+            >
+              {deleteBusy ? "Deleting..." : "Delete category"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -1245,15 +1333,22 @@ function ChannelButton({
 
   const confirmDelete = React.useCallback(async () => {
     if (!onDeleteChannel) return
-    setDeleteBusy(true)
+    // Close the dialog BEFORE awaiting the mutation. The mutation
+    // triggers a `channel_deleted` WS broadcast that drops this
+    // channel from the list — which unmounts SortableChannel while
+    // the AlertDialog is still mid-close. That race leaves Radix's
+    // body `pointer-events: none` lock in place and freezes every
+    // future click until a hard reload.
     setDeleteError(null)
+    setDeleteOpen(false)
+    setDeleteBusy(true)
     try {
       await onDeleteChannel(channel.id)
-      setDeleteOpen(false)
     } catch (err) {
       setDeleteError(
         err instanceof Error ? err.message : "Failed to delete channel"
       )
+      setDeleteOpen(true)
     } finally {
       setDeleteBusy(false)
     }
@@ -1287,10 +1382,15 @@ function ChannelButton({
           <ContextMenuItem
             variant="destructive"
             disabled={!canDelete}
-            onSelect={(event) => {
-              event.preventDefault()
-              setDeleteError(null)
-              setDeleteOpen(true)
+            onSelect={() => {
+              // Defer dialog open to the next tick — opening
+              // synchronously while ContextMenu is still tearing
+              // down stacks two Radix overlays and leaves `<body>`
+              // with `pointer-events: none` once both close.
+              setTimeout(() => {
+                setDeleteError(null)
+                setDeleteOpen(true)
+              }, 0)
             }}
           >
             <TrashIcon className="size-4" />

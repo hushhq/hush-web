@@ -199,14 +199,19 @@ function MemberRow({
       return
     }
     if (!onKickMember) return
-    setKickBusy(true)
+    // Close BEFORE awaiting the mutation. The kick triggers a member
+    // refresh that may unmount this row while the AlertDialog is still
+    // mid-close, leaking Radix's body `pointer-events: none` lock and
+    // freezing the UI until reload.
     setKickError(null)
+    setKickOpen(false)
+    setKickBusy(true)
     try {
       await onKickMember(member, reason)
-      setKickOpen(false)
       setKickReason("")
     } catch (err) {
       setKickError(err instanceof Error ? err.message : "Failed to kick member")
+      setKickOpen(true)
     } finally {
       setKickBusy(false)
     }
@@ -269,9 +274,12 @@ function MemberRow({
               <ContextMenuSeparator />
               <ContextMenuItem
                 variant="destructive"
-                onSelect={(event) => {
-                  event.preventDefault()
-                  setKickOpen(true)
+                onSelect={() => {
+                  // Defer to next tick so ContextMenu finishes its
+                  // close + body pointer-events restore before the
+                  // AlertDialog mounts. Stacking two Radix overlays
+                  // leaks the body lock when both later dismiss.
+                  setTimeout(() => setKickOpen(true), 0)
                 }}
               >
                 <BanIcon />

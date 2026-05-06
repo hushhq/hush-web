@@ -143,9 +143,8 @@ export function ServerRail({
           <ContextMenuContent className="w-56">
             <ContextMenuItem
               disabled={!onCreateServer}
-              onSelect={(event) => {
-                event.preventDefault()
-                onCreateServer?.()
+              onSelect={() => {
+                setTimeout(() => onCreateServer?.(), 0)
               }}
             >
               <PlusIcon className="size-4" />
@@ -153,9 +152,8 @@ export function ServerRail({
             </ContextMenuItem>
             <ContextMenuItem
               disabled={!onDiscoverServers}
-              onSelect={(event) => {
-                event.preventDefault()
-                onDiscoverServers?.()
+              onSelect={() => {
+                setTimeout(() => onDiscoverServers?.(), 0)
               }}
             >
               <CompassIcon className="size-4" />
@@ -317,9 +315,8 @@ function RailServer({
         <ContextMenuSeparator />
         <ContextMenuItem
           disabled={!canOpenSettings || !onOpenSettings}
-          onSelect={(event) => {
-            event.preventDefault()
-            onOpenSettings?.(server.id)
+          onSelect={() => {
+            setTimeout(() => onOpenSettings?.(server.id), 0)
           }}
         >
           <SettingsIcon className="size-4" />
@@ -333,9 +330,8 @@ function RailServer({
         {canDelete ? (
           <ContextMenuItem
             variant="destructive"
-            onSelect={(event) => {
-              event.preventDefault()
-              setDeleteOpen(true)
+            onSelect={() => {
+              setTimeout(() => setDeleteOpen(true), 0)
             }}
           >
             <LogOutIcon className="size-4" />
@@ -345,9 +341,8 @@ function RailServer({
           <ContextMenuItem
             variant="destructive"
             disabled={!canLeave}
-            onSelect={(event) => {
-              event.preventDefault()
-              setLeaveOpen(true)
+            onSelect={() => {
+              setTimeout(() => setLeaveOpen(true), 0)
             }}
           >
             <LogOutIcon className="size-4" />
