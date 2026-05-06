@@ -66,12 +66,30 @@ export function VoiceParticipantGrid({ className }: VoiceParticipantGridProps) {
   React.useEffect(() => {
     const node = wrapperRef.current
     if (!node || typeof ResizeObserver === "undefined") return
+    let raf = 0
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect
-      if (rect) setBox({ width: rect.width, height: rect.height })
+      if (!rect) return
+      // Coalesce notifications into a single frame: a naive setBox per
+      // entry caused ResizeObserver loops on slow renders, freezing the
+      // shell while the browser kept retrying. We also no-op when the
+      // dimensions are unchanged so we never schedule a state update
+      // that would not affect output.
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        setBox((prev) => {
+          const w = Math.round(rect.width)
+          const h = Math.round(rect.height)
+          if (prev.width === w && prev.height === h) return prev
+          return { width: w, height: h }
+        })
+      })
     })
     observer.observe(node)
-    return () => observer.disconnect()
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      observer.disconnect()
+    }
   }, [])
 
   const targetAspect = (cols * 16) / (rows * 9)

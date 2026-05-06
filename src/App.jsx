@@ -16,6 +16,7 @@ import { buildGuildRouteRef } from './lib/slugify';
 // on cold loads where the ThemeProvider effect hasn't mounted yet.
 applyThemeMode('dark');
 
+
 const UnauthenticatedShell = lazy(() =>
   import('./components/auth/unauthenticated-shell').then((m) => ({
     default: m.UnauthenticatedShell,

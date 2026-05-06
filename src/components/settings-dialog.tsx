@@ -35,6 +35,7 @@ export interface SettingsSection {
   content: React.ReactNode
   groupId?: string
   destructive?: boolean
+  disabled?: boolean
 }
 
 export interface SettingsGroup {
@@ -62,15 +63,18 @@ export function SettingsDialog({
   defaultSectionId,
 }: SettingsDialogProps) {
   const [activeId, setActiveId] = React.useState<string>(
-    defaultSectionId ?? sections[0]?.id ?? ""
+    resolveActiveSectionId(sections, defaultSectionId)
   )
 
   React.useEffect(() => {
     if (!open) return
-    setActiveId(defaultSectionId ?? sections[0]?.id ?? "")
+    setActiveId(resolveActiveSectionId(sections, defaultSectionId))
   }, [open, defaultSectionId, sections])
 
-  const active = sections.find((s) => s.id === activeId) ?? sections[0]
+  const active =
+    sections.find((s) => s.id === activeId && !s.disabled) ??
+    sections.find((s) => !s.disabled) ??
+    sections[0]
 
   const grouped = React.useMemo(() => {
     if (!groups?.length) return [{ id: "_default", label: undefined, items: sections }]
@@ -106,7 +110,10 @@ export function SettingsDialog({
                         <SidebarMenuItem key={section.id}>
                           <SidebarMenuButton
                             isActive={section.id === activeId}
-                            onClick={() => setActiveId(section.id)}
+                            disabled={section.disabled}
+                            onClick={() => {
+                              if (!section.disabled) setActiveId(section.id)
+                            }}
                             className={cn(
                               section.destructive &&
                                 "text-destructive hover:text-destructive data-[active=true]:text-destructive"
@@ -156,6 +163,7 @@ export function SettingsDialog({
                           <SelectItem
                             key={section.id}
                             value={section.id}
+                            disabled={section.disabled}
                             className={cn(
                               section.destructive && "text-destructive"
                             )}
@@ -179,5 +187,16 @@ export function SettingsDialog({
         </SidebarProvider>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function resolveActiveSectionId(
+  sections: SettingsSection[],
+  preferredId?: string
+): string {
+  const preferred = sections.find((section) => section.id === preferredId)
+  if (preferred && !preferred.disabled) return preferred.id
+  return (
+    sections.find((section) => !section.disabled)?.id ?? sections[0]?.id ?? ""
   )
 }

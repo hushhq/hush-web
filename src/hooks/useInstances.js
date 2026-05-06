@@ -325,7 +325,28 @@ export function useInstances() {
       scheduleReconnect(instanceUrl);
     });
 
+    // Subscribe to every guild's hub room on open + reconnect. Without
+    // this frame the backend's BroadcastToServer fan-out lands in an
+    // empty subscriber set and the client misses voice_state_update,
+    // channel_*, and member events for any guild the user isn't
+    // actively viewing. Per-adapter `subscribe.server` (in
+    // useChannelsForServer) only covers the active server; this
+    // hook-level pass covers every server the user is a member of.
+    const subscribeAllServers = () => {
+      const entry = instancesRef.current.get(instanceUrl);
+      if (!entry?.guilds || !wsClient.isConnected?.()) return;
+      for (const g of entry.guilds) {
+        if (g?.id) {
+          wsClient.send('subscribe.server', { server_id: g.id });
+        }
+      }
+    };
+    wsClient.on('open', subscribeAllServers);
+
     // Handle guild-level WS events that require a guild list refresh.
+    // After the refresh, re-subscribe to every guild — a `member_joined`
+    // routed via BroadcastToUser means a NEW server appeared in the
+    // user's list and we need to start listening for its broadcasts.
     const refreshOnEvent = async () => {
       const entry = instancesRef.current.get(instanceUrl);
       if (!entry?.jwt) return;
@@ -333,6 +354,7 @@ export function useInstances() {
         const guilds = await getMyGuilds(entry.jwt, instanceUrl);
         entry.guilds = mergeStampedGuilds(entry.guilds, guilds, instanceUrl);
         flushState();
+        subscribeAllServers();
       } catch (err) {
         console.error(`[useInstances] guild refresh failed for ${instanceUrl}:`, err);
       }
@@ -479,6 +501,19 @@ export function useInstances() {
       });
 
       flushState();
+
+      // Subscribe to every guild's hub room. The on('open') handler
+      // covers reconnect, but on the FIRST connect the open event
+      // fires before guilds have been fetched — entry.guilds is empty
+      // at that point so the subscribe loop is a no-op. Run it again
+      // here once the guild list is in place.
+      if (wsClient.isConnected?.()) {
+        for (const g of stampedGuilds) {
+          if (g?.id) {
+            wsClient.send('subscribe.server', { server_id: g.id });
+          }
+        }
+      }
     } catch (err) {
       if (!isActiveGeneration()) return;
       // Mark as offline but keep entry so reconnect can retry.
