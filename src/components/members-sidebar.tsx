@@ -351,18 +351,15 @@ function ProfileCard({
             <span className="text-muted-foreground">Member since</span>
             <span>Apr 2025</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Status</span>
-            <span className="capitalize">{member.presence ?? "online"}</span>
-          </div>
         </div>
+        {/* Send message is intentionally inert until DMs ship from
+            the server-member popover. Render disabled so the
+            affordance stays visible without firing a half-wired
+            handler. */}
         <button
           type="button"
-          disabled={!onDirectMessage}
-          onClick={() => {
-            void onDirectMessage?.(member)
-          }}
-          className="flex h-8 items-center justify-center gap-2 rounded-md bg-muted text-xs font-medium transition-colors hover:bg-muted/70"
+          disabled
+          className="flex h-8 cursor-not-allowed items-center justify-center gap-2 rounded-md bg-muted text-xs font-medium opacity-50"
         >
           <MessageSquareIcon className="size-3.5" />
           Send message
