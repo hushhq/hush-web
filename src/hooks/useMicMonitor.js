@@ -15,7 +15,9 @@ export function buildMicMonitorAudioConstraints(deviceId = null) {
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,
-    channelCount: 1,
+    // Force mono — same posture as the publish path (see
+    // `audio/capture/buildConstraints.ts`).
+    channelCount: { exact: 1 },
   };
   if (deviceId) {
     constraints.deviceId = { exact: deviceId };

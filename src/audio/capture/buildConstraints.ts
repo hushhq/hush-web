@@ -30,7 +30,7 @@ export interface MicConstraints {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
-  channelCount: number;
+  channelCount: ConstrainULong;
   deviceId?: { exact: string };
 }
 
@@ -55,7 +55,12 @@ export function buildConstraints(
     echoCancellation: true,
     noiseSuppression: profile.browserDsp,
     autoGainControl: profile.browserDsp,
-    channelCount: 1,
+    // Force mono. Voice chat is single-channel by design and stereo
+    // mics double the opus bandwidth without adding intelligibility.
+    // `{ exact: 1 }` makes the browser fail acquisition rather than
+    // silently hand back a stereo track that we'd then need to
+    // downmix.
+    channelCount: { exact: 1 },
   };
 
   if (deviceId) {

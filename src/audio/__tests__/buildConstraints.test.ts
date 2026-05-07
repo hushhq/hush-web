@@ -8,7 +8,7 @@ describe('buildConstraints', () => {
     expect(c.echoCancellation).toBe(true);
     expect(c.noiseSuppression).toBe(true);
     expect(c.autoGainControl).toBe(true);
-    expect(c.channelCount).toBe(1);
+    expect(c.channelCount).toEqual({ exact: 1 });
   });
 
   it('mobile-web-standard: browser DSP on (NS + AGC + EC)', () => {
@@ -49,9 +49,9 @@ describe('buildConstraints', () => {
     expect(c.deviceId).toBeUndefined();
   });
 
-  it('channelCount is always 1', () => {
+  it('channelCount is always forced mono ({ exact: 1 })', () => {
     for (const profile of Object.values(CAPTURE_PROFILES)) {
-      expect(buildConstraints(profile).channelCount).toBe(1);
+      expect(buildConstraints(profile).channelCount).toEqual({ exact: 1 });
     }
   });
 });

@@ -16,7 +16,13 @@ import { MEDIA_SOURCES } from '../../utils/constants';
 export interface LocalParticipantPort {
   publishTrack(
     track: LocalAudioTrack,
-    options: { source: typeof Track.Source.Microphone },
+    options: {
+      source: typeof Track.Source.Microphone;
+      /** Force opus mono. Default LiveKit picks channels from the
+       *  captured track; we want a deterministic single-channel
+       *  pipeline. */
+      forceStereo?: boolean;
+    },
   ): Promise<void>;
   unpublishTrack(track: LocalAudioTrack): Promise<void>;
 }
@@ -73,6 +79,11 @@ export class LiveKitRoomAdapter implements RoomPublishPort {
 
     await this._participant.publishTrack(localTrack, {
       source: Track.Source.Microphone,
+      // Force opus mono regardless of what the captured track
+      // reports. Pairs with the `channelCount: { exact: 1 }`
+      // getUserMedia constraint so neither the encoder nor the
+      // input stream can sneak a stereo track through.
+      forceStereo: false,
     });
 
     // Keep localTracksRef in sync — the rest of the app reads this.

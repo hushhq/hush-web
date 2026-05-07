@@ -62,6 +62,8 @@ describe('LiveKitRoomAdapter: publishTrack', () => {
     expect(participant.publishTrack).toHaveBeenCalledTimes(1);
     const publishedTrack = (participant.publishTrack as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(publishedTrack).toBeInstanceOf(MockLocalAudioTrack);
+    const publishOpts = (participant.publishTrack as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(publishOpts).toMatchObject({ forceStereo: false });
   });
 
   it('updates localTracksRef after publish', async () => {

@@ -69,7 +69,7 @@ describe('useMicMonitor', () => {
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
-      channelCount: 1,
+      channelCount: { exact: 1 },
       deviceId: { exact: 'mic-1' },
     });
   });
@@ -95,7 +95,7 @@ describe('useMicMonitor', () => {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        channelCount: 1,
+        channelCount: { exact: 1 },
         deviceId: { exact: 'mic-1' },
       },
     });
