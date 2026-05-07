@@ -13,8 +13,14 @@
  *    (`voiceRuntime.onMicFilterSettingsChange`).
  *  - Mic-test isolation: while in voice, starting the test deafens the
  *    room (or mutes the mic if already deafened) so the local monitor
- *    is the only audible path. Stopping or unmounting restores the
- *    pre-test state.
+ *    is the only audible path. Stopping or unmounting (or a failure
+ *    during a mid-test mic switch) restores the pre-test state.
+ *
+ * Permission posture: opening the panel does NOT request mic/camera
+ * permission. We only enumerate devices (no labels until permission is
+ * granted) and surface explicit "Grant access" buttons. Permission is
+ * triggered by user intent — clicking the grant button, or starting
+ * the mic test.
  */
 
 import * as React from "react"
@@ -48,9 +54,10 @@ import {
   type VoiceDevicePrefs,
 } from "@/lib/voiceDevicePrefs"
 
-interface MediaDeviceOption {
+interface RawDevice {
   deviceId: string
-  label: string
+  /** Empty string when permission has not been granted yet. */
+  rawLabel: string
 }
 
 interface MicFilterSettings {
@@ -77,35 +84,63 @@ interface IsolationSnapshot {
 }
 
 interface DeviceList {
-  audio: MediaDeviceOption[]
-  video: MediaDeviceOption[]
+  audio: RawDevice[]
+  video: RawDevice[]
 }
 
 const DEFAULT_OPTION_VALUE = "__default__"
+const EMPTY_DEVICE_LIST: DeviceList = { audio: [], video: [] }
 
-async function enumerate(
-  options: { withVideoLabels: boolean }
-): Promise<DeviceList> {
-  const constraints: MediaStreamConstraints = options.withVideoLabels
-    ? { audio: true, video: true }
-    : { audio: true }
-  const probe = await navigator.mediaDevices.getUserMedia(constraints)
-  probe.getTracks().forEach((track) => track.stop())
+/**
+ * Enumerate input devices WITHOUT triggering a permission prompt.
+ * Labels remain empty strings until permission has been granted for
+ * that kind, which the UI uses to decide whether to show the picker
+ * or a "Grant access" button.
+ */
+async function enumerateDevicesRaw(): Promise<DeviceList> {
+  if (!navigator?.mediaDevices?.enumerateDevices) return EMPTY_DEVICE_LIST
   const devices = await navigator.mediaDevices.enumerateDevices()
-  const toOption =
-    (fallback: string) =>
-    (d: MediaDeviceInfo, index: number): MediaDeviceOption => ({
-      deviceId: d.deviceId,
-      label: d.label || `${fallback} ${index + 1}`,
-    })
+  const toRaw = (d: MediaDeviceInfo): RawDevice => ({
+    deviceId: d.deviceId,
+    rawLabel: d.label,
+  })
   return {
     audio: devices
       .filter((d) => d.kind === "audioinput" && d.deviceId)
-      .map(toOption("Microphone")),
+      .map(toRaw),
     video: devices
       .filter((d) => d.kind === "videoinput" && d.deviceId)
-      .map(toOption("Camera")),
+      .map(toRaw),
   }
+}
+
+async function requestMediaPermission(
+  kind: "audio" | "video"
+): Promise<void> {
+  if (!navigator?.mediaDevices?.getUserMedia) {
+    throw new Error("Media capture is not supported on this device.")
+  }
+  const constraints: MediaStreamConstraints =
+    kind === "audio" ? { audio: true } : { video: true }
+  const stream = await navigator.mediaDevices.getUserMedia(constraints)
+  stream.getTracks().forEach((track) => track.stop())
+}
+
+/**
+ * `true` when at least one device of this kind has a non-empty label —
+ * which means the browser has surfaced labels for this kind, which only
+ * happens after permission has been granted.
+ */
+function hasPermissionFor(devices: RawDevice[]): boolean {
+  return devices.some((d) => d.rawLabel.length > 0)
+}
+
+function formatDeviceLabel(
+  device: RawDevice,
+  fallback: string,
+  index: number
+): string {
+  return device.rawLabel || `${fallback} ${index + 1}`
 }
 
 function getMicMonitorErrorMessage(error: unknown): string {
@@ -137,14 +172,11 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     voiceRuntimeRef.current = voiceRuntime ?? null
   }, [voiceRuntime])
 
-  const [deviceList, setDeviceList] = React.useState<DeviceList>({
-    audio: [],
-    video: [],
-  })
+  const [deviceList, setDeviceList] =
+    React.useState<DeviceList>(EMPTY_DEVICE_LIST)
   const [permissionError, setPermissionError] = React.useState<string | null>(
     null
   )
-  const [videoLabelsLoaded, setVideoLabelsLoaded] = React.useState(false)
   const [prefs, setPrefs] = React.useState<VoiceDevicePrefs | null>(null)
   const [filterSettings, setFilterSettingsState] =
     React.useState<MicFilterSettings>(() => getMicFilterSettings())
@@ -183,29 +215,24 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     }
   }, [userId])
 
-  const ensureDevices = React.useCallback(
-    async (wantsVideoLabels: boolean) => {
-      try {
-        const result = await enumerate({ withVideoLabels: wantsVideoLabels })
-        setDeviceList(result)
-        if (wantsVideoLabels) setVideoLabelsLoaded(true)
-        setPermissionError(null)
-        return result
-      } catch (error) {
-        setPermissionError(
-          error instanceof Error
-            ? error.message
-            : "Microphone or camera permission was denied."
-        )
-        return null
-      }
-    },
-    []
-  )
+  const refreshDevices = React.useCallback(async () => {
+    try {
+      const result = await enumerateDevicesRaw()
+      setDeviceList(result)
+      return result
+    } catch (error) {
+      setPermissionError(
+        error instanceof Error
+          ? error.message
+          : "Failed to enumerate media devices."
+      )
+      return null
+    }
+  }, [])
 
   React.useEffect(() => {
-    void ensureDevices(false)
-  }, [ensureDevices])
+    void refreshDevices()
+  }, [refreshDevices])
 
   const restoreVoiceAfterMicTest = React.useCallback(async () => {
     const snapshot = isolationRef.current
@@ -277,6 +304,11 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
           settings: filterSettings,
         })
       } catch (error) {
+        // Mid-test mic switch failed — restore the room to its
+        // pre-test state instead of leaving the user silently
+        // deafened/muted.
+        await stopMicMonitor()
+        await restoreVoiceAfterMicTest()
         setMicTestError(new Error(getMicMonitorErrorMessage(error)))
       }
     },
@@ -284,6 +316,7 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       filterSettings,
       isMicTesting,
       persistPrefs,
+      restoreVoiceAfterMicTest,
       setMicTestError,
       startMicMonitor,
       stopMicMonitor,
@@ -309,6 +342,23 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     [updateMicMonitorSettings]
   )
 
+  const handleGrantPermission = React.useCallback(
+    async (kind: "audio" | "video") => {
+      try {
+        await requestMediaPermission(kind)
+        setPermissionError(null)
+        await refreshDevices()
+      } catch (error) {
+        setPermissionError(
+          error instanceof Error
+            ? error.message
+            : "Permission denied."
+        )
+      }
+    },
+    [refreshDevices]
+  )
+
   const handleMicTestToggle = React.useCallback(async () => {
     if (isMicTesting) {
       await stopMicMonitor()
@@ -322,33 +372,27 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
         settings: filterSettings,
       })
       // Refresh labels (post-permission they become populated).
-      await ensureDevices(false)
+      await refreshDevices()
     } catch (error) {
       await restoreVoiceAfterMicTest()
       setMicTestError(new Error(getMicMonitorErrorMessage(error)))
     }
   }, [
-    ensureDevices,
     filterSettings,
     isMicTesting,
     isolateVoiceForMicTest,
     prefs?.audioDeviceId,
+    refreshDevices,
     restoreVoiceAfterMicTest,
     setMicTestError,
     startMicMonitor,
     stopMicMonitor,
   ])
 
-  const handleGrantCameraAccess = React.useCallback(async () => {
-    if (videoLabelsLoaded) return
-    await ensureDevices(true)
-  }, [ensureDevices, videoLabelsLoaded])
-
+  const audioGranted = hasPermissionFor(deviceList.audio)
+  const videoGranted = hasPermissionFor(deviceList.video)
   const audioValue = prefs?.audioDeviceId ?? DEFAULT_OPTION_VALUE
   const videoValue = prefs?.videoDeviceId ?? DEFAULT_OPTION_VALUE
-  const showVideoGrant =
-    deviceList.video.length === 0 ||
-    (!videoLabelsLoaded && deviceList.video.every((d) => !d.label))
   const meterPercent = Math.max(0, Math.min(100, micLevel))
 
   return (
@@ -371,26 +415,36 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
           icon={<MicIcon className="size-4" />}
           label="Microphone"
           control={
-            <Select
-              value={audioValue}
-              onValueChange={handleAudioDeviceChange}
-              disabled={!userId}
-            >
-              <SelectTrigger
-                aria-label="Microphone"
-                className="w-full sm:w-72"
+            audioGranted ? (
+              <Select
+                value={audioValue}
+                onValueChange={handleAudioDeviceChange}
+                disabled={!userId}
               >
-                <SelectValue placeholder="Default" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
-                {deviceList.audio.map((d) => (
-                  <SelectItem key={d.deviceId} value={d.deviceId}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <SelectTrigger
+                  aria-label="Microphone"
+                  className="w-full sm:w-72"
+                >
+                  <SelectValue placeholder="Default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
+                  {deviceList.audio.map((d, index) => (
+                    <SelectItem key={d.deviceId} value={d.deviceId}>
+                      {formatDeviceLabel(d, "Microphone", index)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleGrantPermission("audio")}
+              >
+                Grant microphone access
+              </Button>
+            )
           }
         />
         <Separator />
@@ -398,16 +452,7 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
           icon={<VideoIcon className="size-4" />}
           label="Camera"
           control={
-            showVideoGrant ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleGrantCameraAccess}
-                disabled={!userId}
-              >
-                Grant camera access
-              </Button>
-            ) : (
+            videoGranted ? (
               <Select
                 value={videoValue}
                 onValueChange={handleVideoDeviceChange}
@@ -421,21 +466,26 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
-                  {deviceList.video.map((d) => (
+                  {deviceList.video.map((d, index) => (
                     <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {d.label}
+                      {formatDeviceLabel(d, "Camera", index)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleGrantPermission("video")}
+              >
+                Grant camera access
+              </Button>
             )
           }
         />
         {permissionError ? (
-          <p
-            role="alert"
-            className="text-xs text-destructive"
-          >
+          <p role="alert" className="text-xs text-destructive">
             {permissionError}
           </p>
         ) : null}
