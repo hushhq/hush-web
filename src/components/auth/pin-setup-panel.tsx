@@ -147,7 +147,7 @@ export function PinSetupPanel() {
                     disabled={submitting}
                     aria-label="Choose PIN"
                     autoFocus
-                    className="w-full text-center tracking-[0.5em]"
+                    className="w-full text-center tracking-[0.5em] placeholder:tracking-normal"
                   />
                 )}
               </TabsContent>
@@ -225,7 +225,7 @@ export function PinSetupPanel() {
                     disabled={submitting}
                     aria-invalid={mismatch}
                     aria-label="Confirm PIN"
-                    className="w-full text-center tracking-[0.5em]"
+                    className="w-full text-center tracking-[0.5em] placeholder:tracking-normal"
                   />
                 )
               ) : (
