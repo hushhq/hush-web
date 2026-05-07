@@ -116,6 +116,52 @@ describe('useMicMonitor', () => {
     expect(result.current.isTesting).toBe(true);
   });
 
+  it('skips the noise-gate worklet when noiseGateEnabled is false', async () => {
+    const track = createFakeAudioTrack();
+    const stream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+    navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
+    mockBuildCaptureGraph.mockResolvedValue(mockGraphResult());
+
+    const { result } = renderHook(() => useMicMonitor());
+
+    await act(async () => {
+      await result.current.start({
+        deviceId: 'mic-1',
+        settings: { noiseGateEnabled: false },
+      });
+    });
+
+    expect(mockBuildCaptureGraph).toHaveBeenCalledTimes(1);
+    const callOpts = mockBuildCaptureGraph.mock.calls[0][0];
+    expect(callOpts.workletUrl).toBeUndefined();
+    expect(callOpts.monitorOutput).toBe(true);
+  });
+
+  it('passes the noise-gate worklet URL when noiseGateEnabled is true', async () => {
+    const track = createFakeAudioTrack();
+    const stream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+    navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
+    mockBuildCaptureGraph.mockResolvedValue(mockGraphResult());
+
+    const { result } = renderHook(() => useMicMonitor());
+
+    await act(async () => {
+      await result.current.start({
+        deviceId: 'mic-1',
+        settings: { noiseGateEnabled: true },
+      });
+    });
+
+    const callOpts = mockBuildCaptureGraph.mock.calls[0][0];
+    expect(callOpts.workletUrl).toBe('mock://noise-gate-worklet.js');
+  });
+
   it('stops and surfaces an error when the browser ends the mic track', async () => {
     const track = createFakeAudioTrack();
     const stream = {

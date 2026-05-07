@@ -21,13 +21,9 @@ function mockAudioContext(): AudioContext {
   const destination = {
     stream: destStream,
     channelCount: 2,
-  } as unknown as MediaStreamAudioDestinationNode;
-
-  const gainNode = {
-    gain: { value: 1 },
     connect: vi.fn(),
     disconnect: vi.fn(),
-  };
+  } as unknown as MediaStreamAudioDestinationNode;
 
   return {
     state: 'running',
@@ -40,7 +36,17 @@ function mockAudioContext(): AudioContext {
       disconnect: vi.fn(),
     }),
     createMediaStreamDestination: vi.fn().mockReturnValue(destination),
-    createGain: vi.fn().mockReturnValue(gainNode),
+    // Fresh node per call so per-node connect spies stay
+    // independent. Tests use `mock.results` to walk individual gain
+    // node instances.
+    createGain: vi.fn(() => ({
+      gain: { value: 1 },
+      channelCount: 2,
+      channelCountMode: 'max',
+      channelInterpretation: 'speakers',
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    })),
     audioWorklet: undefined, // No worklet in test env
   } as unknown as AudioContext;
 }
@@ -210,6 +216,66 @@ describe('buildCaptureGraph', () => {
     } finally {
       globalThis.AudioWorkletNode = origCtor;
     }
+  });
+
+  it('routes monoDownmix → publish destinationNode + monitor gain (shared mono stage)', async () => {
+    const factory = mockFactory();
+    const result = await buildCaptureGraph({
+      stream: mockStream(),
+      audioContextFactory: factory,
+      monitorOutput: true,
+    });
+
+    // The graph creates exactly two GainNodes when monitorOutput=true:
+    //   call 0 = monoDownmixNode (shared stage)
+    //   call 1 = monitorGainNode (loopback to speakers)
+    const ctx = factory.lastContext as unknown as {
+      createGain: ReturnType<typeof vi.fn>;
+    };
+    expect(ctx.createGain).toHaveBeenCalledTimes(2);
+    const monoDownmixNode = ctx.createGain.mock.results[0].value;
+    const monitorGainNode = ctx.createGain.mock.results[1].value;
+
+    // monoDownmix is configured for downmix (channelCount=1, explicit, speakers)
+    expect(monoDownmixNode.channelCount).toBe(1);
+    expect(monoDownmixNode.channelCountMode).toBe('explicit');
+    expect(monoDownmixNode.channelInterpretation).toBe('speakers');
+
+    // The exported monoDownmixNode is the same node as call 0.
+    expect(result.monoDownmixNode).toBe(monoDownmixNode);
+
+    // monoDownmix → destinationNode (publish) AND monoDownmix → monitorGain.
+    const calls = monoDownmixNode.connect.mock.calls;
+    const targets = calls.map((c: unknown[]) => c[0]);
+    expect(targets).toContain(result.destinationNode);
+    expect(targets).toContain(monitorGainNode);
+
+    // monitorGainNode → audioContext.destination (speaker output).
+    const monitorTargets = monitorGainNode.connect.mock.calls.map(
+      (c: unknown[]) => c[0],
+    );
+    expect(monitorTargets).toContain(factory.lastContext!.destination);
+  });
+
+  it('routes monoDownmix → publish destinationNode only when monitorOutput is false', async () => {
+    const factory = mockFactory();
+    const result = await buildCaptureGraph({
+      stream: mockStream(),
+      audioContextFactory: factory,
+    });
+
+    const ctx = factory.lastContext as unknown as {
+      createGain: ReturnType<typeof vi.fn>;
+    };
+    // No monitor branch → only the monoDownmix gain is created.
+    expect(ctx.createGain).toHaveBeenCalledTimes(1);
+    const monoDownmixNode = ctx.createGain.mock.results[0].value;
+
+    const targets = monoDownmixNode.connect.mock.calls.map(
+      (c: unknown[]) => c[0],
+    );
+    expect(targets).toEqual([result.destinationNode]);
+    expect(result.monitorGainNode).toBeNull();
   });
 
   it('returns null noiseGateNode when worklet addModule throws', async () => {
