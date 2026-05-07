@@ -2,7 +2,7 @@
  * Behavioural cover for `voiceDevicePrefs`. `fake-indexeddb/auto` is
  * loaded in `src/test/setup.js`, so each test starts with a clean store.
  */
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 
 import {
   readVoiceDevicePrefs,
@@ -10,6 +10,7 @@ import {
   clearVoiceDevicePrefs,
   shouldSkipPrejoin,
   mergeVoiceDevicePrefs,
+  subscribeVoiceDevicePrefs,
 } from "./voiceDevicePrefs"
 
 const USER = "user-vdp-1"
@@ -208,5 +209,75 @@ describe("mergeVoiceDevicePrefs", () => {
       videoEnabled: false,
       dontAskAgain: false,
     })
+  })
+})
+
+describe("subscribeVoiceDevicePrefs", () => {
+  it("notifies listeners after a save", async () => {
+    const listener = vi.fn()
+    const unsub = subscribeVoiceDevicePrefs(USER, listener)
+    await saveVoiceDevicePrefs(USER, {
+      audioDeviceId: "mic-x",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: false,
+    })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0][0]).toMatchObject({
+      audioDeviceId: "mic-x",
+    })
+    unsub()
+  })
+
+  it("notifies with null after a clear", async () => {
+    const listener = vi.fn()
+    const unsub = subscribeVoiceDevicePrefs(USER, listener)
+    await saveVoiceDevicePrefs(USER, {
+      audioDeviceId: "mic-x",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: false,
+    })
+    await clearVoiceDevicePrefs(USER)
+    expect(listener.mock.calls.at(-1)?.[0]).toBeNull()
+    unsub()
+  })
+
+  it("scopes listeners by userId", async () => {
+    const listenerA = vi.fn()
+    const listenerB = vi.fn()
+    const unsubA = subscribeVoiceDevicePrefs("user-a", listenerA)
+    const unsubB = subscribeVoiceDevicePrefs("user-b", listenerB)
+    await saveVoiceDevicePrefs("user-a", {
+      audioDeviceId: "mic-a",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: false,
+    })
+    expect(listenerA).toHaveBeenCalledTimes(1)
+    expect(listenerB).not.toHaveBeenCalled()
+    unsubA()
+    unsubB()
+  })
+
+  it("stops firing after unsubscribe", async () => {
+    const listener = vi.fn()
+    const unsub = subscribeVoiceDevicePrefs(USER, listener)
+    unsub()
+    await saveVoiceDevicePrefs(USER, {
+      audioDeviceId: "mic-x",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: false,
+    })
+    expect(listener).not.toHaveBeenCalled()
   })
 })

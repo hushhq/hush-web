@@ -15,6 +15,7 @@ import {
   mergeVoiceDevicePrefs,
   readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
+  subscribeVoiceDevicePrefs,
   type VoiceDevicePrefs,
 } from "@/lib/voiceDevicePrefs"
 import {
@@ -250,6 +251,18 @@ export function VoiceChannelView({
     }
   }, [currentUserId])
 
+  // Live-apply prefs changes that originate elsewhere (settings
+  // panel, prejoin dialog, in-call device popover). Without this,
+  // picking a new mic / camera / output in the panel while the user
+  // is in voice would only reach IDB; the active room state would
+  // ignore it until the next join.
+  React.useEffect(() => {
+    if (!currentUserId) return
+    return subscribeVoiceDevicePrefs(currentUserId, (next) => {
+      setPrefs(next)
+    })
+  }, [currentUserId])
+
   React.useEffect(() => {
     const pm = room.playbackManager
     const container = audioContainerRef.current
@@ -316,6 +329,73 @@ export function VoiceChannelView({
       }
     })()
   }, [room.isReady, prefs, room.publishMic, room.publishWebcam])
+
+  // Live re-publish when device prefs change while we are already
+  // capturing. Initial publish is handled by the auto-publish effect
+  // above; this hook only fires for *changes* to a currently active
+  // input. Skips work when nothing relevant has flipped, so it is
+  // safe to depend on the whole prefs object.
+  const lastAppliedAudioDeviceRef = React.useRef<string | null | undefined>(
+    undefined
+  )
+  const lastAppliedVideoDeviceRef = React.useRef<string | null | undefined>(
+    undefined
+  )
+  const lastAppliedOutputDeviceRef = React.useRef<string | null | undefined>(
+    undefined
+  )
+  React.useEffect(() => {
+    if (!room.isReady || !prefs || !autoPublishedRef.current) return
+    void (async () => {
+      try {
+        const nextAudio = prefs.audioDeviceId ?? null
+        if (
+          micPublishedRef.current &&
+          lastAppliedAudioDeviceRef.current !== undefined &&
+          lastAppliedAudioDeviceRef.current !== nextAudio
+        ) {
+          await room.unpublishMic()
+          await room.publishMic(nextAudio)
+          setIsMicOn(true)
+        }
+        lastAppliedAudioDeviceRef.current = nextAudio
+
+        const nextVideo = prefs.videoDeviceId ?? null
+        if (
+          isWebcamOn &&
+          lastAppliedVideoDeviceRef.current !== undefined &&
+          lastAppliedVideoDeviceRef.current !== nextVideo
+        ) {
+          await room.unpublishWebcam()
+          await room.publishWebcam(nextVideo)
+          setIsWebcamOn(true)
+        }
+        lastAppliedVideoDeviceRef.current = nextVideo
+
+        const nextOutput = prefs.outputDeviceId ?? null
+        if (
+          outputDeviceSelectable &&
+          lastAppliedOutputDeviceRef.current !== undefined &&
+          lastAppliedOutputDeviceRef.current !== nextOutput
+        ) {
+          await room.playbackManager?.setSinkId(nextOutput ?? "")
+        }
+        lastAppliedOutputDeviceRef.current = nextOutput
+      } catch (err) {
+        console.warn("[VoiceChannel] live device re-publish failed:", err)
+      }
+    })()
+  }, [
+    room.isReady,
+    prefs,
+    isWebcamOn,
+    outputDeviceSelectable,
+    room.unpublishMic,
+    room.publishMic,
+    room.unpublishWebcam,
+    room.publishWebcam,
+    room.playbackManager,
+  ])
 
   const handlePrejoinConfirm = React.useCallback(
     async (choice: VoicePrejoinChoice) => {

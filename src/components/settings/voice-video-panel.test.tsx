@@ -87,6 +87,10 @@ const saveVoiceDevicePrefs = vi.fn().mockResolvedValue(undefined)
 vi.mock("@/lib/voiceDevicePrefs", () => ({
   readVoiceDevicePrefs: (...args: unknown[]) => readVoiceDevicePrefs(...args),
   saveVoiceDevicePrefs: (...args: unknown[]) => saveVoiceDevicePrefs(...args),
+  // No-op subscriber: the panel-level tests don't drive prefs from
+  // the outside, they exercise the local persistPrefs path. The
+  // emitter integration is covered in voiceDevicePrefs.test.ts.
+  subscribeVoiceDevicePrefs: vi.fn(() => () => {}),
   mergeVoiceDevicePrefs: (
     prev: Record<string, unknown> | null,
     patch: Record<string, unknown>
@@ -473,6 +477,64 @@ describe("VoiceVideoPanel — output device", () => {
     expect(
       await screen.findByText(/could not switch output device/i)
     ).toBeInTheDocument()
+  })
+})
+
+describe("VoiceVideoPanel — ask before joining", () => {
+  it("renders the checkbox unchecked when prefs.dontAskAgain is true", async () => {
+    installMediaDevices({
+      devices: [{ deviceId: "mic-a", kind: "audioinput", label: "Mic A" }],
+    })
+    readVoiceDevicePrefs.mockResolvedValueOnce({
+      audioDeviceId: "mic-a",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: true,
+      updatedAt: 1,
+    })
+
+    render(<VoiceVideoPanel voiceRuntime={null} />)
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: /ask before joining a voice channel/i,
+    })
+    await waitFor(() => {
+      expect(checkbox).not.toBeChecked()
+    })
+  })
+
+  it("toggling the checkbox flips dontAskAgain through persistPrefs", async () => {
+    installMediaDevices({
+      devices: [{ deviceId: "mic-a", kind: "audioinput", label: "Mic A" }],
+    })
+    readVoiceDevicePrefs.mockResolvedValueOnce({
+      audioDeviceId: "mic-a",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: true,
+      updatedAt: 1,
+    })
+
+    render(<VoiceVideoPanel voiceRuntime={null} />)
+
+    const checkbox = await screen.findByRole("checkbox", {
+      name: /ask before joining a voice channel/i,
+    })
+    await waitFor(() => {
+      expect(checkbox).not.toBeChecked()
+    })
+
+    await userEvent.click(checkbox)
+
+    await waitFor(() => {
+      expect(saveVoiceDevicePrefs).toHaveBeenCalled()
+    })
+    const lastCall = saveVoiceDevicePrefs.mock.calls.at(-1) ?? []
+    expect(lastCall[1]).toMatchObject({ dontAskAgain: false })
   })
 })
 

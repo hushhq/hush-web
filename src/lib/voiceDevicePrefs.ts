@@ -131,17 +131,24 @@ export async function readVoiceDevicePrefs(
 /**
  * Persist the user's prejoin selection. Always stamps `updatedAt` to
  * `Date.now()` so callers do not need to fill it in.
+ *
+ * Notifies in-process subscribers (see `subscribeVoiceDevicePrefs`)
+ * after the IDB write succeeds so the active voice channel + the
+ * settings panel stay in lockstep without each having to mount the
+ * other or roll their own broadcast channel.
  */
 export async function saveVoiceDevicePrefs(
   userId: string,
   prefs: Omit<VoiceDevicePrefs, "updatedAt">
 ): Promise<void> {
+  const stamped: VoiceDevicePrefs = { ...prefs, updatedAt: Date.now() }
   const db = await openDb(userId)
   try {
-    await writeRecord(db, { ...prefs, updatedAt: Date.now() })
+    await writeRecord(db, stamped)
   } finally {
     db.close()
   }
+  notifyVoiceDevicePrefs(userId, stamped)
 }
 
 /**
@@ -155,6 +162,60 @@ export async function clearVoiceDevicePrefs(userId: string): Promise<void> {
     await deleteRecord(db)
   } finally {
     db.close()
+  }
+  notifyVoiceDevicePrefs(userId, null)
+}
+
+// ─── Pub/sub for in-process prefs changes ──────────────────
+
+type VoiceDevicePrefsListener = (prefs: VoiceDevicePrefs | null) => void
+
+const _voiceDevicePrefsListeners: Map<
+  string,
+  Set<VoiceDevicePrefsListener>
+> = new Map()
+
+function notifyVoiceDevicePrefs(
+  userId: string,
+  prefs: VoiceDevicePrefs | null
+): void {
+  const listeners = _voiceDevicePrefsListeners.get(userId)
+  if (!listeners) return
+  for (const listener of listeners) {
+    try {
+      listener(prefs)
+    } catch (err) {
+      // Listener errors must not break the persistence pipeline.
+      console.warn("[voiceDevicePrefs] listener threw:", err)
+    }
+  }
+}
+
+/**
+ * Subscribe to in-process prefs changes for `userId`. Fires whenever
+ * `saveVoiceDevicePrefs` or `clearVoiceDevicePrefs` succeeds, with
+ * the new record (or `null` after a clear). Returns an unsubscribe
+ * function.
+ *
+ * Used by `voice-channel-view` to live-apply device picks made in the
+ * settings panel, and by the panel itself when changes originate from
+ * the prejoin dialog or the in-call device popovers.
+ */
+export function subscribeVoiceDevicePrefs(
+  userId: string,
+  listener: VoiceDevicePrefsListener
+): () => void {
+  let bucket = _voiceDevicePrefsListeners.get(userId)
+  if (!bucket) {
+    bucket = new Set()
+    _voiceDevicePrefsListeners.set(userId, bucket)
+  }
+  bucket.add(listener)
+  return () => {
+    bucket?.delete(listener)
+    if (bucket && bucket.size === 0) {
+      _voiceDevicePrefsListeners.delete(userId)
+    }
   }
 }
 

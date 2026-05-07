@@ -28,6 +28,8 @@ import { HeadphonesIcon, MicIcon, VideoIcon } from "lucide-react"
 
 import { isOutputDeviceSelectionSupported } from "@/audio"
 import { Button } from "@/components/ui/button.tsx"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -43,6 +45,7 @@ import {
   mergeVoiceDevicePrefs,
   readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
+  subscribeVoiceDevicePrefs,
   type VoiceDevicePrefs,
 } from "@/lib/voiceDevicePrefs"
 
@@ -216,6 +219,16 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     return () => {
       cancelled = true
     }
+  }, [userId])
+
+  // Stay in lockstep with prefs changes from elsewhere (prejoin
+  // dialog, in-call device popover) so the panel never displays a
+  // stale "don't ask again" or device pick.
+  React.useEffect(() => {
+    if (!userId) return
+    return subscribeVoiceDevicePrefs(userId, (next) => {
+      setPrefs(next)
+    })
   }, [userId])
 
   const refreshDevices = React.useCallback(async () => {
@@ -398,6 +411,15 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     [persistPrefs]
   )
 
+  const handleAskBeforeJoiningChange = React.useCallback(
+    async (checked: boolean) => {
+      // The persisted flag is the inverse: when "Ask before
+      // joining" is checked, we should NOT skip the prejoin.
+      await persistPrefs({ dontAskAgain: !checked })
+    },
+    [persistPrefs]
+  )
+
   const handleGrantPermission = React.useCallback(
     async (kind: "audio" | "video") => {
       try {
@@ -451,6 +473,7 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   const audioValue = prefs?.audioDeviceId ?? DEFAULT_OPTION_VALUE
   const videoValue = prefs?.videoDeviceId ?? DEFAULT_OPTION_VALUE
   const outputValue = prefs?.outputDeviceId ?? DEFAULT_OPTION_VALUE
+  const askBeforeJoining = prefs ? !prefs.dontAskAgain : true
 
   return (
     <div className="flex flex-col gap-6">
@@ -463,6 +486,35 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       </div>
 
       <Separator />
+
+      <DeviceCard
+        title="Behaviour"
+        description="How Hush handles your entry into voice channels on this device."
+      >
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="ask-before-joining"
+            checked={askBeforeJoining}
+            disabled={!userId}
+            onCheckedChange={(checked) =>
+              handleAskBeforeJoiningChange(checked === true)
+            }
+          />
+          <div className="flex flex-col gap-0.5">
+            <Label
+              htmlFor="ask-before-joining"
+              className="text-sm font-medium"
+            >
+              Ask before joining a voice channel
+            </Label>
+            <span className="text-xs text-muted-foreground">
+              Show the prejoin dialog (camera preview + device pickers)
+              every time you enter a voice channel. Uncheck to skip it
+              and connect with your saved devices.
+            </span>
+          </div>
+        </div>
+      </DeviceCard>
 
       <DeviceCard
         title="Devices"
