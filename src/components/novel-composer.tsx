@@ -432,7 +432,7 @@ export const NovelComposer = React.forwardRef<
           </EditorCommandEmpty>
           <EditorCommandList>
             {groupedItems.actions.length > 0 ? (
-              <SlashSection title="Azioni Chat" items={groupedItems.actions} />
+              <SlashSection title="Chat actions" items={groupedItems.actions} />
             ) : null}
             {groupedItems.actions.length > 0 &&
             groupedItems.formatting.length > 0 ? (
@@ -440,7 +440,7 @@ export const NovelComposer = React.forwardRef<
             ) : null}
             {groupedItems.formatting.length > 0 ? (
               <SlashSection
-                title="Formattazione"
+                title="Formatting"
                 items={groupedItems.formatting}
               />
             ) : null}
