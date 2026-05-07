@@ -45,6 +45,14 @@ function mockAudioContext(): AudioContext {
       disconnect: vi.fn(),
     }),
     createMediaStreamDestination: vi.fn().mockReturnValue(destination),
+    createGain: vi.fn().mockReturnValue({
+      gain: { value: 1 },
+      channelCount: 1,
+      channelCountMode: 'explicit',
+      channelInterpretation: 'speakers',
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    }),
     audioWorklet: undefined, // No worklet support in test env by default
   } as unknown as AudioContext;
 }

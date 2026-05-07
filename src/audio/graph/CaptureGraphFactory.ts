@@ -24,6 +24,11 @@ export interface CaptureGraphResult {
   sourceNode: MediaStreamAudioSourceNode;
   destinationNode: MediaStreamAudioDestinationNode;
   noiseGateNode: AudioWorkletNode | null;
+  /** Shared mono downmix stage. Both publish + monitor branches
+   *  read from this node so they hear identical audio. Exposed so
+   *  callers can attach extra taps (e.g. an AnalyserNode for the
+   *  mic-test level meter when the noise-gate worklet is absent). */
+  monoDownmixNode: GainNode;
   processedTrack: MediaStreamTrack;
   /** Optional monitor gain node (only if monitorOutput was true). */
   monitorGainNode: GainNode | null;
@@ -109,14 +114,33 @@ export async function buildCaptureGraph(
     }
   }
 
-  processingTail.connect(destinationNode);
+  // Shared mono downmix stage. Both endpoints (publish destination
+  // + local monitor loopback) read from this single node so they
+  // hear identical processed-and-mono audio. Without this, the
+  // monitor branch would tap `processingTail` directly and a
+  // stereo mic would surface only the L channel locally while the
+  // publish branch (which the destinationNode downmixes to mono)
+  // sounded different.
+  //
+  // GainNode with channelCount=1 + 'explicit' mode + 'speakers'
+  // interpretation tells the Web Audio engine to apply the
+  // standard stereo→mono downmix (L+R)/2 at this node, not a
+  // channel-pick.
+  const monoDownmixNode = audioContext.createGain();
+  monoDownmixNode.channelCount = 1;
+  monoDownmixNode.channelCountMode = 'explicit';
+  monoDownmixNode.channelInterpretation = 'speakers';
+  processingTail.connect(monoDownmixNode);
 
-  // Optional monitor loopback for local mic test.
+  monoDownmixNode.connect(destinationNode);
+
+  // Optional monitor loopback for local mic test. Reads from the
+  // shared mono stage so the user hears the same signal peers do.
   let monitorGainNode: GainNode | null = null;
   if (options.monitorOutput) {
     monitorGainNode = audioContext.createGain();
     monitorGainNode.gain.value = 1;
-    processingTail.connect(monitorGainNode);
+    monoDownmixNode.connect(monitorGainNode);
     monitorGainNode.connect(audioContext.destination);
   }
 
@@ -132,6 +156,7 @@ export async function buildCaptureGraph(
     sourceNode,
     destinationNode,
     noiseGateNode,
+    monoDownmixNode,
     processedTrack,
     monitorGainNode,
     applyFilterSettings: (settings) => applySettingsToNode(noiseGateNode, settings),

@@ -107,9 +107,13 @@ export function useMicMonitor() {
       return;
     }
 
+    // Skip the noise-gate worklet when the gate is disabled — the
+    // mic test runs on the same transport-only graph as the publish
+    // path, so the user hears exactly what peers hear.
+    const includeWorklet = Boolean(normalizedSettings.noiseGateEnabled);
     const graph = await buildCaptureGraph({
       stream,
-      workletUrl: NOISE_GATE_WORKLET_URL,
+      workletUrl: includeWorklet ? NOISE_GATE_WORKLET_URL : undefined,
       filterSettings: normalizedSettings,
       monitorOutput: true,
     });
@@ -170,6 +174,10 @@ export function useMicMonitor() {
     // `level`/`gateOpen` state writes are throttled to ~30 Hz (every
     // ~33 ms) to keep status text + tests responsive without re-
     // rendering the entire dialog at the worklet's posting rate.
+    let analyserNode = null;
+    let analyserBuffer = null;
+    let analyserInterval = null;
+
     if (graph.noiseGateNode?.port) {
       let lastStateUpdate = 0;
       const STATE_UPDATE_INTERVAL_MS = 33;
@@ -190,12 +198,65 @@ export function useMicMonitor() {
           setGateOpen(nextGateOpen);
         }
       };
+    } else if (graph.monoDownmixNode && typeof graph.audioContext.createAnalyser === 'function') {
+      // No worklet: drive the meter from an AnalyserNode tap on the
+      // shared mono stage. RMS dBFS → 0..100 normalized like the
+      // worklet does, so the panel meter behaves identically whether
+      // the gate is on or off.
+      try {
+        analyserNode = graph.audioContext.createAnalyser();
+        analyserNode.fftSize = 2048;
+        analyserNode.smoothingTimeConstant = 0;
+        analyserBuffer = new Float32Array(analyserNode.fftSize);
+        graph.monoDownmixNode.connect(analyserNode);
+
+        let lastStateUpdate = 0;
+        const STATE_UPDATE_INTERVAL_MS = 33;
+        const SAMPLE_INTERVAL_MS = 16;
+        analyserInterval = setInterval(() => {
+          if (!isMountedRef.current || !analyserNode || !analyserBuffer) return;
+          analyserNode.getFloatTimeDomainData(analyserBuffer);
+          let sumSquares = 0;
+          for (let i = 0; i < analyserBuffer.length; i++) {
+            const sample = analyserBuffer[i];
+            sumSquares += sample * sample;
+          }
+          const rms = Math.sqrt(sumSquares / analyserBuffer.length);
+          const rmsDb = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+          // Match the worklet's normalization: -60 dB → 0, 0 dB → 100.
+          const normalized = Math.max(
+            0,
+            Math.min(100, Math.round(((rmsDb + 60) / 60) * 100))
+          );
+          levelRef.current = normalized;
+          gateOpenRef.current = false;
+          const now =
+            typeof performance !== 'undefined' && performance.now
+              ? performance.now()
+              : Date.now();
+          if (now - lastStateUpdate >= STATE_UPDATE_INTERVAL_MS) {
+            lastStateUpdate = now;
+            setLevel(normalized);
+            setGateOpen(false);
+          }
+        }, SAMPLE_INTERVAL_MS);
+      } catch (err) {
+        console.warn('[audio] Mic monitor analyser tap failed:', err);
+      }
     }
 
     // Cleanup mirrors CaptureSession.teardown: disconnect all nodes,
     // stop all tracks (including processedTrack if distinct), close context.
     const cleanup = async () => {
+      if (analyserInterval) {
+        clearInterval(analyserInterval);
+        analyserInterval = null;
+      }
+      try { analyserNode?.disconnect(); } catch { /* teardown */ }
+      analyserNode = null;
+      analyserBuffer = null;
       try { graph.monitorGainNode?.disconnect(); } catch { /* teardown */ }
+      try { graph.monoDownmixNode?.disconnect(); } catch { /* teardown */ }
       try { graph.noiseGateNode?.disconnect(); } catch { /* teardown */ }
       try { graph.sourceNode?.disconnect(); } catch { /* teardown */ }
       try { graph.destinationNode?.disconnect(); } catch { /* teardown */ }

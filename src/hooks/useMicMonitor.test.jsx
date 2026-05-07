@@ -42,11 +42,22 @@ function createFakeAudioContext() {
 function mockGraphResult(overrides = {}) {
   const track = createFakeAudioTrack();
   const audioContext = createFakeAudioContext();
+  // Mock the analyser path used when no noise-gate worklet is loaded.
+  audioContext.createAnalyser = vi.fn(() => ({
+    fftSize: 2048,
+    smoothingTimeConstant: 0,
+    getFloatTimeDomainData: vi.fn((buffer) => {
+      buffer.fill(0);
+    }),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+  }));
   return {
     audioContext,
     sourceNode: { disconnect: vi.fn() },
     destinationNode: { disconnect: vi.fn() },
     noiseGateNode: null,
+    monoDownmixNode: { connect: vi.fn(), disconnect: vi.fn() },
     processedTrack: track,
     monitorGainNode: null,
     applyFilterSettings: vi.fn(),
