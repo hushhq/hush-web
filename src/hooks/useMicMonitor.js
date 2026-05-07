@@ -56,6 +56,12 @@ export function useMicMonitor() {
       session.noiseGateNode.port.onmessage = null;
     }
 
+    // Reset both the React state AND the real-time refs. Callers
+    // that read `levelRef`/`gateOpenRef` (the meter's RAF smoother,
+    // aria-valuenow) must see zero on stop, otherwise the visual
+    // and accessible state diverge after the test ends.
+    levelRef.current = 0;
+    gateOpenRef.current = false;
     if (isMountedRef.current) {
       setIsTesting(false);
       setLevel(0);

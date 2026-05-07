@@ -27,9 +27,14 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     this.releaseCoef = 0;
     this.currentGain = 0;
 
-    // Level reporting (throttled)
-    this.frameCount = 0;
-    this.reportInterval = 64; // Report every 64 frames (~1.33ms at 48kHz)
+    // Level reporting (throttled). `process()` is invoked once per
+    // render quantum (typically 128 frames at 48 kHz = ~2.67 ms),
+    // not once per sample, so this counter ticks per quantum.
+    // reportEveryNQuanta = 2 gives a posting rate of ~188 Hz, well
+    // above the visual smoother's frame rate without flooding the
+    // main thread.
+    this.quantumCount = 0;
+    this.reportEveryNQuanta = 2;
 
     // Calculate smoothing coefficients for 48kHz sample rate
     // attack = 10ms, release = 50ms
@@ -118,10 +123,10 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
       outputChannel[i] = inputChannel[i] * this.currentGain;
     }
 
-    // Report level to main thread (throttled)
-    this.frameCount++;
-    if (this.frameCount >= this.reportInterval) {
-      this.frameCount = 0;
+    // Report level to main thread (throttled per render quantum).
+    this.quantumCount++;
+    if (this.quantumCount >= this.reportEveryNQuanta) {
+      this.quantumCount = 0;
       // Normalize -60dB to 0dB → 0 to 100
       const normalized = Math.max(0, Math.min(100, ((rmsDb + 60) / 60) * 100));
       this.port.postMessage({
