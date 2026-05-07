@@ -578,26 +578,43 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
           label="Output"
           control={
             outputSelectable ? (
-              <Select
-                value={outputValue}
-                onValueChange={handleOutputDeviceChange}
-                disabled={!userId || !audioGranted}
-              >
-                <SelectTrigger
-                  aria-label="Output"
-                  className="w-full sm:w-72"
+              audioGranted ? (
+                // Browser only exposes labels for `audiooutput` after
+                // any media permission is granted (mic counts), so we
+                // gate the picker on `audioGranted` and surface the
+                // same Grant CTA as the mic/camera rows when no
+                // permission has been given yet.
+                <Select
+                  value={outputValue}
+                  onValueChange={handleOutputDeviceChange}
+                  disabled={!userId}
                 >
-                  <SelectValue placeholder="Default" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
-                  {deviceList.output.map((d, index) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {formatDeviceLabel(d, "Speakers", index)}
+                  <SelectTrigger
+                    aria-label="Output"
+                    className="w-full sm:w-72"
+                  >
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DEFAULT_OPTION_VALUE}>
+                      Default
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {deviceList.output.map((d, index) => (
+                      <SelectItem key={d.deviceId} value={d.deviceId}>
+                        {formatDeviceLabel(d, "Speakers", index)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleGrantPermission("audio")}
+                >
+                  Grant audio access
+                </Button>
+              )
             ) : (
               <Select disabled value={DEFAULT_OPTION_VALUE}>
                 <SelectTrigger
