@@ -229,6 +229,50 @@ export async function shouldSkipPrejoin(userId: string): Promise<boolean> {
 }
 
 /**
+ * Plan computed from a prefs delta so the active voice room knows
+ * which mic / cam / output to re-apply when prefs change while the
+ * user is already in a channel. Pure function so it is unit-testable
+ * without mounting the voice channel view.
+ *
+ * Returns flags for each device whose pref no longer matches the
+ * last-applied baseline. `null` = system default; "skip" means the
+ * caller already applied this device imperatively (e.g. via the
+ * in-call picker handlers) and stamped the baseline before persist.
+ */
+export interface DeviceApplyPlan {
+  audio: { changed: boolean; nextDeviceId: string | null }
+  video: { changed: boolean; nextDeviceId: string | null }
+  output: { changed: boolean; nextDeviceId: string | null }
+}
+
+export function computeDeviceApplyPlan(
+  baseline: {
+    audio: string | null
+    video: string | null
+    output: string | null
+  },
+  next: VoiceDevicePrefs
+): DeviceApplyPlan {
+  const nextAudio = next.audioDeviceId ?? null
+  const nextVideo = next.videoDeviceId ?? null
+  const nextOutput = next.outputDeviceId ?? null
+  return {
+    audio: {
+      changed: baseline.audio !== nextAudio,
+      nextDeviceId: nextAudio,
+    },
+    video: {
+      changed: baseline.video !== nextVideo,
+      nextDeviceId: nextVideo,
+    },
+    output: {
+      changed: baseline.output !== nextOutput,
+      nextDeviceId: nextOutput,
+    },
+  }
+}
+
+/**
  * Default values applied to every VoiceDevicePrefs field that the
  * caller did not explicitly carry forward. Single source of truth so
  * a new field added to the schema cannot be silently dropped by an

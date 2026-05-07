@@ -11,6 +11,7 @@ import {
   shouldSkipPrejoin,
   mergeVoiceDevicePrefs,
   subscribeVoiceDevicePrefs,
+  computeDeviceApplyPlan,
 } from "./voiceDevicePrefs"
 
 const USER = "user-vdp-1"
@@ -279,5 +280,62 @@ describe("subscribeVoiceDevicePrefs", () => {
       dontAskAgain: false,
     })
     expect(listener).not.toHaveBeenCalled()
+  })
+})
+
+describe("computeDeviceApplyPlan", () => {
+  const NEXT = {
+    audioDeviceId: "mic-b",
+    videoDeviceId: "cam-b",
+    outputDeviceId: "out-b",
+    audioEnabled: true,
+    videoEnabled: true,
+    dontAskAgain: false,
+    updatedAt: 1,
+  }
+
+  it("flags every changed device against a different baseline", () => {
+    const plan = computeDeviceApplyPlan(
+      { audio: "mic-a", video: "cam-a", output: "out-a" },
+      NEXT
+    )
+    expect(plan.audio).toEqual({ changed: true, nextDeviceId: "mic-b" })
+    expect(plan.video).toEqual({ changed: true, nextDeviceId: "cam-b" })
+    expect(plan.output).toEqual({ changed: true, nextDeviceId: "out-b" })
+  })
+
+  it("flags nothing when baseline matches next exactly", () => {
+    const plan = computeDeviceApplyPlan(
+      { audio: "mic-b", video: "cam-b", output: "out-b" },
+      NEXT
+    )
+    expect(plan.audio.changed).toBe(false)
+    expect(plan.video.changed).toBe(false)
+    expect(plan.output.changed).toBe(false)
+  })
+
+  it("normalizes undefined deviceIds to null on the next side", () => {
+    const plan = computeDeviceApplyPlan(
+      { audio: null, video: null, output: null },
+      {
+        audioDeviceId: null,
+        videoDeviceId: null,
+        outputDeviceId: null,
+        audioEnabled: true,
+        videoEnabled: false,
+        dontAskAgain: false,
+        updatedAt: 1,
+      }
+    )
+    expect(plan.audio.changed).toBe(false)
+    expect(plan.audio.nextDeviceId).toBeNull()
+  })
+
+  it("treats null → 'mic-a' as a change (no double-skip on first stamp)", () => {
+    const plan = computeDeviceApplyPlan(
+      { audio: null, video: null, output: null },
+      NEXT
+    )
+    expect(plan.audio).toEqual({ changed: true, nextDeviceId: "mic-b" })
   })
 })

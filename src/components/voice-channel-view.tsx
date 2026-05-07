@@ -12,6 +12,7 @@ import { useRoom } from "@/hooks/useRoom"
 import { useVoiceBandwidth } from "@/hooks/useVoiceBandwidth"
 import * as mlsStore from "@/lib/mlsStore"
 import {
+  computeDeviceApplyPlan,
   mergeVoiceDevicePrefs,
   readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
@@ -309,19 +310,51 @@ export function VoiceChannelView({
   ])
 
   const autoPublishedRef = React.useRef(false)
+  // Refs that hold the last device id we actually applied to the
+  // active session. Declared above the live re-publish effect so
+  // the auto-publish effect can stamp them on first apply (avoids
+  // a stale "undefined → null" diff that would skip the first
+  // panel-side change when starting from a null baseline).
+  const lastAppliedAudioDeviceRef = React.useRef<string | null | undefined>(
+    undefined
+  )
+  const lastAppliedVideoDeviceRef = React.useRef<string | null | undefined>(
+    undefined
+  )
+  const lastAppliedOutputDeviceRef = React.useRef<string | null | undefined>(
+    undefined
+  )
   React.useEffect(() => {
     if (!room.isReady || autoPublishedRef.current) return
     if (!prefs) return
     autoPublishedRef.current = true
+    // Seed the last-applied baselines synchronously so the live
+    // re-publish effect never observes the `undefined` state after
+    // auto-publish has been initiated. Without this, a prefs change
+    // arriving in the small window between autoPublishedRef=true
+    // and the async publishMic/publishWebcam settling would silently
+    // be dropped (the effect's `!== undefined` guard would skip).
+    lastAppliedAudioDeviceRef.current = prefs.audioEnabled
+      ? (prefs.audioDeviceId ?? null)
+      : null
+    lastAppliedVideoDeviceRef.current = prefs.videoEnabled
+      ? (prefs.videoDeviceId ?? null)
+      : null
+    lastAppliedOutputDeviceRef.current = prefs.outputDeviceId ?? null
     void (async () => {
       try {
-        if (prefs.audioEnabled && prefs.audioDeviceId) {
-          await room.publishMic(prefs.audioDeviceId)
+        if (prefs.audioEnabled) {
+          // `null` means "system default device" — distinct from
+          // "audio disabled". Pass it through to publishMic so the
+          // browser picks the OS default mic.
+          const audioDeviceId = prefs.audioDeviceId ?? null
+          await room.publishMic(audioDeviceId)
           micPublishedRef.current = true
           setIsMicOn(true)
         }
-        if (prefs.videoEnabled && prefs.videoDeviceId) {
-          await room.publishWebcam(prefs.videoDeviceId)
+        if (prefs.videoEnabled) {
+          const videoDeviceId = prefs.videoDeviceId ?? null
+          await room.publishWebcam(videoDeviceId)
           setIsWebcamOn(true)
         }
       } catch (err) {
@@ -335,52 +368,38 @@ export function VoiceChannelView({
   // above; this hook only fires for *changes* to a currently active
   // input. Skips work when nothing relevant has flipped, so it is
   // safe to depend on the whole prefs object.
-  const lastAppliedAudioDeviceRef = React.useRef<string | null | undefined>(
-    undefined
-  )
-  const lastAppliedVideoDeviceRef = React.useRef<string | null | undefined>(
-    undefined
-  )
-  const lastAppliedOutputDeviceRef = React.useRef<string | null | undefined>(
-    undefined
-  )
   React.useEffect(() => {
     if (!room.isReady || !prefs || !autoPublishedRef.current) return
     void (async () => {
       try {
-        const nextAudio = prefs.audioDeviceId ?? null
-        if (
-          micPublishedRef.current &&
-          lastAppliedAudioDeviceRef.current !== undefined &&
-          lastAppliedAudioDeviceRef.current !== nextAudio
-        ) {
+        const plan = computeDeviceApplyPlan(
+          {
+            audio: lastAppliedAudioDeviceRef.current ?? null,
+            video: lastAppliedVideoDeviceRef.current ?? null,
+            output: lastAppliedOutputDeviceRef.current ?? null,
+          },
+          prefs
+        )
+        if (plan.audio.changed && micPublishedRef.current) {
           await room.unpublishMic()
-          await room.publishMic(nextAudio)
+          await room.publishMic(plan.audio.nextDeviceId)
           setIsMicOn(true)
         }
-        lastAppliedAudioDeviceRef.current = nextAudio
+        lastAppliedAudioDeviceRef.current = plan.audio.nextDeviceId
 
-        const nextVideo = prefs.videoDeviceId ?? null
-        if (
-          isWebcamOn &&
-          lastAppliedVideoDeviceRef.current !== undefined &&
-          lastAppliedVideoDeviceRef.current !== nextVideo
-        ) {
+        if (plan.video.changed && isWebcamOn) {
           await room.unpublishWebcam()
-          await room.publishWebcam(nextVideo)
+          await room.publishWebcam(plan.video.nextDeviceId)
           setIsWebcamOn(true)
         }
-        lastAppliedVideoDeviceRef.current = nextVideo
+        lastAppliedVideoDeviceRef.current = plan.video.nextDeviceId
 
-        const nextOutput = prefs.outputDeviceId ?? null
-        if (
-          outputDeviceSelectable &&
-          lastAppliedOutputDeviceRef.current !== undefined &&
-          lastAppliedOutputDeviceRef.current !== nextOutput
-        ) {
-          await room.playbackManager?.setSinkId(nextOutput ?? "")
+        if (plan.output.changed && outputDeviceSelectable) {
+          await room.playbackManager?.setSinkId(
+            plan.output.nextDeviceId ?? ""
+          )
         }
-        lastAppliedOutputDeviceRef.current = nextOutput
+        lastAppliedOutputDeviceRef.current = plan.output.nextDeviceId
       } catch (err) {
         console.warn("[VoiceChannel] live device re-publish failed:", err)
       }
@@ -542,6 +561,11 @@ export function VoiceChannelView({
       }
       try {
         await room.playbackManager?.setSinkId(deviceId)
+        // Stamp the last-applied ref so the live re-publish effect
+        // (which runs after the prefs subscriber fires) sees the
+        // device already on the manager and skips a duplicate
+        // setSinkId call.
+        lastAppliedOutputDeviceRef.current = deviceId
       } catch (err) {
         console.error("[VoiceChannel] output device switch failed:", err)
       }
@@ -564,6 +588,9 @@ export function VoiceChannelView({
       await room.publishMic(deviceId)
       micPublishedRef.current = true
       setIsMicOn(true)
+      // Stamp before the prefs subscriber re-fires the live
+      // re-publish effect, otherwise we'd unpub+pub again here.
+      lastAppliedAudioDeviceRef.current = deviceId
     },
     [currentUserId, room]
   )
@@ -582,6 +609,7 @@ export function VoiceChannelView({
       if (isWebcamOn) await room.unpublishWebcam()
       await room.publishWebcam(deviceId)
       setIsWebcamOn(true)
+      lastAppliedVideoDeviceRef.current = deviceId
     },
     [currentUserId, isWebcamOn, room]
   )
@@ -625,9 +653,15 @@ export function VoiceChannelView({
       isScreenSharing,
       isWebcamOn,
       applyMicFilterSettings: room.updateMicFilterSettings,
-      setOutputDeviceSink: (deviceId) => {
+      setOutputDeviceSink: async (deviceId) => {
         if (!outputDeviceSelectable) return
-        return room.playbackManager?.setSinkId(deviceId ?? "")
+        await room.playbackManager?.setSinkId(deviceId ?? "")
+        // Settings panel calls this BEFORE persisting prefs (so a
+        // failed setSinkId does not corrupt the saved choice).
+        // Stamping the ref here keeps the live re-publish effect
+        // from re-running setSinkId once the prefs save propagates
+        // back through the subscriber.
+        lastAppliedOutputDeviceRef.current = deviceId ?? null
       },
     }
   })
