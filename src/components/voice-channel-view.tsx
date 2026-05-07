@@ -12,6 +12,7 @@ import { useRoom } from "@/hooks/useRoom"
 import { useVoiceBandwidth } from "@/hooks/useVoiceBandwidth"
 import * as mlsStore from "@/lib/mlsStore"
 import {
+  mergeVoiceDevicePrefs,
   readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
   type VoiceDevicePrefs,
@@ -310,14 +311,13 @@ export function VoiceChannelView({
   const handlePrejoinConfirm = React.useCallback(
     async (choice: VoicePrejoinChoice) => {
       setPrejoinOpen(false)
-      const next: VoiceDevicePrefs = {
+      const next = mergeVoiceDevicePrefs(prefs, {
         audioDeviceId: choice.audioDeviceId,
         videoDeviceId: choice.videoDeviceId,
         audioEnabled: choice.audioEnabled,
         videoEnabled: choice.videoEnabled,
         dontAskAgain: choice.dontAskAgain,
-        updatedAt: Date.now(),
-      }
+      })
       setPrefs(next)
       if (currentUserId) {
         void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
@@ -444,15 +444,9 @@ export function VoiceChannelView({
   const handlePickOutput = React.useCallback(
     async (deviceId: string) => {
       setShowOutputPicker(false)
-      const next: VoiceDevicePrefs = {
-        audioDeviceId: prefs?.audioDeviceId ?? null,
-        videoDeviceId: prefs?.videoDeviceId ?? null,
+      const next = mergeVoiceDevicePrefs(prefs, {
         outputDeviceId: deviceId,
-        audioEnabled: prefs?.audioEnabled ?? true,
-        videoEnabled: prefs?.videoEnabled ?? false,
-        dontAskAgain: prefs?.dontAskAgain ?? true,
-        updatedAt: Date.now(),
-      }
+      })
       setPrefs(next)
       if (currentUserId) {
         void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
@@ -469,14 +463,10 @@ export function VoiceChannelView({
   const handlePickMic = React.useCallback(
     async (deviceId: string) => {
       setShowMicPicker(false)
-      const next: VoiceDevicePrefs = {
+      const next = mergeVoiceDevicePrefs(prefs, {
         audioDeviceId: deviceId,
-        videoDeviceId: prefs?.videoDeviceId ?? null,
         audioEnabled: true,
-        videoEnabled: prefs?.videoEnabled ?? false,
-        dontAskAgain: prefs?.dontAskAgain ?? true,
-        updatedAt: Date.now(),
-      }
+      })
       setPrefs(next)
       if (currentUserId) {
         void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
@@ -492,14 +482,10 @@ export function VoiceChannelView({
   const handlePickWebcam = React.useCallback(
     async (deviceId: string) => {
       setShowWebcamPicker(false)
-      const next: VoiceDevicePrefs = {
-        audioDeviceId: prefs?.audioDeviceId ?? null,
+      const next = mergeVoiceDevicePrefs(prefs, {
         videoDeviceId: deviceId,
-        audioEnabled: prefs?.audioEnabled ?? true,
         videoEnabled: true,
-        dontAskAgain: prefs?.dontAskAgain ?? true,
-        updatedAt: Date.now(),
-      }
+      })
       setPrefs(next)
       if (currentUserId) {
         void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})

@@ -44,6 +44,16 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "user-1" } }),
 }))
 
+const isMobileState = { value: false }
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => isMobileState.value,
+}))
+
+const outputSelectionSupportedState = { value: true }
+vi.mock("@/audio", () => ({
+  isOutputDeviceSelectionSupported: () => outputSelectionSupportedState.value,
+}))
+
 const startMicMonitor = vi.fn().mockResolvedValue(undefined)
 const stopMicMonitor = vi.fn().mockResolvedValue(undefined)
 const updateMicMonitorSettings = vi.fn()
@@ -77,6 +87,20 @@ const saveVoiceDevicePrefs = vi.fn().mockResolvedValue(undefined)
 vi.mock("@/lib/voiceDevicePrefs", () => ({
   readVoiceDevicePrefs: (...args: unknown[]) => readVoiceDevicePrefs(...args),
   saveVoiceDevicePrefs: (...args: unknown[]) => saveVoiceDevicePrefs(...args),
+  mergeVoiceDevicePrefs: (
+    prev: Record<string, unknown> | null,
+    patch: Record<string, unknown>
+  ) => ({
+    audioDeviceId: null,
+    videoDeviceId: null,
+    outputDeviceId: null,
+    audioEnabled: true,
+    videoEnabled: false,
+    dontAskAgain: false,
+    ...(prev ?? {}),
+    ...patch,
+    updatedAt: Date.now(),
+  }),
 }))
 
 import { VoiceVideoPanel, type VoiceRuntime } from "./voice-video-panel"
@@ -141,6 +165,8 @@ afterEach(() => {
   micMonitorState.level = 0
   micMonitorState.gateOpen = false
   micMonitorState.error = null
+  isMobileState.value = false
+  outputSelectionSupportedState.value = true
   localStorage.clear()
 })
 
@@ -343,7 +369,6 @@ describe("VoiceVideoPanel — output device", () => {
       typeof HTMLMediaElement !== "undefined" &&
       typeof HTMLMediaElement.prototype.setSinkId !== "function"
     ) {
-      // @ts-expect-error jsdom polyfill
       HTMLMediaElement.prototype.setSinkId = function setSinkId() {
         return Promise.resolve()
       }
@@ -384,6 +409,81 @@ describe("VoiceVideoPanel — output device", () => {
     const lastCallArgs = saveVoiceDevicePrefs.mock.calls.at(-1) ?? []
     expect(lastCallArgs[1]).toMatchObject({ outputDeviceId: "out-b" })
     expect(onOutputDeviceChange).toHaveBeenCalledWith("out-b")
+  })
+
+  it("disables the picker on mobile and shows the OS-routing copy", async () => {
+    isMobileState.value = true
+    installMediaDevices({
+      devices: [
+        { deviceId: "mic-a", kind: "audioinput", label: "Mic A" },
+        { deviceId: "out-a", kind: "audiooutput", label: "Built-in Speakers" },
+      ],
+    })
+
+    render(<VoiceVideoPanel voiceRuntime={null} />)
+
+    const trigger = await screen.findByRole("combobox", { name: /output/i })
+    expect(trigger).toBeDisabled()
+    expect(
+      screen.getByText(/output routing is managed by the os on mobile/i)
+    ).toBeInTheDocument()
+  })
+
+  it("disables the picker when the browser lacks setSinkId support", async () => {
+    outputSelectionSupportedState.value = false
+    installMediaDevices({
+      devices: [
+        { deviceId: "mic-a", kind: "audioinput", label: "Mic A" },
+        { deviceId: "out-a", kind: "audiooutput", label: "Built-in Speakers" },
+      ],
+    })
+
+    render(<VoiceVideoPanel voiceRuntime={null} />)
+
+    const trigger = await screen.findByRole("combobox", { name: /output/i })
+    expect(trigger).toBeDisabled()
+    expect(
+      screen.getByText(/your browser does not expose output device selection/i)
+    ).toBeInTheDocument()
+  })
+
+  it("does NOT persist the choice when the live reroute fails", async () => {
+    installMediaDevices({
+      devices: [
+        { deviceId: "mic-a", kind: "audioinput", label: "Mic A" },
+        { deviceId: "out-a", kind: "audiooutput", label: "Built-in Speakers" },
+        { deviceId: "out-b", kind: "audiooutput", label: "External Headphones" },
+      ],
+    })
+    const onOutputDeviceChange = vi
+      .fn()
+      .mockRejectedValue(new Error("device disconnected"))
+    const runtime: VoiceRuntime = {
+      isInVoice: true,
+      isMuted: false,
+      isDeafened: false,
+      onMute: vi.fn(),
+      onDeafen: vi.fn().mockResolvedValue(undefined),
+      onMicFilterSettingsChange: vi.fn(),
+      onOutputDeviceChange,
+    }
+
+    render(<VoiceVideoPanel voiceRuntime={runtime} />)
+
+    const trigger = await screen.findByRole("combobox", { name: /output/i })
+    await userEvent.click(trigger)
+    const option = await screen.findByRole("option", {
+      name: /external headphones/i,
+    })
+    await userEvent.click(option)
+
+    await waitFor(() => {
+      expect(onOutputDeviceChange).toHaveBeenCalled()
+    })
+    expect(saveVoiceDevicePrefs).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(/could not switch output device/i)
+    ).toBeInTheDocument()
   })
 })
 

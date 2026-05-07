@@ -166,3 +166,37 @@ export async function shouldSkipPrejoin(userId: string): Promise<boolean> {
   const prefs = await readVoiceDevicePrefs(userId)
   return prefs?.dontAskAgain === true
 }
+
+/**
+ * Default values applied to every VoiceDevicePrefs field that the
+ * caller did not explicitly carry forward. Single source of truth so
+ * a new field added to the schema cannot be silently dropped by an
+ * existing writer.
+ */
+const PREFS_DEFAULTS: Omit<VoiceDevicePrefs, "updatedAt"> = {
+  audioDeviceId: null,
+  videoDeviceId: null,
+  outputDeviceId: null,
+  audioEnabled: true,
+  videoEnabled: false,
+  dontAskAgain: false,
+}
+
+/**
+ * Merge a partial patch onto an existing prefs record (or the
+ * defaults if `prev` is null) and stamp `updatedAt`. Use this in
+ * every writer instead of constructing a fresh literal — adding a
+ * field to `VoiceDevicePrefs` then only requires updating
+ * `PREFS_DEFAULTS`, and existing writers automatically preserve it.
+ */
+export function mergeVoiceDevicePrefs(
+  prev: VoiceDevicePrefs | null,
+  patch: Partial<Omit<VoiceDevicePrefs, "updatedAt">>
+): VoiceDevicePrefs {
+  return {
+    ...PREFS_DEFAULTS,
+    ...prev,
+    ...patch,
+    updatedAt: Date.now(),
+  }
+}

@@ -9,6 +9,7 @@ import {
   saveVoiceDevicePrefs,
   clearVoiceDevicePrefs,
   shouldSkipPrejoin,
+  mergeVoiceDevicePrefs,
 } from "./voiceDevicePrefs"
 
 const USER = "user-vdp-1"
@@ -153,5 +154,59 @@ describe("voiceDevicePrefs — shouldSkipPrejoin", () => {
       dontAskAgain: true,
     })
     expect(await shouldSkipPrejoin(USER)).toBe(true)
+  })
+})
+
+describe("mergeVoiceDevicePrefs", () => {
+  it("preserves every existing field when patching a single one", () => {
+    const prev = {
+      audioDeviceId: "mic-a",
+      videoDeviceId: "cam-a",
+      outputDeviceId: "out-a",
+      audioEnabled: true,
+      videoEnabled: true,
+      dontAskAgain: true,
+      updatedAt: 1,
+    }
+    const next = mergeVoiceDevicePrefs(prev, { audioDeviceId: "mic-b" })
+    expect(next).toMatchObject({
+      audioDeviceId: "mic-b",
+      videoDeviceId: "cam-a",
+      outputDeviceId: "out-a",
+      audioEnabled: true,
+      videoEnabled: true,
+      dontAskAgain: true,
+    })
+    expect(next.updatedAt).not.toBe(1)
+  })
+
+  it("does not drop outputDeviceId when patching audio/video/dontAskAgain", () => {
+    const prev = {
+      audioDeviceId: "mic-a",
+      videoDeviceId: "cam-a",
+      outputDeviceId: "out-headset",
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: false,
+      updatedAt: 1,
+    }
+    const a = mergeVoiceDevicePrefs(prev, { audioDeviceId: "mic-b" })
+    const v = mergeVoiceDevicePrefs(prev, { videoDeviceId: "cam-b" })
+    const d = mergeVoiceDevicePrefs(prev, { dontAskAgain: true })
+    expect(a.outputDeviceId).toBe("out-headset")
+    expect(v.outputDeviceId).toBe("out-headset")
+    expect(d.outputDeviceId).toBe("out-headset")
+  })
+
+  it("falls back to defaults when prev is null", () => {
+    const next = mergeVoiceDevicePrefs(null, { audioDeviceId: "mic-a" })
+    expect(next).toMatchObject({
+      audioDeviceId: "mic-a",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: false,
+    })
   })
 })

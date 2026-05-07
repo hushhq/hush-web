@@ -51,6 +51,7 @@ import {
   setMicFilterSettings,
 } from "@/lib/micProcessing"
 import {
+  mergeVoiceDevicePrefs,
   readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
   type VoiceDevicePrefs,
@@ -344,18 +345,10 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   }, [isMicTesting, micLevelRef])
 
   const persistPrefs = React.useCallback(
-    async (next: Partial<VoiceDevicePrefs>) => {
+    async (patch: Partial<Omit<VoiceDevicePrefs, "updatedAt">>) => {
       if (!userId) return
-      const merged: Omit<VoiceDevicePrefs, "updatedAt"> = {
-        audioDeviceId: prefs?.audioDeviceId ?? null,
-        videoDeviceId: prefs?.videoDeviceId ?? null,
-        outputDeviceId: prefs?.outputDeviceId ?? null,
-        audioEnabled: prefs?.audioEnabled ?? true,
-        videoEnabled: prefs?.videoEnabled ?? false,
-        dontAskAgain: prefs?.dontAskAgain ?? false,
-        ...next,
-      }
-      setPrefs({ ...merged, updatedAt: Date.now() })
+      const merged = mergeVoiceDevicePrefs(prefs, patch)
+      setPrefs(merged)
       await saveVoiceDevicePrefs(userId, merged)
     },
     [prefs, userId]
@@ -403,12 +396,25 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   const handleOutputDeviceChange = React.useCallback(
     async (value: string) => {
       const nextId = value === DEFAULT_OPTION_VALUE ? null : value
+      const runtime = voiceRuntimeRef.current
+      // When in an active call we re-route the playback manager to
+      // the new sink BEFORE persisting, so a failure (device gone,
+      // permission denied, browser quirk) does not leave the saved
+      // pref pointing at an output we cannot honour next time.
+      if (runtime?.isInVoice && runtime.onOutputDeviceChange) {
+        try {
+          await Promise.resolve(runtime.onOutputDeviceChange(nextId))
+        } catch (error) {
+          setPermissionError(
+            error instanceof Error
+              ? `Could not switch output device: ${error.message}`
+              : "Could not switch output device."
+          )
+          return
+        }
+      }
       await persistPrefs({ outputDeviceId: nextId })
-      // Live re-route into the active call's playback manager so
-      // remote participants' audio switches without a rejoin.
-      await Promise.resolve(
-        voiceRuntimeRef.current?.onOutputDeviceChange?.(nextId)
-      )
+      setPermissionError(null)
     },
     [persistPrefs]
   )
