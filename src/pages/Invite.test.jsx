@@ -264,7 +264,7 @@ describe('Invite - same-instance flow', () => {
     renderInvite('/invite/abc123');
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /sign in to join/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /log in to join/i })).toBeInTheDocument();
     });
   });
 

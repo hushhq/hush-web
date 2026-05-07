@@ -59,7 +59,7 @@ describe("AuthFlow", () => {
   it("renders the main view with sign-in + sign-up + version label", () => {
     setup()
     expect(
-      screen.getByRole("button", { name: /^sign in$/i })
+      screen.getByRole("button", { name: /^log in$/i })
     ).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: /^sign up$/i })
@@ -82,7 +82,7 @@ describe("AuthFlow", () => {
     setup()
 
     const u = userEvent.setup()
-    await u.click(screen.getByRole("button", { name: /^sign in$/i }))
+    await u.click(screen.getByRole("button", { name: /^log in$/i }))
 
     expect(screen.getByText(/recovery phrase/i)).toBeInTheDocument()
     expect(screen.getAllByRole("textbox")).toHaveLength(12)

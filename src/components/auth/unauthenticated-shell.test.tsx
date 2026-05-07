@@ -96,7 +96,7 @@ describe("UnauthenticatedShell", () => {
   it("renders the AuthFlow when bootState is needs_login", () => {
     setup("needs_login")
     expect(
-      screen.getByRole("button", { name: /^sign in$/i })
+      screen.getByRole("button", { name: /^log in$/i })
     ).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: /^sign up$/i })
@@ -109,7 +109,7 @@ describe("UnauthenticatedShell", () => {
     await userEvent.click(screen.getByRole("button", { name: /not you/i }))
 
     expect(
-      screen.getByRole("button", { name: /^sign in$/i })
+      screen.getByRole("button", { name: /^log in$/i })
     ).toBeInTheDocument()
   })
 })

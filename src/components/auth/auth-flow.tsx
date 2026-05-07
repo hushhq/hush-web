@@ -230,7 +230,7 @@ function MainPanel({
     <div className="flex flex-col gap-4">
       <Button size="lg" className="h-12 w-full" onClick={onSignIn}>
         <LogInIcon />
-        Sign in
+        Log in
       </Button>
       <Button
         size="lg"

@@ -350,7 +350,7 @@ export default function Invite() {
                 onClick={handleUnauthenticated}
                 style={{ padding: '12px' }}
               >
-                Sign in to join
+                Log in to join
               </button>
               <a href="/" className="invite-link">Return to home</a>
             </div>
@@ -420,7 +420,7 @@ export default function Invite() {
             onClick={handleUnauthenticated}
             style={{ padding: '12px' }}
           >
-            Sign in to join
+            Log in to join
           </button>
           <a href="/" className="invite-link">Return to home</a>
         </div>

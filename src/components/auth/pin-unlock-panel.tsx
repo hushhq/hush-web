@@ -112,7 +112,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
       const code = (err as { code?: string })?.code
       if (code === "VAULT_WIPED") {
         setErrorMessage(
-          "Too many failed attempts. Vault has been wiped. Please sign in with your recovery phrase."
+          "Too many failed attempts. Vault has been wiped. Please log in with your recovery phrase."
         )
         return
       }
@@ -192,7 +192,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
                     disabled={submitting || isDelayed}
                     aria-label="Vault PIN"
                     autoFocus
-                    className="w-full text-center tracking-[0.5em]"
+                    className="w-full text-center tracking-[0.5em] placeholder:tracking-normal"
                   />
                 )}
               </div>
@@ -226,7 +226,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
                 onClick={onSwitchAccount}
                 className="w-full"
               >
-                Not you? Sign in
+                Not you? Log in
               </Button>
             ) : null}
           </div>
