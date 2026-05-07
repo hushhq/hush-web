@@ -467,7 +467,17 @@ function ServerHeader({
               <DropdownMenuLabel className="text-xs text-muted-foreground">
                 Servers
               </DropdownMenuLabel>
-              <div className="max-h-64 overflow-y-auto [mask-image:linear-gradient(to_bottom,transparent_0,black_12px,black_calc(100%-12px),transparent_100%)] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+              {/* Mask gradient (transparent → black at 12px on
+                  each edge) was meant to feather long lists, but
+                  it always-on dimmed the first + last items even
+                  when the list was 1-2 entries and not scrollable,
+                  so it read as "sfumato" on Home + the only server.
+                  Disabled for now. Restore by re-adding the
+                  `[mask-image:linear-gradient(...)]` utility below
+                  if we ever wire a scroll-aware variant.
+                  Original:
+                  [mask-image:linear-gradient(to_bottom,transparent_0,black_12px,black_calc(100%-12px),transparent_100%)] */}
+              <div className="max-h-64 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
                 {railEntries.map((entry) => (
                   <DropdownMenuItem
                     key={entry.id}
