@@ -117,8 +117,27 @@ vi.mock("@livekit/components-styles", () => ({}))
 vi.mock("@/components/voice/voice-controls-bar", () => ({
   VoiceControlsBar: () => null,
 }))
+// Capture each picker's onSelect by title so tests can drive
+// in-call mic / webcam / output handlers without rendering real
+// dialog DOM.
+const pickerHandlers: {
+  mic: ((id: string) => void) | null
+  camera: ((id: string) => void) | null
+  output: ((id: string) => void) | null
+} = { mic: null, camera: null, output: null }
+
 vi.mock("@/components/voice/voice-device-picker-dialog", () => ({
-  VoiceDevicePickerDialog: () => null,
+  VoiceDevicePickerDialog: (props: {
+    title?: string
+    onSelect?: (id: string) => void
+  }) => {
+    if (typeof props.onSelect === "function") {
+      if (props.title === "Choose microphone") pickerHandlers.mic = props.onSelect
+      else if (props.title === "Choose camera") pickerHandlers.camera = props.onSelect
+      else if (props.title === "Choose audio output") pickerHandlers.output = props.onSelect
+    }
+    return null
+  },
 }))
 vi.mock("@/components/voice/voice-participant-grid", () => ({
   VoiceParticipantGrid: () => null,
@@ -157,6 +176,9 @@ function resetRoomMock() {
 
 beforeEach(async () => {
   resetRoomMock()
+  pickerHandlers.mic = null
+  pickerHandlers.camera = null
+  pickerHandlers.output = null
   await clearVoiceDevicePrefs("user-1").catch(() => {})
 })
 
@@ -211,6 +233,23 @@ describe("VoiceChannelView — auto-publish with skip prejoin + default device",
 
     await waitFor(() => {
       expect(roomMock.api.publishMic).toHaveBeenCalledWith(null)
+    })
+  })
+
+  it("publishes the system default webcam when videoDeviceId is null + videoEnabled is true", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: false,
+      videoEnabled: true,
+      dontAskAgain: true,
+    })
+
+    await mount()
+
+    await waitFor(() => {
+      expect(roomMock.api.publishWebcam).toHaveBeenCalledWith(null)
     })
   })
 
@@ -303,6 +342,41 @@ describe("VoiceChannelView — live re-publish on prefs change", () => {
     await waitFor(() => {
       expect(roomMock.playbackManager.setSinkId).toHaveBeenCalledWith("out-b")
     })
+  })
+
+  it("in-call mic picker handler republishes exactly once (no double-publish)", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: "mic-a",
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: true,
+    })
+
+    await mount()
+
+    await waitFor(() => {
+      expect(roomMock.api.publishMic).toHaveBeenCalledWith("mic-a")
+      expect(pickerHandlers.mic).toBeTypeOf("function")
+    })
+    roomMock.api.publishMic.mockClear()
+    roomMock.api.unpublishMic.mockClear()
+
+    // Simulate the user picking a different mic from the in-call
+    // picker. The handler imperatively re-publishes AND saves prefs;
+    // the prefs subscriber re-fires the diff effect, which must
+    // see lastApplied === incoming and no-op.
+    await act(async () => {
+      pickerHandlers.mic!("mic-b")
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    await waitFor(() => {
+      expect(roomMock.api.publishMic).toHaveBeenCalledWith("mic-b")
+    })
+    expect(roomMock.api.unpublishMic).toHaveBeenCalledTimes(1)
+    expect(roomMock.api.publishMic).toHaveBeenCalledTimes(1)
   })
 
   it("does not republish when the panel saves a no-op prefs update", async () => {
