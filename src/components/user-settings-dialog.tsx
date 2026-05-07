@@ -32,6 +32,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { getVaultConfig } from "@/lib/identityVault"
 import { DevicesPanel } from "@/components/settings/devices-panel"
+import { VoiceVideoPanel } from "@/components/settings/voice-video-panel"
 
 interface UserAccountInfo {
   displayName: string
@@ -126,7 +127,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Voice & video",
       icon: <MicIcon />,
-      content: <PlaceholderPanel title="Voice & video" />,
+      content: <VoiceVideoPanel />,
     },
     {
       id: "notifications",
