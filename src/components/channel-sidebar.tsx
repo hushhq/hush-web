@@ -679,7 +679,7 @@ function SystemSection({
     <SidebarGroup>
       <SidebarGroupLabel>System</SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-0.5">
           {channels.map((channel) => (
             <SidebarMenuItem key={channel.id}>
               <SidebarMenuButton
@@ -710,7 +710,7 @@ function DirectMessagesSection({
     <SidebarGroup>
       <SidebarGroupLabel>Direct messages</SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-0.5">
           {entries.map((entry) => (
             <SidebarMenuItem key={entry.id}>
               <SidebarMenuButton
@@ -1609,7 +1609,7 @@ function AppsSection({ apps }: { apps: AppEntry[] }) {
     <SidebarGroup className="mt-auto">
       <SidebarGroupLabel>Apps</SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-0.5">
           {apps.map((app) => (
             <SidebarMenuItem key={app.id}>
               <SidebarMenuButton>
