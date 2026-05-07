@@ -1,4 +1,5 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // jsdom does not provide AudioContext. Polyfill so useMicMonitor's
@@ -128,6 +129,33 @@ describe('useMicMonitor', () => {
       expect(result.current.error).not.toBeNull();
     });
     expect(result.current.isTesting).toBe(false);
+  });
+
+  // Regression: under React.StrictMode the dev double-invoke runs the
+  // mount → cleanup → mount sequence on first render. Without
+  // re-arming `isMountedRef`, `start()` would build the graph and
+  // then immediately tear it down at the post-await guard, leaving
+  // `isTesting=false` and a dead audio context. This guarded that
+  // bug shipped in the live mic monitor.
+  it('starts the monitor session under React.StrictMode (regression)', async () => {
+    const track = createFakeAudioTrack();
+    const stream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+
+    navigator.mediaDevices.getUserMedia.mockResolvedValue(stream);
+    mockBuildCaptureGraph.mockResolvedValue(mockGraphResult());
+
+    const { result } = renderHook(() => useMicMonitor(), {
+      wrapper: StrictMode,
+    });
+
+    await act(async () => {
+      await result.current.start({ deviceId: 'mic-1', settings: {} });
+    });
+
+    expect(result.current.isTesting).toBe(true);
   });
 
   it('falls back to raw-stream session when AudioContext is unavailable', async () => {

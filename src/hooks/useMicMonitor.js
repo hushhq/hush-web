@@ -192,6 +192,12 @@ export function useMicMonitor() {
   }, []);
 
   useEffect(() => {
+    // Re-arm the mount flag on every (re)mount. Required under
+    // React.StrictMode dev double-invoke: the first cleanup flips
+    // this to false, and without re-arming on the second mount the
+    // monitor session would be torn down inside `start()` before it
+    // can flip `isTesting` to true (see early-out at line ~85 below).
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       const session = sessionRef.current;
