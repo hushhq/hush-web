@@ -28,7 +28,6 @@ import { HeadphonesIcon, MicIcon, VideoIcon } from "lucide-react"
 
 import { isOutputDeviceSelectionSupported } from "@/audio"
 import { Button } from "@/components/ui/button.tsx"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -37,19 +36,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator.tsx"
-import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/contexts/AuthContext"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMicMonitor } from "@/hooks/useMicMonitor"
-import {
-  DEFAULT_MIC_FILTER_SETTINGS,
-  MIC_GATE_THRESHOLD_MAX_DB,
-  MIC_GATE_THRESHOLD_MIN_DB,
-  MIC_GATE_THRESHOLD_STEP_DB,
-  getMicFilterSettings,
-  setMicFilterSettings,
-} from "@/lib/micProcessing"
 import {
   mergeVoiceDevicePrefs,
   readVoiceDevicePrefs,
@@ -198,33 +187,24 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     null
   )
   const [prefs, setPrefs] = React.useState<VoiceDevicePrefs | null>(null)
-  const [filterSettings, setFilterSettingsState] =
-    React.useState<MicFilterSettings>(() => getMicFilterSettings())
 
   const {
     isTesting: isMicTesting,
-    gateOpen: isGateOpen,
     error: micTestError,
     setError: setMicTestError,
     levelRef: micLevelRef,
-    gateOpenRef: micGateOpenRef,
     start: startMicMonitor,
     stop: stopMicMonitor,
-    updateSettings: updateMicMonitorSettings,
   } = useMicMonitor() as {
     isTesting: boolean
-    level: number
-    gateOpen: boolean
     error: Error | null
     setError: (error: Error | null) => void
     levelRef: React.MutableRefObject<number>
-    gateOpenRef: React.MutableRefObject<boolean>
     start: (options: {
       deviceId: string | null
       settings: MicFilterSettings
     }) => Promise<void>
     stop: () => Promise<void>
-    updateSettings: (settings: MicFilterSettings) => void
   }
 
   React.useEffect(() => {
@@ -363,7 +343,7 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
         await stopMicMonitor()
         await startMicMonitor({
           deviceId: nextId,
-          settings: filterSettings,
+          settings: { noiseGateEnabled: false, noiseGateThresholdDb: -50 },
         })
       } catch (error) {
         // Mid-test mic switch failed — restore the room to its
@@ -375,7 +355,6 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       }
     },
     [
-      filterSettings,
       isMicTesting,
       persistPrefs,
       restoreVoiceAfterMicTest,
@@ -419,17 +398,6 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     [persistPrefs]
   )
 
-  const applyFilters = React.useCallback(
-    (next: Partial<MicFilterSettings>) => {
-      const normalized = setMicFilterSettings(next)
-      setFilterSettingsState(normalized)
-      updateMicMonitorSettings(normalized)
-      voiceRuntimeRef.current?.onMicFilterSettingsChange(normalized)
-      return normalized
-    },
-    [updateMicMonitorSettings]
-  )
-
   const handleGrantPermission = React.useCallback(
     async (kind: "audio" | "video") => {
       try {
@@ -457,7 +425,9 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       await isolateVoiceForMicTest()
       await startMicMonitor({
         deviceId: prefs?.audioDeviceId ?? null,
-        settings: filterSettings,
+        // Hush noise gate is disabled until the v2 DSP ships; the
+        // monitor stays as a raw loopback level meter.
+        settings: { noiseGateEnabled: false, noiseGateThresholdDb: -50 },
       })
       // Refresh labels (post-permission they become populated).
       await refreshDevices()
@@ -466,7 +436,6 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       setMicTestError(new Error(getMicMonitorErrorMessage(error)))
     }
   }, [
-    filterSettings,
     isMicTesting,
     isolateVoiceForMicTest,
     prefs?.audioDeviceId,
@@ -652,58 +621,28 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
 
       <DeviceCard
         title="Audio filters"
-        description="Filters the published mic stream before it goes to the room."
+        description="Noise gate + advanced filters. Shipping soon."
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium">Noise gate</span>
+            <span className="text-sm font-medium">
+              Hush audio filters
+            </span>
             <span className="text-xs text-muted-foreground">
-              Suppress background hiss when you are not speaking.
+              We are temporarily relying on the browser's built-in
+              noise suppression and auto gain. Hush-side filters with
+              tunable thresholds will return in an upcoming release.
             </span>
           </div>
-          <Switch
-            checked={filterSettings.noiseGateEnabled}
-            onCheckedChange={(checked) =>
-              applyFilters({ noiseGateEnabled: checked })
-            }
-            aria-label="Noise gate"
-          />
-        </div>
-        <Separator />
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="noise-gate-threshold" className="text-sm">
-              Sensitivity threshold
-            </Label>
-            <span className="font-mono text-xs text-muted-foreground">
-              {filterSettings.noiseGateThresholdDb} dB
-            </span>
-          </div>
-          <Slider
-            id="noise-gate-threshold"
-            min={MIC_GATE_THRESHOLD_MIN_DB}
-            max={MIC_GATE_THRESHOLD_MAX_DB}
-            step={MIC_GATE_THRESHOLD_STEP_DB}
-            value={[filterSettings.noiseGateThresholdDb]}
-            disabled={!filterSettings.noiseGateEnabled}
-            onValueChange={(values) =>
-              applyFilters({
-                noiseGateThresholdDb:
-                  values[0] ?? DEFAULT_MIC_FILTER_SETTINGS.noiseGateThresholdDb,
-              })
-            }
-            aria-label="Sensitivity threshold"
-          />
-          <div className="flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
-            <span>More open</span>
-            <span>More aggressive</span>
-          </div>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Shipping soon
+          </span>
         </div>
       </DeviceCard>
 
       <DeviceCard
         title="Mic test"
-        description="Hear your mic locally while you tune the filters."
+        description="Hear your mic locally and check the input level."
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-0.5">
@@ -732,25 +671,14 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
         >
           <div
             ref={meterFillRef}
-            className={
-              "h-full rounded-full will-change-[width] " +
-              (isMicTesting && isGateOpen
-                ? "bg-primary"
-                : "bg-muted-foreground/40")
-            }
+            className="h-full rounded-full bg-primary will-change-[width]"
             style={{ width: "0%" }}
           />
         </div>
         <span className="text-xs text-muted-foreground">
           {isMicTesting
-            ? `Monitoring locally · ${
-                filterSettings.noiseGateEnabled
-                  ? isGateOpen
-                    ? "gate open"
-                    : "gate closed"
-                  : "gate disabled"
-              }`
-            : "Start the test to hear your mic locally while you adjust the filter."}
+            ? "Monitoring locally"
+            : "Start the test to hear your mic locally and check the input level."}
         </span>
         {micTestError ? (
           <p role="alert" className="text-xs text-destructive">

@@ -24,12 +24,16 @@ describe('CAPTURE_PROFILES', () => {
     }
   });
 
-  it('desktop-standard: Hush processing ON, browser DSP OFF, no raw track', () => {
+  // Temporary: the desktop publish path runs the same shape as
+  // mobile-web-standard until the Hush v2 DSP pipeline ships. Hush
+  // processing is OFF and the browser owns NS + AGC + EC. Restore
+  // hushProcessing=true when the advanced filter UI returns.
+  it('desktop-standard: browser DSP ON, Hush processing OFF, raw track (temporary)', () => {
     const p = CAPTURE_PROFILES['desktop-standard'];
-    expect(p.browserDsp).toBe(false);
-    expect(p.hushProcessing).toBe(true);
-    expect(p.useRawTrack).toBe(false);
-    expect(p.echoCanConfigurable).toBe(true);
+    expect(p.browserDsp).toBe(true);
+    expect(p.hushProcessing).toBe(false);
+    expect(p.useRawTrack).toBe(true);
+    expect(p.echoCanConfigurable).toBe(false);
   });
 
   it('mobile-web-standard: browser DSP ON, Hush processing OFF, raw track', () => {

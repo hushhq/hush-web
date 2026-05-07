@@ -65,11 +65,17 @@ export interface CaptureProfile {
 export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>> = {
   'desktop-standard': {
     mode: 'desktop-standard',
-    browserDsp: false,
-    hushProcessing: true,
-    useRawTrack: false,
+    // Temporary: Hush noise-gate / advanced-filter pipeline disabled
+    // until the v2 DSP ships. Until then we publish a raw mic track
+    // and rely on the browser's built-in NS + AGC + EC. EC is always
+    // on (see buildConstraints) regardless of how this flag flips,
+    // because acoustic echo cancel cannot be unbundled cheaply on
+    // any platform we currently target.
+    browserDsp: true,
+    hushProcessing: false,
+    useRawTrack: true,
     localMonitoring: true,
-    echoCanConfigurable: true,
+    echoCanConfigurable: false,
   },
   'mobile-web-standard': {
     mode: 'mobile-web-standard',

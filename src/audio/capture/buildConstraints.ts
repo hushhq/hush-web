@@ -31,13 +31,20 @@ export interface MicConstraints {
  *
  * @param profile - The resolved capture profile for the current mode.
  * @param deviceId - Optional mic device ID.
+ *
+ * Echo cancellation is always on regardless of profile. Acoustic echo
+ * cancellation needs the speaker reference signal, which only the
+ * browser holds; turning it off when speakers are audible produces
+ * loud feedback in any voice call. Noise suppression and auto gain
+ * remain profile-driven so we can hand them back to a Hush-side DSP
+ * pipeline in the future without forcing EC off too.
  */
 export function buildConstraints(
   profile: CaptureProfile,
   deviceId?: string | null,
 ): MicConstraints {
   const constraints: MicConstraints = {
-    echoCancellation: profile.browserDsp,
+    echoCancellation: true,
     noiseSuppression: profile.browserDsp,
     autoGainControl: profile.browserDsp,
     channelCount: 1,

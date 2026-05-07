@@ -249,33 +249,22 @@ describe("VoiceVideoPanel — permission posture", () => {
   })
 })
 
-describe("VoiceVideoPanel — filter pushdown", () => {
-  it("pushes filter changes to voiceRuntime.onMicFilterSettingsChange", async () => {
+describe("VoiceVideoPanel — audio filters card", () => {
+  it("renders the Shipping soon placeholder and no noise-gate switch", async () => {
     installMediaDevices({
       devices: [{ deviceId: "mic-a", kind: "audioinput", label: "Mic A" }],
     })
-    const onMicFilterSettingsChange = vi.fn()
-    const runtime: VoiceRuntime = {
-      isInVoice: true,
-      isMuted: false,
-      isDeafened: false,
-      onMute: vi.fn(),
-      onDeafen: vi.fn().mockResolvedValue(undefined),
-      onMicFilterSettingsChange,
-    }
 
-    render(<VoiceVideoPanel voiceRuntime={runtime} />)
+    render(<VoiceVideoPanel voiceRuntime={null} />)
 
-    const noiseGateSwitch = await screen.findByRole("switch", {
-      name: /noise gate/i,
-    })
-    await userEvent.click(noiseGateSwitch)
-
-    expect(onMicFilterSettingsChange).toHaveBeenCalledTimes(1)
-    expect(onMicFilterSettingsChange.mock.calls[0][0]).toMatchObject({
-      noiseGateEnabled: false,
-    })
-    expect(updateMicMonitorSettings).toHaveBeenCalledTimes(1)
+    expect(
+      await screen.findByText(/hush audio filters/i)
+    ).toBeInTheDocument()
+    expect(screen.getAllByText(/shipping soon/i).length).toBeGreaterThan(0)
+    expect(screen.queryByRole("switch", { name: /noise gate/i })).toBeNull()
+    expect(
+      screen.queryByRole("slider", { name: /sensitivity threshold/i })
+    ).toBeNull()
   })
 })
 

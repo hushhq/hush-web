@@ -40,7 +40,8 @@ describe('useVoiceAudioEngine', () => {
       useVoiceAudioEngine(),
     );
     expect(result.current.publishOptions.disableAudioFilters).toBe(false);
-    expect(result.current.publishOptions.useRawTrack).toBe(false);
+    // Desktop publish runs the raw path until the v2 DSP ships.
+    expect(result.current.publishOptions.useRawTrack).toBe(true);
   });
 
   it('state updates when engine operations are called', () => {

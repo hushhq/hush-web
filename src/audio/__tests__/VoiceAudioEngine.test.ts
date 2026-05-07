@@ -60,11 +60,11 @@ describe('resolvePlaybackContext', () => {
 // ─── derivePublishOptions ───────────────────────────────
 
 describe('derivePublishOptions', () => {
-  it('desktop-standard: processed track, no browser DSP, filters enabled', () => {
+  it('desktop-standard: raw track + browser DSP (temporary, until v2 DSP)', () => {
     const opts = derivePublishOptions(CAPTURE_PROFILES['desktop-standard']);
     expect(opts.disableAudioFilters).toBe(false);
-    expect(opts.useRawTrack).toBe(false);
-    expect(opts.useBrowserDsp).toBe(false);
+    expect(opts.useRawTrack).toBe(true);
+    expect(opts.useBrowserDsp).toBe(true);
   });
 
   it('mobile-web-standard: raw track + browser DSP, filters enabled', () => {
@@ -94,8 +94,9 @@ describe('VoiceAudioEngine', () => {
   it('initializes with correct capture profile for mode', () => {
     const engine = new VoiceAudioEngine({ mode: 'desktop-standard', platform: 'desktop' });
     expect(engine.mode).toBe('desktop-standard');
-    expect(engine.captureProfile.hushProcessing).toBe(true);
-    expect(engine.captureProfile.browserDsp).toBe(false);
+    // Temporary: desktop publish path runs browser DSP until v2.
+    expect(engine.captureProfile.hushProcessing).toBe(false);
+    expect(engine.captureProfile.browserDsp).toBe(true);
     engine.dispose();
   });
 

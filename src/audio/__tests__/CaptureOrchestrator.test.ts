@@ -293,8 +293,8 @@ describe('CaptureOrchestrator: mobile-web conservative path', () => {
 
 // ─── Desktop Pipeline ───────────────────────────────────
 
-describe('CaptureOrchestrator: desktop-standard pipeline', () => {
-  it('desktop-standard creates AudioContext with 48kHz', async () => {
+describe('CaptureOrchestrator: desktop-standard pipeline (temporary raw + browser DSP)', () => {
+  it('desktop-standard runs the raw path (no AudioContext) until v2 DSP ships', async () => {
     const ctxFactory = mockAudioContextFactory();
 
     const orch = new CaptureOrchestrator({
@@ -304,14 +304,14 @@ describe('CaptureOrchestrator: desktop-standard pipeline', () => {
 
     const session = await orch.acquire(CAPTURE_PROFILES['desktop-standard']);
 
-    expect(session.usesProcessingPipeline).toBe(true);
-    expect(session.audioContext).not.toBeNull();
-    expect(ctxFactory.create).toHaveBeenCalledWith({ sampleRate: 48_000 });
+    expect(session.usesProcessingPipeline).toBe(false);
+    expect(session.audioContext).toBeNull();
+    expect(ctxFactory.create).not.toHaveBeenCalled();
 
     await orch.teardown();
   });
 
-  it('desktop-standard constraints have browser DSP off', async () => {
+  it('desktop-standard constraints turn browser DSP on (NS + AGC + EC)', async () => {
     const devices = mockMediaDevices();
 
     const orch = new CaptureOrchestrator({
@@ -322,8 +322,9 @@ describe('CaptureOrchestrator: desktop-standard pipeline', () => {
     await orch.acquire(CAPTURE_PROFILES['desktop-standard']);
 
     const constraints = (devices.getUserMedia as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(constraints.audio.echoCancellation).toBe(false);
-    expect(constraints.audio.noiseSuppression).toBe(false);
+    expect(constraints.audio.echoCancellation).toBe(true);
+    expect(constraints.audio.noiseSuppression).toBe(true);
+    expect(constraints.audio.autoGainControl).toBe(true);
 
     await orch.teardown();
   });

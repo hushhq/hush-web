@@ -3,11 +3,11 @@ import { buildConstraints } from '../capture/buildConstraints';
 import { CAPTURE_PROFILES } from '../core/VoiceAudioTypes';
 
 describe('buildConstraints', () => {
-  it('desktop-standard: all browser DSP off (Hush owns processing)', () => {
+  it('desktop-standard: browser DSP on (temporary, until v2 DSP ships)', () => {
     const c = buildConstraints(CAPTURE_PROFILES['desktop-standard']);
-    expect(c.echoCancellation).toBe(false);
-    expect(c.noiseSuppression).toBe(false);
-    expect(c.autoGainControl).toBe(false);
+    expect(c.echoCancellation).toBe(true);
+    expect(c.noiseSuppression).toBe(true);
+    expect(c.autoGainControl).toBe(true);
     expect(c.channelCount).toBe(1);
   });
 
@@ -18,11 +18,20 @@ describe('buildConstraints', () => {
     expect(c.autoGainControl).toBe(true);
   });
 
-  it('local-monitor: browser DSP off (same as desktop)', () => {
+  it('local-monitor: keeps NS + AGC off, but EC stays on', () => {
+    // When advanced filters return, the local-monitor profile turns
+    // browser NS + AGC off so the user can hear the raw / Hush-
+    // processed signal. EC stays on regardless to prevent feedback.
     const c = buildConstraints(CAPTURE_PROFILES['local-monitor']);
-    expect(c.echoCancellation).toBe(false);
+    expect(c.echoCancellation).toBe(true);
     expect(c.noiseSuppression).toBe(false);
     expect(c.autoGainControl).toBe(false);
+  });
+
+  it('echoCancellation is always on regardless of profile', () => {
+    for (const profile of Object.values(CAPTURE_PROFILES)) {
+      expect(buildConstraints(profile).echoCancellation).toBe(true);
+    }
   });
 
   it('includes deviceId when provided', () => {
