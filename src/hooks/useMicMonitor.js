@@ -34,6 +34,15 @@ export function useMicMonitor() {
   const [level, setLevel] = useState(0);
   const [gateOpen, setGateOpen] = useState(false);
   const [error, setError] = useState(null);
+  // Real-time copies of level + gateOpen, written every worklet
+  // message (~750 Hz). The visual meter reads these from a
+  // requestAnimationFrame loop and interpolates exponentially
+  // toward them so the bar moves smoothly without flooding React
+  // with re-renders. The state values above stay around for
+  // existing callers and tests; they are throttled to ~30 Hz so
+  // they no longer drive jumpy paints.
+  const levelRef = useRef(0);
+  const gateOpenRef = useRef(false);
 
   const stop = useCallback(async () => {
     const session = sessionRef.current;
@@ -144,12 +153,31 @@ export function useMicMonitor() {
 
     // Noise gate worklet level reports drive the mic test UI meter.
     // This is the one place where worklet→UI coupling is intentional.
+    //
+    // We write `levelRef`/`gateOpenRef` on every message so the panel's
+    // RAF-driven smoother always sees the freshest sample; the React
+    // `level`/`gateOpen` state writes are throttled to ~30 Hz (every
+    // ~33 ms) to keep status text + tests responsive without re-
+    // rendering the entire dialog at the worklet's posting rate.
     if (graph.noiseGateNode?.port) {
+      let lastStateUpdate = 0;
+      const STATE_UPDATE_INTERVAL_MS = 33;
       graph.noiseGateNode.port.onmessage = (event) => {
         if (event.data?.type !== 'level') return;
         if (!isMountedRef.current) return;
-        setLevel(event.data.level ?? 0);
-        setGateOpen(Boolean(event.data.gateOpen));
+        const nextLevel = event.data.level ?? 0;
+        const nextGateOpen = Boolean(event.data.gateOpen);
+        levelRef.current = nextLevel;
+        gateOpenRef.current = nextGateOpen;
+        const now =
+          typeof performance !== 'undefined' && performance.now
+            ? performance.now()
+            : Date.now();
+        if (now - lastStateUpdate >= STATE_UPDATE_INTERVAL_MS) {
+          lastStateUpdate = now;
+          setLevel(nextLevel);
+          setGateOpen(nextGateOpen);
+        }
       };
     }
 
@@ -214,6 +242,8 @@ export function useMicMonitor() {
   return {
     isTesting,
     level,
+    levelRef,
+    gateOpenRef,
     gateOpen,
     error,
     setError,

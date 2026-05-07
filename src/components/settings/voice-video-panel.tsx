@@ -183,10 +183,11 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
 
   const {
     isTesting: isMicTesting,
-    level: micLevel,
     gateOpen: isGateOpen,
     error: micTestError,
     setError: setMicTestError,
+    levelRef: micLevelRef,
+    gateOpenRef: micGateOpenRef,
     start: startMicMonitor,
     stop: stopMicMonitor,
     updateSettings: updateMicMonitorSettings,
@@ -196,6 +197,8 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     gateOpen: boolean
     error: Error | null
     setError: (error: Error | null) => void
+    levelRef: React.MutableRefObject<number>
+    gateOpenRef: React.MutableRefObject<boolean>
     start: (options: {
       deviceId: string | null
       settings: MicFilterSettings
@@ -273,6 +276,52 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       void stopMicMonitor().then(() => restoreVoiceAfterMicTest())
     }
   }, [stopMicMonitor, restoreVoiceAfterMicTest])
+
+  // Smooth dB-meter animation. The worklet posts level samples at
+  // ~750 Hz; rendering React state at that rate (or even 30 Hz)
+  // produces visible step jumps on the meter bar. Instead, drive
+  // the fill width directly from a requestAnimationFrame loop with
+  // a single-pole IIR smoother toward the latest sample.
+  //
+  // Time constants: near-instant attack so peaks land in one frame,
+  // slow release so the bar coasts down. Both are independent of
+  // the worklet's own attack/release on gain — this is purely the
+  // visual smoother.
+  const meterFillRef = React.useRef<HTMLDivElement | null>(null)
+  React.useEffect(() => {
+    if (!isMicTesting) {
+      // Reset bar to zero when the test stops so the UI doesn't
+      // freeze at the last seen level.
+      if (meterFillRef.current) meterFillRef.current.style.width = "0%"
+      return
+    }
+    let raf = 0
+    let displayed = 0
+    let lastTimestamp = performance.now()
+    // Single-pole IIR. alpha = 1 - exp(-dt / tau).
+    // Near-instant attack so peaks land in one frame, slow release
+    // so the bar coasts down.
+    const ATTACK_TAU_MS = 5
+    const RELEASE_TAU_MS = 100
+    const tick = (now: number) => {
+      const dt = Math.max(0, now - lastTimestamp)
+      lastTimestamp = now
+      const target = micLevelRef.current ?? 0
+      const tau = target > displayed ? ATTACK_TAU_MS : RELEASE_TAU_MS
+      // Standard exponential approach: alpha = 1 - exp(-dt/tau).
+      const alpha = 1 - Math.exp(-dt / tau)
+      displayed = displayed + (target - displayed) * alpha
+      if (meterFillRef.current) {
+        meterFillRef.current.style.width = `${Math.max(
+          0,
+          Math.min(100, displayed)
+        )}%`
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [isMicTesting, micLevelRef])
 
   const persistPrefs = React.useCallback(
     async (next: Partial<VoiceDevicePrefs>) => {
@@ -393,7 +442,6 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   const videoGranted = hasPermissionFor(deviceList.video)
   const audioValue = prefs?.audioDeviceId ?? DEFAULT_OPTION_VALUE
   const videoValue = prefs?.videoDeviceId ?? DEFAULT_OPTION_VALUE
-  const meterPercent = Math.max(0, Math.min(100, micLevel))
 
   return (
     <div className="flex flex-col gap-6">
@@ -569,16 +617,17 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={meterPercent}
+          aria-valuenow={Math.round(micLevelRef.current ?? 0)}
         >
           <div
+            ref={meterFillRef}
             className={
-              "h-full rounded-full will-change-transform " +
+              "h-full rounded-full will-change-[width] " +
               (isMicTesting && isGateOpen
                 ? "bg-primary"
                 : "bg-muted-foreground/40")
             }
-            style={{ width: `${meterPercent}%` }}
+            style={{ width: "0%" }}
           />
         </div>
         <span className="text-xs text-muted-foreground">

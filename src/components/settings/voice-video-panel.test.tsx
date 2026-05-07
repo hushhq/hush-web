@@ -53,6 +53,8 @@ const micMonitorState: {
   gateOpen: boolean
   error: Error | null
 } = { isTesting: false, level: 0, gateOpen: false, error: null }
+const micLevelRef = { current: 0 }
+const micGateOpenRef = { current: false }
 vi.mock("@/hooks/useMicMonitor", () => ({
   useMicMonitor: () => ({
     isTesting: micMonitorState.isTesting,
@@ -62,6 +64,8 @@ vi.mock("@/hooks/useMicMonitor", () => ({
     setError: (e: Error | null) => {
       micMonitorState.error = e
     },
+    levelRef: micLevelRef,
+    gateOpenRef: micGateOpenRef,
     start: startMicMonitor,
     stop: stopMicMonitor,
     updateSettings: updateMicMonitorSettings,
