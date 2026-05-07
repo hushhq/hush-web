@@ -148,6 +148,42 @@ function formatDeviceLabel(
   return device.rawLabel || `${fallback} ${index + 1}`
 }
 
+/**
+ * Resolve the OS-level default device for a kind so the "Default"
+ * option in the picker can read e.g. "Default (MacBook Pro
+ * Microphone)" instead of just "Default".
+ *
+ * Chromium exposes a synthetic `deviceId === 'default'` entry whose
+ * label is "Default - <actual device>". Firefox / Safari do not
+ * surface such an entry; the first device in enumeration order is
+ * the system default. We strip the "Default - " prefix so the
+ * displayed string stays clean across browsers.
+ *
+ * Returns `null` when no labels are populated yet (= permission
+ * not granted) so the caller can fall back to a plain "Default".
+ */
+function resolveDefaultDeviceName(
+  devices: RawDevice[]
+): string | null {
+  if (devices.length === 0) return null
+  const synthetic = devices.find((d) => d.deviceId === "default")
+  if (synthetic && synthetic.rawLabel) {
+    return synthetic.rawLabel.replace(/^Default\s*[-—–:]\s*/i, "")
+  }
+  // Skip the synthetic entry so the "real" default reflects the
+  // first hardware device in the list.
+  const firstReal = devices.find(
+    (d) => d.deviceId !== "default" && d.deviceId !== "communications"
+  )
+  if (firstReal && firstReal.rawLabel) return firstReal.rawLabel
+  return null
+}
+
+function formatDefaultOptionLabel(devices: RawDevice[]): string {
+  const name = resolveDefaultDeviceName(devices)
+  return name ? `Default (${name})` : "Default"
+}
+
 function getMicMonitorErrorMessage(error: unknown): string {
   const name = (error as { name?: string })?.name
   if (name === "NotAllowedError" || name === "SecurityError") {
@@ -537,12 +573,20 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
                   <SelectValue placeholder="Default" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
-                  {deviceList.audio.map((d, index) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {formatDeviceLabel(d, "Microphone", index)}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value={DEFAULT_OPTION_VALUE}>
+                    {formatDefaultOptionLabel(deviceList.audio)}
+                  </SelectItem>
+                  {deviceList.audio
+                    .filter(
+                      (d) =>
+                        d.deviceId !== "default" &&
+                        d.deviceId !== "communications"
+                    )
+                    .map((d, index) => (
+                      <SelectItem key={d.deviceId} value={d.deviceId}>
+                        {formatDeviceLabel(d, "Microphone", index)}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             ) : (
@@ -574,12 +618,20 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
                   <SelectValue placeholder="Default" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
-                  {deviceList.video.map((d, index) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {formatDeviceLabel(d, "Camera", index)}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value={DEFAULT_OPTION_VALUE}>
+                    {formatDefaultOptionLabel(deviceList.video)}
+                  </SelectItem>
+                  {deviceList.video
+                    .filter(
+                      (d) =>
+                        d.deviceId !== "default" &&
+                        d.deviceId !== "communications"
+                    )
+                    .map((d, index) => (
+                      <SelectItem key={d.deviceId} value={d.deviceId}>
+                        {formatDeviceLabel(d, "Camera", index)}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             ) : (
@@ -618,13 +670,19 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={DEFAULT_OPTION_VALUE}>
-                      Default
+                      {formatDefaultOptionLabel(deviceList.output)}
                     </SelectItem>
-                    {deviceList.output.map((d, index) => (
-                      <SelectItem key={d.deviceId} value={d.deviceId}>
-                        {formatDeviceLabel(d, "Speakers", index)}
-                      </SelectItem>
-                    ))}
+                    {deviceList.output
+                      .filter(
+                        (d) =>
+                          d.deviceId !== "default" &&
+                          d.deviceId !== "communications"
+                      )
+                      .map((d, index) => (
+                        <SelectItem key={d.deviceId} value={d.deviceId}>
+                          {formatDeviceLabel(d, "Speakers", index)}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               ) : (

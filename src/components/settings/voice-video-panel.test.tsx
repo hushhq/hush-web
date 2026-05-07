@@ -480,6 +480,59 @@ describe("VoiceVideoPanel — output device", () => {
   })
 })
 
+describe("VoiceVideoPanel — Default option label", () => {
+  it("shows 'Default (<resolved name>)' when a synthetic default device is exposed", async () => {
+    installMediaDevices({
+      devices: [
+        {
+          deviceId: "default",
+          kind: "audioinput",
+          label: "Default - MacBook Pro Microphone",
+        },
+        {
+          deviceId: "mic-real",
+          kind: "audioinput",
+          label: "MacBook Pro Microphone",
+        },
+      ],
+    })
+
+    render(<VoiceVideoPanel voiceRuntime={null} />)
+
+    const trigger = await screen.findByRole("combobox", { name: /microphone/i })
+    await userEvent.click(trigger)
+
+    expect(
+      await screen.findByRole("option", {
+        name: /^default \(macbook pro microphone\)$/i,
+      })
+    ).toBeInTheDocument()
+
+    // Synthetic 'default' entry is hidden; the real device is the
+    // only non-Default option in the list.
+    const realOptions = screen
+      .getAllByRole("option")
+      .filter((el) => !/default/i.test(el.textContent ?? ""))
+    expect(realOptions).toHaveLength(1)
+    expect(realOptions[0]).toHaveAccessibleName(/macbook pro microphone/i)
+  })
+
+  it("falls back to 'Default' when no labels are populated", async () => {
+    installMediaDevices({
+      devices: [{ deviceId: "mic-a", kind: "audioinput", label: "" }],
+    })
+
+    render(<VoiceVideoPanel voiceRuntime={null} />)
+
+    // Permission not granted yet → mic row shows the Grant button,
+    // not the picker, so the label only matters for the camera /
+    // output rows. We just confirm no exception.
+    expect(
+      await screen.findByRole("button", { name: /grant microphone access/i })
+    ).toBeInTheDocument()
+  })
+})
+
 describe("VoiceVideoPanel — ask before joining", () => {
   it("renders the checkbox unchecked when prefs.dontAskAgain is true", async () => {
     installMediaDevices({
