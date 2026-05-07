@@ -197,6 +197,15 @@ export function VoiceChannelView({
   const bandwidth = useVoiceBandwidth()
   const [prefs, setPrefs] = React.useState<VoiceDevicePrefs | null>(null)
   const [prefsLoaded, setPrefsLoaded] = React.useState(false)
+  // Always-fresh mirror of `prefs`. Writers (prejoin confirm + the
+  // mid-call mic/cam/output pickers) read from this ref so the
+  // merge always sees the latest committed prefs even when the
+  // callback was memoised against a stale `prefs` reference. This
+  // guards against a class of bugs where a writer would clobber a
+  // field (e.g. outputDeviceId) that had been set after the
+  // callback was last re-bound.
+  const prefsRef = React.useRef<VoiceDevicePrefs | null>(prefs)
+  prefsRef.current = prefs
   const [prejoinOpen, setPrejoinOpen] = React.useState(false)
   const [hasJoined, setHasJoined] = React.useState(false)
   const [audioDevices, setAudioDevices] = React.useState<DeviceOption[]>([])
@@ -311,7 +320,7 @@ export function VoiceChannelView({
   const handlePrejoinConfirm = React.useCallback(
     async (choice: VoicePrejoinChoice) => {
       setPrejoinOpen(false)
-      const next = mergeVoiceDevicePrefs(prefs, {
+      const next = mergeVoiceDevicePrefs(prefsRef.current, {
         audioDeviceId: choice.audioDeviceId,
         videoDeviceId: choice.videoDeviceId,
         audioEnabled: choice.audioEnabled,
@@ -444,7 +453,7 @@ export function VoiceChannelView({
   const handlePickOutput = React.useCallback(
     async (deviceId: string) => {
       setShowOutputPicker(false)
-      const next = mergeVoiceDevicePrefs(prefs, {
+      const next = mergeVoiceDevicePrefs(prefsRef.current, {
         outputDeviceId: deviceId,
       })
       setPrefs(next)
@@ -457,13 +466,13 @@ export function VoiceChannelView({
         console.error("[VoiceChannel] output device switch failed:", err)
       }
     },
-    [currentUserId, prefs, room.playbackManager]
+    [currentUserId, room.playbackManager]
   )
 
   const handlePickMic = React.useCallback(
     async (deviceId: string) => {
       setShowMicPicker(false)
-      const next = mergeVoiceDevicePrefs(prefs, {
+      const next = mergeVoiceDevicePrefs(prefsRef.current, {
         audioDeviceId: deviceId,
         audioEnabled: true,
       })
@@ -476,13 +485,13 @@ export function VoiceChannelView({
       micPublishedRef.current = true
       setIsMicOn(true)
     },
-    [currentUserId, prefs, room]
+    [currentUserId, room]
   )
 
   const handlePickWebcam = React.useCallback(
     async (deviceId: string) => {
       setShowWebcamPicker(false)
-      const next = mergeVoiceDevicePrefs(prefs, {
+      const next = mergeVoiceDevicePrefs(prefsRef.current, {
         videoDeviceId: deviceId,
         videoEnabled: true,
       })
@@ -494,7 +503,7 @@ export function VoiceChannelView({
       await room.publishWebcam(deviceId)
       setIsWebcamOn(true)
     },
-    [currentUserId, isWebcamOn, prefs, room]
+    [currentUserId, isWebcamOn, room]
   )
 
   const handleLeave = React.useCallback(async () => {
