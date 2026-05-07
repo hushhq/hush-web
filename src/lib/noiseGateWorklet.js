@@ -29,7 +29,7 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
 
     // Level reporting (throttled)
     this.frameCount = 0;
-    this.reportInterval = 128; // Report every 128 frames (~2.67ms at 48kHz)
+    this.reportInterval = 64; // Report every 64 frames (~1.33ms at 48kHz)
 
     // Calculate smoothing coefficients for 48kHz sample rate
     // attack = 10ms, release = 50ms

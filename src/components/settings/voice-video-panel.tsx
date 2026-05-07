@@ -573,7 +573,7 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
         >
           <div
             className={
-              "h-full transition-[width] duration-75 ease-linear " +
+              "h-full rounded-full will-change-transform " +
               (isMicTesting && isGateOpen
                 ? "bg-primary"
                 : "bg-muted-foreground/40")
