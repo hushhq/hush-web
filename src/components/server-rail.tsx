@@ -3,7 +3,6 @@ import {
   HashIcon,
   PlusIcon,
   CompassIcon,
-  HomeIcon,
   BellIcon,
   BellOffIcon,
   CheckCheckIcon,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button.tsx"
+import { HushLogo } from "@/components/brand/HushLogo"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -128,7 +128,7 @@ export function ServerRail({
       <div className="flex flex-col items-center gap-2 pb-2">
         <RailIcon
           label="Home"
-          icon={<HomeIcon className="size-5" />}
+          icon={<HushLogo className="size-5" />}
           active={activeRailId === "home"}
           onClick={() => onSelect("home")}
         />

@@ -12,7 +12,7 @@ export function HushLogo({ className }) {
       viewBox="0 0 100 100"
       width="100"
       height="100"
-      className={`text-foreground ${className ?? ''}`}
+      className={`text-current ${className ?? ''}`}
       aria-label="Hush logo"
       role="img"
       fill="currentColor"
