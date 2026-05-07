@@ -621,21 +621,14 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
 
       <DeviceCard
         title="Audio filters"
-        description="Noise gate + advanced filters. Shipping soon."
+        description="Noise gate and advanced filters. Shipping soon."
       >
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium">
-              Hush audio filters
-            </span>
-            <span className="text-xs text-muted-foreground">
-              We are temporarily relying on the browser's built-in
-              noise suppression and auto gain. Hush-side filters with
-              tunable thresholds will return in an upcoming release.
-            </span>
-          </div>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Shipping soon
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium">Hush audio filters</span>
+          <span className="text-xs text-muted-foreground">
+            We are temporarily relying on the browser's built-in audio
+            processing. Hush-side filters will be available in an
+            upcoming release.
           </span>
         </div>
       </DeviceCard>

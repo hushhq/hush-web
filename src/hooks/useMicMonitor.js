@@ -5,13 +5,16 @@ import { normalizeMicFilterSettings, NOISE_GATE_WORKLET_URL } from '../lib/micPr
 const MIC_MONITOR_STOPPED_ERROR = 'Microphone input stopped unexpectedly.';
 
 export function buildMicMonitorAudioConstraints(deviceId = null) {
+  // Mirror the publish-path constraints (browser NS + AGC + EC). The
+  // mic test must let the user preview exactly what peers will hear,
+  // which means the same DSP pipeline. Echo cancellation in a local
+  // loopback path means AEC cancels the round-trip from speakers
+  // back into the mic — acceptable, and identical to what happens
+  // during an active voice call when monitoring locally.
   const constraints = {
-    // Local mic monitoring is a loopback path. Browser DSP can aggressively
-    // clamp or suppress that signal, so keep the monitor profile predictable
-    // and let Hush's own gate be the only active filter here.
-    echoCancellation: false,
-    noiseSuppression: false,
-    autoGainControl: false,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
     channelCount: 1,
   };
   if (deviceId) {

@@ -260,7 +260,7 @@ describe("VoiceVideoPanel — audio filters card", () => {
     expect(
       await screen.findByText(/hush audio filters/i)
     ).toBeInTheDocument()
-    expect(screen.getAllByText(/shipping soon/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/shipping soon/i)).toBeInTheDocument()
     expect(screen.queryByRole("switch", { name: /noise gate/i })).toBeNull()
     expect(
       screen.queryByRole("slider", { name: /sensitivity threshold/i })

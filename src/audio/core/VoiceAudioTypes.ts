@@ -57,10 +57,14 @@ export interface CaptureProfile {
 /**
  * Immutable capture profile definitions.
  *
- * These describe the intended per-mode capture architecture:
- * - desktop-standard: full Hush pipeline (AudioContext + noise gate)
- * - mobile-web-standard: raw track with browser DSP (NS+AGC on, no AudioContext)
- * - local-monitor: Hush pipeline with loopback monitoring
+ * Current shape (temporary, until the Hush v2 DSP pipeline returns):
+ * - desktop-standard: raw track with browser DSP (NS+AGC+EC on),
+ *   no AudioContext pipeline. Identical capture shape to mobile.
+ * - mobile-web-standard: raw track with browser DSP (NS+AGC+EC on),
+ *   no AudioContext pipeline.
+ * - local-monitor: AudioContext loopback used by the mic-test card.
+ *   Browser DSP follows publish-path defaults so the test previews
+ *   the same processing peers will hear.
  */
 export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>> = {
   'desktop-standard': {

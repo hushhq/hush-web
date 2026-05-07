@@ -6,14 +6,22 @@
  * JS function is not modified — this is a parallel implementation
  * for future adoption.
  *
- * Constraint strategy per profile:
+ * Constraint strategy per profile (current — temporary until the
+ * Hush v2 DSP pipeline returns):
  *
- *   desktop-standard / local-monitor:
- *     Browser DSP OFF. Hush owns processing (AudioContext + noise gate).
+ *   desktop-standard / mobile-web-standard:
+ *     Browser DSP ON (NS + AGC + EC). Raw mic track from
+ *     getUserMedia, no AudioContext pipeline. Echo cancellation is
+ *     forced on regardless of profile (see below).
  *
- *   mobile-web-standard:
- *     Browser DSP ON (NS + AGC + EC). No AudioContext pipeline.
- *     Relies on the browser's built-in processing for stability.
+ *   local-monitor:
+ *     NS + AGC OFF, EC ON. Used when the future Hush DSP wants to
+ *     own noise suppression / gain on a loopback path while still
+ *     keeping the speaker-to-mic feedback loop killed.
+ *
+ * EC stays on across all profiles because acoustic echo cancel
+ * needs the browser's speaker reference signal; turning it off
+ * produces feedback in any voice context we ship.
  */
 
 import type { CaptureProfile } from '../core/VoiceAudioTypes';

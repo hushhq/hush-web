@@ -64,17 +64,17 @@ describe('useMicMonitor', () => {
     };
   });
 
-  it('builds stable loopback constraints for mic monitoring', () => {
+  it('builds loopback constraints that mirror the publish path browser DSP', () => {
     expect(buildMicMonitorAudioConstraints('mic-1')).toEqual({
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
       channelCount: 1,
       deviceId: { exact: 'mic-1' },
     });
   });
 
-  it('requests mic monitor media without browser dsp filters', async () => {
+  it('requests mic monitor media with browser DSP on (matches publish)', async () => {
     const track = createFakeAudioTrack();
     const stream = {
       getAudioTracks: () => [track],
@@ -92,9 +92,9 @@ describe('useMicMonitor', () => {
 
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({
       audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
         channelCount: 1,
         deviceId: { exact: 'mic-1' },
       },
