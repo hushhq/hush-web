@@ -187,7 +187,7 @@ function PanelFooter({
         Hush is open source and self-hostable.{" "}
         <a
           className="font-medium underline-offset-4 hover:underline"
-          href="https://github.com/gethush/hush"
+          href="https://github.com/hushhq/hush"
           target="_blank"
           rel="noreferrer noopener"
         >

@@ -585,7 +585,7 @@ function ServerHeader({
             <HushLogo className="size-20" />
             <div className="flex items-center gap-3 text-sm font-medium text-foreground">
               <a
-                href="https://github.com/hushhq"
+                href="https://github.com/hushhq/hush"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
