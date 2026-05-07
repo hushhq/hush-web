@@ -35,12 +35,12 @@ export function useMicMonitor() {
   const [gateOpen, setGateOpen] = useState(false);
   const [error, setError] = useState(null);
   // Real-time copies of level + gateOpen, written every worklet
-  // message (~750 Hz). The visual meter reads these from a
-  // requestAnimationFrame loop and interpolates exponentially
-  // toward them so the bar moves smoothly without flooding React
-  // with re-renders. The state values above stay around for
-  // existing callers and tests; they are throttled to ~30 Hz so
-  // they no longer drive jumpy paints.
+  // message (~188 Hz at the current reportEveryNQuanta = 2). The
+  // visual meter reads these from a requestAnimationFrame loop and
+  // interpolates exponentially toward them so the bar moves
+  // smoothly without flooding React with re-renders. The state
+  // values above stay around for existing callers and tests; they
+  // are throttled to ~30 Hz so they no longer drive jumpy paints.
   const levelRef = useRef(0);
   const gateOpenRef = useRef(false);
 

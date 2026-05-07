@@ -278,7 +278,8 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   }, [stopMicMonitor, restoreVoiceAfterMicTest])
 
   // Smooth dB-meter animation. The worklet posts level samples at
-  // ~750 Hz; rendering React state at that rate (or even 30 Hz)
+  // ~188 Hz (`reportEveryNQuanta = 2` in noiseGateWorklet.js).
+  // Rendering React state at that rate — or even at 60 Hz —
   // produces visible step jumps on the meter bar. Instead, drive
   // the fill width directly from a requestAnimationFrame loop with
   // a single-pole IIR smoother toward the latest sample.

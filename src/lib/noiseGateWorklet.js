@@ -9,7 +9,7 @@
  * - RMS-based level detection
  * - Smooth attack/release (10ms attack, 50ms release)
  * - Hold time to prevent flutter (150ms)
- * - Level reporting for UI meter (throttled to ~60ms)
+ * - Level reporting for UI meter (throttled to ~5.3 ms / ~188 Hz)
  */
 
 class NoiseGateProcessor extends AudioWorkletProcessor {
