@@ -24,6 +24,10 @@ export interface HushSuggestionItem extends SuggestionItem {
    *  produced a click regression where keyboard-Enter selected the
    *  item but a mouse click did not. */
   badge?: string
+  /** Render the row dimmed + non-interactive but still visible in
+   *  the list. Used to surface roadmap items so the affordance is
+   *  discoverable without firing a half-wired command. */
+  disabled?: boolean
 }
 
 /** Screen-space rect of the caret at slash invocation. Used by the
@@ -160,11 +164,16 @@ export function createHushSlashItems(
   // the title.
   const BADGES: Record<string, string | undefined> = {
     GIF: "Beta",
+    Poll: "Shipping soon",
+  }
+  const DISABLED: Record<string, boolean | undefined> = {
+    Poll: true,
   }
   return items.map((item, index) => ({
     ...item,
     group: index < 2 ? "actions" : "formatting",
     badge: BADGES[item.title],
+    disabled: DISABLED[item.title] ?? false,
   }))
 }
 

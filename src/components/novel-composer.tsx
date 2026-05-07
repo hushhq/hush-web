@@ -484,8 +484,15 @@ function SlashSection({
         <EditorCommandItem
           key={item.title}
           value={item.title}
-          onCommand={(val) => item.command?.(val)}
-          className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm aria-selected:bg-muted"
+          onCommand={(val) => {
+            if (item.disabled) return
+            item.command?.(val)
+          }}
+          className={
+            item.disabled
+              ? "flex w-full cursor-not-allowed items-center gap-2 rounded-sm px-2 py-1.5 text-sm opacity-50 aria-selected:bg-transparent"
+              : "flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm aria-selected:bg-muted"
+          }
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded border bg-background">
             {item.icon}
