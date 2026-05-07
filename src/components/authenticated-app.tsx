@@ -736,8 +736,12 @@ export function AuthenticatedApp() {
       dmGuilds
         .filter((g) => g.channelId)
         .map((g) => {
-          const name =
-            g.otherUser?.displayName ?? g.otherUser?.username ?? "user"
+          // displayName as-is; on fallback the username keeps the
+          // "@" prefix so the row reads as a handle, not a name.
+          const name = g.otherUser?.displayName?.trim()
+            || (g.otherUser?.username
+              ? `@${g.otherUser.username.replace(/^@+/, "")}`
+              : "user")
           const peerId = g.otherUser?.id
           // Presence stays optimistic ("online") until the first
           // `presence.update` frame so the DM list does not flicker
@@ -1162,15 +1166,20 @@ export function AuthenticatedApp() {
       }
     : undefined
 
-  // Sidebar user prop (prototype shape).
-  const sidebarUser = React.useMemo(
-    () => ({
-      name: user?.display_name ?? user?.username ?? "you",
-      email: user?.username ?? "",
-      initials: deriveInitials(user?.display_name ?? user?.username ?? "you"),
-    }),
-    [user?.display_name, user?.username]
-  )
+  // Sidebar user prop (prototype shape). The `name` field falls
+  // back to "@username" when no display_name is set, and the
+  // `email` row in the user-menu actually surfaces the @-handle
+  // (no email backend yet).
+  const sidebarUser = React.useMemo(() => {
+    const handle = user?.username ? `@${user.username.replace(/^@+/, "")}` : ""
+    const display = user?.display_name?.trim()
+    const labelForName = display || handle || "you"
+    return {
+      name: labelForName,
+      email: handle,
+      initials: deriveInitials(display || user?.username || "you"),
+    }
+  }, [user?.display_name, user?.username])
 
   // Stable Chat.jsx prop callbacks
   const getStore = React.useCallback(
@@ -1637,7 +1646,14 @@ export function AuthenticatedApp() {
         account={
           user
             ? {
-                displayName: user.display_name ?? user.username ?? "you",
+                // displayName falls back to "@username" rather than
+                // the bare handle, so the row never reads as a
+                // free-form name when the user has not set one.
+                displayName:
+                  user.display_name?.trim() ||
+                  (user.username
+                    ? `@${user.username.replace(/^@+/, "")}`
+                    : "you"),
                 username: user.username ?? "",
               }
             : undefined

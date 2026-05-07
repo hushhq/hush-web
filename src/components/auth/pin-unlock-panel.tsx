@@ -63,8 +63,14 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const [isDelayed, setIsDelayed] = React.useState(false)
   const countdownRef = React.useRef<number | null>(null)
 
-  const username = user?.display_name ?? user?.username ?? "your account"
-  const initial = (username.charAt(0) ?? "?").toUpperCase()
+  const display = user?.display_name?.trim()
+  const handle = user?.username
+    ? `@${user.username.replace(/^@+/, "")}`
+    : ""
+  // displayName as-is, otherwise fallback to "@username" so the
+  // greeting still reads as a handle rather than a free-form name.
+  const username = display || handle || "your account"
+  const initial = ((display || user?.username || "?").charAt(0) ?? "?").toUpperCase()
 
   React.useEffect(
     () => () => {
