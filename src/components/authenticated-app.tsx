@@ -1261,6 +1261,9 @@ export function AuthenticatedApp() {
               token={token}
               baseUrl={baseUrl}
               wsClient={wsClient as Parameters<typeof SystemChannelView>[0]["wsClient"]}
+              resolveActor={(id) =>
+                members.find((m) => m.id === id)?.name ?? null
+              }
             />
           }
         />

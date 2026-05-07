@@ -29,6 +29,12 @@ interface SystemChannelViewProps {
    *  system events as the backend broadcasts them, so a long-lived
    *  log surface stays current without manual refresh. */
   wsClient?: WsClientLike | null
+  /** Resolves a user id to its `@username` for display. The system
+   *  message rows fall back to a shortened id when this returns
+   *  null. Pass the same members snapshot the surrounding chrome
+   *  uses so actor / target read the same identity in the log and
+   *  in the members sidebar. */
+  resolveActor?: (id: string) => string | null
 }
 
 /**
@@ -58,6 +64,7 @@ export function SystemChannelView({
   token,
   baseUrl,
   wsClient,
+  resolveActor,
 }: SystemChannelViewProps) {
   const { events, loading, error } = useSystemEvents({
     serverId,
@@ -89,7 +96,11 @@ export function SystemChannelView({
             </div>
           ) : null}
           {events.map((event) => (
-            <SystemEventRow key={event.id} event={event} />
+            <SystemEventRow
+              key={event.id}
+              event={event}
+              resolveActor={resolveActor}
+            />
           ))}
         </div>
       </ScrollArea>
@@ -107,7 +118,13 @@ function SystemSkeleton() {
   )
 }
 
-function SystemEventRow({ event }: { event: SystemEvent }) {
+function SystemEventRow({
+  event,
+  resolveActor,
+}: {
+  event: SystemEvent
+  resolveActor?: (id: string) => string | null
+}) {
   const ts = formatTimestamp(event.createdAt)
   return (
     <div className="flex flex-col gap-1 rounded-md border bg-card px-3 py-2">
@@ -116,11 +133,11 @@ function SystemEventRow({ event }: { event: SystemEvent }) {
         <span className="text-xs text-muted-foreground tabular-nums">{ts}</span>
       </div>
       <div className="text-xs text-muted-foreground">
-        Actor: <span className="font-mono">{shortId(event.actorId)}</span>
+        Actor: <ActorTag id={event.actorId} resolveActor={resolveActor} />
         {event.targetId ? (
           <>
             {" · Target: "}
-            <span className="font-mono">{shortId(event.targetId)}</span>
+            <ActorTag id={event.targetId} resolveActor={resolveActor} />
           </>
         ) : null}
       </div>
@@ -129,6 +146,20 @@ function SystemEventRow({ event }: { event: SystemEvent }) {
       ) : null}
     </div>
   )
+}
+
+function ActorTag({
+  id,
+  resolveActor,
+}: {
+  id: string
+  resolveActor?: (id: string) => string | null
+}) {
+  const username = resolveActor?.(id) ?? null
+  if (username) {
+    return <span className="font-medium text-foreground">@{username}</span>
+  }
+  return <span className="font-mono">{shortId(id)}</span>
 }
 
 function humanizeEventType(t: string): string {
