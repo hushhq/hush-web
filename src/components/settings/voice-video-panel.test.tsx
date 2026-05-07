@@ -332,6 +332,61 @@ describe("VoiceVideoPanel — mic test isolation", () => {
   })
 })
 
+describe("VoiceVideoPanel — output device", () => {
+  // jsdom does not implement HTMLMediaElement.setSinkId so the
+  // `isOutputDeviceSelectionSupported` predicate returns false out
+  // of the box. Polyfill it as a no-op for the duration of these
+  // tests so the picker renders and the live pushdown path can be
+  // exercised. We also stub `useIsMobile` to return false.
+  beforeAll(() => {
+    if (
+      typeof HTMLMediaElement !== "undefined" &&
+      typeof HTMLMediaElement.prototype.setSinkId !== "function"
+    ) {
+      // @ts-expect-error jsdom polyfill
+      HTMLMediaElement.prototype.setSinkId = function setSinkId() {
+        return Promise.resolve()
+      }
+    }
+  })
+
+  it("persists the chosen output device + pushes it to voiceRuntime", async () => {
+    installMediaDevices({
+      devices: [
+        { deviceId: "mic-a", kind: "audioinput", label: "Mic A" },
+        { deviceId: "out-a", kind: "audiooutput", label: "Built-in Speakers" },
+        { deviceId: "out-b", kind: "audiooutput", label: "External Headphones" },
+      ],
+    })
+    const onOutputDeviceChange = vi.fn().mockResolvedValue(undefined)
+    const runtime: VoiceRuntime = {
+      isInVoice: true,
+      isMuted: false,
+      isDeafened: false,
+      onMute: vi.fn(),
+      onDeafen: vi.fn().mockResolvedValue(undefined),
+      onMicFilterSettingsChange: vi.fn(),
+      onOutputDeviceChange,
+    }
+
+    render(<VoiceVideoPanel voiceRuntime={runtime} />)
+
+    const trigger = await screen.findByRole("combobox", { name: /output/i })
+    await userEvent.click(trigger)
+    const option = await screen.findByRole("option", {
+      name: /external headphones/i,
+    })
+    await userEvent.click(option)
+
+    await waitFor(() => {
+      expect(saveVoiceDevicePrefs).toHaveBeenCalled()
+    })
+    const lastCallArgs = saveVoiceDevicePrefs.mock.calls.at(-1) ?? []
+    expect(lastCallArgs[1]).toMatchObject({ outputDeviceId: "out-b" })
+    expect(onOutputDeviceChange).toHaveBeenCalledWith("out-b")
+  })
+})
+
 describe("VoiceVideoPanel — device persistence", () => {
   it("persists microphone selection through voiceDevicePrefs", async () => {
     installMediaDevices({

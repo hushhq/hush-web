@@ -132,6 +132,7 @@ interface VoiceControls {
     noiseGateEnabled: boolean
     noiseGateThresholdDb: number
   }>) => void
+  setOutputDeviceSink?: (deviceId: string | null) => Promise<void> | void
 }
 
 interface VoiceState {
@@ -904,6 +905,9 @@ export function AuthenticatedApp() {
         noiseGateThresholdDb: number
       }>) => {
         voiceControlsRef.current.applyMicFilterSettings?.(settings)
+      },
+      onOutputDeviceChange: (deviceId: string | null) => {
+        return voiceControlsRef.current.setOutputDeviceSink?.(deviceId)
       },
     }),
     [isInVoice, isMuted, isDeafened]

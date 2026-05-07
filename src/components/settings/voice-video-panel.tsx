@@ -24,8 +24,9 @@
  */
 
 import * as React from "react"
-import { MicIcon, VideoIcon } from "lucide-react"
+import { HeadphonesIcon, MicIcon, VideoIcon } from "lucide-react"
 
+import { isOutputDeviceSelectionSupported } from "@/audio"
 import { Button } from "@/components/ui/button.tsx"
 import { Label } from "@/components/ui/label"
 import {
@@ -39,6 +40,7 @@ import { Separator } from "@/components/ui/separator.tsx"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/contexts/AuthContext"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { useMicMonitor } from "@/hooks/useMicMonitor"
 import {
   DEFAULT_MIC_FILTER_SETTINGS,
@@ -72,6 +74,12 @@ export interface VoiceRuntime {
   onMute: () => void | Promise<void>
   onDeafen: () => void | Promise<void>
   onMicFilterSettingsChange: (settings: Partial<MicFilterSettings>) => void
+  /** Routes the output sink id (HTMLMediaElement.setSinkId) to the
+   *  active room's playback manager so peer audio re-routes to the
+   *  newly picked output device without leaving and rejoining the
+   *  call. No-op when not in voice or when the browser lacks
+   *  setSinkId support. */
+  onOutputDeviceChange?: (deviceId: string | null) => void | Promise<void>
 }
 
 interface VoiceVideoPanelProps {
@@ -86,10 +94,11 @@ interface IsolationSnapshot {
 interface DeviceList {
   audio: RawDevice[]
   video: RawDevice[]
+  output: RawDevice[]
 }
 
 const DEFAULT_OPTION_VALUE = "__default__"
-const EMPTY_DEVICE_LIST: DeviceList = { audio: [], video: [] }
+const EMPTY_DEVICE_LIST: DeviceList = { audio: [], video: [], output: [] }
 
 /**
  * Enumerate input devices WITHOUT triggering a permission prompt.
@@ -110,6 +119,9 @@ async function enumerateDevicesRaw(): Promise<DeviceList> {
       .map(toRaw),
     video: devices
       .filter((d) => d.kind === "videoinput" && d.deviceId)
+      .map(toRaw),
+    output: devices
+      .filter((d) => d.kind === "audiooutput" && d.deviceId)
       .map(toRaw),
   }
 }
@@ -158,6 +170,13 @@ function getMicMonitorErrorMessage(error: unknown): string {
 export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   const { user } = useAuth() as { user: { id?: string } | null }
   const userId = user?.id ?? null
+  const isMobile = useIsMobile()
+  // Output device selection is desktop-only for now: mobile browsers
+  // (and the React Native bridge we'll ship later) own the audio
+  // route at the OS level, not via HTMLMediaElement.setSinkId.
+  // Disable the picker entirely on mobile and on desktop browsers
+  // that lack the API (Firefox/Safari).
+  const outputSelectable = !isMobile && isOutputDeviceSelectionSupported()
 
   // Snapshot of which mute/deafen toggles the panel applied to isolate
   // the mic test, so stopping the test can restore the pre-test state
@@ -381,6 +400,19 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
     [persistPrefs]
   )
 
+  const handleOutputDeviceChange = React.useCallback(
+    async (value: string) => {
+      const nextId = value === DEFAULT_OPTION_VALUE ? null : value
+      await persistPrefs({ outputDeviceId: nextId })
+      // Live re-route into the active call's playback manager so
+      // remote participants' audio switches without a rejoin.
+      await Promise.resolve(
+        voiceRuntimeRef.current?.onOutputDeviceChange?.(nextId)
+      )
+    },
+    [persistPrefs]
+  )
+
   const applyFilters = React.useCallback(
     (next: Partial<MicFilterSettings>) => {
       const normalized = setMicFilterSettings(next)
@@ -443,6 +475,7 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   const videoGranted = hasPermissionFor(deviceList.video)
   const audioValue = prefs?.audioDeviceId ?? DEFAULT_OPTION_VALUE
   const videoValue = prefs?.videoDeviceId ?? DEFAULT_OPTION_VALUE
+  const outputValue = prefs?.outputDeviceId ?? DEFAULT_OPTION_VALUE
 
   return (
     <div className="flex flex-col gap-6">
@@ -533,9 +566,63 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
             )
           }
         />
+        <Separator />
+        <DeviceRow
+          icon={<HeadphonesIcon className="size-4" />}
+          label="Output"
+          control={
+            outputSelectable ? (
+              <Select
+                value={outputValue}
+                onValueChange={handleOutputDeviceChange}
+                disabled={!userId || !audioGranted}
+              >
+                <SelectTrigger
+                  aria-label="Output"
+                  className="w-full sm:w-72"
+                >
+                  <SelectValue placeholder="Default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
+                  {deviceList.output.map((d, index) => (
+                    <SelectItem key={d.deviceId} value={d.deviceId}>
+                      {formatDeviceLabel(d, "Speakers", index)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select disabled value={DEFAULT_OPTION_VALUE}>
+                <SelectTrigger
+                  aria-label="Output"
+                  className="w-full sm:w-72"
+                >
+                  <SelectValue
+                    placeholder={
+                      isMobile ? "System default" : "Not supported"
+                    }
+                  >
+                    {isMobile ? "System default" : "Not supported"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_OPTION_VALUE}>Default</SelectItem>
+                </SelectContent>
+              </Select>
+            )
+          }
+        />
         {permissionError ? (
           <p role="alert" className="text-xs text-destructive">
             {permissionError}
+          </p>
+        ) : null}
+        {!outputSelectable ? (
+          <p className="text-xs text-muted-foreground">
+            {isMobile
+              ? "Output routing is managed by the OS on mobile. We will surface a picker once Hush ships on React Native."
+              : "Your browser does not expose output device selection. Use the OS-level audio settings to switch."}
           </p>
         ) : null}
       </DeviceCard>

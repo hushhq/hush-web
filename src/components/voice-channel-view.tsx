@@ -43,6 +43,7 @@ type VoiceControlsApi = {
   isScreenSharing?: boolean
   isWebcamOn?: boolean
   applyMicFilterSettings?: (settings: MicFilterSettingsPatch) => void
+  setOutputDeviceSink?: (deviceId: string | null) => Promise<void> | void
 }
 
 type VoiceState = {
@@ -549,6 +550,10 @@ export function VoiceChannelView({
       isScreenSharing,
       isWebcamOn,
       applyMicFilterSettings: room.updateMicFilterSettings,
+      setOutputDeviceSink: (deviceId) => {
+        if (!outputDeviceSelectable) return
+        return room.playbackManager?.setSinkId(deviceId ?? "")
+      },
     }
   })
 
