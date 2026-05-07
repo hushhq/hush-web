@@ -128,6 +128,10 @@ interface VoiceControls {
   toggleWebcam?: () => void
   isScreenSharing?: boolean
   isWebcamOn?: boolean
+  applyMicFilterSettings?: (settings: Partial<{
+    noiseGateEnabled: boolean
+    noiseGateThresholdDb: number
+  }>) => void
 }
 
 interface VoiceState {
@@ -879,6 +883,32 @@ export function AuthenticatedApp() {
     voiceControlsRef.current.toggleDeafen?.()
   }, [])
 
+  // Voice runtime surface for the settings panel: lets the mic-test
+  // card temporarily deafen the room while monitoring locally, and
+  // pushes filter changes (noise gate threshold) into the live capture
+  // graph without the user having to leave + rejoin the channel.
+  const isInVoice = joinedVoice != null
+  const voiceRuntime = React.useMemo(
+    () => ({
+      isInVoice,
+      isMuted,
+      isDeafened,
+      onMute: () => {
+        voiceControlsRef.current.toggleMic?.()
+      },
+      onDeafen: () => {
+        voiceControlsRef.current.toggleDeafen?.()
+      },
+      onMicFilterSettingsChange: (settings: Partial<{
+        noiseGateEnabled: boolean
+        noiseGateThresholdDb: number
+      }>) => {
+        voiceControlsRef.current.applyMicFilterSettings?.(settings)
+      },
+    }),
+    [isInVoice, isMuted, isDeafened]
+  )
+
   const handleToggleVideo = React.useCallback(() => {
     voiceControlsRef.current.toggleWebcam?.()
   }, [])
@@ -1607,6 +1637,7 @@ export function AuthenticatedApp() {
         }
         homeInstanceUrl={homeInstance.url}
         homeLogPublicKey={homeInstance.logPublicKey}
+        voiceRuntime={voiceRuntime}
         onSignOut={async () => {
           await performLogout()
           setIsUserSettingsOpen(false)

@@ -32,7 +32,10 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { getVaultConfig } from "@/lib/identityVault"
 import { DevicesPanel } from "@/components/settings/devices-panel"
-import { VoiceVideoPanel } from "@/components/settings/voice-video-panel"
+import {
+  VoiceVideoPanel,
+  type VoiceRuntime,
+} from "@/components/settings/voice-video-panel"
 
 interface UserAccountInfo {
   displayName: string
@@ -52,6 +55,11 @@ interface UserSettingsDialogProps {
   homeInstanceUrl?: string | null
   /** Hex transparency log public key for the home instance. */
   homeLogPublicKey?: string | null
+  /** Active voice runtime surface — null when the user is not joined
+   *  to any voice channel. Lets the Voice & Video panel temporarily
+   *  isolate the mic test from the live room and push filter changes
+   *  into the published capture graph. */
+  voiceRuntime?: VoiceRuntime | null
 }
 
 export function UserSettingsDialog({
@@ -61,6 +69,7 @@ export function UserSettingsDialog({
   onSignOut,
   homeInstanceUrl,
   homeLogPublicKey,
+  voiceRuntime,
 }: UserSettingsDialogProps) {
   // Keep unfinished surfaces visible but disabled so the settings map
   // stays recognizable while only wired panels are reachable.
@@ -127,7 +136,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Voice & video",
       icon: <MicIcon />,
-      content: <VoiceVideoPanel />,
+      content: <VoiceVideoPanel voiceRuntime={voiceRuntime ?? null} />,
     },
     {
       id: "notifications",

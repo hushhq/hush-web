@@ -8,13 +8,13 @@
  *  - Audio-filter card: noise-gate switch + sensitivity threshold slider
  *    (persisted in localStorage via `lib/micProcessing`).
  *  - Mic-test card: local loopback meter driven by `useMicMonitor`.
- *
- * In-call mic-test isolation (legacy `voiceRuntime` deafen/mute on test
- * start, restore on stop) is intentionally deferred — the active voice
- * runtime is not yet exposed to the settings dialog tree. Until it is,
- * the mic test runs against a private AudioContext so it does not
- * interfere with a published mic, but the *user* still hears their own
- * voice in the room. Wire `voiceRuntime` through later.
+ *  - Live filter pushdown: while in voice, threshold + gate toggle
+ *    changes apply to the published capture graph immediately
+ *    (`voiceRuntime.onMicFilterSettingsChange`).
+ *  - Mic-test isolation: while in voice, starting the test deafens the
+ *    room (or mutes the mic if already deafened) so the local monitor
+ *    is the only audible path. Stopping or unmounting restores the
+ *    pre-test state.
  */
 
 import * as React from "react"
@@ -56,6 +56,24 @@ interface MediaDeviceOption {
 interface MicFilterSettings {
   noiseGateEnabled: boolean
   noiseGateThresholdDb: number
+}
+
+export interface VoiceRuntime {
+  isInVoice: boolean
+  isMuted: boolean
+  isDeafened: boolean
+  onMute: () => void | Promise<void>
+  onDeafen: () => void | Promise<void>
+  onMicFilterSettingsChange: (settings: Partial<MicFilterSettings>) => void
+}
+
+interface VoiceVideoPanelProps {
+  voiceRuntime?: VoiceRuntime | null
+}
+
+interface IsolationSnapshot {
+  appliedDeafen: boolean
+  appliedMute: boolean
 }
 
 interface DeviceList {
@@ -102,9 +120,22 @@ function getMicMonitorErrorMessage(error: unknown): string {
   return message || "Unable to start mic test."
 }
 
-export function VoiceVideoPanel() {
+export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   const { user } = useAuth() as { user: { id?: string } | null }
   const userId = user?.id ?? null
+
+  // Snapshot of which mute/deafen toggles the panel applied to isolate
+  // the mic test, so stopping the test can restore the pre-test state
+  // even if voiceRuntime props churn while the test is running.
+  const isolationRef = React.useRef<IsolationSnapshot | null>(null)
+  // Always read the latest voiceRuntime in async callbacks so we don't
+  // capture stale values across the await of `startMicMonitor`.
+  const voiceRuntimeRef = React.useRef<VoiceRuntime | null>(
+    voiceRuntime ?? null
+  )
+  React.useEffect(() => {
+    voiceRuntimeRef.current = voiceRuntime ?? null
+  }, [voiceRuntime])
 
   const [deviceList, setDeviceList] = React.useState<DeviceList>({
     audio: [],
@@ -176,11 +207,45 @@ export function VoiceVideoPanel() {
     void ensureDevices(false)
   }, [ensureDevices])
 
+  const restoreVoiceAfterMicTest = React.useCallback(async () => {
+    const snapshot = isolationRef.current
+    isolationRef.current = null
+    if (!snapshot) return
+    const runtime = voiceRuntimeRef.current
+    if (!runtime?.isInVoice) return
+    if (snapshot.appliedDeafen) {
+      await Promise.resolve(runtime.onDeafen())
+      return
+    }
+    if (snapshot.appliedMute) {
+      await Promise.resolve(runtime.onMute())
+    }
+  }, [])
+
+  const isolateVoiceForMicTest = React.useCallback(async () => {
+    const runtime = voiceRuntimeRef.current
+    if (!runtime?.isInVoice) return
+    const snapshot: IsolationSnapshot = {
+      appliedDeafen: false,
+      appliedMute: false,
+    }
+    isolationRef.current = snapshot
+    if (!runtime.isDeafened) {
+      snapshot.appliedDeafen = true
+      await Promise.resolve(runtime.onDeafen())
+      return
+    }
+    if (!runtime.isMuted) {
+      snapshot.appliedMute = true
+      await Promise.resolve(runtime.onMute())
+    }
+  }, [])
+
   React.useEffect(() => {
     return () => {
-      void stopMicMonitor()
+      void stopMicMonitor().then(() => restoreVoiceAfterMicTest())
     }
-  }, [stopMicMonitor])
+  }, [stopMicMonitor, restoreVoiceAfterMicTest])
 
   const persistPrefs = React.useCallback(
     async (next: Partial<VoiceDevicePrefs>) => {
@@ -238,6 +303,7 @@ export function VoiceVideoPanel() {
       const normalized = setMicFilterSettings(next)
       setFilterSettingsState(normalized)
       updateMicMonitorSettings(normalized)
+      voiceRuntimeRef.current?.onMicFilterSettingsChange(normalized)
       return normalized
     },
     [updateMicMonitorSettings]
@@ -246,9 +312,11 @@ export function VoiceVideoPanel() {
   const handleMicTestToggle = React.useCallback(async () => {
     if (isMicTesting) {
       await stopMicMonitor()
+      await restoreVoiceAfterMicTest()
       return
     }
     try {
+      await isolateVoiceForMicTest()
       await startMicMonitor({
         deviceId: prefs?.audioDeviceId ?? null,
         settings: filterSettings,
@@ -256,13 +324,16 @@ export function VoiceVideoPanel() {
       // Refresh labels (post-permission they become populated).
       await ensureDevices(false)
     } catch (error) {
+      await restoreVoiceAfterMicTest()
       setMicTestError(new Error(getMicMonitorErrorMessage(error)))
     }
   }, [
     ensureDevices,
     filterSettings,
     isMicTesting,
+    isolateVoiceForMicTest,
     prefs?.audioDeviceId,
+    restoreVoiceAfterMicTest,
     setMicTestError,
     startMicMonitor,
     stopMicMonitor,
@@ -429,7 +500,9 @@ export function VoiceVideoPanel() {
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-medium">Local monitor</span>
             <span className="text-xs text-muted-foreground">
-              Plays only on this device. Does not publish to any room.
+              {voiceRuntime?.isInVoice
+                ? "While active, Hush deafens the room and the local loopback is the only audible path."
+                : "Plays only on this device. Does not publish to any room."}
             </span>
           </div>
           <Button

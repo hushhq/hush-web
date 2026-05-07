@@ -29,6 +29,11 @@ import { VoiceQualityPickerDialog } from "@/components/voice/voice-quality-picke
 import { VoiceReconnectOverlay } from "@/components/voice/voice-reconnect-overlay"
 import { Button } from "@/components/ui/button"
 
+type MicFilterSettingsPatch = Partial<{
+  noiseGateEnabled: boolean
+  noiseGateThresholdDb: number
+}>
+
 type VoiceControlsApi = {
   toggleMic?: () => void
   toggleDeafen?: () => void
@@ -37,6 +42,7 @@ type VoiceControlsApi = {
   toggleWebcam?: () => void
   isScreenSharing?: boolean
   isWebcamOn?: boolean
+  applyMicFilterSettings?: (settings: MicFilterSettingsPatch) => void
 }
 
 type VoiceState = {
@@ -107,6 +113,7 @@ interface RoomApi {
   unpublishMic: () => Promise<void>
   muteMic: () => Promise<void>
   unmuteMic: () => Promise<void>
+  updateMicFilterSettings: (settings: MicFilterSettingsPatch) => void
   watchScreen: (producerId: string) => void
   unwatchScreen: (producerId: string) => void
   playbackManager: PlaybackManagerLike | null
@@ -541,6 +548,7 @@ export function VoiceChannelView({
       toggleWebcam: handleToggleWebcam,
       isScreenSharing,
       isWebcamOn,
+      applyMicFilterSettings: room.updateMicFilterSettings,
     }
   })
 
