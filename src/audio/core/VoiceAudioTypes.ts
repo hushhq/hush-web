@@ -58,26 +58,34 @@ export interface CaptureProfile {
  * Immutable capture profile definitions.
  *
  * Current shape (temporary, until the Hush v2 DSP pipeline returns):
- * - desktop-standard: raw track with browser DSP (NS+AGC+EC on),
- *   no AudioContext pipeline. Identical capture shape to mobile.
+ * - desktop-standard: AudioContext transport graph (source → mono
+ *   destinationNode → publish), browser DSP on, no Hush worklet.
+ *   The graph exists purely to guarantee a mono downmix even when
+ *   the device hands back a stereo track despite the constraint.
  * - mobile-web-standard: raw track with browser DSP (NS+AGC+EC on),
- *   no AudioContext pipeline.
+ *   no AudioContext pipeline. Mobile webviews are sensitive to
+ *   AudioContext load + can drop frames; the constraint alone is
+ *   the best we can do there.
  * - local-monitor: AudioContext loopback used by the mic-test card.
  *   Browser DSP follows publish-path defaults so the test previews
  *   the same processing peers will hear.
+ *
+ * `useRawTrack` and `hushProcessing` are independent:
+ *   - useRawTrack=true skips AudioContext entirely.
+ *   - hushProcessing=true loads the noise-gate worklet inside the
+ *     pipeline graph. Until v2 ships this stays false everywhere.
  */
 export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>> = {
   'desktop-standard': {
     mode: 'desktop-standard',
     // Temporary: Hush noise-gate / advanced-filter pipeline disabled
-    // until the v2 DSP ships. Until then we publish a raw mic track
-    // and rely on the browser's built-in NS + AGC + EC. EC is always
-    // on (see buildConstraints) regardless of how this flag flips,
-    // because acoustic echo cancel cannot be unbundled cheaply on
-    // any platform we currently target.
+    // until the v2 DSP ships. The transport graph stays so we get a
+    // deterministic mono downmix at MediaStreamDestination
+    // (channelCount = 1), independent of whatever the device hands
+    // back to getUserMedia. Browser EC + NS + AGC remain on.
     browserDsp: true,
     hushProcessing: false,
-    useRawTrack: true,
+    useRawTrack: false,
     localMonitoring: true,
     echoCanConfigurable: false,
   },

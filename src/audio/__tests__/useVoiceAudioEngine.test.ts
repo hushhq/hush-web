@@ -40,8 +40,9 @@ describe('useVoiceAudioEngine', () => {
       useVoiceAudioEngine(),
     );
     expect(result.current.publishOptions.disableAudioFilters).toBe(false);
-    // Desktop publish runs the raw path until the v2 DSP ships.
-    expect(result.current.publishOptions.useRawTrack).toBe(true);
+    // Desktop runs the transport graph (no worklet) for mono
+    // downmix until the v2 DSP ships.
+    expect(result.current.publishOptions.useRawTrack).toBe(false);
   });
 
   it('state updates when engine operations are called', () => {

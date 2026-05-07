@@ -24,15 +24,16 @@ describe('CAPTURE_PROFILES', () => {
     }
   });
 
-  // Temporary: the desktop publish path runs the same shape as
-  // mobile-web-standard until the Hush v2 DSP pipeline ships. Hush
-  // processing is OFF and the browser owns NS + AGC + EC. Restore
-  // hushProcessing=true when the advanced filter UI returns.
-  it('desktop-standard: browser DSP ON, Hush processing OFF, raw track (temporary)', () => {
+  // Temporary (until v2 DSP): Hush processing is OFF, but the
+  // transport graph stays so the published track is guaranteed mono
+  // via the AudioContext destinationNode (channelCount = 1). Browser
+  // owns NS + AGC + EC. `useRawTrack` is false so we still get the
+  // downmix; `hushProcessing` is false so no worklet is loaded.
+  it('desktop-standard: browser DSP ON, Hush processing OFF, transport graph kept (temporary)', () => {
     const p = CAPTURE_PROFILES['desktop-standard'];
     expect(p.browserDsp).toBe(true);
     expect(p.hushProcessing).toBe(false);
-    expect(p.useRawTrack).toBe(true);
+    expect(p.useRawTrack).toBe(false);
     expect(p.echoCanConfigurable).toBe(false);
   });
 

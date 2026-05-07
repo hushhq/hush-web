@@ -321,7 +321,14 @@ export class CaptureOrchestrator {
 
   /**
    * Pipeline path: delegates to buildCaptureGraph for shared assembly.
-   * Used by desktop-standard and local-monitor profiles.
+   *
+   * Two orthogonal reasons to be on the pipeline path:
+   *   - hushProcessing=true: load the noise-gate worklet for
+   *     Hush-side filters (off until the v2 DSP returns).
+   *   - useRawTrack=false alone: build a minimal transport graph
+   *     (source → mono destinationNode → publish) so the published
+   *     track is guaranteed mono even when the device hands back a
+   *     stereo MediaStreamTrack despite `channelCount: { exact: 1 }`.
    */
   private async _buildPipelineSession(
     profile: CaptureProfile,
@@ -329,7 +336,7 @@ export class CaptureOrchestrator {
   ): Promise<CaptureSession> {
     const graph = await buildCaptureGraph({
       stream,
-      workletUrl: this._noiseGateWorkletUrl,
+      workletUrl: profile.hushProcessing ? this._noiseGateWorkletUrl : undefined,
       filterSettings: this._filterSettings,
       audioContextFactory: this._audioContextFactory,
     });

@@ -293,8 +293,8 @@ describe('CaptureOrchestrator: mobile-web conservative path', () => {
 
 // ─── Desktop Pipeline ───────────────────────────────────
 
-describe('CaptureOrchestrator: desktop-standard pipeline (temporary raw + browser DSP)', () => {
-  it('desktop-standard runs the raw path (no AudioContext) until v2 DSP ships', async () => {
+describe('CaptureOrchestrator: desktop-standard pipeline', () => {
+  it('desktop-standard creates the transport graph (mono downmix, no worklet)', async () => {
     const ctxFactory = mockAudioContextFactory();
 
     const orch = new CaptureOrchestrator({
@@ -304,9 +304,13 @@ describe('CaptureOrchestrator: desktop-standard pipeline (temporary raw + browse
 
     const session = await orch.acquire(CAPTURE_PROFILES['desktop-standard']);
 
-    expect(session.usesProcessingPipeline).toBe(false);
-    expect(session.audioContext).toBeNull();
-    expect(ctxFactory.create).not.toHaveBeenCalled();
+    // Pipeline path stays even with hushProcessing=false so the
+    // publish track gets mono-downmixed at the destinationNode.
+    expect(session.usesProcessingPipeline).toBe(true);
+    expect(session.audioContext).not.toBeNull();
+    expect(ctxFactory.create).toHaveBeenCalledWith({ sampleRate: 48_000 });
+    // No noise gate worklet until the v2 DSP returns.
+    expect(session.noiseGateNode).toBeNull();
 
     await orch.teardown();
   });
