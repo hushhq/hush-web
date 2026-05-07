@@ -508,7 +508,12 @@ function ServerHeader({
                   Shipping soon
                 </span>
               </DropdownMenuItem>
-              {menuEnabled ? <DropdownMenuSeparator /> : null}
+              {/* Separator between the rail-mirror actions
+                  (Add / Discover) and whatever comes next — Server
+                  group on a real server, Early Bird + Info section
+                  on Home. Render unconditionally so Home gets the
+                  same visual break. */}
+              <DropdownMenuSeparator />
             </div>
             {menuEnabled ? (
               <>
