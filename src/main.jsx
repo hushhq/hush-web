@@ -113,7 +113,7 @@ if (
       zIndex: '99999',
       display: 'flex', gap: '4px', opacity: '0.55',
       padding: '4px 6px',
-      background: '#1a1a2e', border: '1px solid #444',
+      background: 'var(--popover)', border: '1px solid var(--border)',
       borderRadius: '6px', cursor: 'grab',
       userSelect: 'none', touchAction: 'none',
     });
@@ -166,7 +166,7 @@ if (
       b.textContent = label;
       Object.assign(b.style, {
         padding: '6px 10px', fontSize: '11px', fontFamily: 'monospace',
-        background: 'transparent', color: '#aaa', border: 'none',
+        background: 'transparent', color: 'var(--muted-foreground)', border: 'none',
         cursor: 'pointer', whiteSpace: 'nowrap',
         touchAction: 'manipulation',
       });
@@ -178,14 +178,14 @@ if (
         e.stopPropagation();
         if (!isDragging && !didDrag) fn();
       });
-      b.addEventListener('mouseenter', () => { b.style.color = '#fff'; });
-      b.addEventListener('mouseleave', () => { b.style.color = '#aaa'; });
+      b.addEventListener('mouseenter', () => { b.style.color = 'var(--foreground)'; });
+      b.addEventListener('mouseleave', () => { b.style.color = 'var(--muted-foreground)'; });
       return b;
     };
 
     const grip = document.createElement('span');
     grip.textContent = '\u2630';
-    Object.assign(grip.style, { fontSize: '11px', color: '#666', marginRight: '2px' });
+    Object.assign(grip.style, { fontSize: '11px', color: 'var(--muted-foreground)', marginRight: '2px' });
 
     bar.appendChild(grip);
     bar.appendChild(mkBtn('Copy Log', () => window.__copyConsole()));

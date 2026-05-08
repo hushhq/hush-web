@@ -67,7 +67,7 @@ export function SpeakerWaveform({
 
   React.useEffect(() => {
     if (!containerRef.current) return
-    const accent = getCssVar("--primary") || "#0ea5e9"
+    const accent = getCssVar("--primary") || "oklch(0.92 0.004 286.32)"
     const ws = WaveSurfer.create({
       container: containerRef.current,
       url: buildMockSpeakerAudioUrl(),
