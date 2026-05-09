@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils.ts"
 
 import { InstanceSelector } from "@/components/auth/instance-selector"
 import { HushLogo } from "@/components/brand/HushLogo"
+import { BODY_SCROLL_MODE, useBodyScrollMode } from "@/hooks/useBodyScrollMode"
 import { generateIdentityMnemonic } from "@/lib/bip39Identity"
 import { checkUsernameAvailable } from "@/lib/api"
 
@@ -62,9 +63,10 @@ export function AuthFlow({
   signUp,
   onOpenRoadmap,
   onBackToPin,
-  versionLabel = "v0.7.0-alpha.5",
+  versionLabel = "v0.7.0-alpha.6",
 }: AuthFlowProps) {
   const [view, setView] = React.useState<AuthView>("main")
+  useBodyScrollMode(BODY_SCROLL_MODE.SCROLL)
 
   return (
     <div className="flex min-h-svh w-full flex-col bg-background px-4 py-4 sm:px-6">

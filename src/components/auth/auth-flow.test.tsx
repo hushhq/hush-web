@@ -18,6 +18,12 @@ vi.mock("@/lib/api", () => ({
   checkUsernameAvailable: vi.fn().mockResolvedValue({ available: true }),
 }))
 
+const useBodyScrollModeMock = vi.fn()
+vi.mock("@/hooks/useBodyScrollMode", () => ({
+  BODY_SCROLL_MODE: { LOCKED: "locked", SCROLL: "scroll" },
+  useBodyScrollMode: (mode: string) => useBodyScrollModeMock(mode),
+}))
+
 const navigateMock = vi.fn()
 vi.mock("react-router-dom", () => ({
   useNavigate: () => navigateMock,
@@ -36,6 +42,7 @@ describe("AuthFlow", () => {
   beforeEach(() => {
     INSTANCE_PROPS.onSelect.mockReset()
     INSTANCE_PROPS.onAdd.mockReset()
+    useBodyScrollModeMock.mockReset()
     navigateMock.mockReset()
   })
 
@@ -58,6 +65,7 @@ describe("AuthFlow", () => {
 
   it("renders the main view with sign-in + sign-up + version label", () => {
     setup()
+    expect(useBodyScrollModeMock).toHaveBeenCalledWith("scroll")
     expect(
       screen.getByRole("button", { name: /^log in$/i })
     ).toBeInTheDocument()
