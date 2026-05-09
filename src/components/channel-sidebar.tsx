@@ -92,6 +92,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx"
+import { APP_VERSION } from "@/utils/constants"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -621,6 +622,9 @@ function ServerHeader({
                 <ArrowUpRightIcon className="size-3.5" />
               </a>
             </div>
+            <p className="font-mono text-[10px] text-muted-foreground/70">
+              v{APP_VERSION}
+            </p>
           </div>
         </DialogContent>
       </Dialog>
