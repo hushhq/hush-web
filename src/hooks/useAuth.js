@@ -1724,7 +1724,11 @@ export function useAuth() {
     clearTranscriptCache();
     clearVaultTimeoutEffects();
     clearGuestTimers();
-    await Promise.allSettled(deleteTargets);
+    // IndexedDB deletion is best-effort and can be slow or blocked on iOS
+    // Safari. Do not keep the locked-vault UI hostage while the browser
+    // finishes deleting old databases; the localStorage/session markers
+    // above are enough to route this tab to login immediately.
+    void Promise.allSettled(deleteTargets);
 
     identityKeyRef.current = null;
     currentUserIdRef.current = null;
