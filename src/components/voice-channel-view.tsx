@@ -31,6 +31,7 @@ import {
 import { VoiceQualityPickerDialog } from "@/components/voice/voice-quality-picker-dialog"
 import { VoiceReconnectOverlay } from "@/components/voice/voice-reconnect-overlay"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 type MicFilterSettingsPatch = Partial<{
   noiseGateEnabled: boolean
@@ -323,10 +324,8 @@ export function VoiceChannelView({
       didStart = false
     }
   }, [
-    wsClient,
+    hasWsClient,
     channel.id,
-    roomName,
-    displayName,
     prefs?.dontAskAgain,
     prefsLoaded,
   ])
@@ -730,6 +729,89 @@ export function VoiceChannelView({
     if (!isScreenSharing) setLocalScreenWatched(false)
   }, [isScreenSharing])
 
+  // Two-step expand-then-fullscreen flow:
+  //   1. Click a participant tile → `expandedKey` is set; the grid
+  //      collapses to that single tile sized to the channel view.
+  //   2. From the expanded tile, the maximize button calls
+  //      `handleToggleFullscreen` which requests browser fullscreen
+  //      on the entire channel surface so the floating controls bar
+  //      stays inside the fullscreen subtree (it sits absolutely
+  //      above the grid in the same wrapper).
+  // Browser-level Esc auto-exits fullscreen via `fullscreenchange`;
+  // a second Esc collapses the expanded tile back into the grid.
+  const surfaceRef = React.useRef<HTMLDivElement>(null)
+  const [expandedKey, setExpandedKey] = React.useState<string | null>(null)
+  const [isFullscreen, setIsFullscreen] = React.useState(false)
+  const [cursorIdle, setCursorIdle] = React.useState(false)
+
+  React.useEffect(() => {
+    const onChange = () => {
+      const el = document.fullscreenElement
+      setIsFullscreen(el !== null && el === surfaceRef.current)
+    }
+    document.addEventListener("fullscreenchange", onChange)
+    return () => document.removeEventListener("fullscreenchange", onChange)
+  }, [])
+
+  // Idle-hide while fullscreen: any pointer activity or keypress
+  // resets the timer; after IDLE_MS of stillness the controls bar
+  // and cursor fade out, leaving a clean fullscreen surface.
+  React.useEffect(() => {
+    if (!isFullscreen) {
+      setCursorIdle(false)
+      return
+    }
+    const surface = surfaceRef.current
+    if (!surface) return
+    const IDLE_MS = 2200
+    let timer: number | null = null
+    const wake = () => {
+      setCursorIdle(false)
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => setCursorIdle(true), IDLE_MS)
+    }
+    wake()
+    surface.addEventListener("mousemove", wake)
+    surface.addEventListener("pointermove", wake)
+    surface.addEventListener("touchstart", wake, { passive: true })
+    surface.addEventListener("keydown", wake)
+    surface.addEventListener("click", wake)
+    return () => {
+      if (timer !== null) window.clearTimeout(timer)
+      surface.removeEventListener("mousemove", wake)
+      surface.removeEventListener("pointermove", wake)
+      surface.removeEventListener("touchstart", wake)
+      surface.removeEventListener("keydown", wake)
+      surface.removeEventListener("click", wake)
+    }
+  }, [isFullscreen])
+
+  // Esc to collapse expanded tile when not in fullscreen. Browser's
+  // built-in Esc handler exits fullscreen first; this listener only
+  // fires for the second Esc (or any Esc when the tile is expanded
+  // outside fullscreen).
+  React.useEffect(() => {
+    if (!expandedKey || isFullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpandedKey(null)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [expandedKey, isFullscreen])
+
+  const handleToggleFullscreen = React.useCallback(() => {
+    const el = surfaceRef.current
+    if (!el) return
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+    } else {
+      void el.requestFullscreen?.().catch(() => {})
+    }
+  }, [])
+
+  // Hide the controls bar (and cursor) when fullscreen + idle.
+  const hideChrome = isFullscreen && cursorIdle
+
   if (room.error) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background p-6">
@@ -740,7 +822,13 @@ export function VoiceChannelView({
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col bg-background">
+    <div
+      ref={surfaceRef}
+      className={cn(
+        "relative flex h-full w-full flex-col bg-background",
+        hideChrome && "cursor-none"
+      )}
+    >
       <div ref={audioContainerRef} className="hidden" />
 
       <div className="relative flex-1 overflow-hidden">
@@ -751,7 +839,14 @@ export function VoiceChannelView({
         />
         {room.room ? (
           <RoomContext.Provider value={room.room}>
-            <VoiceParticipantGrid className="p-4" localDeafened={isDeafened} />
+            <VoiceParticipantGrid
+              className="p-4"
+              localDeafened={isDeafened}
+              expandedKey={expandedKey}
+              onExpandChange={setExpandedKey}
+              isFullscreen={isFullscreen}
+              onToggleFullscreen={handleToggleFullscreen}
+            />
           </RoomContext.Provider>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -759,24 +854,31 @@ export function VoiceChannelView({
           </div>
         )}
         {hasJoined ? (
-          <VoiceControlsBar
-            isReady={room.isReady}
-            isMicOn={isMicOn}
-            isDeafened={isDeafened}
-            isWebcamOn={isWebcamOn}
-            isScreenSharing={isScreenSharing}
-            qualityKey={bandwidth.qualityKey}
-            onToggleMic={handleToggleMic}
-            onToggleDeafen={handleToggleDeafen}
-            onToggleWebcam={handleToggleWebcam}
-            onToggleScreen={handleToggleScreen}
-            onSwitchScreenSource={handleSwitchScreen}
-            outputDeviceSelectable={outputDeviceSelectable}
-            onPickMicDevice={handleOpenMicPicker}
-            onPickWebcamDevice={handleOpenWebcamPicker}
-            onPickOutputDevice={handleOpenOutputPicker}
-            onLeave={handleLeave}
-          />
+          <div
+            className={cn(
+              "transition-opacity duration-200",
+              hideChrome && "pointer-events-none opacity-0"
+            )}
+          >
+            <VoiceControlsBar
+              isReady={room.isReady}
+              isMicOn={isMicOn}
+              isDeafened={isDeafened}
+              isWebcamOn={isWebcamOn}
+              isScreenSharing={isScreenSharing}
+              qualityKey={bandwidth.qualityKey}
+              onToggleMic={handleToggleMic}
+              onToggleDeafen={handleToggleDeafen}
+              onToggleWebcam={handleToggleWebcam}
+              onToggleScreen={handleToggleScreen}
+              onSwitchScreenSource={handleSwitchScreen}
+              outputDeviceSelectable={outputDeviceSelectable}
+              onPickMicDevice={handleOpenMicPicker}
+              onPickWebcamDevice={handleOpenWebcamPicker}
+              onPickOutputDevice={handleOpenOutputPicker}
+              onLeave={handleLeave}
+            />
+          </div>
         ) : null}
       </div>
 
