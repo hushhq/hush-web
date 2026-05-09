@@ -57,6 +57,8 @@ const DEFAULT_AUTH = {
   needsPinSetup: false,
   needsUnlock: false,
   hasVault: false,
+  authInvalidation: null,
+  clearAuthInvalidation: vi.fn(),
 }
 
 describe("UnauthenticatedShell", () => {
@@ -111,5 +113,28 @@ describe("UnauthenticatedShell", () => {
     expect(
       screen.getByRole("button", { name: /^log in$/i })
     ).toBeInTheDocument()
+  })
+
+  it("routes server-invalidated local vaults to AuthFlow before PIN", () => {
+    useBootController.mockReturnValue({ bootState: "needs_pin" })
+    useAuth.mockReturnValue({
+      ...DEFAULT_AUTH,
+      authInvalidation: { reason: "server_session_invalid" },
+      unlockVault: vi.fn(),
+      setPIN: vi.fn(),
+      skipPinSetup: vi.fn(),
+    })
+    useAuthInstanceSelection.mockReturnValue(DEFAULT_INSTANCE_STATE)
+
+    render(
+      <MemoryRouter>
+        <UnauthenticatedShell />
+      </MemoryRouter>
+    )
+
+    expect(
+      screen.getByRole("button", { name: /^log in$/i })
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/unlock hush/i)).not.toBeInTheDocument()
   })
 })

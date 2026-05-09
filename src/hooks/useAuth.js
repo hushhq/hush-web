@@ -182,6 +182,7 @@ const VAULT_IDLE_DEADLINE_KEY = 'hush_vault_idle_deadline';
 const LEGACY_VAULT_TIMEOUT_KEY = 'hush_vault_timeout';
 const PIN_SETUP_PENDING_KEY = 'hush_pin_setup_pending';
 const PIN_ATTEMPTS_KEY_PREFIX = 'hush_pin_attempts_';
+const AUTH_INVALIDATION_KEY = 'hush_auth_invalidation';
 const INACTIVITY_EVENTS = ['mousemove', 'keydown', 'touchstart', 'click'];
 
 /** Progressive delay in ms by failure count threshold. */
@@ -453,6 +454,71 @@ function findVaultMarkerUserId() {
   return key.slice(VAULT_USER_KEY_PREFIX.length);
 }
 
+/**
+ * Returns true when a server response proves that this local vault can no
+ * longer authenticate against the active instance without a fresh recovery or
+ * registration flow. Network failures and local decrypt failures are excluded:
+ * they must not force users out of their PIN path.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isServerSessionInvalidationError(err) {
+  const status = Number(err?.status);
+  const message = String(err?.message || '');
+  if (status === 404) return true;
+  if (status === 403) {
+    return /account\s*banned|registration\s*blocked|device\s*revoked/i.test(message);
+  }
+  if (status !== 401) return false;
+  return /user\s*not\s*found|unknown\s*public\s*key|device\s*revoked|session\s*invalid|authentication\s*failed/i.test(message);
+}
+
+/**
+ * Returns true only for errors produced by local vault decryption with an
+ * incorrect PIN/passphrase. Server auth errors and storage corruption must not
+ * consume PIN attempts or trigger local vault wipe.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isVaultDecryptFailure(err) {
+  const name = String(err?.name || '');
+  const message = String(err?.message || '');
+  return name === 'OperationError' || /decrypt|decryption|operationerror/i.test(message);
+}
+
+/**
+ * Builds a stable auth-invalidation payload suitable for localStorage and
+ * React state. The payload is not secret; it only explains why the local
+ * vault is being bypassed as the primary boot surface.
+ *
+ * @param {string} reason
+ * @returns {{ reason: string, at: string }}
+ */
+function createAuthInvalidation(reason) {
+  return {
+    reason,
+    at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Reads the persisted auth invalidation marker, if present.
+ *
+ * @returns {{ reason: string, at?: string }|null}
+ */
+function readPersistedAuthInvalidation() {
+  try {
+    const raw = localStorage.getItem(AUTH_INVALIDATION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.reason === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 /**
@@ -471,6 +537,7 @@ function findVaultMarkerUserId() {
  *   isAuthenticated: boolean,
  *   loading: boolean,
  *   error: Error|null,
+ *   authInvalidation: { reason: string, at?: string }|null,
  *   needsPinSetup: boolean,
  *   isGuest: boolean,
  *   guestExpiresAt: string|null,
@@ -486,6 +553,7 @@ function findVaultMarkerUserId() {
  *   skipPinSetup: () => void,
  *   performLogout: () => Promise<void>,
  *   clearError: () => void,
+ *   clearAuthInvalidation: () => void,
  * }}
  */
 export function useAuth() {
@@ -497,6 +565,9 @@ export function useAuth() {
   const [error, setError] = useState(null);
   const [needsPinSetup, setNeedsPinSetupState] = useState(
     () => sessionStorage.getItem(PIN_SETUP_PENDING_KEY) === '1',
+  );
+  const [authInvalidation, setAuthInvalidation] = useState(
+    () => readPersistedAuthInvalidation(),
   );
 
   /**
@@ -543,10 +614,14 @@ export function useAuth() {
   const isAuthenticated = hasSession;
   const isVaultUnlocked = vaultState === 'unlocked' && Boolean(identityKeyRef.current?.privateKey);
   const hasVault = hasLocalVault || vaultState === 'locked' || (vaultState === 'unlocked' && !isGuest);
-  const needsUnlock = hasVault && !isVaultUnlocked;
+  const needsUnlock = hasVault && !isVaultUnlocked && !authInvalidation;
   const isKnownBrowserProfile = hasVault;
 
   const clearError = useCallback(() => setError(null), []);
+  const clearAuthInvalidation = useCallback(() => {
+    localStorage.removeItem(AUTH_INVALIDATION_KEY);
+    setAuthInvalidation(null);
+  }, []);
   const setPinSetupPendingState = useCallback((pending) => {
     setNeedsPinSetupState(pending);
     if (pending) {
@@ -768,6 +843,23 @@ export function useAuth() {
     }
   }, [clearInactivityDeadline, clearInactivityTimer]);
 
+  const markServerSessionInvalidated = useCallback((reason = 'server_session_invalid') => {
+    const nextInvalidation = createAuthInvalidation(reason);
+    localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
+    setAuthInvalidation(nextInvalidation);
+
+    identityKeyRef.current = null;
+    sessionStorage.removeItem(VAULT_DERIVED_KEY);
+    clearVaultTimeoutEffects();
+    clearTranscriptCache();
+    clearSession();
+    setToken(null);
+    setUser(null);
+    setHasLocalVault(Boolean(findVaultMarkerUserId()));
+    setVaultState(findVaultMarkerUserId() ? 'locked' : 'none');
+    clearPinSetup();
+  }, [clearPinSetup, clearVaultTimeoutEffects]);
+
   /**
    * Returns the effective per-user vault config. If the old global timeout key
    * is still present, migrate it into the per-user config on first read.
@@ -876,12 +968,13 @@ export function useAuth() {
    */
   const publishAuthenticatedSession = useCallback((jwt, user, baseUrl = '') => {
     clearGuestTimers();
+    clearAuthInvalidation();
     setIsGuest(false);
     setGuestExpiresAt(null);
     sessionStorage.setItem(baseUrl ? jwtKeyForInstance(baseUrl) : JWT_KEY, jwt);
     setToken(jwt);
     setUser(user);
-  }, [clearGuestTimers]);
+  }, [clearGuestTimers, clearAuthInvalidation]);
 
   const prepareAuthenticatedSession = useCallback(async (data, baseUrl = '') => {
     const { token: jwt, user: u } = data;
@@ -900,6 +993,7 @@ export function useAuth() {
     // Guest auth path: no persisted user, no KeyPackage upload.
     const claims = parseJwtClaims(jwt);
     if (claims?.is_guest) {
+      clearAuthInvalidation();
       sessionStorage.setItem(baseUrl ? jwtKeyForInstance(baseUrl) : JWT_KEY, jwt);
       setToken(jwt);
       // Build a synthetic guest user object so isAuthenticated returns true.
@@ -923,7 +1017,7 @@ export function useAuth() {
     const result = await prepareAuthenticatedSession(data, baseUrl);
     publishAuthenticatedSession(result.token, result.user, baseUrl);
     return result;
-  }, [startGuestExpiryTimers, clearPinSetup, prepareAuthenticatedSession, publishAuthenticatedSession]);
+  }, [startGuestExpiryTimers, clearPinSetup, clearAuthInvalidation, prepareAuthenticatedSession, publishAuthenticatedSession]);
 
   // ── Challenge-response login ───────────────────────────────────────────────
 
@@ -967,11 +1061,9 @@ export function useAuth() {
     }
     setVaultState('unlocked');
     applyVaultTimeout(u.id);
-    // P21 step 2 — write the unlocked identity into the vault session
-    // key store so future boots can resume without PIN under the
-    // configured policy. Fire-and-forget: the unlock path must not
-    // block on IDB; writeVaultSessionForUnlock swallows its own
-    // failures via console.warn. The boot read path lands in step 3.
+    // P21 step 2 — best-effort write of the unlocked identity into the
+    // vault session key store so future boots can resume without PIN
+    // under the configured policy.
     void writeVaultSessionForUnlock(u.id, privateKey, publicKey);
     return { token: jwt, user: u };
   }, [finishAuth, applyVaultTimeout]);
@@ -1038,8 +1130,7 @@ export function useAuth() {
       // P21 step 2 — write the unlocked identity into the vault session
       // key store. Mirrors the call in performChallengeResponse so the
       // first-registration unlock has the same cross-reload affordance
-      // as a returning sign-in. Fire-and-forget: see notes on the
-      // performChallengeResponse call for the rationale.
+      // as a returning sign-in.
       void writeVaultSessionForUnlock(u.id, privateKey, publicKey);
       return { user: u };
     } catch (err) {
@@ -1237,8 +1328,7 @@ export function useAuth() {
       // bundle into the vault session key store. The keypair travelled
       // through the encrypted bundle, not via PIN, so without this the
       // newly-linked device would re-prompt for PIN on its first
-      // reload even under `never`. Fire-and-forget: see notes on the
-      // performChallengeResponse call for the rationale.
+      // reload even under `never`.
       void writeVaultSessionForUnlock(
         authResult.user.id,
         bundle.rootPrivateKey,
@@ -1310,80 +1400,39 @@ export function useAuth() {
       await new Promise(resolve => setTimeout(resolve, delay));
     }
 
+    let privateKey;
+    let rawKeyHex;
+    let publicKey;
+
     try {
       const db = await openVaultStore(userId);
-      const blob = await loadEncryptedKey(db);
-
-      if (!blob) {
-        db.close();
-        throw new Error('vault is empty');
-      }
-
-      const { privateKey, rawKeyHex } = await decryptVaultAndExportKey(blob, pin);
-
-      // The derived wrapping key is NOT persisted to browser storage — any
-      // same-origin script could read it from sessionStorage. In the desktop
-      // app the key is sent to main-process memory via IPC instead, where it
-      // is unreachable from renderer scripts (contextIsolation + no nodeIntegration).
-      // In the browser this call is a no-op.
       try {
-        await storeVaultSessionKey(userId, rawKeyHex);
-      } catch {
-        // Non-fatal: desktop session continuity won't work on next reload,
-        // but the current unlock session is unaffected.
-      }
-
-      // Derive public key from stored hex marker. If localStorage was evicted
-      // (iOS non-Safari), fall back to IDB backup.
-      let storedHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
-      if (!storedHex) {
-        const idbMarker = await loadVaultMarkerFromIDB(db);
-        if (typeof idbMarker === 'string' && idbMarker) {
-          storedHex = idbMarker;
-          localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, storedHex);
+        const blob = await loadEncryptedKey(db);
+        if (!blob) {
+          throw new Error('vault is empty');
         }
-      }
-      db.close();
 
-      const publicKey = storedHex ? hexToBytes(storedHex) : null;
+        ({ privateKey, rawKeyHex } = await decryptVaultAndExportKey(blob, pin));
 
-      identityKeyRef.current = { privateKey, publicKey };
-      setHasLocalVault(true);
-      clearPinAttempts(userId);
-
-      // If no JWT (tab was closed, sessionStorage wiped), re-authenticate
-      // with challenge-response to get a fresh session.
-      const existingJwt = getLocalToken();
-      if (!existingJwt && publicKey && privateKey) {
-        const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
-        const authResult = await performChallengeResponse(privateKey, publicKey, homeInstance);
-        // performChallengeResponse sets token, user, vaultState='unlocked', applyVaultTimeout.
-        return authResult;
-      }
-
-      clearPinSetup();
-      // Hydrate transcript cache BEFORE exposing vaultState='unlocked' so
-      // first render after PIN unlock can serve inherited rows.
-      try {
-        await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
-      } catch (loadErr) {
-        console.warn('[useAuth] transcript cache load failed:', loadErr);
-        clearTranscriptCache();
-      }
-      setVaultState('unlocked');
-      applyVaultTimeout(userId);
-      // P21 step 2 — re-seal the unlocked identity into the vault
-      // session key store. PIN unlock is the most common steady-state
-      // unlock path; without this, the IDB record stays stale across
-      // multi-day sessions and the boot read in step 3 would fall
-      // back to PIN even when the user expects `never` semantics.
-      // Fire-and-forget: this write must not block the unlock UX,
-      // and writeVaultSessionForUnlock already swallows its own
-      // failures via console.warn.
-      if (publicKey) {
-        void writeVaultSessionForUnlock(userId, privateKey, publicKey);
+        // Derive public key from stored hex marker. If localStorage was evicted
+        // (iOS non-Safari), fall back to IDB backup.
+        let storedHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
+        if (!storedHex) {
+          const idbMarker = await loadVaultMarkerFromIDB(db);
+          if (typeof idbMarker === 'string' && idbMarker) {
+            storedHex = idbMarker;
+            localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, storedHex);
+          }
+        }
+        publicKey = storedHex ? hexToBytes(storedHex) : null;
+      } finally {
+        db.close();
       }
     } catch (err) {
+      if (!isVaultDecryptFailure(err)) {
+        throw err;
+      }
+
       const newCount = attempts.count + 1;
       savePinAttempts(userId, { count: newCount, lastAttemptAt: new Date().toISOString() });
 
@@ -1407,9 +1456,70 @@ export function useAuth() {
         `incorrect PIN (${MAX_PIN_FAILURES - newCount} attempts remaining)`,
       );
       wrongPinError.code = 'WRONG_PIN';
+      wrongPinError.cause = err;
       throw wrongPinError;
     }
-  }, [user, applyVaultTimeout, clearPinSetup]);
+
+    // The derived wrapping key is NOT persisted to browser storage — any
+    // same-origin script could read it from sessionStorage. In the desktop
+    // app the key is sent to main-process memory via IPC instead, where it
+    // is unreachable from renderer scripts (contextIsolation + no nodeIntegration).
+    // In the browser this call is a no-op.
+    try {
+      await storeVaultSessionKey(userId, rawKeyHex);
+    } catch {
+      // Non-fatal: desktop session continuity won't work on next reload,
+      // but the current unlock session is unaffected.
+    }
+
+    identityKeyRef.current = { privateKey, publicKey };
+    setHasLocalVault(true);
+    clearPinAttempts(userId);
+
+    // If no JWT (tab was closed, sessionStorage wiped), re-authenticate
+    // with challenge-response to get a fresh session.
+    const existingJwt = getLocalToken();
+    if (!existingJwt && publicKey && privateKey) {
+      const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
+      try {
+        const authResult = await performChallengeResponse(privateKey, publicKey, homeInstance);
+        // performChallengeResponse sets token, user, vaultState='unlocked', applyVaultTimeout.
+        return authResult;
+      } catch (err) {
+        if (isServerSessionInvalidationError(err)) {
+          markServerSessionInvalidated('server_session_invalid');
+          const invalidatedError = new Error('server session no longer recognizes this local vault');
+          invalidatedError.code = 'SERVER_SESSION_INVALIDATED';
+          invalidatedError.cause = err;
+          throw invalidatedError;
+        }
+        throw err;
+      }
+    }
+
+    clearPinSetup();
+    // Hydrate transcript cache BEFORE exposing vaultState='unlocked' so
+    // first render after PIN unlock can serve inherited rows.
+    try {
+      await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
+    } catch (loadErr) {
+      console.warn('[useAuth] transcript cache load failed:', loadErr);
+      clearTranscriptCache();
+    }
+    setVaultState('unlocked');
+    applyVaultTimeout(userId);
+    // P21 step 2 — re-seal the unlocked identity into the vault
+    // session key store. PIN unlock is the most common steady-state
+    // unlock path; without this, the IDB record stays stale across
+    // multi-day sessions and the boot read in step 3 would fall
+    // back to PIN even when the user expects `never` semantics.
+    // Fire-and-forget: this write must not block the unlock UX, and
+    // writeVaultSessionForUnlock already swallows its own failures.
+    if (publicKey) {
+      void writeVaultSessionForUnlock(userId, privateKey, publicKey);
+    }
+    return undefined;
+  }, [user, applyVaultTimeout, clearPinSetup, markServerSessionInvalidated, performChallengeResponse]);
 
   /**
    * Locks the vault by clearing the in-memory private key.
@@ -1801,6 +1911,13 @@ export function useAuth() {
       if (vaultUserId) {
         localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, vaultUserId);
 
+        if (authInvalidation) {
+          setHasLocalVault(true);
+          setVaultState('locked');
+          setLoading(false);
+          return undefined;
+        }
+
         // Verify the vault actually has an encrypted key (PIN was set).
         // If registration completed but PIN was never set (iOS killed page
         // before PIN setup), the vault marker exists but no encrypted blob.
@@ -1867,6 +1984,12 @@ export function useAuth() {
             const result = await checkVaultExistsInIDB(userId);
             if (idbCancelled) return;
             if (result.exists) {
+              if (authInvalidation) {
+                setHasLocalVault(true);
+                setVaultState('locked');
+                setLoading(false);
+                return;
+              }
               // Vault found in IDB - restore localStorage markers from IDB backup.
               if (result.publicKeyHex) {
                 localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, result.publicKeyHex);
@@ -1913,12 +2036,7 @@ export function useAuth() {
         if (cancelled) return;
 
         if (res.status === 401) {
-          clearSession();
-          setToken(null);
-          setUser(null);
-          setHasLocalVault(false);
-          setVaultState('none');
-          setNeedsPinSetupState(false);
+          markServerSessionInvalidated('server_session_invalid');
           return;
         }
 
@@ -2005,7 +2123,7 @@ export function useAuth() {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearPinSetup]);
+  }, [authInvalidation, clearPinSetup, markServerSessionInvalidated]);
 
   // ── Request persistent storage ───────────────────────────────────────────
   // Opt out of best-effort eviction on iOS. Without this, non-Safari browsers
@@ -2123,48 +2241,15 @@ export function useAuth() {
   // Surface the right post-revocation UX (locked-vault sign-in) instead
   // of pretending the browser is brand-new.
   useEffect(() => {
-    function handleAuthInvalid() {
-      console.warn('[useAuth] forced logout due to revoked-device signal');
-      // 1. Drop in-memory identity + derived key so no further crypto
-      //    can run with the old session's secrets.
-      identityKeyRef.current = null;
-      sessionStorage.removeItem(VAULT_DERIVED_KEY);
-      clearVaultTimeoutEffects();
-      clearTranscriptCache();
-      // 2. Clear the server session (token + session-alive flag).
-      clearSession();
-      setToken(null);
-      setUser(null);
-      // 3. Detect whether any encrypted vault still exists on this
-      //    browser. The marker key is `hush_vault_user_<userId>`; we
-      //    don't know the user id at this point (user state is being
-      //    cleared in the same render), so scan localStorage.
-      let vaultStillOnDisk = false;
-      try {
-        for (let i = 0; i < localStorage.length; i += 1) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith(VAULT_USER_KEY_PREFIX)) {
-            vaultStillOnDisk = true;
-            break;
-          }
-        }
-      } catch { /* localStorage may be unavailable in some test envs */ }
-      // 4. If a vault is still on disk, surface the "known profile,
-      //    sign in to unlock" semantic. Otherwise fall through to the
-      //    brand-new-browser state.
-      if (vaultStillOnDisk) {
-        setHasLocalVault(true);
-        setVaultState('locked');
-      } else {
-        setHasLocalVault(false);
-        setVaultState('none');
-      }
-      clearPinSetup();
+    function handleAuthInvalid(event) {
+      const reason = event?.detail?.reason || 'server_session_invalid';
+      console.warn('[useAuth] forced logout due to server invalidation signal', { reason });
+      markServerSessionInvalidated(reason);
     }
     if (typeof window === 'undefined') return undefined;
     window.addEventListener('hush_auth_invalid', handleAuthInvalid);
     return () => window.removeEventListener('hush_auth_invalid', handleAuthInvalid);
-  }, [clearPinSetup, clearVaultTimeoutEffects]);
+  }, [markServerSessionInvalidated]);
 
   return {
     user,
@@ -2178,6 +2263,7 @@ export function useAuth() {
     isAuthenticated,
     loading,
     error,
+    authInvalidation,
     needsPinSetup,
     performChallengeResponse,
     performRegister,
@@ -2191,6 +2277,7 @@ export function useAuth() {
     skipPinSetup,
     performLogout,
     clearError,
+    clearAuthInvalidation,
     // Ref to the in-memory identity keypair. Used by useInstances for
     // challenge-response auth on remote instances. Never serialized.
     identityKeyRef,

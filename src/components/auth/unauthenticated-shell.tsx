@@ -50,8 +50,15 @@ export function UnauthenticatedShell() {
     needsPinSetup: boolean
     needsUnlock: boolean
     hasVault: boolean
+    authInvalidation: { reason: string } | null
+    clearAuthInvalidation: () => void
   }
-  const { performRegister, performRecovery } = auth
+  const {
+    authInvalidation,
+    clearAuthInvalidation,
+    performRegister,
+    performRecovery,
+  } = auth
   const {
     selectedInstanceUrl,
     knownInstances,
@@ -64,7 +71,7 @@ export function UnauthenticatedShell() {
   // PinUnlockPanel. Submitting a different mnemonic creates a new session.
   const [forceRecovery, setForceRecovery] = React.useState(false)
 
-  if (bootState === "needs_pin" && !forceRecovery) {
+  if (bootState === "needs_pin" && !forceRecovery && !authInvalidation) {
     return <PinUnlockPanel onSwitchAccount={() => setForceRecovery(true)} />
   }
   if (bootState === "pin_setup") return <PinSetupPanel />
@@ -117,7 +124,12 @@ export function UnauthenticatedShell() {
       // clicking "Not you? Sign in" on the unlock screen. Without an
       // existing session there is no PIN to go back to.
       onBackToPin={
-        forceRecovery ? () => setForceRecovery(false) : undefined
+        forceRecovery || authInvalidation
+          ? () => {
+              clearAuthInvalidation()
+              setForceRecovery(false)
+            }
+          : undefined
       }
       versionLabel={`v${APP_VERSION}`}
     />

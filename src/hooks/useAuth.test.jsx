@@ -669,6 +669,27 @@ describe('useAuth - unlockVault', () => {
     expect(result.current.vaultState).toBe('locked');
   });
 
+  it('does not count server invalidation after a correct PIN as a PIN failure', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    const notFound = Object.assign(new Error('unknown public key'), { status: 404 });
+    vi.mocked(apiMod.verifyChallenge).mockRejectedValueOnce(notFound);
+
+    let caught;
+    await act(async () => {
+      try { await result.current.unlockVault('correct'); } catch (err) { caught = err; }
+    });
+
+    expect(caught?.code).toBe('SERVER_SESSION_INVALIDATED');
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
+    expect(vaultMod.deleteVaultDatabase).not.toHaveBeenCalled();
+    expect(result.current.authInvalidation?.reason).toBe('server_session_invalid');
+    expect(result.current.needsUnlock).toBe(false);
+    expect(result.current.hasVault).toBe(true);
+  });
+
   it('hydrates the transcript cache BEFORE flipping vaultState back to unlocked', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -789,6 +810,10 @@ describe('useAuth - performLogout', () => {
     // Without this contract, signing out would leave the IDB session
     // DB and the per-tab marker behind — leaking the previous user's
     // session to whoever opens the tab next.
+    vi.mocked(apiMod.verifyChallenge).mockResolvedValueOnce({
+      token: 'jwt-logout-user',
+      user: { id: 'logout-user', username: 'logout', displayName: 'Logout' },
+    });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -801,7 +826,7 @@ describe('useAuth - performLogout', () => {
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     await waitFor(
       async () => {
-        expect(await readWrappedIdentity('user-1')).not.toBeNull();
+        expect(await readWrappedIdentity('logout-user')).not.toBeNull();
       },
       { timeout: 3000 },
     );
@@ -815,11 +840,11 @@ describe('useAuth - performLogout', () => {
     // blocks on IDB; the IDB deleteDatabase resolves on a later tick.
     await waitFor(
       async () => {
-        expect(await readWrappedIdentity('user-1')).toBeNull();
+        expect(await readWrappedIdentity('logout-user')).toBeNull();
       },
       { timeout: 3000 },
     );
-    expect(isMarkerAlive('user-1')).toBe(false);
+    expect(isMarkerAlive('logout-user')).toBe(false);
   });
 
   it('calls deleteVaultDatabase for the logged-in user', async () => {
@@ -1208,6 +1233,22 @@ describe('useAuth - session rehydration', () => {
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
   });
 
+  it('routes an invalid server session above PIN when a local vault exists', async () => {
+    sessionStorage.setItem(JWT_KEY, 'stale-jwt');
+    localStorage.setItem('hush_vault_user_user-43', 'aabb');
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: false, status: 401 });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.authInvalidation?.reason).toBe('server_session_invalid');
+    expect(result.current.vaultState).toBe('locked');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.needsUnlock).toBe(false);
+    expect(localStorage.getItem('hush_vault_user_user-43')).toBe('aabb');
+    expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
+  });
+
   it('sets vaultState=none when no JWT present', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -1353,6 +1394,10 @@ describe('useAuth - lockVault', () => {
   it('clears the cross-reload session key store on manual lock (P21 step 4)', async () => {
     // Without this contract, pressing "Lock" then reloading would
     // resume from IDB and silently undo the lock.
+    vi.mocked(apiMod.verifyChallenge).mockResolvedValueOnce({
+      token: 'jwt-lock-user',
+      user: { id: 'lock-user', username: 'lock', displayName: 'Lock' },
+    });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -1366,7 +1411,7 @@ describe('useAuth - lockVault', () => {
     // Wait for fire-and-forget seal to land before locking.
     await waitFor(
       async () => {
-        expect(await readWrappedIdentity('user-1')).not.toBeNull();
+        expect(await readWrappedIdentity('lock-user')).not.toBeNull();
       },
       { timeout: 3000 },
     );
@@ -1377,11 +1422,11 @@ describe('useAuth - lockVault', () => {
     // The IDB record + per-tab marker must both be wiped.
     await waitFor(
       async () => {
-        expect(await readWrappedIdentity('user-1')).toBeNull();
+        expect(await readWrappedIdentity('lock-user')).toBeNull();
       },
       { timeout: 3000 },
     );
-    expect(isMarkerAlive('user-1')).toBe(false);
+    expect(isMarkerAlive('lock-user')).toBe(false);
   });
 
   it('removes a stale refresh handler when vault timeout changes while unlocked', async () => {

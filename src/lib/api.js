@@ -112,21 +112,21 @@ export async function fetchWithAuth(token, path, opts = {}, baseUrl = '') {
     headers.set('Authorization', `Bearer ${token}`);
   }
   const res = await fetch(url, { ...opts, headers });
-  // Universal device-revocation surface: any authenticated HTTP call
-  // that comes back as 401 "device revoked" fires a window event so
-  // the auth layer can force a logout. Cloning the response keeps the
-  // original body readable by the caller. The check is narrow — only
-  // 401 with the explicit "device revoked" error string triggers the
-  // event, so unrelated 401s (expired session, missing token) keep
-  // their existing per-callsite handling.
+  // Universal server-session invalidation surface: authenticated HTTP
+  // calls that prove the server no longer accepts this local session
+  // notify the auth layer. Cloning keeps the original body readable by
+  // the caller. The check remains intentionally narrow: plain expired
+  // tokens still flow to the callsite, while destructive server actions
+  // (device revoke, user removal, DB reset) move the client out of the
+  // PIN path without wiping its encrypted local vault.
   if (res.status === 401) {
     try {
       const cloned = res.clone();
       const body = await cloned.json().catch(() => null);
       const errStr = (body && typeof body.error === 'string') ? body.error : '';
-      if (/device\s*revoked/i.test(errStr) && typeof window !== 'undefined') {
+      if (/device\s*revoked|user\s*not\s*found|unknown\s*public\s*key|session\s*invalid/i.test(errStr) && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
-          detail: { reason: 'device_revoked' },
+          detail: { reason: /device\s*revoked/i.test(errStr) ? 'device_revoked' : 'server_session_invalid' },
         }));
       }
     } catch { /* ignore — surface the original 401 to the caller */ }
