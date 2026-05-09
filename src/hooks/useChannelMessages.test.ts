@@ -105,6 +105,55 @@ describe("useChannelMessages — send", () => {
     )
   })
 
+  it("persists the self-sent envelope under the server id when ack arrives", async () => {
+    const ws = makeWsClient()
+    const envelope = {
+      v: 1 as const,
+      text: "see attached",
+      attachments: [
+        {
+          id: "att-1",
+          name: "diagram.png",
+          size: 1234,
+          mimeType: "image/png",
+          key: "AAA=",
+          iv: "BBB=",
+        },
+      ],
+    }
+    const { result } = renderHook(() =>
+      useChannelMessages(defaultOpts(ws))
+    )
+
+    await waitFor(() => expect(result.current.isInitialLoading).toBe(false))
+
+    await act(async () => {
+      await result.current.send(envelope)
+    })
+
+    const localId = ws.send.mock.calls.find(
+      ([type]) => type === "message.send"
+    )?.[1]?.local_id
+    expect(localId).toEqual(expect.stringMatching(/^temp-/))
+
+    await act(async () => {
+      ws.emit("message.send.ack", {
+        channel_id: "ch-1",
+        local_id: localId,
+        message_id: "msg-real-1",
+        timestamp: "2026-04-01T23:16:31.998122Z",
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockSetCachedMessage).toHaveBeenCalledWith("msg-real-1", {
+        content: JSON.stringify(envelope),
+        senderId: "user-self",
+        timestamp: new Date("2026-04-01T23:16:31.998122Z").getTime(),
+      })
+    })
+  })
+
   it("marks the optimistic row failed when the socket disconnects mid-send", async () => {
     const ws = makeWsClient()
     let connected = true

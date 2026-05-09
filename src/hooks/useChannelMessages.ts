@@ -187,6 +187,18 @@ function uint8ArrayToBase64(u8: Uint8Array): string {
   return btoa(bin)
 }
 
+async function cacheLocalEnvelope(
+  deps: DecryptDeps,
+  messageId: string,
+  entry: PendingSendEntry
+): Promise<void> {
+  await deps.setCachedMessage?.(messageId, {
+    content: JSON.stringify(entry.envelope),
+    senderId: entry.senderId,
+    timestamp: entry.timestamp,
+  })
+}
+
 /**
  * Decode a UTF-8 plaintext into a v1 envelope. Wire receives MUST be
  * strict v1 — but the local transcript cache from before the cutover
@@ -227,9 +239,8 @@ async function decryptMessageRow(
   if (row.senderId === currentUserId) {
     const pending = consumePendingSend(row.channelId, row.senderId, ts)
     if (pending !== null) {
-      const json = JSON.stringify(pending)
-      await deps.setCachedMessage?.(row.id, {
-        content: json,
+      await cacheLocalEnvelope(deps, row.id, {
+        envelope: pending,
         senderId: row.senderId,
         timestamp: ts,
       })
@@ -345,6 +356,9 @@ export function useChannelMessages(
   const pendingWatchdogsRef = React.useRef<
     Map<string, ReturnType<typeof setTimeout>>
   >(new Map())
+  const pendingEnvelopeByLocalIdRef = React.useRef<Map<string, PendingSendEntry>>(
+    new Map()
+  )
   const scrollRestoreRef = React.useRef<{
     oldScrollHeight: number
     oldScrollTop: number
@@ -561,6 +575,7 @@ export function useChannelMessages(
               clearTimeout(timer)
               pendingWatchdogsRef.current.delete(matchedTempId)
             }
+            pendingEnvelopeByLocalIdRef.current.delete(matchedTempId)
           }
           return prev.map((m, i) =>
             i === idx
@@ -569,8 +584,8 @@ export function useChannelMessages(
           )
         })
         if (pending !== null) {
-          await decryptDepsRef.current.setCachedMessage?.(id, {
-            content: JSON.stringify(pending),
+          await cacheLocalEnvelope(decryptDepsRef.current, id, {
+            envelope: pending,
             senderId: currentUserId,
             timestamp: ts,
           })
@@ -675,6 +690,21 @@ export function useChannelMessages(
             : m
         )
       )
+
+      const pending = pendingEnvelopeByLocalIdRef.current.get(localId)
+      if (pending) {
+        pendingEnvelopeByLocalIdRef.current.delete(localId)
+        void cacheLocalEnvelope(decryptDepsRef.current, realId, {
+          ...pending,
+          timestamp: ts,
+        }).catch((err) => {
+          console.warn(
+            "[useChannelMessages] failed to cache own send after ack",
+            { channelId, localId, realId },
+            err
+          )
+        })
+      }
     }
 
     wsClient.on("message.new", onMessageNew)
@@ -807,6 +837,7 @@ export function useChannelMessages(
   const armSendWatchdog = React.useCallback((tempId: string) => {
     const timer = setTimeout(() => {
       pendingWatchdogsRef.current.delete(tempId)
+      pendingEnvelopeByLocalIdRef.current.delete(tempId)
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId && m.pending
@@ -824,6 +855,7 @@ export function useChannelMessages(
         clearTimeout(timer)
       }
       pendingWatchdogsRef.current.clear()
+      pendingEnvelopeByLocalIdRef.current.clear()
     }
   }, [])
 
@@ -847,11 +879,13 @@ export function useChannelMessages(
       }
       setMessages((prev) => [...prev, optimistic])
       setIsSending(true)
-      rememberPendingSend(channelId, {
+      const pendingEntry = {
         envelope,
         senderId: currentUserId,
         timestamp: Date.now(),
-      })
+      }
+      rememberPendingSend(channelId, pendingEntry)
+      pendingEnvelopeByLocalIdRef.current.set(tempId, pendingEntry)
       try {
         await encryptAndSendEnvelope(
           wsClient,
@@ -872,6 +906,7 @@ export function useChannelMessages(
             m.id === tempId ? { ...m, pending: false, failed: true } : m
           )
         )
+        pendingEnvelopeByLocalIdRef.current.delete(tempId)
         throw err
       } finally {
         setIsSending(false)
@@ -895,11 +930,13 @@ export function useChannelMessages(
       // matcher needs the pending entry recorded the same way.
       // Without this the retry's self-echo cannot be matched and the
       // optimistic row sticks around as a duplicate.
-      rememberPendingSend(channelId, {
+      const pendingEntry = {
         envelope: target.envelope,
         senderId: currentUserId,
         timestamp: Date.now(),
-      })
+      }
+      rememberPendingSend(channelId, pendingEntry)
+      pendingEnvelopeByLocalIdRef.current.set(localId, pendingEntry)
       try {
         await encryptAndSendEnvelope(
           wsClient,
@@ -919,6 +956,7 @@ export function useChannelMessages(
             m.id === localId ? { ...m, pending: false, failed: true } : m
           )
         )
+        pendingEnvelopeByLocalIdRef.current.delete(localId)
       }
     },
     [channelId, wsClient, messages, currentUserId, armSendWatchdog]
