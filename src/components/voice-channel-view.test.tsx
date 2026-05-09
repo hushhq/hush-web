@@ -160,6 +160,10 @@ import {
 import { VoiceChannelView } from "./voice-channel-view"
 
 const CHANNEL = { id: "ch-1", name: "general", type: "voice" as const }
+const WS_CLIENT = {
+  send: vi.fn(),
+  isConnected: () => true,
+}
 
 function setRoomReady(ready: boolean) {
   roomMock.api.isReady = ready
@@ -167,11 +171,14 @@ function setRoomReady(ready: boolean) {
 
 function resetRoomMock() {
   roomMock.api.isReady = false
+  roomMock.api.connectRoom.mockClear().mockResolvedValue(undefined)
+  roomMock.api.disconnectRoom.mockClear().mockResolvedValue(undefined)
   roomMock.api.publishMic.mockClear().mockResolvedValue(undefined)
   roomMock.api.unpublishMic.mockClear().mockResolvedValue(undefined)
   roomMock.api.publishWebcam.mockClear().mockResolvedValue(undefined)
   roomMock.api.unpublishWebcam.mockClear().mockResolvedValue(undefined)
   roomMock.playbackManager.setSinkId.mockClear().mockResolvedValue(undefined)
+  WS_CLIENT.send.mockClear()
 }
 
 beforeEach(async () => {
@@ -217,6 +224,56 @@ async function mount() {
   })
   return result
 }
+
+describe("VoiceChannelView — auto-join lifecycle", () => {
+  it("does not abort an in-flight auto-join when callback props change", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: false,
+      videoEnabled: false,
+      dontAskAgain: true,
+    })
+    roomMock.api.connectRoom.mockImplementationOnce(
+      () => new Promise(() => {})
+    )
+
+    let result!: ReturnType<typeof render>
+    await act(async () => {
+      result = render(
+        <VoiceChannelView
+          channel={CHANNEL}
+          serverId="srv-1"
+          getToken={() => "tok-a"}
+          wsClient={WS_CLIENT}
+          onLeave={vi.fn()}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(roomMock.api.connectRoom).toHaveBeenCalledTimes(1)
+    })
+
+    await act(async () => {
+      result.rerender(
+        <VoiceChannelView
+          channel={CHANNEL}
+          serverId="srv-1"
+          getToken={() => "tok-b"}
+          wsClient={WS_CLIENT}
+          onLeave={vi.fn()}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    expect(roomMock.api.disconnectRoom).not.toHaveBeenCalled()
+    expect(roomMock.api.connectRoom).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe("VoiceChannelView — auto-publish with skip prejoin + default device", () => {
   it("publishes the system default mic when audioDeviceId is null", async () => {

@@ -287,16 +287,26 @@ export function VoiceChannelView({
     })
   }, [room.playbackManager, prefs?.outputDeviceId, outputDeviceSelectable])
 
-  const connectRoomFn = room.connectRoom
-  const disconnectRoomFn = room.disconnectRoom
+  const connectRoomRef = React.useRef(room.connectRoom)
+  const disconnectRoomRef = React.useRef(room.disconnectRoom)
+  React.useEffect(() => {
+    connectRoomRef.current = room.connectRoom
+    disconnectRoomRef.current = room.disconnectRoom
+  }, [room.connectRoom, room.disconnectRoom])
+
   React.useEffect(() => {
     if (!wsClient || !channel.id) return
     if (!prefsLoaded) return
     if (prefs?.dontAskAgain !== true) return
-    void connectRoomFn(roomName, displayName, channel.id).catch(() => {})
+    let didStart = true
+    void connectRoomRef.current(roomName, displayName, channel.id).catch(
+      () => {}
+    )
     setHasJoined(true)
     return () => {
-      disconnectRoomFn().catch(() => {})
+      if (!didStart) return
+      disconnectRoomRef.current().catch(() => {})
+      didStart = false
     }
   }, [
     wsClient,
@@ -305,8 +315,6 @@ export function VoiceChannelView({
     displayName,
     prefs?.dontAskAgain,
     prefsLoaded,
-    connectRoomFn,
-    disconnectRoomFn,
   ])
 
   const autoPublishedRef = React.useRef(false)
@@ -431,13 +439,13 @@ export function VoiceChannelView({
         void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
       }
       try {
-        await connectRoomFn(roomName, displayName, channel.id)
+        await connectRoomRef.current(roomName, displayName, channel.id)
         setHasJoined(true)
       } catch (err) {
         console.error("[VoiceChannel] connect after prejoin failed:", err)
       }
     },
-    [currentUserId, connectRoomFn, roomName, displayName, channel.id]
+    [currentUserId, roomName, displayName, channel.id]
   )
 
   const handlePrejoinCancel = React.useCallback(() => {
