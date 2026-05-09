@@ -50,9 +50,8 @@ export function UnauthenticatedShell() {
     needsPinSetup: boolean
     needsUnlock: boolean
     hasVault: boolean
-    resetLocalAuthState: () => Promise<void>
   }
-  const { performRegister, performRecovery, resetLocalAuthState } = auth
+  const { performRegister, performRecovery } = auth
   const {
     selectedInstanceUrl,
     knownInstances,
@@ -60,18 +59,13 @@ export function UnauthenticatedShell() {
     rememberSelectedInstance,
   } = useAuthInstanceSelection() as AuthInstanceState
 
-  // "Not you?" means this browser profile should forget the locked local
-  // vault before showing login. This is required after an instance reset:
-  // the server-side account may be gone while the browser still has a stale
-  // vault marker that would otherwise route every refresh back to PIN unlock.
+  // When user clicks "Not you? Sign in" on the PIN unlock screen, force the
+  // AuthFlow recovery view even though bootState would otherwise route to
+  // PinUnlockPanel. Submitting a different mnemonic creates a new session.
   const [forceRecovery, setForceRecovery] = React.useState(false)
-  const switchAccountFromPin = React.useCallback(async () => {
-    await resetLocalAuthState()
-    setForceRecovery(true)
-  }, [resetLocalAuthState])
 
   if (bootState === "needs_pin" && !forceRecovery) {
-    return <PinUnlockPanel onSwitchAccount={switchAccountFromPin} />
+    return <PinUnlockPanel onSwitchAccount={() => setForceRecovery(true)} />
   }
   if (bootState === "pin_setup") return <PinSetupPanel />
 

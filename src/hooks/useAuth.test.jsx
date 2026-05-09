@@ -186,7 +186,6 @@ beforeEach(() => {
   vi.mocked(vaultMod.openVaultStore).mockClear();
   vi.mocked(vaultMod.getVaultConfig).mockReturnValue(null);
   vi.mocked(vaultMod.setVaultConfig).mockClear();
-  vi.mocked(transcriptVaultMod.deleteTranscriptDatabase).mockClear();
 });
 
 afterEach(() => {
@@ -865,44 +864,6 @@ describe('useAuth - performLogout', () => {
 
     expect(threw).toBe(false);
     expect(result.current.vaultState).toBe('none');
-  });
-});
-
-describe('useAuth - resetLocalAuthState', () => {
-  it('forgets stale local auth and vault state without requiring a server session', async () => {
-    const staleUserId = 'user-stale';
-    const vaultMarkerKey = `hush_vault_user_${staleUserId}`;
-    const vaultConfigKey = `hush_vault_config_${staleUserId}`;
-    const pinAttemptsKey = `hush_pin_attempts_${staleUserId}`;
-
-    localStorage.setItem('hush_device_id', 'device-1');
-    localStorage.setItem(vaultMarkerKey, 'aabb');
-    localStorage.setItem('hush_vault_user__last_user', staleUserId);
-    localStorage.setItem(vaultConfigKey, '{"timeout":"never"}');
-    localStorage.setItem(
-      pinAttemptsKey,
-      JSON.stringify({ count: 3, lastAttemptAt: new Date().toISOString() }),
-    );
-    sessionStorage.setItem(JWT_KEY, 'stale-jwt');
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    await act(async () => {
-      await result.current.resetLocalAuthState();
-    });
-
-    expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith(staleUserId);
-    expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith(staleUserId);
-    expect(localStorage.getItem(vaultMarkerKey)).toBeNull();
-    expect(localStorage.getItem('hush_vault_user__last_user')).toBeNull();
-    expect(localStorage.getItem(vaultConfigKey)).toBeNull();
-    expect(localStorage.getItem(pinAttemptsKey)).toBeNull();
-    expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
-    expect(result.current.user).toBeNull();
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.hasVault).toBe(false);
-    expect(result.current.hasSession).toBe(false);
   });
 });
 

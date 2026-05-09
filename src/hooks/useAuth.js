@@ -180,7 +180,6 @@ const VAULT_SESSION_FLAG = 'hush_vault_session_alive';
 const VAULT_DERIVED_KEY = 'hush_vault_derived_key';
 const VAULT_IDLE_DEADLINE_KEY = 'hush_vault_idle_deadline';
 const LEGACY_VAULT_TIMEOUT_KEY = 'hush_vault_timeout';
-const VAULT_CONFIG_KEY_PREFIX = 'hush_vault_config_';
 const PIN_SETUP_PENDING_KEY = 'hush_pin_setup_pending';
 const PIN_ATTEMPTS_KEY_PREFIX = 'hush_pin_attempts_';
 const INACTIVITY_EVENTS = ['mousemove', 'keydown', 'touchstart', 'click'];
@@ -454,71 +453,6 @@ function findVaultMarkerUserId() {
   return key.slice(VAULT_USER_KEY_PREFIX.length);
 }
 
-/**
- * Collects every local user id that owns auth/vault metadata in this browser.
- *
- * Used by the account-switch path, where the current server-side account may
- * already be gone after an instance reset. In that state `user` can be null,
- * but local vault markers, PIN counters, or vault config keys still force the
- * boot controller back to the PIN screen.
- *
- * @param {Array<string|null|undefined>} candidates
- * @returns {string[]}
- */
-function collectLocalAuthUserIds(candidates = []) {
-  const ids = new Set();
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim()) {
-      ids.add(candidate);
-    }
-  }
-
-  const lastUser = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
-  if (lastUser) ids.add(lastUser);
-
-  for (const key of Object.keys(localStorage)) {
-    if (key.startsWith(VAULT_USER_KEY_PREFIX) && !key.endsWith('_last_user')) {
-      ids.add(key.slice(VAULT_USER_KEY_PREFIX.length));
-    } else if (key.startsWith(PIN_ATTEMPTS_KEY_PREFIX)) {
-      ids.add(key.slice(PIN_ATTEMPTS_KEY_PREFIX.length));
-    } else if (key.startsWith(VAULT_CONFIG_KEY_PREFIX)) {
-      ids.add(key.slice(VAULT_CONFIG_KEY_PREFIX.length));
-    }
-  }
-
-  return Array.from(ids).filter(Boolean);
-}
-
-/**
- * Removes per-user local auth metadata that can make a stale browser profile
- * look locked after the server-side account has been deleted.
- *
- * @param {string} userId
- */
-function clearLocalAuthMetadata(userId) {
-  localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
-  localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
-  localStorage.removeItem(`${VAULT_CONFIG_KEY_PREFIX}${userId}`);
-  localStorage.removeItem(VAULT_IDLE_DEADLINE_KEY);
-}
-
-/**
- * Deletes the per-user MLS database if the current browser device id is known.
- *
- * @param {string} userId
- * @returns {Promise<void>}
- */
-function deleteLocalMlsDatabase(userId) {
-  const deviceId = localStorage.getItem(DEVICE_ID_KEY);
-  if (!deviceId || typeof indexedDB === 'undefined') {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(`hush-mls-${userId}-${deviceId}`);
-    req.onsuccess = req.onerror = req.onblocked = () => resolve();
-  });
-}
-
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 /**
@@ -551,7 +485,6 @@ function deleteLocalMlsDatabase(userId) {
  *   setPIN: (pin: string) => Promise<void>,
  *   skipPinSetup: () => void,
  *   performLogout: () => Promise<void>,
- *   resetLocalAuthState: () => Promise<void>,
  *   clearError: () => void,
  * }}
  */
@@ -1688,61 +1621,6 @@ export function useAuth() {
     setLoading(false);
   }, [user, clearGuestTimers, clearVaultTimeoutEffects]);
 
-  /**
-   * Clears this browser's local auth/vault profile without calling the server.
-   *
-   * This is intentionally narrower than performLogout(): it is used by the
-   * locked-vault "Not you?" path, where the server-side account may have been
-   * wiped already and a logout request cannot succeed. The goal is to remove
-   * the local data that makes the boot controller prefer the PIN screen over
-   * login/recovery while preserving non-auth browser preferences.
-   */
-  const resetLocalAuthState = useCallback(async () => {
-    setLoading(true);
-
-    const userIds = collectLocalAuthUserIds([
-      user?.id,
-      currentUserIdRef.current,
-    ]);
-    const deleteTargets = [];
-
-    for (const userId of userIds) {
-      clearLocalAuthMetadata(userId);
-      deleteTargets.push(
-        deleteVaultDatabase(userId).catch(() => undefined),
-        clearVaultSessionKey(userId).catch(() => undefined),
-        clearVaultSessionStore(userId).catch(() => undefined),
-        deleteTranscriptDatabase(userId).catch(() => undefined),
-        deleteLocalMlsDatabase(userId).catch(() => undefined),
-      );
-    }
-
-    localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
-    sessionStorage.removeItem(VAULT_SESSION_FLAG);
-    sessionStorage.removeItem(VAULT_DERIVED_KEY);
-    clearSession();
-    clearTranscriptCache();
-    clearVaultTimeoutEffects();
-    clearGuestTimers();
-    // IndexedDB deletion is best-effort and can be slow or blocked on iOS
-    // Safari. Do not keep the locked-vault UI hostage while the browser
-    // finishes deleting old databases; the localStorage/session markers
-    // above are enough to route this tab to login immediately.
-    void Promise.allSettled(deleteTargets);
-
-    identityKeyRef.current = null;
-    currentUserIdRef.current = null;
-    setToken(null);
-    setUser(null);
-    setVaultState('none');
-    setHasLocalVault(false);
-    setNeedsPinSetupState(false);
-    setIsGuest(false);
-    setGuestExpiresAt(null);
-    setError(null);
-    setLoading(false);
-  }, [user?.id, clearGuestTimers, clearVaultTimeoutEffects]);
-
   // ── Keep currentUserIdRef in sync with user state ─────────────────────────
 
   useEffect(() => {
@@ -2312,7 +2190,6 @@ export function useAuth() {
     updateVaultTimeout,
     skipPinSetup,
     performLogout,
-    resetLocalAuthState,
     clearError,
     // Ref to the in-memory identity keypair. Used by useInstances for
     // challenge-response auth on remote instances. Never serialized.

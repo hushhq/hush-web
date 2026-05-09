@@ -52,7 +52,6 @@ const DEFAULT_INSTANCE_STATE = {
 const DEFAULT_AUTH = {
   performRegister: vi.fn(),
   performRecovery: vi.fn(),
-  resetLocalAuthState: vi.fn().mockResolvedValue(undefined),
   user: null,
   hasSession: false,
   needsPinSetup: false,
@@ -69,24 +68,19 @@ describe("UnauthenticatedShell", () => {
   })
 
   function setup(bootState: string) {
-    const auth = {
+    useBootController.mockReturnValue({ bootState })
+    useAuth.mockReturnValue({
       ...DEFAULT_AUTH,
-      performRegister: vi.fn(),
-      performRecovery: vi.fn(),
-      resetLocalAuthState: vi.fn().mockResolvedValue(undefined),
       unlockVault: vi.fn(),
       setPIN: vi.fn(),
       skipPinSetup: vi.fn(),
-    }
-    useBootController.mockReturnValue({ bootState })
-    useAuth.mockReturnValue(auth)
+    })
     useAuthInstanceSelection.mockReturnValue(DEFAULT_INSTANCE_STATE)
-    const view = render(
+    return render(
       <MemoryRouter>
         <UnauthenticatedShell />
       </MemoryRouter>
     )
-    return { ...view, auth }
   }
 
   it("renders the PinUnlockPanel when bootState is needs_pin", () => {
@@ -110,11 +104,10 @@ describe("UnauthenticatedShell", () => {
   })
 
   it("forces AuthFlow when the user clicks Not you on the unlock panel", async () => {
-    const { auth } = setup("needs_pin")
+    setup("needs_pin")
 
     await userEvent.click(screen.getByRole("button", { name: /not you/i }))
 
-    expect(auth.resetLocalAuthState).toHaveBeenCalledTimes(1)
     expect(
       screen.getByRole("button", { name: /^log in$/i })
     ).toBeInTheDocument()

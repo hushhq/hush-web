@@ -9,8 +9,8 @@
  *  - "Not you? Sign in" footer triggers onSwitchAccount
  *
  * Wires to `useAuth().unlockVault(pin)`. The parent (UnauthenticatedShell)
- * passes onSwitchAccount which forgets stale local auth state before showing
- * the AuthFlow login/recovery view.
+ * passes onSwitchAccount which forces the AuthFlow recovery view even
+ * though bootState is still 'needs_pin'.
  */
 import * as React from "react"
 import { LockIcon } from "lucide-react"
@@ -41,8 +41,8 @@ function getDelayMs(failureCount: number): number {
 }
 
 interface PinUnlockPanelProps {
-  /** Forget this local vault profile and show the login/recovery flow. */
-  onSwitchAccount?: () => void | Promise<void>
+  /** Force AuthFlow recovery view even though vault is locked. */
+  onSwitchAccount?: () => void
 }
 
 export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
