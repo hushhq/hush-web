@@ -164,6 +164,10 @@ const WS_CLIENT = {
   send: vi.fn(),
   isConnected: () => true,
 }
+const NEXT_WS_CLIENT = {
+  send: vi.fn(),
+  isConnected: () => true,
+}
 
 function setRoomReady(ready: boolean) {
   roomMock.api.isReady = ready
@@ -179,6 +183,7 @@ function resetRoomMock() {
   roomMock.api.unpublishWebcam.mockClear().mockResolvedValue(undefined)
   roomMock.playbackManager.setSinkId.mockClear().mockResolvedValue(undefined)
   WS_CLIENT.send.mockClear()
+  NEXT_WS_CLIENT.send.mockClear()
 }
 
 beforeEach(async () => {
@@ -226,7 +231,7 @@ async function mount() {
 }
 
 describe("VoiceChannelView — auto-join lifecycle", () => {
-  it("does not abort an in-flight auto-join when callback props change", async () => {
+  it("does not abort an in-flight auto-join when callback or wsClient props refresh", async () => {
     await saveVoiceDevicePrefs("user-1", {
       audioDeviceId: null,
       videoDeviceId: null,
@@ -263,7 +268,7 @@ describe("VoiceChannelView — auto-join lifecycle", () => {
           channel={CHANNEL}
           serverId="srv-1"
           getToken={() => "tok-b"}
-          wsClient={WS_CLIENT}
+          wsClient={NEXT_WS_CLIENT}
           onLeave={vi.fn()}
         />
       )

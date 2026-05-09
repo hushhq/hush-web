@@ -289,17 +289,31 @@ export function VoiceChannelView({
 
   const connectRoomRef = React.useRef(room.connectRoom)
   const disconnectRoomRef = React.useRef(room.disconnectRoom)
+  const autoJoinArgsRef = React.useRef({
+    roomName,
+    displayName,
+    channelId: channel.id,
+  })
   React.useEffect(() => {
     connectRoomRef.current = room.connectRoom
     disconnectRoomRef.current = room.disconnectRoom
   }, [room.connectRoom, room.disconnectRoom])
-
   React.useEffect(() => {
-    if (!wsClient || !channel.id) return
+    autoJoinArgsRef.current = {
+      roomName,
+      displayName,
+      channelId: channel.id,
+    }
+  }, [roomName, displayName, channel.id])
+
+  const hasWsClient = Boolean(wsClient)
+  React.useEffect(() => {
+    if (!hasWsClient || !channel.id) return
     if (!prefsLoaded) return
     if (prefs?.dontAskAgain !== true) return
+    const args = autoJoinArgsRef.current
     let didStart = true
-    void connectRoomRef.current(roomName, displayName, channel.id).catch(
+    void connectRoomRef.current(args.roomName, args.displayName, args.channelId).catch(
       () => {}
     )
     setHasJoined(true)
