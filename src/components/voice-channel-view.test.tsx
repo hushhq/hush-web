@@ -149,12 +149,25 @@ vi.mock("@/components/voice/voice-reconnect-overlay", () => ({
   VoiceReconnectOverlay: () => null,
 }))
 
+const prejoinProps: {
+  onDevicePrefsChange?: (patch: {
+    audioDeviceId?: string | null
+    videoDeviceId?: string | null
+    audioEnabled?: boolean
+    videoEnabled?: boolean
+  }) => void
+} = {}
+
 vi.mock("@/components/voice/voice-prejoin-dialog", () => ({
-  VoicePrejoinDialog: () => null,
+  VoicePrejoinDialog: (props: typeof prejoinProps) => {
+    prejoinProps.onDevicePrefsChange = props.onDevicePrefsChange
+    return null
+  },
 }))
 
 import {
   clearVoiceDevicePrefs,
+  readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
 } from "@/lib/voiceDevicePrefs"
 import { VoiceChannelView } from "./voice-channel-view"
@@ -191,6 +204,7 @@ beforeEach(async () => {
   pickerHandlers.mic = null
   pickerHandlers.camera = null
   pickerHandlers.output = null
+  prejoinProps.onDevicePrefsChange = undefined
   await clearVoiceDevicePrefs("user-1").catch(() => {})
 })
 
@@ -329,6 +343,33 @@ describe("VoiceChannelView — auto-publish with skip prejoin + default device",
 
     await waitFor(() => {
       expect(roomMock.api.publishMic).toHaveBeenCalledWith("mic-saved")
+    })
+  })
+})
+
+describe("VoiceChannelView — prejoin device preference sync", () => {
+  it("persists device changes made from the prejoin dialog", async () => {
+    await mount()
+
+    expect(prejoinProps.onDevicePrefsChange).toBeTypeOf("function")
+    await act(async () => {
+      prejoinProps.onDevicePrefsChange?.({
+        audioDeviceId: "mic-prejoin",
+        videoDeviceId: "cam-prejoin",
+        audioEnabled: true,
+        videoEnabled: true,
+      })
+      await Promise.resolve()
+    })
+
+    await waitFor(async () => {
+      const prefs = await readVoiceDevicePrefs("user-1")
+      expect(prefs).toMatchObject({
+        audioDeviceId: "mic-prejoin",
+        videoDeviceId: "cam-prejoin",
+        audioEnabled: true,
+        videoEnabled: true,
+      })
     })
   })
 })

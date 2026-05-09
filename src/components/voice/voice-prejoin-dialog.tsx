@@ -38,6 +38,14 @@ interface VoicePrejoinDialogProps {
   open: boolean
   onConfirm: (choice: VoicePrejoinChoice) => void
   onCancel: () => void
+  onDevicePrefsChange?: (
+    patch: Partial<
+      Pick<
+        VoicePrejoinChoice,
+        "audioDeviceId" | "videoDeviceId" | "audioEnabled" | "videoEnabled"
+      >
+    >
+  ) => void
   /** Initial selection seeded from `voiceDevicePrefs`, when present. */
   initial?: Partial<VoicePrejoinChoice>
 }
@@ -99,6 +107,7 @@ export function VoicePrejoinDialog({
   open,
   onConfirm,
   onCancel,
+  onDevicePrefsChange,
   initial,
 }: VoicePrejoinDialogProps) {
   const audioId = React.useId()
@@ -130,6 +139,22 @@ export function VoicePrejoinDialog({
   // for labels; once we do, we should not redo it on every videoEnabled
   // flip — the OS LED would re-flash.
   const [videoLabelsLoaded, setVideoLabelsLoaded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open) return
+    setAudioDeviceId(initial?.audioDeviceId ?? undefined)
+    setVideoDeviceId(initial?.videoDeviceId ?? undefined)
+    setAudioEnabled(initial?.audioEnabled ?? true)
+    setVideoEnabled(initial?.videoEnabled ?? false)
+    setDontAskAgain(initial?.dontAskAgain ?? false)
+  }, [
+    open,
+    initial?.audioDeviceId,
+    initial?.videoDeviceId,
+    initial?.audioEnabled,
+    initial?.videoEnabled,
+    initial?.dontAskAgain,
+  ])
 
   React.useEffect(() => {
     if (!open) return
@@ -186,6 +211,28 @@ export function VoicePrejoinDialog({
     })
   }
 
+  function handleAudioDeviceChange(value: string) {
+    setAudioDeviceId(value)
+    onDevicePrefsChange?.({ audioDeviceId: value })
+  }
+
+  function handleVideoDeviceChange(value: string) {
+    setVideoDeviceId(value)
+    onDevicePrefsChange?.({ videoDeviceId: value })
+  }
+
+  function handleAudioToggle() {
+    const next = !audioEnabled
+    setAudioEnabled(next)
+    onDevicePrefsChange?.({ audioEnabled: next })
+  }
+
+  function handleVideoToggle() {
+    const next = !videoEnabled
+    setVideoEnabled(next)
+    onDevicePrefsChange?.({ videoEnabled: next })
+  }
+
   function handleOpenChange(next: boolean) {
     if (!next) {
       stopPreview(previewStreamRef)
@@ -232,9 +279,9 @@ export function VoicePrejoinDialog({
                 label="Microphone"
                 devices={audioDevices}
                 value={audioDeviceId}
-                onChange={setAudioDeviceId}
+                onChange={handleAudioDeviceChange}
                 enabled={audioEnabled}
-                onToggle={() => setAudioEnabled((v) => !v)}
+                onToggle={handleAudioToggle}
                 onIcon={<MicIcon />}
                 offIcon={<MicOffIcon />}
                 placeholder="Select microphone"
@@ -244,9 +291,9 @@ export function VoicePrejoinDialog({
                 label="Camera"
                 devices={videoDevices}
                 value={videoDeviceId}
-                onChange={setVideoDeviceId}
+                onChange={handleVideoDeviceChange}
                 enabled={videoEnabled}
-                onToggle={() => setVideoEnabled((v) => !v)}
+                onToggle={handleVideoToggle}
                 onIcon={<VideoIcon />}
                 offIcon={<VideoOffIcon />}
                 placeholder="Select camera"

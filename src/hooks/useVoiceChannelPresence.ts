@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { getLiveKitVoiceState } from "@/lib/api"
 import type { VoiceParticipantInfo } from "@/adapters/types"
 
 /**
@@ -41,6 +42,13 @@ interface WsClientLike {
   off?: (event: string, handler: (msg: unknown) => void) => void
 }
 
+interface VoiceStateSnapshot {
+  participantsByChannel?: Record<
+    string,
+    Array<{ userId: string; displayName: string }>
+  >
+}
+
 /**
  * Per-channel voice roster, keyed by channel id. Built up incrementally
  * from `voice_state_update` WS messages — when a peer joins or leaves a
@@ -54,14 +62,17 @@ interface WsClientLike {
  * the roster goes empty, so a leaver does not leave a stale mute
  * badge on a future re-join.
  *
- * Bootstrap caveat: a tab that connects after others are already in a
- * voice channel does not see them until the next join / leave fires.
- * A future enhancement would be to ship the snapshot on the WS hello
- * frame; the shape returned here is forwards-compatible with that.
+ * A bootstrap HTTP snapshot covers the initial server load, then WS
+ * updates keep the map current. Without that snapshot, a tab opened
+ * after people had already joined voice would stay empty until the
+ * next join / leave webhook.
  */
 export function useVoiceChannelPresence(
   wsClient: WsClientLike | null | undefined,
-  currentUserId: string
+  currentUserId: string,
+  token: string | null | undefined,
+  serverId: string | null | undefined,
+  baseUrl = ""
 ): Map<string, VoiceParticipantInfo[]> {
   const [presence, setPresence] = React.useState<
     Map<string, VoiceParticipantInfo[]>
@@ -74,22 +85,35 @@ export function useVoiceChannelPresence(
   >(new Map())
 
   React.useEffect(() => {
+    if (!token || !serverId) {
+      setPresence(new Map())
+      setMuteState(new Map())
+      return
+    }
+    let cancelled = false
+    void getLiveKitVoiceState(token, serverId, baseUrl)
+      .then((snapshot: VoiceStateSnapshot) => {
+        if (cancelled) return
+        setPresence(snapshotToPresence(snapshot, currentUserId))
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        console.warn("[useVoiceChannelPresence] snapshot failed", err)
+        setPresence(new Map())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, serverId, baseUrl, currentUserId])
+
+  React.useEffect(() => {
     if (!wsClient) return
 
     const onUpdate = (raw: unknown) => {
       const msg = raw as VoiceStateUpdate
       if (msg?.type !== "voice_state_update") return
       if (!msg.channel_id) return
-      const tiles: VoiceParticipantInfo[] = (msg.participants ?? []).map(
-        (p) => ({
-          id: p.userId,
-          name:
-            p.userId === currentUserId
-              ? "You"
-              : (p.displayName || p.userId || "Anonymous"),
-          initials: deriveInitials(p.displayName || p.userId),
-        })
-      )
+      const tiles = participantsToPresence(msg.participants ?? [], currentUserId)
       setPresence((prev) => {
         const next = new Map(prev)
         if (tiles.length === 0) {
@@ -182,6 +206,36 @@ export function useVoiceChannelPresence(
     }
     return merged
   }, [presence, muteState])
+}
+
+function snapshotToPresence(
+  snapshot: VoiceStateSnapshot,
+  currentUserId: string
+): Map<string, VoiceParticipantInfo[]> {
+  const next = new Map<string, VoiceParticipantInfo[]>()
+  for (const [channelId, participants] of Object.entries(
+    snapshot.participantsByChannel ?? {}
+  )) {
+    const rows = participantsToPresence(participants, currentUserId)
+    if (rows.length > 0) {
+      next.set(channelId, rows)
+    }
+  }
+  return next
+}
+
+function participantsToPresence(
+  participants: Array<{ userId: string; displayName: string }>,
+  currentUserId: string
+): VoiceParticipantInfo[] {
+  return participants.map((p) => ({
+    id: p.userId,
+    name:
+      p.userId === currentUserId
+        ? "You"
+        : (p.displayName || p.userId || "Anonymous"),
+    initials: deriveInitials(p.displayName || p.userId),
+  }))
 }
 
 function deriveInitials(name: string): string {

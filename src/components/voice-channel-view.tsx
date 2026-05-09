@@ -462,6 +462,17 @@ export function VoiceChannelView({
     [currentUserId, roomName, displayName, channel.id]
   )
 
+  const handlePrejoinDevicePrefsChange = React.useCallback(
+    (patch: Parameters<typeof mergeVoiceDevicePrefs>[1]) => {
+      const next = mergeVoiceDevicePrefs(prefsRef.current, patch)
+      setPrefs(next)
+      if (currentUserId) {
+        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+      }
+    },
+    [currentUserId]
+  )
+
   const handlePrejoinCancel = React.useCallback(() => {
     setPrejoinOpen(false)
     void Promise.resolve(onLeave())
@@ -907,6 +918,7 @@ export function VoiceChannelView({
         open={prejoinOpen}
         onConfirm={handlePrejoinConfirm}
         onCancel={handlePrejoinCancel}
+        onDevicePrefsChange={handlePrejoinDevicePrefsChange}
         initial={
           prefs
             ? {

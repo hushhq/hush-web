@@ -62,7 +62,7 @@ export function AuthFlow({
   signUp,
   onOpenRoadmap,
   onBackToPin,
-  versionLabel = "v0.7.0-alpha.3",
+  versionLabel = "v0.7.0-alpha.4",
 }: AuthFlowProps) {
   const [view, setView] = React.useState<AuthView>("main")
 

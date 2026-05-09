@@ -372,7 +372,10 @@ export function AuthenticatedApp() {
     (instanceUrl ? getWsClient(instanceUrl) : null) as Parameters<
       typeof useVoiceChannelPresence
     >[0],
-    currentUserId
+    currentUserId,
+    token,
+    activeServer?.id ?? null,
+    baseUrl
   )
 
   const currentUserRole = React.useMemo(

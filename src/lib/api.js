@@ -975,6 +975,28 @@ export async function getGuildChannels(token, serverId, baseUrl = '') {
 }
 
 /**
+ * Get current LiveKit voice participants for all voice channels in a guild.
+ * The response is a bootstrap snapshot; subsequent changes still arrive via
+ * `voice_state_update` websocket events.
+ *
+ * @param {string} token - JWT
+ * @param {string} serverId - Guild UUID
+ * @param {string} baseUrl - Instance base URL
+ * @returns {Promise<{ participantsByChannel: Record<string, Array<{ userId: string, displayName: string }>> }>}
+ */
+export async function getLiveKitVoiceState(token, serverId, baseUrl = '') {
+  const path = `/api/livekit/voice-state?serverId=${encodeURIComponent(serverId)}`;
+  const res = await fetchWithAuth(token, path, {}, baseUrl);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const e = new Error(err.error || `get voice state ${res.status}`);
+    e.status = res.status;
+    throw e;
+  }
+  return res.json();
+}
+
+/**
  * Create a channel in a guild (admin+).
  * @param {string} token - JWT
  * @param {string} serverId - Guild UUID
