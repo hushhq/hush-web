@@ -11,14 +11,7 @@ import {
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-react"
 import { isTrackReference } from "@livekit/components-core"
 import { Track } from "livekit-client"
-import {
-  HeadphoneOffIcon,
-  Maximize2Icon,
-  MaximizeIcon,
-  MicOffIcon,
-  MinimizeIcon,
-  XIcon,
-} from "lucide-react"
+import { HeadphoneOffIcon, MicOffIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -30,23 +23,18 @@ interface VoiceParticipantTileProps {
    *  a track — it's a client-only flag — so the parent grid passes it
    *  in for the local participant. */
   isDeafened?: boolean
-  /** When set, the tile is currently the sole expanded tile (step 1
-   *  of the two-step fullscreen flow). Suppresses the small expand
-   *  affordance and reveals the collapse + fullscreen controls. */
+  /** When set, the tile is the sole expanded tile filling the channel
+   *  view. Click on the tile body in this state calls `onCollapse`
+   *  (toggle behaviour), so no separate X affordance is rendered.
+   *  Fullscreen is owned by the parent surface, not the tile. */
   isExpanded?: boolean
-  /** True while the document is in real browser fullscreen and the
-   *  tile sits inside the fullscreen subtree. Toggles the maximize /
-   *  minimize icon copy on the rightmost overlay button. */
-  isFullscreen?: boolean
-  /** Click on the tile body (or the inline expand button) lifts the
-   *  tile to the expanded view in the parent grid. Omit on tiles
-   *  that should not be expandable (e.g. the lonely placeholder). */
+  /** Click on the tile body in the grid lifts it to the expanded
+   *  view. Omit on tiles that should not be expandable (e.g. the
+   *  lonely placeholder). */
   onExpand?: () => void
-  /** Collapse expanded → grid. Only meaningful when `isExpanded`. */
+  /** Click on the tile body while `isExpanded` collapses it back to
+   *  the grid. Esc also triggers collapse via the parent surface. */
   onCollapse?: () => void
-  /** Toggle browser fullscreen on the parent voice surface. Only
-   *  meaningful when `isExpanded` (per the two-step flow contract). */
-  onToggleFullscreen?: () => void
 }
 
 function getInitials(name: string): string {
@@ -81,10 +69,8 @@ export function VoiceParticipantTile({
   className,
   isDeafened = false,
   isExpanded = false,
-  isFullscreen = false,
   onExpand,
   onCollapse,
-  onToggleFullscreen,
 }: VoiceParticipantTileProps) {
   const ref = useEnsureTrackRef(trackRef)
   const { elementProps } = useParticipantTile<HTMLDivElement>({
@@ -99,15 +85,19 @@ export function VoiceParticipantTile({
   const displayName = ref.participant.name || ref.participant.identity
   const isLocal = ref.participant.isLocal
   const isScreenShare = ref.source === Track.Source.ScreenShare
-  const canExpand = Boolean(onExpand) && !isExpanded
+  // The tile is interactive whenever a handler exists: in the grid we
+  // call `onExpand`, in the expanded view we call `onCollapse`. Both
+  // states share the same click target so the lonely placeholder
+  // (which passes neither) stays inert.
+  const isInteractive =
+    (isExpanded && Boolean(onCollapse)) ||
+    (!isExpanded && Boolean(onExpand))
 
   const handleClick = React.useCallback(() => {
-    if (canExpand) onExpand?.()
-  }, [canExpand, onExpand])
-
-  const stop = React.useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-  }, [])
+    if (!isInteractive) return
+    if (isExpanded) onCollapse?.()
+    else onExpand?.()
+  }, [isInteractive, isExpanded, onCollapse, onExpand])
 
   return (
     <ParticipantContextIfNeeded participant={ref.participant}>
@@ -124,19 +114,26 @@ export function VoiceParticipantTile({
             ...elementProps.style,
             borderRadius: "var(--radius-md, 0.5rem)",
           }}
-          onClick={canExpand ? handleClick : elementProps.onClick}
-          role={canExpand ? "button" : elementProps.role}
-          tabIndex={canExpand ? 0 : elementProps.tabIndex}
+          onClick={isInteractive ? handleClick : elementProps.onClick}
+          role={isInteractive ? "button" : elementProps.role}
+          tabIndex={isInteractive ? 0 : elementProps.tabIndex}
+          aria-label={
+            isInteractive
+              ? isExpanded
+                ? "Collapse"
+                : "Expand"
+              : undefined
+          }
           onKeyDown={(e) => {
-            if (canExpand && (e.key === "Enter" || e.key === " ")) {
+            if (isInteractive && (e.key === "Enter" || e.key === " ")) {
               e.preventDefault()
-              onExpand?.()
+              handleClick()
             }
           }}
           className={cn(
             "group relative flex size-full items-center justify-center overflow-hidden border bg-card transition-all",
             "data-[lk-speaking=true]:border-primary/60 data-[lk-speaking=true]:ring-2 data-[lk-speaking=true]:ring-primary/40",
-            canExpand && "cursor-pointer",
+            isInteractive && "cursor-pointer",
             className,
             elementProps.className
           )}
@@ -199,82 +196,10 @@ export function VoiceParticipantTile({
             aria-hidden
             className={cn(
               "pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent opacity-0 transition-opacity duration-200",
-              !isExpanded && "group-hover:opacity-100"
+              isInteractive && "group-hover:opacity-100"
             )}
           />
 
-          {/* Top-right hover affordance — small expand button that
-              becomes visible only on hover. Stops propagation so a
-              direct click here does not double-fire the tile's
-              own onClick handler. */}
-          {canExpand ? (
-            <button
-              type="button"
-              aria-label="Expand"
-              title="Expand"
-              onClick={(e) => {
-                stop(e)
-                onExpand?.()
-              }}
-              className={cn(
-                "absolute right-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-md bg-black/55 text-white opacity-0 backdrop-blur-sm transition-opacity duration-200",
-                "hover:bg-black/75 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                "group-hover:opacity-100"
-              )}
-            >
-              <Maximize2Icon className="size-4" />
-            </button>
-          ) : null}
-
-          {/* Expanded-mode controls — collapse + fullscreen toggle.
-              Stay always-visible so the user can step out of the
-              expanded surface without hunting for them. */}
-          {isExpanded ? (
-            <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
-              {onToggleFullscreen ? (
-                <button
-                  type="button"
-                  aria-label={
-                    isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
-                  }
-                  title={
-                    isFullscreen ? "Exit fullscreen" : "Enter fullscreen"
-                  }
-                  onClick={(e) => {
-                    stop(e)
-                    onToggleFullscreen()
-                  }}
-                  className={cn(
-                    "inline-flex size-9 items-center justify-center rounded-md bg-black/55 text-white backdrop-blur-sm transition-colors",
-                    "hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  )}
-                >
-                  {isFullscreen ? (
-                    <MinimizeIcon className="size-4" />
-                  ) : (
-                    <MaximizeIcon className="size-4" />
-                  )}
-                </button>
-              ) : null}
-              {onCollapse ? (
-                <button
-                  type="button"
-                  aria-label="Collapse"
-                  title="Collapse"
-                  onClick={(e) => {
-                    stop(e)
-                    onCollapse()
-                  }}
-                  className={cn(
-                    "inline-flex size-9 items-center justify-center rounded-md bg-black/55 text-white backdrop-blur-sm transition-colors",
-                    "hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  )}
-                >
-                  <XIcon className="size-4" />
-                </button>
-              ) : null}
-            </div>
-          ) : null}
 
           {/* Bottom metadata strip — only on video tiles (the avatar
               variant inlines its name + mute strip below the avatar

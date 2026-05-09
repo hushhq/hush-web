@@ -32,6 +32,7 @@ import { VoiceQualityPickerDialog } from "@/components/voice/voice-quality-picke
 import { VoiceReconnectOverlay } from "@/components/voice/voice-reconnect-overlay"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { MaximizeIcon, MinimizeIcon } from "lucide-react"
 
 type MicFilterSettingsPatch = Partial<{
   noiseGateEnabled: boolean
@@ -729,16 +730,18 @@ export function VoiceChannelView({
     if (!isScreenSharing) setLocalScreenWatched(false)
   }, [isScreenSharing])
 
-  // Two-step expand-then-fullscreen flow:
-  //   1. Click a participant tile → `expandedKey` is set; the grid
-  //      collapses to that single tile sized to the channel view.
-  //   2. From the expanded tile, the maximize button calls
-  //      `handleToggleFullscreen` which requests browser fullscreen
-  //      on the entire channel surface so the floating controls bar
-  //      stays inside the fullscreen subtree (it sits absolutely
-  //      above the grid in the same wrapper).
+  // Expand and fullscreen are independent affordances on the voice
+  // surface:
+  //   - Click a participant tile  → `expandedKey` is set; the grid
+  //     collapses to that single tile sized to the channel view.
+  //     Click the X on the expanded tile (or press Esc) to collapse.
+  //   - Click the floating maximize button (bottom-right of the
+  //     channel surface) → request browser fullscreen on the whole
+  //     surface. Works whether or not a tile is expanded; the
+  //     controls bar and the maximize button itself live inside the
+  //     fullscreen subtree so they remain interactive.
   // Browser-level Esc auto-exits fullscreen via `fullscreenchange`;
-  // a second Esc collapses the expanded tile back into the grid.
+  // a second Esc collapses any currently expanded tile.
   const surfaceRef = React.useRef<HTMLDivElement>(null)
   const [expandedKey, setExpandedKey] = React.useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = React.useState(false)
@@ -844,8 +847,6 @@ export function VoiceChannelView({
               localDeafened={isDeafened}
               expandedKey={expandedKey}
               onExpandChange={setExpandedKey}
-              isFullscreen={isFullscreen}
-              onToggleFullscreen={handleToggleFullscreen}
             />
           </RoomContext.Provider>
         ) : (
@@ -853,6 +854,25 @@ export function VoiceChannelView({
             Connecting…
           </div>
         )}
+        {hasJoined ? (
+          <button
+            type="button"
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            onClick={handleToggleFullscreen}
+            className={cn(
+              "absolute bottom-3 right-3 z-20 inline-flex size-10 items-center justify-center rounded-full border bg-background/95 text-foreground backdrop-blur transition-opacity duration-200",
+              "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              hideChrome && "pointer-events-none opacity-0"
+            )}
+          >
+            {isFullscreen ? (
+              <MinimizeIcon className="size-4" />
+            ) : (
+              <MaximizeIcon className="size-4" />
+            )}
+          </button>
+        ) : null}
         {hasJoined ? (
           <div
             className={cn(

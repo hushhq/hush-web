@@ -14,20 +14,15 @@ interface VoiceParticipantGridProps {
    *  the parent and forwards it to the local participant tile so a
    *  deafened user gets the headphone-off badge on their own tile. */
   localDeafened?: boolean
-  /** Stable identifier of the currently expanded tile (step 1 of the
-   *  two-step fullscreen flow). When non-null, the grid renders only
-   *  that tile, sized to the full container. */
+  /** Stable identifier of the currently expanded tile. When non-null,
+   *  the grid renders only that tile, sized to the full container.
+   *  Independent from browser fullscreen — the floating fullscreen
+   *  button on the channel surface works whether a tile is expanded
+   *  or the full grid is visible. */
   expandedKey?: string | null
   /** Setter the parent owns so this state can survive React re-renders
-   *  triggered by track-list churn and so the controls bar (which
-   *  lives outside the grid) can read it for fullscreen + idle hide. */
+   *  triggered by track-list churn. */
   onExpandChange?: (key: string | null) => void
-  /** Browser fullscreen state. Forwarded to the expanded tile so the
-   *  rightmost overlay button toggles between maximize and minimize. */
-  isFullscreen?: boolean
-  /** Bridge to the parent's fullscreen request. Called by the
-   *  expanded tile's "enter fullscreen" affordance. */
-  onToggleFullscreen?: () => void
 }
 
 const TILE_GAP_PX = 8
@@ -136,8 +131,6 @@ export function VoiceParticipantGrid({
   localDeafened = false,
   expandedKey = null,
   onExpandChange,
-  isFullscreen = false,
-  onToggleFullscreen,
 }: VoiceParticipantGridProps) {
   const tracks = useTracks(
     [
@@ -231,9 +224,7 @@ export function VoiceParticipantGrid({
               expandedTrack.participant.isLocal ? localDeafened : false
             }
             isExpanded
-            isFullscreen={isFullscreen}
             onCollapse={() => onExpandChange?.(null)}
-            onToggleFullscreen={onToggleFullscreen}
           />
         </div>
       ) : tileSize.width > 0 ? (
