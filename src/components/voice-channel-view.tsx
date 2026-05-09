@@ -865,7 +865,13 @@ export function VoiceChannelView({
             Connecting…
           </div>
         )}
-        {hasJoined ? (
+        {hasJoined && !isMobile ? (
+          // Browser fullscreen on the channel surface is desktop-only.
+          // iOS Safari refuses `requestFullscreen()` on arbitrary
+          // elements (only `<video>` gets a vendor-prefixed alternative)
+          // and Android Chrome's behaviour drifts across versions, so
+          // hiding the affordance on mobile is cleaner than rendering
+          // a button that silently fails.
           <button
             type="button"
             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}

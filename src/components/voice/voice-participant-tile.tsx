@@ -10,7 +10,7 @@ import {
 } from "@livekit/components-react"
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-react"
 import { isTrackReference } from "@livekit/components-core"
-import { Track } from "livekit-client"
+import { Track, TrackEvent } from "livekit-client"
 import { HeadphoneOffIcon, MicOffIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -85,6 +85,34 @@ export function VoiceParticipantTile({
   const displayName = ref.participant.name || ref.participant.identity
   const isLocal = ref.participant.isLocal
   const isScreenShare = ref.source === Track.Source.ScreenShare
+
+  // Track aspect ratio for object-fit selection. Mobile cameras
+  // publish a portrait stream (typically 720×1280 / 9:16) while the
+  // grid cells are sized at 16:9 to keep the layout uniform across
+  // participants. `object-cover` on a portrait track over a 16:9 box
+  // crops the top + bottom of the speaker; switching to
+  // `object-contain` letterboxes the source instead so the entire
+  // video stays visible. The dimensions arrive asynchronously after
+  // subscribe and may rotate mid-call, so we subscribe to the
+  // track's dimensions event and re-render on change.
+  const [dims, setDims] = React.useState<Track.Dimensions | undefined>(
+    isTrackReference(ref) ? ref.publication?.dimensions : undefined
+  )
+  React.useEffect(() => {
+    if (!isTrackReference(ref)) return
+    const pub = ref.publication
+    if (!pub) return
+    setDims(pub.dimensions)
+    const track = pub.track
+    if (!track) return
+    const handler = (next: Track.Dimensions) => setDims(next)
+    track.on(TrackEvent.VideoDimensionsChanged, handler)
+    return () => {
+      track.off(TrackEvent.VideoDimensionsChanged, handler)
+    }
+  }, [ref])
+  const isPortrait =
+    !!dims && dims.height > dims.width && !isScreenShare
   // The tile is interactive whenever a handler exists: in the grid we
   // call `onExpand`, in the expanded view we call `onCollapse`. Both
   // states share the same click target so the lonely placeholder
@@ -141,7 +169,10 @@ export function VoiceParticipantTile({
           {isVideo ? (
             <VideoTrack
               trackRef={ref}
-              className="absolute inset-0 size-full object-cover"
+              className={cn(
+                "absolute inset-0 size-full",
+                isPortrait ? "object-contain" : "object-cover"
+              )}
               style={
                 isLocal && ref.source === Track.Source.Camera
                   ? { transform: "scaleX(-1)" }
