@@ -28,6 +28,7 @@ vi.mock('../lib/guildMetadataKeyStore', () => ({
 }));
 
 vi.mock('../hooks/useAuth', () => ({
+  HOME_INSTANCE_KEY: 'hush_home_instance',
   getDeviceId: vi.fn(() => 'device-1'),
 }));
 
@@ -37,6 +38,7 @@ import * as apiModule from '../lib/api';
 import * as guildMetadataKeyStore from '../lib/guildMetadataKeyStore';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
+import { HOME_INSTANCE_KEY } from '../hooks/useAuth';
 import Invite from './Invite';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -95,8 +97,37 @@ describe('Invite - same-instance flow', () => {
     cleanup();
     vi.clearAllMocks();
     window.location.hash = '';
+    localStorage.clear();
     sessionStorage.clear();
     guildMetadataKeyStore.openGuildMetadataKeyStore.mockResolvedValue({ close: vi.fn() });
+  });
+
+  it('accepts /join links when the invite host matches the user home instance', async () => {
+    localStorage.setItem(HOME_INSTANCE_KEY, 'https://chat.example.com/');
+    useAuth.mockReturnValue(makeAuthState({ isAuthenticated: true, hasSession: true }));
+    const ctx = makeInstanceContext({
+      getTokenForInstance: vi.fn((instanceUrl) => (
+        instanceUrl === 'https://chat.example.com' ? 'chat-jwt' : null
+      )),
+    });
+    useInstanceContext.mockReturnValue(ctx);
+    apiModule.getInviteInfo.mockResolvedValue({ serverId: 'srv-1', memberCount: 7 });
+    apiModule.claimInvite.mockResolvedValue({ serverId: 'srv-1' });
+
+    renderInvite('/join/chat.example.com/abc123#name=Secret%20Guild');
+
+    await waitFor(() => {
+      expect(apiModule.getInviteInfo).toHaveBeenCalledWith(
+        'abc123',
+        'https://chat.example.com',
+      );
+      expect(apiModule.claimInvite).toHaveBeenCalledWith(
+        'chat-jwt',
+        'abc123',
+        'https://chat.example.com',
+      );
+    });
+    expect(screen.queryByText(/cross-instance invites are not supported/i)).not.toBeInTheDocument();
   });
 
   afterEach(() => {
@@ -292,6 +323,7 @@ describe('Invite - cross-instance flow (/join/:instance/:code)', () => {
     cleanup();
     vi.clearAllMocks();
     window.location.hash = '';
+    localStorage.clear();
     sessionStorage.clear();
   });
 

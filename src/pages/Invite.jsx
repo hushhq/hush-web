@@ -12,7 +12,7 @@ import {
   setGuildMetadataKeyBytes,
 } from '../lib/guildMetadataKeyStore';
 import { CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE } from '../lib/inviteLinks';
-import { getDeviceId } from '../hooks/useAuth';
+import { getDeviceId, HOME_INSTANCE_KEY } from '../hooks/useAuth';
 import { buildGuildRouteRef } from '../lib/slugify';
 
 const POST_CLAIM_SETUP_ERROR =
@@ -30,6 +30,23 @@ function inviteErrorMessage(err) {
 function buildUnlockResumePath(location) {
   const current = `${location.pathname}${location.search}${location.hash}`;
   return `/?returnTo=${encodeURIComponent(current)}`;
+}
+
+function normalizeOrigin(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getStoredHomeInstanceUrl() {
+  try {
+    return localStorage.getItem(HOME_INSTANCE_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -58,17 +75,26 @@ export default function Invite() {
   const { hasSession, needsUnlock, user } = useAuth();
   const { bootInstance, getTokenForInstance, refreshGuilds } = useInstanceContext();
 
-  /** Whether this is a cross-instance invite. */
-  const isCrossInstance = Boolean(instanceParam);
+  /** Whether the route carries an explicit invite instance host. */
+  const hasInstanceParam = Boolean(instanceParam);
 
-  /** Cross-instance invites are blocked for MVP. */
-  const crossInstanceBlocked = isCrossInstance;
-
-  /** Canonical base URL for the remote instance (cross-instance only). */
+  /** Canonical base URL for the invite instance. */
   const instanceUrl = useMemo(() => {
     if (!instanceParam) return null;
     return `https://${instanceParam}`;
   }, [instanceParam]);
+
+  const isInviteForHomeInstance = useMemo(() => {
+    if (!instanceUrl) return false;
+    const inviteOrigin = normalizeOrigin(instanceUrl);
+    const homeOrigin =
+      normalizeOrigin(getStoredHomeInstanceUrl()) ??
+      normalizeOrigin(window.location.origin);
+    return Boolean(inviteOrigin && homeOrigin && inviteOrigin === homeOrigin);
+  }, [instanceUrl]);
+
+  /** Cross-instance invites are blocked for MVP. */
+  const crossInstanceBlocked = hasInstanceParam && !isInviteForHomeInstance;
 
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -212,12 +238,12 @@ export default function Invite() {
   // ── Same-instance authenticated flow: auto-claim ──────────────────────
 
   useEffect(() => {
-    if (isCrossInstance) return; // handled separately
+    if (crossInstanceBlocked) return;
     if (!hasSession || needsUnlock || !invite || !code) return;
     let cancelled = false;
 
     async function claimSameInstanceInvite() {
-      const sameInstanceUrl = window.location.origin;
+      const sameInstanceUrl = instanceUrl ?? window.location.origin;
       setJoining(true);
       setError(null);
       setClaimRecovery(null);
@@ -258,7 +284,7 @@ export default function Invite() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSession, needsUnlock, invite, code, isCrossInstance, bootInstance, getTokenForInstance, completeJoinedMembership, startClaimRecovery]);
+  }, [hasSession, needsUnlock, invite, code, instanceUrl, crossInstanceBlocked, bootInstance, getTokenForInstance, completeJoinedMembership, startClaimRecovery]);
 
   // ── Cross-instance: user pressed "Join" ──────────────────────────────
 
@@ -328,7 +354,7 @@ export default function Invite() {
 
   // ── Cross-instance invite UI ──────────────────────────────────────────
 
-  if (isCrossInstance) {
+  if (hasInstanceParam && !isInviteForHomeInstance) {
     const memberCount = invite.memberCount ?? invite.member_count ?? null;
     const isConnecting = booting || joining;
 
