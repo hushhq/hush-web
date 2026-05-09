@@ -16,6 +16,7 @@ import {
   Loader2Icon,
 } from "lucide-react"
 
+import { AttachmentLightbox } from "@/components/chat/attachment-lightbox"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useAttachmentDownloader } from "@/hooks/useAttachmentDownloader"
@@ -141,29 +142,77 @@ function PreviewTile({
   }
   if (mimeType.startsWith("image/")) {
     return (
-      <img
-        src={objectUrl}
-        alt={name}
-        className="rounded-md border bg-muted"
-        loading="lazy"
-        width={width}
-        height={height}
-      />
+      <ExpandableMedia mimeType={mimeType} objectUrl={objectUrl} name={name}>
+        <img
+          src={objectUrl}
+          alt={name}
+          className="block rounded-md border bg-muted transition-opacity duration-150 group-hover:opacity-90"
+          loading="lazy"
+          width={width}
+          height={height}
+        />
+      </ExpandableMedia>
     )
   }
   if (mimeType.startsWith("video/")) {
+    // Inline tiles render the video without controls so the whole
+    // surface is one click target (open in lightbox). The lightbox
+    // takes over playback with full native controls + autoplay.
     return (
-      <video
-        src={objectUrl}
-        controls
-        className="rounded-md border bg-muted"
-        width={width}
-        height={height}
-      />
+      <ExpandableMedia mimeType={mimeType} objectUrl={objectUrl} name={name}>
+        <video
+          src={objectUrl}
+          muted
+          playsInline
+          preload="metadata"
+          className="block rounded-md border bg-muted transition-opacity duration-150 group-hover:opacity-90"
+          width={width}
+          height={height}
+        />
+      </ExpandableMedia>
     )
   }
-  // audio
+  // audio: no lightbox — inline controls are already the right UX.
   return <audio src={objectUrl} controls className="w-full" />
+}
+
+/**
+ * Click-to-zoom wrapper. Wraps an `<img>` or `<video>` in a button
+ * that opens the lightbox. The visual element passed via children
+ * stays unchanged (sizing, aspect ratio, etc.); we only add a hover
+ * cue and the open-on-click affordance.
+ */
+function ExpandableMedia({
+  mimeType,
+  objectUrl,
+  name,
+  children,
+}: {
+  mimeType: string
+  objectUrl: string
+  name: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`Open ${name}`}
+        onClick={() => setOpen(true)}
+        className="group relative block max-w-full cursor-zoom-in overflow-hidden rounded-md p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {children}
+      </button>
+      <AttachmentLightbox
+        open={open}
+        onOpenChange={setOpen}
+        mimeType={mimeType}
+        objectUrl={objectUrl}
+        name={name}
+      />
+    </>
+  )
 }
 
 function fixedAspectStyle(width?: number, height?: number): React.CSSProperties {
