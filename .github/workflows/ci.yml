@@ -9,11 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           scope: '@gethush'
+      - if: github.event_name == 'pull_request'
+        run: node scripts/check-pr-size.mjs
+        env:
+          PR_SIZE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+          PR_SIZE_HEAD_REF: ${{ github.event.pull_request.head.sha }}
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
