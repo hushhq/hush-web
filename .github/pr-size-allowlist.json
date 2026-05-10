@@ -66,7 +66,7 @@
     "src/lib/vaultSessionKey.ts": 555,
     "src/lib/voiceDevicePrefs.test.ts": 341,
     "src/lib/voiceDevicePrefs.ts": 307,
-    "src/lib/ws.js": 414,
+    "src/lib/ws.js": 423,
     "src/lib/ws.test.js": 648,
     "src/pages/Invite.jsx": 456,
     "src/pages/Invite.test.jsx": 496,
