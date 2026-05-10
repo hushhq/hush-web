@@ -24,6 +24,7 @@
  * decoder.
  */
 import { isAttachmentContentTypeAllowed } from "@/lib/attachmentLimits"
+import { isSafeMediaUrl } from "@/lib/safeMediaUrl"
 
 /**
  * Conservative byte budget for the JSON envelope. Backend caps
@@ -245,7 +246,9 @@ function isGifRef(value: unknown): value is GifRef {
   return (
     typeof v.id === "string" &&
     typeof v.url === "string" &&
+    isSafeMediaUrl(v.url) &&
     typeof v.previewUrl === "string" &&
+    isSafeMediaUrl(v.previewUrl) &&
     typeof v.width === "number" &&
     typeof v.height === "number"
   )
