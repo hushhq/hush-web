@@ -143,6 +143,7 @@ interface VoiceState {
 }
 
 type ScreenShareResolutionCap = "1080p" | "720p"
+const DEFAULT_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 function readScreenShareResolutionCap(
   handshakeData:
@@ -157,6 +158,22 @@ function readScreenShareResolutionCap(
     handshakeData?.screen_share_resolution_cap ??
     handshakeData?.screenShareResolutionCap
   return value === "720p" ? "720p" : "1080p"
+}
+
+function readMaxAttachmentBytes(
+  handshakeData:
+    | {
+        max_attachment_bytes?: number
+        maxAttachmentBytes?: number
+      }
+    | null
+    | undefined
+): number {
+  const value =
+    handshakeData?.max_attachment_bytes ?? handshakeData?.maxAttachmentBytes
+  return typeof value === "number" && value > 0
+    ? value
+    : DEFAULT_MAX_ATTACHMENT_BYTES
 }
 
 function systemIconFor(type: SystemChannelType): React.ReactNode {
@@ -239,6 +256,8 @@ export function AuthenticatedApp() {
         log_public_key?: string
         screen_share_resolution_cap?: string
         screenShareResolutionCap?: string
+        max_attachment_bytes?: number
+        maxAttachmentBytes?: number
       } | null
       serverIds: string[]
     }>
@@ -297,6 +316,16 @@ export function AuthenticatedApp() {
   const baseUrl = instanceUrl ?? ""
   const wsClient = instanceUrl ? getWsClient(instanceUrl) : null
   const currentUserId = user?.id ?? ""
+  const activeHandshakeData = React.useMemo(() => {
+    if (!instanceUrl) return null
+    const activeOrigin = normalizeOrigin(instanceUrl)
+    return (
+      connectedInstances.find(
+        (inst) => normalizeOrigin(inst.instanceUrl) === activeOrigin
+      )?.handshakeData ?? null
+    )
+  }, [connectedInstances, instanceUrl])
+  const activeMaxAttachmentBytes = readMaxAttachmentBytes(activeHandshakeData)
 
   const {
     categories,
@@ -1254,6 +1283,7 @@ export function AuthenticatedApp() {
         wsClient={wsClient}
         members={members}
         baseUrl={baseUrl}
+        maxAttachmentBytes={activeMaxAttachmentBytes}
       />
     ) : null
 

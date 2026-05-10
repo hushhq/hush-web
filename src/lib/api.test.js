@@ -161,6 +161,21 @@ describe('getHandshake', () => {
     expect(result.screen_share_resolution_cap).toBe('720p');
   });
 
+  it('normalizes camelCase maxAttachmentBytes for existing consumers', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        maxAttachmentBytes: 1048576,
+      }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await getHandshake('https://chat.example.com');
+
+    expect(result.maxAttachmentBytes).toBe(1048576);
+    expect(result.max_attachment_bytes).toBe(1048576);
+  });
+
   it('throws when handshake endpoint returns non-ok status', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 503 });
     vi.stubGlobal('fetch', mockFetch);

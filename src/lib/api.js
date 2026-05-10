@@ -293,6 +293,9 @@ export async function getAttachmentDownloadUrl(token, attachmentId, baseUrl = ''
   const res = await fetchWithAuth(token, path, {}, baseUrl);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 410) {
+      throw new Error(err.error || 'attachment unavailable');
+    }
     throw new Error(err.error || `download url ${res.status}`);
   }
   return res.json();
@@ -868,6 +871,12 @@ export async function getHandshake(baseUrl = '', signal) {
     data.screen_share_resolution_cap === undefined
   ) {
     data.screen_share_resolution_cap = data.screenShareResolutionCap;
+  }
+  if (
+    data?.maxAttachmentBytes !== undefined &&
+    data.max_attachment_bytes === undefined
+  ) {
+    data.max_attachment_bytes = data.maxAttachmentBytes;
   }
   return data;
 }

@@ -23,6 +23,8 @@ import { useAttachmentDownloader } from "@/hooks/useAttachmentDownloader"
 import { cn } from "@/lib/utils"
 import type { AttachmentRef } from "@/lib/messageEnvelope"
 
+const ATTACHMENT_GONE_MESSAGE = "This attachment is no longer available."
+
 interface AttachmentTileProps {
   ref: AttachmentRef
   getToken: () => string | null
@@ -93,7 +95,7 @@ export function AttachmentTile({
 interface PreviewTileProps {
   mimeType: string
   name: string
-  state: "idle" | "loading" | "ready" | "failed"
+  state: "idle" | "loading" | "ready" | "failed" | "gone"
   objectUrl: string | null
   errorMessage: string | null
   onRetry: () => void
@@ -111,6 +113,9 @@ function PreviewTile({
   width,
   height,
 }: PreviewTileProps) {
+  if (state === "gone") {
+    return <DeletedAttachmentCard name={name} />
+  }
   if (state === "failed") {
     return (
       <Card className="flex items-center gap-2 p-3 text-xs">
@@ -174,6 +179,18 @@ function PreviewTile({
   }
   // audio: no lightbox — inline controls are already the right UX.
   return <audio src={objectUrl} controls className="w-full" />
+}
+
+function DeletedAttachmentCard({ name }: { name: string }) {
+  return (
+    <Card className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+      <FileIcon className="size-4" />
+      <span className="min-w-0 flex-1 truncate">
+        {name}
+      </span>
+      <span>{ATTACHMENT_GONE_MESSAGE}</span>
+    </Card>
+  )
 }
 
 /**
@@ -240,7 +257,12 @@ function FileCard({ ref, getToken, baseUrl }: FileCardProps) {
       const { default: download } = await import("./attachment-download-helper")
       await download({ ref, token, baseUrl })
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "download failed")
+      const message = err instanceof Error ? err.message : "download failed"
+      setErrorMessage(
+        message.includes("attachment no longer available")
+          ? ATTACHMENT_GONE_MESSAGE
+          : message
+      )
     } finally {
       setIsDownloading(false)
     }

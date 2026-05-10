@@ -45,6 +45,7 @@ export interface UseAttachmentUploaderOptions {
   channelId: string | null
   getToken: () => string | null
   baseUrl?: string
+  maxAttachmentBytes?: number
 }
 
 export interface UseAttachmentUploaderResult {
@@ -74,7 +75,13 @@ function nextLocalId(): string {
 export function useAttachmentUploader(
   opts: UseAttachmentUploaderOptions
 ): UseAttachmentUploaderResult {
-  const { serverId, channelId, getToken, baseUrl = "" } = opts
+  const {
+    serverId,
+    channelId,
+    getToken,
+    baseUrl = "",
+    maxAttachmentBytes = MAX_ATTACHMENT_BYTES,
+  } = opts
   const [uploads, setUploads] = React.useState<UploadEntry[]>([])
   // Mirror of `uploads` that updates synchronously alongside every
   // `setUploads` call so callbacks can read the latest list outside a
@@ -137,10 +144,10 @@ export function useAttachmentUploader(
         return
       }
       const ciphertextSize = encrypted.ciphertext.byteLength
-      if (ciphertextSize > MAX_ATTACHMENT_BYTES) {
+      if (ciphertextSize > maxAttachmentBytes) {
         updateEntry(entry.localId, {
           status: "failed",
-          errorMessage: `file exceeds ${MAX_ATTACHMENT_BYTES} bytes`,
+          errorMessage: `file exceeds ${maxAttachmentBytes} bytes`,
         })
         return
       }
@@ -199,7 +206,7 @@ export function useAttachmentUploader(
         ref,
       })
     },
-    [serverId, channelId, getToken, baseUrl, updateEntry]
+    [serverId, channelId, getToken, baseUrl, maxAttachmentBytes, updateEntry]
   )
 
   const add = React.useCallback(
@@ -211,13 +218,13 @@ export function useAttachmentUploader(
       const accepted: UploadEntry[] = []
       for (const file of files.slice(0, remainingSlots)) {
         const localId = nextLocalId()
-        if (file.size > MAX_ATTACHMENT_BYTES) {
+        if (file.size > maxAttachmentBytes) {
           accepted.push({
             localId,
             file,
             status: "failed",
             progress: 0,
-            errorMessage: `file exceeds ${MAX_ATTACHMENT_BYTES} bytes`,
+            errorMessage: `file exceeds ${maxAttachmentBytes} bytes`,
           })
           continue
         }
@@ -243,7 +250,7 @@ export function useAttachmentUploader(
         .filter((e) => e.status === "queued")
         .forEach((e) => void startUpload(e))
     },
-    [commitUploads, startUpload]
+    [commitUploads, maxAttachmentBytes, startUpload]
   )
 
   const remove = React.useCallback(

@@ -19,7 +19,7 @@ import * as api from "@/lib/api"
 import { decryptBlob } from "@/lib/attachmentCrypto"
 import type { AttachmentRef } from "@/lib/messageEnvelope"
 
-export type DownloadState = "idle" | "loading" | "ready" | "failed"
+export type DownloadState = "idle" | "loading" | "ready" | "failed" | "gone"
 
 export interface UseAttachmentDownloaderOptions {
   ref: AttachmentRef
@@ -92,8 +92,9 @@ export function useAttachmentDownloader(
         setState("ready")
       } catch (err) {
         if (cancelled) return
-        setState("failed")
-        setErrorMessage(err instanceof Error ? err.message : "download failed")
+        const message = err instanceof Error ? err.message : "download failed"
+        setState(message.includes("attachment no longer available") ? "gone" : "failed")
+        setErrorMessage(message)
       }
     }
     void run()

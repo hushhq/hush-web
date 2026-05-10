@@ -70,6 +70,7 @@ interface RealChatProps {
   markReadEnabled?: boolean
   onMarkRead?: ((channelId: string) => void) | null
   onNewMessage?: () => void
+  maxAttachmentBytes?: number
 }
 
 export function RealChat({
@@ -86,6 +87,7 @@ export function RealChat({
   markReadEnabled = false,
   onMarkRead = null,
   onNewMessage,
+  maxAttachmentBytes,
 }: RealChatProps) {
   const displayNameMap = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -150,6 +152,7 @@ export function RealChat({
     channelId,
     getToken,
     baseUrl,
+    maxAttachmentBytes,
   })
 
   const [pendingGif, setPendingGif] = React.useState<GifRef | null>(null)

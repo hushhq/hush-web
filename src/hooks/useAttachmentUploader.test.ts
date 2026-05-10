@@ -110,6 +110,27 @@ describe("useAttachmentUploader", () => {
     expect(MockUploadXHR.instances).toHaveLength(0)
   })
 
+  it("uses the instance max attachment size when provided", async () => {
+    const { result } = renderHook(() =>
+      useAttachmentUploader({
+        serverId: "srv-1",
+        channelId: "ch-1",
+        getToken: () => "token",
+        maxAttachmentBytes: 128,
+      })
+    )
+
+    await act(async () => {
+      result.current.add([makeFile("too-big.png", 129)])
+    })
+
+    await waitFor(() => {
+      expect(result.current.uploads[0]?.status).toBe("failed")
+    })
+    expect(result.current.uploads[0]?.errorMessage).toMatch(/128 bytes/)
+    expect(mockPresignAttachment).not.toHaveBeenCalled()
+  })
+
   it("propagates a presign 4xx as failed status", async () => {
     mockPresignAttachment.mockRejectedValueOnce(new Error("presign 413"))
     const { result } = renderHook(() =>
