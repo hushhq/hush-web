@@ -184,4 +184,48 @@ describe("decodeEnvelopeV1 — strict cutover", () => {
     if (result.ok) return
     expect(result.reason).toBe("invalid-shape")
   })
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,<script>1</script>",
+    "blob:https://example.com/uuid",
+    "file:///etc/passwd",
+    "http://example.com/x.gif",
+    "vbscript:msgbox(1)",
+  ])("returns invalid-shape when gif.url is %s", (badUrl) => {
+    const result = decodeEnvelopeV1FromString(
+      JSON.stringify({
+        v: 1,
+        text: "x",
+        gif: { ...fixtureGif, url: badUrl },
+      })
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe("invalid-shape")
+  })
+
+  it.each([
+    "javascript:alert(1)",
+    "data:image/svg+xml,<svg/>",
+    "http://example.com/x-small.gif",
+  ])("returns invalid-shape when gif.previewUrl is %s", (badUrl) => {
+    const result = decodeEnvelopeV1FromString(
+      JSON.stringify({
+        v: 1,
+        text: "x",
+        gif: { ...fixtureGif, previewUrl: badUrl },
+      })
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe("invalid-shape")
+  })
+
+  it("accepts a gif with both URLs on https", () => {
+    const result = decodeEnvelopeV1FromString(
+      JSON.stringify({ v: 1, text: "x", gif: fixtureGif })
+    )
+    expect(result.ok).toBe(true)
+  })
 })
