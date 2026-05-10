@@ -205,67 +205,42 @@ describe("vaultSessionKey — clearSessionKey", () => {
     await expect(clearSessionKey(USER)).resolves.toBeUndefined()
   })
 
-  it("clears the store via fallback when deleteDatabase emits onblocked", async () => {
-    const key = await ensureSessionKey(USER)
-    const wrapped = await wrapIdentity(
-      key,
-      new TextEncoder().encode("identity"),
-    )
-    await persistWrappedIdentity(USER, wrapped)
+  // Stub `deleteDatabase` to fire either `onblocked` or `onerror` so
+  // we can exercise the fallback path independently from fake-indexeddb's
+  // own delete behaviour.
+  const stubDeleteWith = (event: "blocked" | "error") =>
+    vi.spyOn(indexedDB, "deleteDatabase").mockImplementation(() => {
+      const req = {
+        onsuccess: null as ((ev: Event) => void) | null,
+        onerror: null as ((ev: Event) => void) | null,
+        onblocked: null as ((ev: Event) => void) | null,
+      }
+      queueMicrotask(() =>
+        event === "blocked"
+          ? req.onblocked?.(new Event("blocked"))
+          : req.onerror?.(new Event("error")),
+      )
+      return req as unknown as IDBOpenDBRequest
+    })
 
-    // Stub `deleteDatabase` to emit `onblocked`, simulating a sibling
-    // tab holding the DB open. Pre-fix this resolved silently and the
-    // CryptoKey + wrapped identity survived; with the fallback the
-    // store must be cleared even when the delete is blocked.
-    const spy = vi
-      .spyOn(indexedDB, "deleteDatabase")
-      .mockImplementation(() => {
-        const req = {
-          onsuccess: null as ((ev: Event) => void) | null,
-          onerror: null as ((ev: Event) => void) | null,
-          onblocked: null as ((ev: Event) => void) | null,
-        }
-        queueMicrotask(() => req.onblocked?.(new Event("blocked")))
-        return req as unknown as IDBOpenDBRequest
-      })
-
-    try {
-      await clearSessionKey(USER)
-      expect(await getSessionKeyIfAlive(USER, "never")).toBeNull()
-      expect(await readWrappedIdentity(USER)).toBeNull()
-    } finally {
-      spy.mockRestore()
-    }
-  })
-
-  it("clears the store via fallback when deleteDatabase errors", async () => {
-    const key = await ensureSessionKey(USER)
-    const wrapped = await wrapIdentity(
-      key,
-      new TextEncoder().encode("identity"),
-    )
-    await persistWrappedIdentity(USER, wrapped)
-
-    const spy = vi
-      .spyOn(indexedDB, "deleteDatabase")
-      .mockImplementation(() => {
-        const req = {
-          onsuccess: null as ((ev: Event) => void) | null,
-          onerror: null as ((ev: Event) => void) | null,
-          onblocked: null as ((ev: Event) => void) | null,
-          error: new DOMException("simulated error"),
-        }
-        queueMicrotask(() => req.onerror?.(new Event("error")))
-        return req as unknown as IDBOpenDBRequest
-      })
-
-    try {
-      await clearSessionKey(USER)
-      expect(await readWrappedIdentity(USER)).toBeNull()
-    } finally {
-      spy.mockRestore()
-    }
-  })
+  it.each(["blocked", "error"] as const)(
+    "clears the store via fallback when deleteDatabase emits %s",
+    async (event) => {
+      const key = await ensureSessionKey(USER)
+      await persistWrappedIdentity(
+        USER,
+        await wrapIdentity(key, new TextEncoder().encode("identity")),
+      )
+      const spy = stubDeleteWith(event)
+      try {
+        await clearSessionKey(USER)
+        expect(await getSessionKeyIfAlive(USER, "never")).toBeNull()
+        expect(await readWrappedIdentity(USER)).toBeNull()
+      } finally {
+        spy.mockRestore()
+      }
+    },
+  )
 })
 
 describe("vaultSessionKey — multi-tab presence (P21 step 5)", () => {
