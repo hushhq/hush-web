@@ -32,12 +32,6 @@ import {
 } from '../lib/trackManager';
 import { DEFAULT_QUALITY, MEDIA_SOURCES } from '../utils/constants';
 
-const DEFAULT_LIVEKIT_WEBSOCKET_TIMEOUT_MS = 15_000;
-// Safari can complete LiveKit's validate probe but miss the default 15s
-// signal websocket window on cold E2EE joins. Keep other browsers at the
-// LiveKit default so genuine failures still surface promptly.
-const SAFARI_LIVEKIT_WEBSOCKET_TIMEOUT_MS = 45_000;
-
 /**
  * Decode a base64 string to a Uint8Array.
  * @param {string} b64
@@ -81,22 +75,6 @@ function buildLiveKitUrl(baseUrl = '') {
       ? window.location.origin
       : null,
   });
-}
-
-function isSafariUserAgent(userAgent = '') {
-  if (!userAgent) return false;
-  return /Safari\//.test(userAgent)
-    && /AppleWebKit\//.test(userAgent)
-    && !/(Chrome|Chromium|CriOS|FxiOS|Edg|OPR)\//.test(userAgent);
-}
-
-export function resolveLiveKitConnectOptions(userAgent = globalThis.navigator?.userAgent ?? '') {
-  return {
-    autoSubscribe: true,
-    websocketTimeout: isSafariUserAgent(userAgent)
-      ? SAFARI_LIVEKIT_WEBSOCKET_TIMEOUT_MS
-      : DEFAULT_LIVEKIT_WEBSOCKET_TIMEOUT_MS,
-  };
 }
 
 /**
@@ -524,7 +502,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // secondary to functional correctness — track it as a follow-up
         // (selective subscribe + per-track UI focus) rather than
         // flipping the flag here. See PR #4 review item P0 for context.
-        await room.connect(livekitUrl, token, resolveLiveKitConnectOptions());
+        await room.connect(livekitUrl, token, { autoSubscribe: true });
 
         if (isStale()) {
           room.disconnect();
