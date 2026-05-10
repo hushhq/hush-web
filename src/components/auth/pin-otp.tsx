@@ -45,7 +45,12 @@ export function PinOtp({
   value,
   onChange,
   disabled,
-  autoComplete = "one-time-code",
+  // Default to `current-password` so iOS / password managers offer a
+  // saved vault PIN on unlock. `one-time-code` (the previous default)
+  // is reserved for SMS-delivered OTPs and triggers spurious "from
+  // Messages" autofill on iOS for an unrelated code. Setup callers
+  // use the dedicated `PinOtpSetup` component which pins `new-password`.
+  autoComplete = "current-password",
   autoFocus,
   ariaLabel,
   ariaInvalid,
