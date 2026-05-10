@@ -5,7 +5,7 @@
  * implementation, so AES-GCM and `generateKey({ extractable: false })`
  * round-trip just like in a browser.
  */
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 
 import {
   ensureSessionKey,
@@ -203,6 +203,68 @@ describe("vaultSessionKey — clearSessionKey", () => {
 
   it("is a noop when there is no record to wipe", async () => {
     await expect(clearSessionKey(USER)).resolves.toBeUndefined()
+  })
+
+  it("clears the store via fallback when deleteDatabase emits onblocked", async () => {
+    const key = await ensureSessionKey(USER)
+    const wrapped = await wrapIdentity(
+      key,
+      new TextEncoder().encode("identity"),
+    )
+    await persistWrappedIdentity(USER, wrapped)
+
+    // Stub `deleteDatabase` to emit `onblocked`, simulating a sibling
+    // tab holding the DB open. Pre-fix this resolved silently and the
+    // CryptoKey + wrapped identity survived; with the fallback the
+    // store must be cleared even when the delete is blocked.
+    const spy = vi
+      .spyOn(indexedDB, "deleteDatabase")
+      .mockImplementation(() => {
+        const req = {
+          onsuccess: null as ((ev: Event) => void) | null,
+          onerror: null as ((ev: Event) => void) | null,
+          onblocked: null as ((ev: Event) => void) | null,
+        }
+        queueMicrotask(() => req.onblocked?.(new Event("blocked")))
+        return req as unknown as IDBOpenDBRequest
+      })
+
+    try {
+      await clearSessionKey(USER)
+      expect(await getSessionKeyIfAlive(USER, "never")).toBeNull()
+      expect(await readWrappedIdentity(USER)).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it("clears the store via fallback when deleteDatabase errors", async () => {
+    const key = await ensureSessionKey(USER)
+    const wrapped = await wrapIdentity(
+      key,
+      new TextEncoder().encode("identity"),
+    )
+    await persistWrappedIdentity(USER, wrapped)
+
+    const spy = vi
+      .spyOn(indexedDB, "deleteDatabase")
+      .mockImplementation(() => {
+        const req = {
+          onsuccess: null as ((ev: Event) => void) | null,
+          onerror: null as ((ev: Event) => void) | null,
+          onblocked: null as ((ev: Event) => void) | null,
+          error: new DOMException("simulated error"),
+        }
+        queueMicrotask(() => req.onerror?.(new Event("error")))
+        return req as unknown as IDBOpenDBRequest
+      })
+
+    try {
+      await clearSessionKey(USER)
+      expect(await readWrappedIdentity(USER)).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
