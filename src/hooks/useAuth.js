@@ -58,6 +58,7 @@ import {
   readPersistedInactivityDeadline,
   shouldBlockNumericVaultSessionResume,
 } from '../lib/vaultInactivityDeadline';
+import { resolveReauthInstanceUrl } from '../lib/reauthInstance';
 import {
   openHistoryStore,
   importHistorySnapshot,
@@ -1487,9 +1488,9 @@ export function useAuth() {
     // with challenge-response to get a fresh session.
     const existingJwt = getLocalToken();
     if (!existingJwt && publicKey && privateKey) {
-      const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
+      const reauthBaseUrl = resolveReauthInstanceUrl();
       try {
-        const authResult = await performChallengeResponse(privateKey, publicKey, homeInstance);
+        const authResult = await performChallengeResponse(privateKey, publicKey, reauthBaseUrl);
         // performChallengeResponse sets token, user, vaultState='unlocked', applyVaultTimeout.
         return authResult;
       } catch (err) {
@@ -1781,10 +1782,10 @@ export function useAuth() {
           clearVaultSessionKey(userId).catch(() => {});
           return false;
         }
-        const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
+        const reauthBaseUrl = resolveReauthInstanceUrl();
         // performChallengeResponse handles identityKeyRef, token, user,
         // vaultState, transcript cache, and applyVaultTimeout.
-        await performChallengeResponse(privateKey, publicKey, homeInstance);
+        await performChallengeResponse(privateKey, publicKey, reauthBaseUrl);
         return true;
       }
 
@@ -1866,11 +1867,11 @@ export function useAuth() {
     if (!existingJwt) {
       if (!publicKey) return false;
       try {
-        const homeInstance = localStorage.getItem(HOME_INSTANCE_KEY) || '';
+        const reauthBaseUrl = resolveReauthInstanceUrl();
         // performChallengeResponse owns identityKeyRef, token, user,
         // vaultState, transcript cache hydration, applyVaultTimeout,
         // and re-seals the session key store on its way out.
-        await performChallengeResponse(privateKey, publicKey, homeInstance);
+        await performChallengeResponse(privateKey, publicKey, reauthBaseUrl);
         return true;
       } catch (err) {
         console.warn('[useAuth] vault session-key challenge-response failed:', err);

@@ -262,6 +262,20 @@ export function getActiveAuthInstanceUrlSync() {
   return getSelectedAuthInstanceUrlSync();
 }
 
+/**
+ * Same as `getActiveAuthInstanceUrlSync` but returns `null` when the
+ * active instance is not explicitly set, instead of falling through to
+ * the selected/default instance. Use when a caller must distinguish
+ * "user has an active session on instance X" from "no active session
+ * yet, would default to X".
+ *
+ * @returns {string | null} normalized origin, or null when unset
+ */
+export function getActiveAuthInstanceUrlIfSet() {
+  if (typeof sessionStorage === 'undefined') return null;
+  return normalizeInstanceUrl(sessionStorage.getItem(ACTIVE_INSTANCE_KEY)) || null;
+}
+
 export function setSelectedAuthInstanceUrlSync(value) {
   const normalized = normalizeInstanceUrl(value) || DEFAULT_AUTH_INSTANCE_URL;
   try {
