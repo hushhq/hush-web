@@ -1,4 +1,7 @@
-import { getActiveAuthInstanceUrlIfSet } from './authInstanceStore';
+import {
+  getActiveAuthInstanceUrlIfSet,
+  normalizeInstanceUrl,
+} from './authInstanceStore';
 
 /**
  * localStorage key holding the user's "home" instance — the one the
@@ -25,7 +28,7 @@ export function resolveReauthInstanceUrl() {
   const active = getActiveAuthInstanceUrlIfSet();
   if (active) return active;
   if (typeof localStorage !== 'undefined') {
-    const home = localStorage.getItem(HOME_INSTANCE_KEY);
+    const home = normalizeInstanceUrl(localStorage.getItem(HOME_INSTANCE_KEY));
     if (home) return home;
   }
   return '';

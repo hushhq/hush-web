@@ -285,17 +285,22 @@ export async function readWrappedIdentity(
 export async function clearSessionKey(userId: string): Promise<void> {
   if (!userId) return
   clearMarker(userId)
+
+  try {
+    await clearSessionStore(userId)
+  } catch (clearErr) {
+    try {
+      await deleteSessionDatabase(userId)
+      return
+    } catch {
+      throw clearErr
+    }
+  }
+
   try {
     await deleteSessionDatabase(userId)
-    return
   } catch {
-    // `deleteDatabase` failed or was blocked by another open connection.
-    // Resolving silently used to leave the wrapped identity + the
-    // non-extractable CryptoKey intact in IDB, defeating lock and
-    // logout: the next boot would happily reuse them. Fall back to
-    // opening the DB ourselves and clearing the object store so the
-    // record is gone even when sibling tabs hold the database open.
-    await clearSessionStoreFallback(userId)
+    // Store is clear; deletion can be blocked by sibling tabs.
   }
 }
 
@@ -309,17 +314,11 @@ function deleteSessionDatabase(userId: string): Promise<void> {
   })
 }
 
-async function clearSessionStoreFallback(userId: string): Promise<void> {
+async function clearSessionStore(userId: string): Promise<void> {
   const db = await openSessionDb(userId)
   try {
     await new Promise<void>((resolve, reject) => {
-      let tx: IDBTransaction
-      try {
-        tx = db.transaction(STORE_NAME, "readwrite")
-      } catch (err) {
-        reject(err instanceof Error ? err : new Error(String(err)))
-        return
-      }
+      const tx = db.transaction(STORE_NAME, "readwrite")
       tx.objectStore(STORE_NAME).clear()
       tx.oncomplete = () => resolve()
       tx.onerror = () =>
