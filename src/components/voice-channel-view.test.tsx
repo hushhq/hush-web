@@ -112,10 +112,18 @@ vi.mock("@livekit/components-react", () => ({
 
 vi.mock("@livekit/components-styles", () => ({}))
 
-// Lightweight stubs for sub-components — none of the device wiring
-// flows through them so we only need a non-throwing render.
+// Lightweight stubs for sub-components — most tests only need a
+// non-throwing render, while targeted interaction tests capture the
+// control callbacks.
+const controlsProps: {
+  onToggleScreen?: () => void
+} = {}
+
 vi.mock("@/components/voice/voice-controls-bar", () => ({
-  VoiceControlsBar: () => null,
+  VoiceControlsBar: (props: typeof controlsProps) => {
+    controlsProps.onToggleScreen = props.onToggleScreen
+    return null
+  },
 }))
 // Capture each picker's onSelect by title so tests can drive
 // in-call mic / webcam / output handlers without rendering real
@@ -142,8 +150,15 @@ vi.mock("@/components/voice/voice-device-picker-dialog", () => ({
 vi.mock("@/components/voice/voice-participant-grid", () => ({
   VoiceParticipantGrid: () => null,
 }))
+const qualityDialogProps: {
+  open?: boolean
+} = {}
+
 vi.mock("@/components/voice/voice-quality-picker-dialog", () => ({
-  VoiceQualityPickerDialog: () => null,
+  VoiceQualityPickerDialog: (props: typeof qualityDialogProps) => {
+    qualityDialogProps.open = props.open
+    return null
+  },
 }))
 vi.mock("@/components/voice/voice-reconnect-overlay", () => ({
   VoiceReconnectOverlay: () => null,
@@ -194,6 +209,10 @@ function resetRoomMock() {
   roomMock.api.unpublishMic.mockClear().mockResolvedValue(undefined)
   roomMock.api.publishWebcam.mockClear().mockResolvedValue(undefined)
   roomMock.api.unpublishWebcam.mockClear().mockResolvedValue(undefined)
+  roomMock.api.publishScreen.mockClear().mockResolvedValue(null)
+  roomMock.api.unpublishScreen.mockClear().mockResolvedValue(undefined)
+  roomMock.api.switchScreenSource.mockClear().mockResolvedValue(null)
+  roomMock.api.changeQuality.mockClear().mockResolvedValue(undefined)
   roomMock.playbackManager.setSinkId.mockClear().mockResolvedValue(undefined)
   WS_CLIENT.send.mockClear()
   NEXT_WS_CLIENT.send.mockClear()
@@ -204,6 +223,8 @@ beforeEach(async () => {
   pickerHandlers.mic = null
   pickerHandlers.camera = null
   pickerHandlers.output = null
+  controlsProps.onToggleScreen = undefined
+  qualityDialogProps.open = undefined
   prejoinProps.onDevicePrefsChange = undefined
   await clearVoiceDevicePrefs("user-1").catch(() => {})
 })
@@ -212,7 +233,7 @@ afterEach(() => {
   cleanup()
 })
 
-async function mount() {
+async function mount(props: { screenShareResolutionCap?: "1080p" | "720p" } = {}) {
   let result!: ReturnType<typeof render>
   await act(async () => {
     result = render(
@@ -220,8 +241,9 @@ async function mount() {
         channel={CHANNEL}
         serverId="srv-1"
         getToken={() => "tok"}
-        wsClient={null}
+        wsClient={WS_CLIENT}
         onLeave={vi.fn()}
+        screenShareResolutionCap={props.screenShareResolutionCap}
       />
     )
     // Let the prefs-load effect resolve.
@@ -235,8 +257,9 @@ async function mount() {
         channel={CHANNEL}
         serverId="srv-1"
         getToken={() => "tok"}
-        wsClient={null}
+        wsClient={WS_CLIENT}
         onLeave={vi.fn()}
+        screenShareResolutionCap={props.screenShareResolutionCap}
       />
     )
     await Promise.resolve()
@@ -371,6 +394,57 @@ describe("VoiceChannelView — prejoin device preference sync", () => {
         videoEnabled: true,
       })
     })
+  })
+})
+
+describe("VoiceChannelView — screen-share resolution policy", () => {
+  it("starts screen sharing at 720p directly when the instance caps resolution", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: false,
+      videoEnabled: false,
+      dontAskAgain: true,
+    })
+    const track = { addEventListener: vi.fn() }
+    roomMock.api.publishScreen.mockResolvedValueOnce({
+      getVideoTracks: () => [track],
+    })
+
+    await mount({ screenShareResolutionCap: "720p" })
+
+    await waitFor(() => {
+      expect(controlsProps.onToggleScreen).toBeTypeOf("function")
+    })
+    await act(async () => {
+      await controlsProps.onToggleScreen?.()
+    })
+
+    expect(roomMock.api.publishScreen).toHaveBeenCalledWith("lite")
+    expect(qualityDialogProps.open).not.toBe(true)
+  })
+
+  it("opens the quality picker when the instance allows 1080p", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: false,
+      videoEnabled: false,
+      dontAskAgain: true,
+    })
+    await mount({ screenShareResolutionCap: "1080p" })
+
+    await waitFor(() => {
+      expect(controlsProps.onToggleScreen).toBeTypeOf("function")
+    })
+    await act(async () => {
+      await controlsProps.onToggleScreen?.()
+    })
+
+    expect(roomMock.api.publishScreen).not.toHaveBeenCalled()
+    expect(qualityDialogProps.open).toBe(true)
   })
 })
 

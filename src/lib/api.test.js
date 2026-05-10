@@ -146,6 +146,21 @@ describe('getHandshake', () => {
     });
   });
 
+  it('normalizes camelCase screenShareResolutionCap for existing consumers', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        screenShareResolutionCap: '720p',
+      }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await getHandshake('https://chat.example.com');
+
+    expect(result.screenShareResolutionCap).toBe('720p');
+    expect(result.screen_share_resolution_cap).toBe('720p');
+  });
+
   it('throws when handshake endpoint returns non-ok status', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 503 });
     vi.stubGlobal('fetch', mockFetch);

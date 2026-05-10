@@ -142,6 +142,23 @@ interface VoiceState {
   isWebcamOn: boolean
 }
 
+type ScreenShareResolutionCap = "1080p" | "720p"
+
+function readScreenShareResolutionCap(
+  handshakeData:
+    | {
+        screen_share_resolution_cap?: string
+        screenShareResolutionCap?: string
+      }
+    | null
+    | undefined
+): ScreenShareResolutionCap {
+  const value =
+    handshakeData?.screen_share_resolution_cap ??
+    handshakeData?.screenShareResolutionCap
+  return value === "720p" ? "720p" : "1080p"
+}
+
 function systemIconFor(type: SystemChannelType): React.ReactNode {
   return type === "moderation" ? <ShieldAlertIcon /> : <ScrollTextIcon />
 }
@@ -218,7 +235,11 @@ export function AuthenticatedApp() {
       wsClient: unknown
       token: string
       userId: string
-      handshakeData: { log_public_key?: string } | null
+      handshakeData: {
+        log_public_key?: string
+        screen_share_resolution_cap?: string
+        screenShareResolutionCap?: string
+      } | null
       serverIds: string[]
     }>
     disconnectInstance: (instanceUrl: string) => Promise<void>
@@ -1030,6 +1051,17 @@ export function AuthenticatedApp() {
   const voiceWsClient = joinedVoiceInstanceUrl
     ? getWsClient(joinedVoiceInstanceUrl)
     : null
+  const voiceHandshakeData = React.useMemo(() => {
+    if (!joinedVoiceInstanceUrl) return null
+    const joinedOrigin = normalizeOrigin(joinedVoiceInstanceUrl)
+    return (
+      connectedInstances.find(
+        (inst) => normalizeOrigin(inst.instanceUrl) === joinedOrigin
+      )?.handshakeData ?? null
+    )
+  }, [connectedInstances, joinedVoiceInstanceUrl])
+  const voiceScreenShareResolutionCap =
+    readScreenShareResolutionCap(voiceHandshakeData)
   const voiceGetToken = React.useCallback(
     () => voiceToken,
     [voiceToken]
@@ -1519,6 +1551,7 @@ export function AuthenticatedApp() {
                     voiceControlsRef={voiceControlsRef}
                     onVoiceStateChange={handleVoiceStateChange}
                     baseUrl={joinedVoiceInstanceUrl}
+                    screenShareResolutionCap={voiceScreenShareResolutionCap}
                   />
                 </div>
               ) : null}

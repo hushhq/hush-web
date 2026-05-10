@@ -34,6 +34,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MaximizeIcon, MinimizeIcon } from "lucide-react"
 
+type ScreenShareResolutionCap = "1080p" | "720p"
+
 type MicFilterSettingsPatch = Partial<{
   noiseGateEnabled: boolean
   noiseGateThresholdDb: number
@@ -69,6 +71,7 @@ interface VoiceChannelViewProps {
   voiceControlsRef?: React.RefObject<VoiceControlsApi | null> | null
   onVoiceStateChange?: (state: VoiceState) => void
   baseUrl?: string
+  screenShareResolutionCap?: ScreenShareResolutionCap
 }
 
 interface DeviceOption {
@@ -175,6 +178,7 @@ export function VoiceChannelView({
   voiceControlsRef,
   onVoiceStateChange,
   baseUrl = "",
+  screenShareResolutionCap = "1080p",
 }: VoiceChannelViewProps) {
   const { user } = useAuth() as {
     user: { id?: string; displayName?: string; display_name?: string } | null
@@ -519,15 +523,6 @@ export function VoiceChannelView({
     setIsWebcamOn(true)
   }, [isWebcamOn, prefs?.videoDeviceId, room])
 
-  const handleToggleScreen = React.useCallback(async () => {
-    if (isScreenSharing) {
-      await room.unpublishScreen()
-      setIsScreenSharing(false)
-      return
-    }
-    setShowQualityPicker(true)
-  }, [isScreenSharing, room])
-
   const handleQualityPick = React.useCallback(
     async (key: Parameters<typeof bandwidth.setQualityKey>[0]) => {
       setShowQualityPicker(false)
@@ -553,6 +548,19 @@ export function VoiceChannelView({
     },
     [bandwidth, isScreenSharing, room]
   )
+
+  const handleToggleScreen = React.useCallback(async () => {
+    if (isScreenSharing) {
+      await room.unpublishScreen()
+      setIsScreenSharing(false)
+      return
+    }
+    if (screenShareResolutionCap === "720p") {
+      await handleQualityPick("lite")
+      return
+    }
+    setShowQualityPicker(true)
+  }, [handleQualityPick, isScreenSharing, room, screenShareResolutionCap])
 
   const handleSwitchScreen = React.useCallback(async () => {
     if (!isScreenSharing) return
@@ -939,7 +947,7 @@ export function VoiceChannelView({
       />
 
       <VoiceQualityPickerDialog
-        open={showQualityPicker}
+        open={screenShareResolutionCap !== "720p" && showQualityPicker}
         recommendedQualityKey={bandwidth.recommendedQualityKey}
         recommendedUploadMbps={bandwidth.recommendedUploadMbps}
         onSelect={(key) => void handleQualityPick(key)}

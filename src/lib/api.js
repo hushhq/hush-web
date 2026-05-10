@@ -863,6 +863,12 @@ export async function getHandshake(baseUrl = '', signal) {
   if (data?.registrationMode !== undefined && data.registration_mode === undefined) {
     data.registration_mode = data.registrationMode;
   }
+  if (
+    data?.screenShareResolutionCap !== undefined &&
+    data.screen_share_resolution_cap === undefined
+  ) {
+    data.screen_share_resolution_cap = data.screenShareResolutionCap;
+  }
   return data;
 }
 
