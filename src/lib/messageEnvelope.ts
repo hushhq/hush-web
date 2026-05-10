@@ -23,6 +23,7 @@
  * decoder branch — never adding optional fields silently to the v1
  * decoder.
  */
+import { isAttachmentContentTypeAllowed } from "@/lib/attachmentLimits"
 
 /**
  * Conservative byte budget for the JSON envelope. Backend caps
@@ -230,6 +231,7 @@ function isAttachmentRef(value: unknown): value is AttachmentRef {
     typeof v.name === "string" &&
     typeof v.size === "number" &&
     typeof v.mimeType === "string" &&
+    isAttachmentContentTypeAllowed(v.mimeType) &&
     typeof v.key === "string" &&
     typeof v.iv === "string" &&
     (v.width === undefined || typeof v.width === "number") &&

@@ -1,8 +1,8 @@
 /**
- * Shared client-side attachment limits. The server enforces an identical
- * set in `internal/api/attachments.go` (`MaxAttachmentBytes` plus the
- * `allowedAttachmentContentTypes` allowlist). Both sides must agree;
- * keep these constants in lockstep when changing one.
+ * Shared client-side attachment limits. The server must enforce a
+ * compatible ceiling for upload size and content type; the client
+ * repeats the checks at upload and envelope-decode boundaries so a
+ * malicious sender cannot make recipients render active formats.
  */
 
 /**
@@ -18,16 +18,25 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 export const MAX_ATTACHMENTS_PER_MESSAGE = 4
 
 /**
- * Mime allowlist. Each entry is matched as a literal exact string OR a
- * `prefix/` (trailing slash → wildcard subtype). The same shape lives
- * in the Go handler.
+ * MIME allowlist. Entries are exact, normalized content types. Do not
+ * use broad prefixes such as `image/` or `text/`: they admit active
+ * formats like SVG or HTML that are unsafe if any future renderer opens
+ * them outside download-only mode.
  */
 export const ALLOWED_ATTACHMENT_CONTENT_TYPES: ReadonlyArray<string> = [
-  "image/",
-  "audio/",
+  "image/gif",
+  "image/heic",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
   "video/mp4",
   "video/webm",
-  "text/",
+  "text/plain",
   "application/pdf",
 ]
 
@@ -38,7 +47,5 @@ export const ALLOWED_ATTACHMENT_CONTENT_TYPES: ReadonlyArray<string> = [
 export function isAttachmentContentTypeAllowed(candidate: string): boolean {
   const ct = candidate.trim().toLowerCase()
   if (!ct) return false
-  return ALLOWED_ATTACHMENT_CONTENT_TYPES.some((entry) =>
-    entry.endsWith("/") ? ct.startsWith(entry) : ct === entry
-  )
+  return ALLOWED_ATTACHMENT_CONTENT_TYPES.includes(ct)
 }

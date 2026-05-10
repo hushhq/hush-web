@@ -53,6 +53,12 @@ import {
   createVaultSessionPresence,
 } from '../lib/vaultSessionKey';
 import {
+  clearPersistedInactivityDeadline,
+  persistInactivityDeadline,
+  readPersistedInactivityDeadline,
+  shouldBlockNumericVaultSessionResume,
+} from '../lib/vaultInactivityDeadline';
+import {
   openHistoryStore,
   importHistorySnapshot,
 } from '../lib/mlsStore';
@@ -178,7 +184,6 @@ const DEVICE_ID_KEY = 'hush_device_id';
 const VAULT_USER_KEY_PREFIX = 'hush_vault_user_';
 const VAULT_SESSION_FLAG = 'hush_vault_session_alive';
 const VAULT_DERIVED_KEY = 'hush_vault_derived_key';
-const VAULT_IDLE_DEADLINE_KEY = 'hush_vault_idle_deadline';
 const LEGACY_VAULT_TIMEOUT_KEY = 'hush_vault_timeout';
 const PIN_SETUP_PENDING_KEY = 'hush_pin_setup_pending';
 const PIN_ATTEMPTS_KEY_PREFIX = 'hush_pin_attempts_';
@@ -289,13 +294,18 @@ async function tryVaultSessionResume(userId, effectiveConfig) {
   if (!userId) return null;
   const policy = effectiveConfig?.timeout ?? 'browser_close';
   try {
+    if (shouldBlockNumericVaultSessionResume(userId, policy)) {
+      clearPersistedInactivityDeadline(userId);
+      await clearVaultSessionStore(userId);
+      return null;
+    }
+
     // P21 step 5 — under `browser_close` only, probe sibling tabs via
     // BroadcastChannel when the per-tab marker is missing. The marker
     // catches soft-refresh inside the same tab; the probe catches a
     // fresh tab opening while another tab of this user is still live.
-    // Other policies don't need the probe: `never` reuses regardless,
-    // `refresh` always wipes, numeric is gated by the inactivity
-    // deadline.
+    // Other policies don't need the probe: `never` reuses regardless
+    // and `refresh` always wipes.
     let aliveTabExists = false;
     let probe = null;
     if (policy === 'browser_close' && !isVaultSessionMarkerAlive(userId)) {
@@ -724,8 +734,9 @@ export function useAuth() {
    * timeouts across background/foreground transitions.
    */
   const clearInactivityDeadline = useCallback(() => {
+    const userId = currentUserIdRef.current;
     inactivityDeadlineRef.current = null;
-    sessionStorage.removeItem(VAULT_IDLE_DEADLINE_KEY);
+    clearPersistedInactivityDeadline(userId);
   }, []);
 
   /**
@@ -734,8 +745,9 @@ export function useAuth() {
    * @param {number} deadlineMs
    */
   const setInactivityDeadline = useCallback((deadlineMs) => {
+    const userId = currentUserIdRef.current;
     inactivityDeadlineRef.current = deadlineMs;
-    sessionStorage.setItem(VAULT_IDLE_DEADLINE_KEY, String(deadlineMs));
+    persistInactivityDeadline(userId, deadlineMs);
   }, []);
 
   /**
@@ -748,14 +760,9 @@ export function useAuth() {
       return inactivityDeadlineRef.current;
     }
 
-    const raw = sessionStorage.getItem(VAULT_IDLE_DEADLINE_KEY);
-    if (!raw) return null;
-
-    const deadlineMs = Number(raw);
-    if (!Number.isFinite(deadlineMs)) {
-      sessionStorage.removeItem(VAULT_IDLE_DEADLINE_KEY);
-      return null;
-    }
+    const userId = currentUserIdRef.current;
+    const deadlineMs = readPersistedInactivityDeadline(userId);
+    if (deadlineMs == null) return null;
 
     inactivityDeadlineRef.current = deadlineMs;
     return deadlineMs;
@@ -2179,7 +2186,7 @@ export function useAuth() {
       try {
         const res = await fetchWithAuth(stored, '/api/auth/me');
         if (res.status === 401) {
-          clearSession();
+          markServerSessionInvalidated('server_session_invalid');
           window.location.href = '/';
         }
       } catch {
@@ -2189,7 +2196,7 @@ export function useAuth() {
 
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
+  }, [markServerSessionInvalidated]);
 
   // ── Inactivity cleanup on vault lock / guest timer cleanup on unmount ──────
 

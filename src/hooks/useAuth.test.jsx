@@ -1076,6 +1076,48 @@ describe('useAuth - session rehydration', () => {
     });
   });
 
+  it('does NOT resume from the session-key store when a numeric timeout deadline expired while closed', async () => {
+    const userId = 'user-step4-expired-numeric';
+    sessionStorage.setItem(JWT_KEY, 'valid-jwt');
+    localStorage.setItem(`hush_vault_user_${userId}`, 'aabb');
+    localStorage.setItem(`hush_vault_idle_deadline_${userId}`, String(Date.now() - 1));
+    const fakeBlob = new Uint8Array(44);
+    fakeBlob.set(new Uint8Array(32).fill(1), 12);
+    _vaultBlobs.set(userId, fakeBlob);
+
+    vi.mocked(vaultMod.getVaultConfig).mockReturnValue({
+      timeout: 5,
+      pinType: 'pin',
+    });
+
+    await clearSessionKey(userId);
+    await sealIdentityIntoSession(
+      userId,
+      new TextEncoder().encode(
+        JSON.stringify({
+          v: 1,
+          priv: Array.from(new Uint8Array(32).fill(7)),
+          pub: Array.from(new Uint8Array(32).fill(8)),
+        }),
+      ),
+    );
+    expect(await readWrappedIdentity(userId)).not.toBeNull();
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
+      mockFetchOk({ id: userId, username: 'nova', displayName: 'Nova' }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.vaultState).toBe('locked');
+    expect(result.current.needsUnlock).toBe(true);
+
+    await waitFor(async () => {
+      expect(await readWrappedIdentity(userId)).toBeNull();
+    });
+    expect(localStorage.getItem(`hush_vault_idle_deadline_${userId}`)).toBeNull();
+  });
+
   it('resumes from the session-key store under "browser_close" when the per-tab alive marker is set (P21 step 3)', async () => {
     // Same as above, but with an alive marker — soft refresh inside
     // the same tab. Must resume to `vaultState='unlocked'`.

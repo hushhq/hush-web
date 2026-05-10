@@ -154,6 +154,24 @@ describe("decodeEnvelopeV1 — strict cutover", () => {
     expect(result.reason).toBe("invalid-shape")
   })
 
+  it("returns invalid-shape when an attachment smuggles a blocked MIME type", () => {
+    const result = decodeEnvelopeV1FromString(
+      JSON.stringify({
+        v: 1,
+        text: "x",
+        attachments: [
+          {
+            ...fixtureAttachment,
+            mimeType: "image/svg+xml",
+          },
+        ],
+      })
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe("invalid-shape")
+  })
+
   it("returns invalid-shape when gif is missing dimensions", () => {
     const result = decodeEnvelopeV1FromString(
       JSON.stringify({
