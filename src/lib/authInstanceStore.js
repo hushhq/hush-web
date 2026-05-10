@@ -8,17 +8,7 @@ const DEFAULT_MIGRATION_KEY = 'hush_auth_instance_default_origin_migrated_v1';
 
 export const HOSTED_AUTH_INSTANCE_URL = 'https://app.gethush.live';
 
-/**
- * Schemes accepted as instance URLs. Anything else (`javascript:`,
- * `data:`, `blob:`, `file:`, `chrome:`, custom schemes, ws/wss …) is
- * rejected at normalisation time so it can never reach
- * `getLiveKitUrl` / `buildApiUrl` and have the renderer issue an
- * authenticated request to a non-https origin or open a script-execution
- * pseudo-scheme. `http:` is allowed because local dev (`http://localhost`,
- * `http://192.168.x.y:5173`) needs to keep working; the production
- * default is `https:` and the `https://` prefix is auto-added when the
- * caller passes a bare host.
- */
+// Keep instance origins on HTTP(S). `http:` is needed for localhost/LAN dev.
 const ALLOWED_INSTANCE_PROTOCOLS = new Set(['https:', 'http:']);
 
 export function normalizeInstanceUrl(value) {
@@ -276,15 +266,7 @@ export function getActiveAuthInstanceUrlSync() {
   return getSelectedAuthInstanceUrlSync();
 }
 
-/**
- * Same as `getActiveAuthInstanceUrlSync` but returns `null` when the
- * active instance is not explicitly set, instead of falling through to
- * the selected/default instance. Use when a caller must distinguish
- * "user has an active session on instance X" from "no active session
- * yet, would default to X".
- *
- * @returns {string | null} normalized origin, or null when unset
- */
+// Like getActiveAuthInstanceUrlSync, but does not fall through to selection.
 export function getActiveAuthInstanceUrlIfSet() {
   if (typeof sessionStorage === 'undefined') return null;
   return normalizeInstanceUrl(sessionStorage.getItem(ACTIVE_INSTANCE_KEY)) || null;
