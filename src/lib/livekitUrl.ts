@@ -1,0 +1,107 @@
+/**
+ * Resolves the WebSocket URL the LiveKit client should connect to.
+ *
+ * Inputs come from three places, in priority order:
+ *
+ *   1. `VITE_LIVEKIT_URL` build-time override (when set, it wins —
+ *      mirrors the long-standing escape hatch for self-hosters that
+ *      run LiveKit on a separate origin from the API).
+ *   2. The caller's normalized instance origin (https://chat.example.com)
+ *      → ws+s://chat.example.com/livekit/
+ *   3. The current page origin's `/livekit/` path (browser-only fallback;
+ *      packaged Electron builds always have an instance origin).
+ *
+ * Whatever the source, the resolved URL must end up on `ws:` or `wss:`
+ * pointing at a real host. Any other shape — javascript:, data:,
+ * relative paths, malformed URLs — is rejected here so a misconfigured
+ * env var or a tampered instance store cannot drive the LiveKit client
+ * (and the local SFU credential) at an attacker-controlled origin.
+ */
+
+const ALLOWED_LIVEKIT_PROTOCOLS = new Set(["ws:", "wss:"])
+
+export interface BuildLiveKitWsUrlInput {
+  /**
+   * Normalized instance origin from `normalizeInstanceUrl`, or '' /
+   * null when the page-origin fallback should be used.
+   */
+  instanceOrigin?: string | null
+  /**
+   * `import.meta.env.VITE_LIVEKIT_URL` — undefined / empty when no
+   * override is set. Trusted only when it parses as ws:/wss:.
+   */
+  envOverride?: string | null
+  /**
+   * Current page origin (e.g. `window.location.origin`). Optional;
+   * when omitted (server-side render, headless test) the fallback path
+   * is unavailable and the function throws if no instance origin is
+   * provided either.
+   */
+  pageOrigin?: string | null
+}
+
+/**
+ * Returns a validated `ws:` / `wss:` URL pointing at a LiveKit reverse
+ * proxy under `/livekit/`. Throws on any input that cannot be coerced
+ * into one — callers must either supply a usable input or surface the
+ * error to the user instead of falling back to a silently-wrong URL.
+ */
+export function buildLiveKitWsUrl(input: BuildLiveKitWsUrlInput): string {
+  const { instanceOrigin, envOverride, pageOrigin } = input
+
+  if (envOverride) {
+    const validated = validateAsLiveKitWsUrl(envOverride)
+    if (validated) return validated
+    throw new Error(
+      `livekitUrl: VITE_LIVEKIT_URL must be ws:// or wss://; got ${envOverride}`,
+    )
+  }
+
+  if (instanceOrigin) {
+    const wsFromInstance = swapHttpToWs(instanceOrigin)
+    if (wsFromInstance) return wsFromInstance
+    throw new Error(
+      `livekitUrl: instance origin is not http/https: ${instanceOrigin}`,
+    )
+  }
+
+  if (pageOrigin) {
+    const wsFromPage = swapHttpToWs(pageOrigin)
+    if (wsFromPage) return wsFromPage
+    throw new Error(
+      `livekitUrl: page origin is not http/https: ${pageOrigin}`,
+    )
+  }
+
+  throw new Error(
+    "livekitUrl: no instance origin, env override, or page origin available",
+  )
+}
+
+function swapHttpToWs(origin: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(origin)
+  } catch {
+    return null
+  }
+  if (parsed.protocol === "https:") parsed.protocol = "wss:"
+  else if (parsed.protocol === "http:") parsed.protocol = "ws:"
+  else return null
+  parsed.pathname = "/livekit/"
+  parsed.search = ""
+  parsed.hash = ""
+  return parsed.toString()
+}
+
+function validateAsLiveKitWsUrl(candidate: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(candidate)
+  } catch {
+    return null
+  }
+  if (!ALLOWED_LIVEKIT_PROTOCOLS.has(parsed.protocol)) return null
+  if (!parsed.host) return null
+  return parsed.toString()
+}

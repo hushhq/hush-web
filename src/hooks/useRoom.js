@@ -16,6 +16,7 @@ import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
 import { CAPTURE_PROFILES, resolveMode, isMobileWebAudio } from '../audio';
 import { PlaybackManager } from '../audio/playback/PlaybackManager';
 import { getActiveAuthInstanceUrlSync, normalizeInstanceUrl } from '../lib/authInstanceStore';
+import { buildLiveKitWsUrl } from '../lib/livekitUrl';
 
 import {
   attachRemoteTrackListeners,
@@ -63,19 +64,17 @@ function buildApiUrl(path, baseUrl = '') {
 }
 
 function buildLiveKitUrl(baseUrl = '') {
-  if (import.meta.env.VITE_LIVEKIT_URL) return import.meta.env.VITE_LIVEKIT_URL;
-
-  const normalized = normalizeInstanceUrl(baseUrl);
-  if (normalized) {
-    const url = new URL(normalized);
-    url.protocol = url.protocol === 'http:' ? 'ws:' : 'wss:';
-    url.pathname = '/livekit/';
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  }
-
-  return `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/livekit/`;
+  // `buildLiveKitWsUrl` parses every input via the URL constructor and
+  // accepts only ws:/wss: in the result. Any non-http(s) instance
+  // origin or a misconfigured VITE_LIVEKIT_URL throws here rather than
+  // silently driving the LiveKit client at an attacker-controlled host.
+  return buildLiveKitWsUrl({
+    envOverride: import.meta.env.VITE_LIVEKIT_URL || null,
+    instanceOrigin: normalizeInstanceUrl(baseUrl),
+    pageOrigin: typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : null,
+  });
 }
 
 /**
