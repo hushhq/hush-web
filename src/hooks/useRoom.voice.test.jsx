@@ -229,7 +229,7 @@ vi.mock('../audio', async (importOriginal) => {
   };
 });
 
-import { useRoom } from './useRoom';
+import { resolveLiveKitConnectOptions, useRoom } from './useRoom';
 
 // ---------------------------------------------------------------------------
 // Shared test helpers
@@ -346,6 +346,30 @@ describe('useRoom MLS voice E2EE', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     expect(capturedRooms.at(-1).connectArgs[0]).toBe('wss://app.gethush.live/livekit/');
+    expect(capturedRooms.at(-1).connectArgs[2]).toMatchObject({
+      autoSubscribe: true,
+      websocketTimeout: 15_000,
+    });
+  });
+
+  it('passes an extended LiveKit websocket timeout for Safari', () => {
+    const safariUserAgent =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15';
+
+    expect(resolveLiveKitConnectOptions(safariUserAgent)).toEqual({
+      autoSubscribe: true,
+      websocketTimeout: 45_000,
+    });
+  });
+
+  it('keeps the default LiveKit websocket timeout for Chromium browsers', () => {
+    const chromeUserAgent =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36';
+
+    expect(resolveLiveKitConnectOptions(chromeUserAgent)).toEqual({
+      autoSubscribe: true,
+      websocketTimeout: 15_000,
+    });
   });
 
   it('connectRoom calls exportVoiceFrameKey and applies key via setKey(frameKeyBytes, epoch % 256)', async () => {
