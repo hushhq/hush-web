@@ -8,6 +8,7 @@ import { getActiveAuthInstanceUrlSync, getSelectedAuthInstanceUrlSync } from './
 import * as hushCrypto from './hushCrypto';
 import { getReadableDeviceLabel } from './deviceLabel';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
+import { detectSessionInvalidation } from './sessionInvalidationDetector';
 
 const USERNAME_CHECK_TIMEOUT_MS = 8000;
 const HANDSHAKE_TIMEOUT_MS = 10000;
@@ -112,21 +113,21 @@ export async function fetchWithAuth(token, path, opts = {}, baseUrl = '') {
     headers.set('Authorization', `Bearer ${token}`);
   }
   const res = await fetch(url, { ...opts, headers });
-  // Universal server-session invalidation surface: authenticated HTTP
-  // calls that prove the server no longer accepts this local session
-  // notify the auth layer. Cloning keeps the original body readable by
-  // the caller. The check remains intentionally narrow: plain expired
-  // tokens still flow to the callsite, while destructive server actions
-  // (device revoke, user removal, DB reset) move the client out of the
-  // PIN path without wiping its encrypted local vault.
+  // Server-session invalidation surface: classify a 401 only when
+  // either a structured `error_code` declares it, or the call hit a
+  // session-aware endpoint (auth/session/livekit-token) AND the human-
+  // readable error matches a narrow pattern. Plain expired tokens, and
+  // any 401 from product endpoints (member lookups, channel reads, …)
+  // surface to the caller without firing the global event so the UI is
+  // not torn down for an unrelated 401.
   if (res.status === 401) {
     try {
       const cloned = res.clone();
       const body = await cloned.json().catch(() => null);
-      const errStr = (body && typeof body.error === 'string') ? body.error : '';
-      if (/device\s*revoked|user\s*not\s*found|unknown\s*public\s*key|session\s*invalid/i.test(errStr) && typeof window !== 'undefined') {
+      const detected = detectSessionInvalidation({ path, body });
+      if (detected && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
-          detail: { reason: /device\s*revoked/i.test(errStr) ? 'device_revoked' : 'server_session_invalid' },
+          detail: { reason: detected.reason },
         }));
       }
     } catch { /* ignore — surface the original 401 to the caller */ }
