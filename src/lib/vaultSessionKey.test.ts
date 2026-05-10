@@ -206,8 +206,8 @@ describe("vaultSessionKey — clearSessionKey", () => {
   })
 
   // Stub `deleteDatabase` to fire either `onblocked` or `onerror` so
-  // we can exercise the fallback path independently from fake-indexeddb's
-  // own delete behaviour.
+  // we can prove the sensitive store is still cleared even when final
+  // database deletion cannot complete.
   const stubDeleteWith = (event: "blocked" | "error") =>
     vi.spyOn(indexedDB, "deleteDatabase").mockImplementation(() => {
       const req = {
@@ -224,7 +224,7 @@ describe("vaultSessionKey — clearSessionKey", () => {
     })
 
   it.each(["blocked", "error"] as const)(
-    "clears the store via fallback when deleteDatabase emits %s",
+    "clears the store before best-effort deleteDatabase emits %s",
     async (event) => {
       const key = await ensureSessionKey(USER)
       await persistWrappedIdentity(

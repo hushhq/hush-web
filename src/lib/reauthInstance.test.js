@@ -20,6 +20,16 @@ describe('resolveReauthInstanceUrl', () => {
     expect(resolveReauthInstanceUrl()).toBe('https://home.example.com');
   });
 
+  it('normalizes the home instance fallback', () => {
+    localStorage.setItem(HOME_INSTANCE_KEY, 'https://home.example.com/path?q=1');
+    expect(resolveReauthInstanceUrl()).toBe('https://home.example.com');
+  });
+
+  it('ignores an unsafe home instance fallback', () => {
+    localStorage.setItem(HOME_INSTANCE_KEY, 'javascript:alert(1)');
+    expect(resolveReauthInstanceUrl()).toBe('');
+  });
+
   it('returns empty string when neither is set', () => {
     expect(resolveReauthInstanceUrl()).toBe('');
   });
