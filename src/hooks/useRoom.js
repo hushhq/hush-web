@@ -491,6 +491,17 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // renderer is app://localhost, so voice must target the active
         // auth instance's /livekit/ reverse proxy instead.
         const livekitUrl = buildLiveKitUrl(voiceBaseUrl);
+        // autoSubscribe is intentionally `true`: @livekit/components-react's
+        // prebuilt grid/tile components mounted via RoomContext.Provider
+        // assume tracks are subscribed by the time they observe a remote
+        // participant. Switching to `false` would silently drop remote
+        // audio + video unless we also wire explicit per-publication
+        // subscribe calls in the consumer (voice-channel-view +
+        // participant-tile). The privacy/bandwidth trade-off (every
+        // participant decrypts every track on join) is real but
+        // secondary to functional correctness — track it as a follow-up
+        // (selective subscribe + per-track UI focus) rather than
+        // flipping the flag here. See PR #4 review item P0 for context.
         await room.connect(livekitUrl, token, { autoSubscribe: true });
 
         if (isStale()) {
