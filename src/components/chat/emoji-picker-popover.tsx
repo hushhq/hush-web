@@ -4,8 +4,8 @@
  * decorative, now wired to insert the chosen unicode codepoint at the
  * editor cursor via the parent's `onSelect` callback.
  *
- * `@emoji-mart/data` is large; it is dynamically imported on first
- * open so the cold composer mount stays fast.
+ * `emoji-mart` and `@emoji-mart/data` are dynamically imported on
+ * first open so the cold composer mount stays fast.
  */
 import * as React from "react"
 
@@ -27,6 +27,65 @@ interface EmojiMartSelection {
   shortcodes?: string
 }
 
+type EmojiMartPickerElement = HTMLElement & {
+  update?: (props: Record<string, unknown>) => void
+}
+
+type EmojiMartPickerConstructor = new (
+  props: Record<string, unknown>
+) => EmojiMartPickerElement
+
+interface EmojiMartModule {
+  Picker: EmojiMartPickerConstructor
+}
+
+function resolveEmojiMartModule(mod: unknown): EmojiMartModule {
+  const direct = mod as Partial<EmojiMartModule>
+  if (typeof direct.Picker === "function") {
+    return direct as EmojiMartModule
+  }
+
+  const withDefault = mod as { default?: Partial<EmojiMartModule> }
+  if (typeof withDefault.default?.Picker === "function") {
+    return withDefault.default as EmojiMartModule
+  }
+
+  throw new Error("emoji-mart Picker export is unavailable")
+}
+
+function EmojiMartPicker({
+  Picker,
+  data,
+  onSelect,
+}: {
+  Picker: EmojiMartPickerConstructor
+  data: unknown
+  onSelect: (selection: EmojiMartSelection) => void
+}) {
+  const hostRef = React.useRef<HTMLDivElement | null>(null)
+
+  React.useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+
+    const picker = new Picker({
+      data,
+      onEmojiSelect: onSelect,
+      theme: "auto",
+      previewPosition: "none",
+      skinTonePosition: "search",
+      navPosition: "bottom",
+    })
+
+    host.replaceChildren(picker)
+    return () => {
+      host.replaceChildren()
+    }
+  }, [Picker, data, onSelect])
+
+  return <div ref={hostRef} />
+}
+
 export function EmojiPickerPopover({
   trigger,
   onSelect,
@@ -34,28 +93,26 @@ export function EmojiPickerPopover({
   side = "top",
 }: EmojiPickerPopoverProps) {
   const [open, setOpen] = React.useState(false)
-  const [PickerComponent, setPickerComponent] =
-    React.useState<React.ComponentType<Record<string, unknown>> | null>(null)
+  const [Picker, setPicker] =
+    React.useState<EmojiMartPickerConstructor | null>(null)
   const [data, setData] = React.useState<unknown>(null)
 
   React.useEffect(() => {
-    if (!open || PickerComponent) return
+    if (!open || Picker) return
     let cancelled = false
     Promise.all([
-      import("@emoji-mart/react"),
+      import("emoji-mart"),
       import("@emoji-mart/data"),
-    ]).then(([mod, dataMod]) => {
+    ]).then(([emojiMartMod, dataMod]) => {
       if (cancelled) return
-      const Comp = (mod.default ?? (mod as unknown)) as React.ComponentType<
-        Record<string, unknown>
-      >
-      setPickerComponent(() => Comp)
+      const { Picker: LoadedPicker } = resolveEmojiMartModule(emojiMartMod)
+      setPicker(() => LoadedPicker)
       setData(dataMod.default ?? dataMod)
     })
     return () => {
       cancelled = true
     }
-  }, [open, PickerComponent])
+  }, [open, Picker])
 
   const handleSelect = React.useCallback(
     (selection: EmojiMartSelection) => {
@@ -76,14 +133,11 @@ export function EmojiPickerPopover({
         side={side}
         className="w-auto border-0 bg-transparent p-0 shadow-none"
       >
-        {PickerComponent && data ? (
-          <PickerComponent
+        {Picker && data ? (
+          <EmojiMartPicker
+            Picker={Picker}
             data={data}
-            onEmojiSelect={handleSelect}
-            theme="auto"
-            previewPosition="none"
-            skinTonePosition="search"
-            navPosition="bottom"
+            onSelect={handleSelect}
           />
         ) : (
           <div className="rounded-md bg-popover p-4 text-xs text-muted-foreground shadow-md">

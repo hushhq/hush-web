@@ -1,11 +1,11 @@
 /**
  * Behavioural cover for the emoji picker popover.
  *
- * The real `@emoji-mart/react` Picker is a heavy custom-elements
- * component that does not render under jsdom. We mock it with a stub
+ * The real `emoji-mart` Picker is a custom element that does not need
+ * to run under jsdom. We mock its constructor with a button element
  * that simulates an emoji selection so the integration boundary
- * (popover open → emoji-mart onEmojiSelect → onSelect callback) can be
- * exercised.
+ * (popover open -> emoji-mart onEmojiSelect -> onSelect callback) can
+ * be exercised.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react"
@@ -16,19 +16,27 @@ interface PickerProps {
   onEmojiSelect: (selection: { native: string }) => void
 }
 
-vi.mock("@emoji-mart/react", () => ({
-  default: function MockPicker(props: PickerProps) {
-    return (
-      <button
-        type="button"
-        data-testid="mock-emoji-pick"
-        onClick={() => props.onEmojiSelect({ native: "🚀" })}
-      >
-        Pick 🚀
-      </button>
-    )
-  },
-}))
+vi.mock("emoji-mart", () => {
+  function MockPicker(props: PickerProps) {
+    const host = document.createElement("div")
+    const button = document.createElement("button")
+    button.type = "button"
+    button.dataset.testid = "mock-emoji-pick"
+    button.textContent = "Pick 🚀"
+    button.addEventListener("click", () => {
+      props.onEmojiSelect({ native: "🚀" })
+    })
+    host.appendChild(button)
+    return host
+  }
+
+  return {
+    Picker: MockPicker,
+    default: {
+      Picker: MockPicker,
+    },
+  }
+})
 
 vi.mock("@emoji-mart/data", () => ({
   default: { categories: [], emojis: {} },

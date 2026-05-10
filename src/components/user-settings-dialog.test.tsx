@@ -74,7 +74,7 @@ describe("UserSettingsDialog", () => {
     )
 
     expect(screen.getByText("Yarin")).toBeInTheDocument()
-    expect(screen.getByText("yarin")).toBeInTheDocument()
+    expect(screen.getByText("@yarin")).toBeInTheDocument()
   })
 
   it("removes AI assistant and disables unwired settings sections", async () => {
