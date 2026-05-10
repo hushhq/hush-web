@@ -147,6 +147,15 @@ export function createWsClient(opts) {
       // MLS event for this channel reaches us until something else
       // resubscribes. Listeners that registered via subscribeChannel
       // do not need to know reconnect happened.
+      //
+      // Ordering invariant: the auth frame above is sent on the same
+      // WebSocket, in the same microtask, before these subscribe
+      // frames. WebSocket guarantees FIFO delivery on a single
+      // connection, and the server reads the first frame as auth
+      // (internal/ws/handler.go authFromFirstMessage), so by the time
+      // the server processes any subscribe below the connection is
+      // already authenticated. Do not insert async work between the
+      // auth send and this loop or the invariant breaks silently.
       for (const channelId of channelSubscriptions.keys()) {
         socket.send(JSON.stringify({ type: 'subscribe', channel_id: channelId }));
       }
