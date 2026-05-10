@@ -32,6 +32,24 @@ describe('authInstanceStore', () => {
     expect(normalizeInstanceUrl('https://chat.example.com/path?q=1')).toBe('https://chat.example.com');
   });
 
+  it('accepts http origins so localhost / LAN dev keeps working', () => {
+    expect(normalizeInstanceUrl('http://localhost:5173')).toBe('http://localhost:5173');
+    expect(normalizeInstanceUrl('http://192.168.1.10:5173')).toBe('http://192.168.1.10:5173');
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,<script>1</script>',
+    'blob:https://example.com/uuid',
+    'file:///etc/passwd',
+    'chrome://settings',
+    'ws://example.com/socket',
+    'wss://example.com/socket',
+    'ftp://example.com/file',
+  ])('rejects scheme %s as an instance URL', (badUrl) => {
+    expect(normalizeInstanceUrl(badUrl)).toBeNull();
+  });
+
   it('returns the default instance on first use', () => {
     expect(getSelectedAuthInstanceUrlSync()).toBe(DEFAULT_AUTH_INSTANCE_URL);
     expect(getActiveAuthInstanceUrlSync()).toBe(DEFAULT_AUTH_INSTANCE_URL);

@@ -8,6 +8,19 @@ const DEFAULT_MIGRATION_KEY = 'hush_auth_instance_default_origin_migrated_v1';
 
 export const HOSTED_AUTH_INSTANCE_URL = 'https://app.gethush.live';
 
+/**
+ * Schemes accepted as instance URLs. Anything else (`javascript:`,
+ * `data:`, `blob:`, `file:`, `chrome:`, custom schemes, ws/wss …) is
+ * rejected at normalisation time so it can never reach
+ * `getLiveKitUrl` / `buildApiUrl` and have the renderer issue an
+ * authenticated request to a non-https origin or open a script-execution
+ * pseudo-scheme. `http:` is allowed because local dev (`http://localhost`,
+ * `http://192.168.x.y:5173`) needs to keep working; the production
+ * default is `https:` and the `https://` prefix is auto-added when the
+ * caller passes a bare host.
+ */
+const ALLOWED_INSTANCE_PROTOCOLS = new Set(['https:', 'http:']);
+
 export function normalizeInstanceUrl(value) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return null;
@@ -18,6 +31,7 @@ export function normalizeInstanceUrl(value) {
 
   try {
     const url = new URL(candidate);
+    if (!ALLOWED_INSTANCE_PROTOCOLS.has(url.protocol)) return null;
     url.pathname = '';
     url.search = '';
     url.hash = '';
