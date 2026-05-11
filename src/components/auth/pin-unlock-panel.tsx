@@ -24,7 +24,11 @@ import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
 import { useAuth } from "@/contexts/AuthContext"
 import { loadPinAttempts } from "@/hooks/useAuth"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { formatHandle, sanitizeDisplayName } from "@/lib/userLabel"
+import {
+  formatHandle,
+  getUserDisplayName,
+  sanitizeDisplayName,
+} from "@/lib/userLabel"
 
 const MAX_ATTEMPTS = 10
 
@@ -50,7 +54,12 @@ interface PinUnlockPanelProps {
 export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const { unlockVault, user } = useAuth() as {
     unlockVault: (pin: string) => Promise<void>
-    user: { id?: string; username?: string; display_name?: string } | null
+    user: {
+      id?: string
+      username?: string
+      displayName?: string
+      display_name?: string
+    } | null
   }
   const [pin, setPin] = React.useState("")
   // Spaced 4-dot OTP cells are only used on mobile so the soft keypad
@@ -68,7 +77,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const [isDelayed, setIsDelayed] = React.useState(false)
   const countdownRef = React.useRef<number | null>(null)
 
-  const display = sanitizeDisplayName(user?.display_name, user?.username)
+  const display = sanitizeDisplayName(getUserDisplayName(user), user?.username)
   const handle = formatHandle(user?.username)
   // displayName as-is, otherwise fallback to "@username" so the
   // greeting still reads as a handle rather than a free-form name.

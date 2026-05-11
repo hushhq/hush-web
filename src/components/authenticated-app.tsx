@@ -93,7 +93,11 @@ import type {
 } from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useOnlinePresence } from "@/hooks/useOnlinePresence"
-import { formatHandle, sanitizeDisplayName } from "@/lib/userLabel"
+import {
+  formatHandle,
+  getUserDisplayName,
+  sanitizeDisplayName,
+} from "@/lib/userLabel"
 import { PerInstanceListeners } from "@/components/realtime/PerInstanceListeners"
 import { PerServerListeners } from "@/components/realtime/PerServerListeners"
 
@@ -226,7 +230,12 @@ export function AuthenticatedApp() {
     identityKeyRef,
     setTransparencyError,
   } = useAuth() as {
-    user: { id: string; username?: string; display_name?: string } | null
+    user: {
+      id: string
+      username?: string
+      displayName?: string
+      display_name?: string
+    } | null
     performLogout: () => Promise<void>
     identityKeyRef: React.MutableRefObject<{
       publicKey?: Uint8Array
@@ -1014,7 +1023,9 @@ export function AuthenticatedApp() {
     const myChannelId = joinedVoice?.channelId ?? null
     if (voicePresence.size === 0 && myChannelId == null) return channels
     const myDisplayName =
-      user?.display_name?.trim() || user?.username?.trim() || "You"
+      sanitizeDisplayName(getUserDisplayName(user), user?.username) ||
+      user?.username?.trim() ||
+      "You"
     const myInitials = (() => {
       const parts = myDisplayName.split(/\s+/).filter(Boolean)
       if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
@@ -1059,6 +1070,7 @@ export function AuthenticatedApp() {
     voicePresence,
     joinedVoice?.channelId,
     currentUserId,
+    user?.displayName,
     user?.display_name,
     user?.username,
     voiceState.isMicOn,
@@ -1235,13 +1247,13 @@ export function AuthenticatedApp() {
   // name only; `email` is the @-handle row (no email backend yet).
   const sidebarUser = React.useMemo(() => {
     const handle = formatHandle(user?.username)
-    const display = sanitizeDisplayName(user?.display_name, user?.username)
+    const display = sanitizeDisplayName(getUserDisplayName(user), user?.username)
     return {
       name: display || "You",
       email: handle,
       initials: deriveInitials(display || user?.username || "you"),
     }
-  }, [user?.display_name, user?.username])
+  }, [user?.displayName, user?.display_name, user?.username])
 
   // Stable Chat.jsx prop callbacks
   const getStore = React.useCallback(
@@ -1710,7 +1722,7 @@ export function AuthenticatedApp() {
         account={
           user
             ? {
-                displayName: user.display_name?.trim() ?? "",
+                displayName: getUserDisplayName(user),
                 username: user.username ?? "",
               }
             : undefined

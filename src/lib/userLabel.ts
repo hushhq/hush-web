@@ -56,6 +56,25 @@ export function sanitizeDisplayName(
 }
 
 /**
+ * Reads a user display name from either API shape used by the app.
+ * The Go API serializes `displayName`; some older React paths used
+ * `display_name`. Account surfaces should not care which shape arrived.
+ */
+export function getUserDisplayName(
+  user:
+    | {
+        displayName?: string | null
+        display_name?: string | null
+      }
+    | null
+    | undefined
+): string {
+  const camel = user?.displayName?.trim()
+  if (camel) return camel
+  return user?.display_name?.trim() ?? ""
+}
+
+/**
  * Returns the best human label for a user:
  *   - `displayName` if non-blank (rendered as-is)
  *   - else "@username" if `username` is non-blank
