@@ -63,12 +63,13 @@ function buildApiUrl(path, baseUrl = '') {
   return normalized ? `${normalized}${path}` : path;
 }
 
-function buildLiveKitUrl(baseUrl = '') {
+function buildLiveKitUrl(baseUrl = '', serverUrl = null) {
   // `buildLiveKitWsUrl` parses every input via the URL constructor and
   // accepts only ws:/wss: in the result. Any non-http(s) instance
   // origin or a misconfigured VITE_LIVEKIT_URL throws here rather than
   // silently driving the LiveKit client at an attacker-controlled host.
   return buildLiveKitWsUrl({
+    serverUrl,
     envOverride: import.meta.env.VITE_LIVEKIT_URL || null,
     instanceOrigin: normalizeInstanceUrl(baseUrl),
     pageOrigin: typeof window !== 'undefined' && window.location?.origin
@@ -276,7 +277,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           throw new Error(msg);
         }
 
-        const { token } = await response.json();
+        const { token, livekitUrl: serverLiveKitUrl } = await response.json();
         if (isStale()) return;
 
         // ─── MLS Voice Group Setup ────────────────────────────────────────────
@@ -490,7 +491,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // Browser builds use the current origin. Electron's packaged
         // renderer is app://localhost, so voice must target the active
         // auth instance's /livekit/ reverse proxy instead.
-        const livekitUrl = buildLiveKitUrl(voiceBaseUrl);
+        const livekitUrl = buildLiveKitUrl(voiceBaseUrl, serverLiveKitUrl);
         // autoSubscribe is intentionally `true`: @livekit/components-react's
         // prebuilt grid/tile components mounted via RoomContext.Provider
         // assume tracks are subscribed by the time they observe a remote

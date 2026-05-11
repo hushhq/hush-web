@@ -2,6 +2,16 @@ import { describe, it, expect } from "vitest"
 import { buildLiveKitWsUrl } from "./livekitUrl"
 
 describe("buildLiveKitWsUrl", () => {
+  it("trusts a server-provided per-instance URL before build env override", () => {
+    expect(
+      buildLiveKitWsUrl({
+        serverUrl: "wss://rtc.example.com/",
+        envOverride: "wss://hosted-rtc.example.net/",
+        instanceOrigin: "https://chat.example.com",
+      }),
+    ).toBe("wss://rtc.example.com/")
+  })
+
   it("derives wss:// from an https instance origin", () => {
     expect(
       buildLiveKitWsUrl({ instanceOrigin: "https://chat.example.com" }),
@@ -82,5 +92,14 @@ describe("buildLiveKitWsUrl", () => {
         instanceOrigin: "https://chat.example.com",
       }),
     ).toBe("wss://livekit.example.com/")
+  })
+
+  it("rejects malformed server-provided URLs", () => {
+    expect(() =>
+      buildLiveKitWsUrl({
+        serverUrl: "https://rtc.example.com",
+        instanceOrigin: "https://chat.example.com",
+      }),
+    ).toThrow(/server livekitUrl/)
   })
 })
