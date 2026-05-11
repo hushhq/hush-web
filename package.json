@@ -1,6 +1,6 @@
 {
   "name": "hush-client",
-  "version": "0.7.0-alpha.12",
+  "version": "0.7.0-alpha.13",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,7 +18,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@emoji-mart/data": "^1.2.1",
     "@fontsource-variable/geist": "^5.2.8",
-    "@gethush/hush-crypto": "0.2.0",
+    "@gethush/hush-crypto": "0.2.2",
     "@giphy/js-fetch-api": "^5.8.0",
     "@giphy/react-components": "^10.1.2",
     "@livekit/components-react": "2.9.20",

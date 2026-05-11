@@ -9,6 +9,7 @@ import * as hushCrypto from './hushCrypto';
 import { getReadableDeviceLabel } from './deviceLabel';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
 import { detectSessionInvalidation } from './sessionInvalidationDetector';
+import { CURRENT_MLS_CIPHERSUITE, assertHandshakeMLSCiphersuiteMatches } from './mlsCiphersuite';
 
 const USERNAME_CHECK_TIMEOUT_MS = 8000;
 const HANDSHAKE_TIMEOUT_MS = 10000;
@@ -147,7 +148,7 @@ export async function uploadMLSCredential(token, body, baseUrl = '') {
     res = await fetchWithAuth(token, '/api/mls/credentials', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, ciphersuite: CURRENT_MLS_CIPHERSUITE }),
     }, baseUrl);
   } catch (err) {
     throw createNetworkError('upload MLS credential', resolveRequestUrl('/api/mls/credentials', baseUrl), err);
@@ -170,7 +171,7 @@ export async function uploadMLSKeyPackages(token, body, baseUrl = '') {
     res = await fetchWithAuth(token, '/api/mls/key-packages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, ciphersuite: CURRENT_MLS_CIPHERSUITE }),
     }, baseUrl);
   } catch (err) {
     throw createNetworkError('upload MLS key packages', resolveRequestUrl('/api/mls/key-packages', baseUrl), err);
@@ -1578,6 +1579,22 @@ export async function deleteServerTemplate(token, id, baseUrl = '') {
  */
 export async function uploadKeyPackagesAfterAuth(token, userId, deviceId, deps = {}, baseUrl = '') {
   const resolvedBaseUrl = resolveAuthBaseUrl(baseUrl);
+
+  // Verify the instance is on the same OpenMLS ciphersuite as this client before
+  // we generate or upload any MLS state. A mismatched server would either reject
+  // the upload (current servers) or silently mislabel it (pre-fix servers).
+  // Throws MLSCiphersuiteMismatchError on conflict; missing field tolerated.
+  const getHandshakeFn = deps.getHandshake ?? ((b) => getHandshake(b));
+  try {
+    const handshake = await getHandshakeFn(resolvedBaseUrl);
+    assertHandshakeMLSCiphersuiteMatches(handshake);
+  } catch (err) {
+    if (err && err.name === 'MLSCiphersuiteMismatchError') throw err;
+    // Network / parse failures are not fatal here: the server-side validator
+    // will still reject a mismatched upload. Skip the early check rather than
+    // block authentication on a transient handshake failure.
+  }
+
   await uploadKeyPackagesAfterAuthImpl(token, userId, deviceId, {
     mlsStore: deps.mlsStore ?? mlsStore,
     crypto: deps.crypto ?? hushCrypto,
@@ -1620,7 +1637,7 @@ export async function putMLSGroupInfo(token, channelId, groupInfoBase64, epoch, 
   const res = await fetchWithAuth(token, `/api/mls/groups/${encodeURIComponent(channelId)}/info`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupInfo: groupInfoBase64, epoch }),
+    body: JSON.stringify({ groupInfo: groupInfoBase64, epoch, ciphersuite: CURRENT_MLS_CIPHERSUITE }),
   }, baseUrl);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1643,7 +1660,12 @@ export async function postMLSCommit(token, channelId, commitBytesBase64, groupIn
   const res = await fetchWithAuth(token, `/api/mls/groups/${encodeURIComponent(channelId)}/commit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ commitBytes: commitBytesBase64, groupInfo: groupInfoBase64, epoch }),
+    body: JSON.stringify({
+      commitBytes: commitBytesBase64,
+      groupInfo: groupInfoBase64,
+      epoch,
+      ciphersuite: CURRENT_MLS_CIPHERSUITE,
+    }),
   }, baseUrl);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1693,7 +1715,7 @@ export async function putMLSVoiceGroupInfo(token, channelId, groupInfoBase64, ep
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupInfo: groupInfoBase64, epoch }),
+      body: JSON.stringify({ groupInfo: groupInfoBase64, epoch, ciphersuite: CURRENT_MLS_CIPHERSUITE }),
     },
     baseUrl,
   );
@@ -1721,7 +1743,12 @@ export async function postMLSVoiceCommit(token, channelId, commitBytesBase64, ep
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commitBytes: commitBytesBase64, groupInfo: groupInfoBase64 ?? '', epoch }),
+      body: JSON.stringify({
+        commitBytes: commitBytesBase64,
+        groupInfo: groupInfoBase64 ?? '',
+        epoch,
+        ciphersuite: CURRENT_MLS_CIPHERSUITE,
+      }),
     },
     baseUrl,
   );
@@ -1827,7 +1854,7 @@ export async function putGuildMetadataGroupInfo(token, guildId, groupInfoBase64,
   const res = await fetchWithAuth(token, `/api/mls/guilds/${encodeURIComponent(guildId)}/group-info`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupInfo: groupInfoBase64, epoch }),
+    body: JSON.stringify({ groupInfo: groupInfoBase64, epoch, ciphersuite: CURRENT_MLS_CIPHERSUITE }),
   }, baseUrl);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

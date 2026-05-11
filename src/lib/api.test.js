@@ -267,7 +267,24 @@ describe('uploadMLSCredential', () => {
     expect(url).toBe('/api/mls/credentials');
     expect(opts.method).toBe('POST');
     expect(opts.headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
-    expect(JSON.parse(opts.body)).toEqual(body);
+    // Server requires the current MLS ciphersuite on every write; the API
+    // wrapper injects it from the shared constant.
+    expect(JSON.parse(opts.body)).toEqual({ ...body, ciphersuite: 77 });
+  });
+
+  it('does not let callers override the current ciphersuite', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await uploadMLSCredential(TOKEN, {
+      deviceId: 'dev-1',
+      credentialBytes: [1, 2, 3],
+      signingPublicKey: [4, 5, 6],
+      ciphersuite: 1,
+    });
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body).ciphersuite).toBe(77);
   });
 
   it('throws on non-ok response', async () => {
@@ -304,7 +321,22 @@ describe('uploadMLSKeyPackages', () => {
     expect(url).toBe('/api/mls/key-packages');
     expect(opts.method).toBe('POST');
     expect(opts.headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
-    expect(JSON.parse(opts.body)).toEqual(body);
+    expect(JSON.parse(opts.body)).toEqual({ ...body, ciphersuite: 77 });
+  });
+
+  it('does not let callers override the current ciphersuite', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await uploadMLSKeyPackages(TOKEN, {
+      deviceId: 'dev-1',
+      keyPackages: [[1, 2, 3]],
+      expiresAt: '2026-04-17T00:00:00Z',
+      ciphersuite: 1,
+    });
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body).ciphersuite).toBe(77);
   });
 
   it('sends lastResort: true when provided', async () => {
@@ -453,22 +485,32 @@ describe('uploadKeyPackagesAfterAuth (api.js wrapper)', () => {
       crypto: mockCrypto,
     });
 
+    // The first fetch is the pre-flight handshake call. uploadKeyPackagesAfterAuth
+    // verifies the server's advertised MLS ciphersuite matches the client constant
+    // before generating any MLS material; this call is part of the public
+    // contract because failing closed here is what stops a legacy client from
+    // poisoning current-suite tables.
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
+      'https://chat.example.com/api/handshake',
+      expect.anything(),
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
       'https://chat.example.com/api/mls/credentials',
       expect.objectContaining({
         headers: expect.any(Headers),
       }),
     );
     expect(mockFetch).toHaveBeenNthCalledWith(
-      2,
+      3,
       'https://chat.example.com/api/mls/key-packages',
       expect.objectContaining({
         headers: expect.any(Headers),
       }),
     );
     expect(mockFetch).toHaveBeenNthCalledWith(
-      3,
+      4,
       'https://chat.example.com/api/mls/key-packages',
       expect.objectContaining({
         headers: expect.any(Headers),

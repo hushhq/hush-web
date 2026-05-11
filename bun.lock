@@ -11,7 +11,7 @@
         "@emoji-mart/data": "^1.2.1",
         "@emoji-mart/react": "^1.1.1",
         "@fontsource-variable/geist": "^5.2.8",
-        "@gethush/hush-crypto": "0.2.0",
+        "@gethush/hush-crypto": "0.2.2",
         "@giphy/js-fetch-api": "^5.8.0",
         "@giphy/react-components": "^10.1.2",
         "@livekit/components-react": "^2.9.20",
@@ -297,7 +297,7 @@
 
     "@fontsource-variable/geist": ["@fontsource-variable/geist@5.2.8", "", {}, "sha512-cJ6m9e+8MQ5dCYJsLylfZrgBh6KkG4bOLckB35Tr9J/EqdkEM6QllH5PxqP1dhTvFup+HtMRPuz9xOjxXJggxw=="],
 
-    "@gethush/hush-crypto": ["@gethush/hush-crypto@0.2.0", "", {}, "sha512-ZqmwtoGCjNvM5rq5f5k/XQPJel5MRSmpD1PgcFN9PBQx3wic5jeJScc7iH+T8LuVz5ze+xSoIUFwhLGJAqbbPw=="],
+    "@gethush/hush-crypto": ["@gethush/hush-crypto@0.2.2", "", {}, "sha512-tJeP4UaOe1O7fNmqOrvMN3Pc+Gjn34eQt9SHA1KOgpC+Rwu8d1Me4iCiXxC2ctwtjCj2alm8xOmhtZrgjOTWGQ=="],
 
     "@giphy/colors": ["@giphy/colors@1.0.1", "", {}, "sha512-CMUY2UR8Ujl/wTRVjwu9spss6Cf2qkQNATKfoWCTWQp7CXdSfPWUDepp0c0/F0n7lYphLFvD9qzOC4NSdBt7nw=="],
 
