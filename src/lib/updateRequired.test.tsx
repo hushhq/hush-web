@@ -36,13 +36,26 @@ import {
   setWaitingUpdateSW,
 } from "./updateRequired";
 import { evaluateHandshakeCompatibility } from "./handshakeCompatibility";
-import { isClientBelowMinimum } from "./clientVersion";
+import { CLIENT_VERSION, isClientBelowMinimum } from "./clientVersion";
 import {
   CURRENT_MLS_CIPHERSUITE,
   MLSCiphersuiteMismatchError,
 } from "./mlsCiphersuite";
 import { fetchWithAuth } from "./api";
 import UpdateRequiredDialog from "../components/UpdateRequiredDialog";
+
+function nextAlphaVersion(version: string): string {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-alpha\.(\d+))?$/);
+  if (!match) return "999.0.0-alpha.1";
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  const alpha = match[4] ? Number(match[4]) : null;
+
+  if (alpha != null) return `${major}.${minor}.${patch}-alpha.${alpha + 1}`;
+  return `${major}.${minor}.${patch + 1}-alpha.1`;
+}
 
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -289,7 +302,9 @@ describe("UpdateRequiredDialog", () => {
     render(<UpdateRequiredDialog />);
     await flushEffects();
     await act(async () => {
-      evaluateHandshakeCompatibility({ min_client_version: "0.7.0-alpha.15" });
+      evaluateHandshakeCompatibility({
+        min_client_version: nextAlphaVersion(CLIENT_VERSION),
+      });
     });
     expect(await screen.findByTestId("update-required-dialog")).toBeInTheDocument();
   });
