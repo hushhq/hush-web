@@ -67,6 +67,7 @@ vi.mock('../lib/bip39Identity', () => ({
 
 // Shared blob store (reset between tests via beforeEach).
 const _vaultBlobs = new Map();
+const _pinAttempts = new Map();
 
 vi.mock('../lib/identityVault', () => ({
   encryptVault: vi.fn().mockImplementation(async (privateKey) => {
@@ -115,6 +116,16 @@ vi.mock('../lib/identityVault', () => ({
   saveVaultMarkerToIDB: vi.fn().mockResolvedValue(undefined),
   checkVaultExistsInIDB: vi.fn().mockResolvedValue({ exists: false, publicKeyHex: null }),
   loadVaultMarkerFromIDB: vi.fn().mockResolvedValue(null),
+  loadPinAttemptsFromIDB: vi.fn().mockImplementation(async (db) =>
+    _pinAttempts.get(db.userId) ?? { count: 0, lastAttemptAt: null },
+  ),
+  savePinAttemptsToIDB: vi.fn().mockImplementation(async (db, record) => {
+    _pinAttempts.set(db.userId, record);
+  }),
+  clearPinAttemptsFromIDB: vi.fn().mockImplementation(async (db) => {
+    _pinAttempts.delete(db.userId);
+  }),
+  isLegacyVaultBlob: vi.fn().mockReturnValue(false),
 }));
 
 // ── Imports after mocks ────────────────────────────────────────────────────────
@@ -156,6 +167,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   _vaultBlobs.clear();
+  _pinAttempts.clear();
   _mockActiveInstanceUrl = '';
   _mockMarkAuthInstanceUsed.mockClear();
   _mockMarkAuthInstanceUsed.mockImplementation(async (value) => {
@@ -184,6 +196,10 @@ beforeEach(() => {
   vi.mocked(vaultMod.saveEncryptedKey).mockClear();
   vi.mocked(vaultMod.encryptVault).mockClear();
   vi.mocked(vaultMod.openVaultStore).mockClear();
+  vi.mocked(vaultMod.loadPinAttemptsFromIDB).mockClear();
+  vi.mocked(vaultMod.savePinAttemptsToIDB).mockClear();
+  vi.mocked(vaultMod.clearPinAttemptsFromIDB).mockClear();
+  vi.mocked(vaultMod.isLegacyVaultBlob).mockReturnValue(false);
   vi.mocked(vaultMod.getVaultConfig).mockReturnValue(null);
   vi.mocked(vaultMod.setVaultConfig).mockClear();
 });
@@ -621,19 +637,43 @@ describe('useAuth - unlockVault', () => {
     expect(result.current.vaultState).toBe('unlocked');
   });
 
+  it('migrates a legacy vault blob after a successful PIN unlock', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    vi.mocked(vaultMod.isLegacyVaultBlob).mockReturnValueOnce(true);
+    vi.mocked(vaultMod.encryptVault).mockClear();
+    vi.mocked(vaultMod.saveEncryptedKey).mockClear();
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+
+    expect(vaultMod.encryptVault).toHaveBeenCalledWith(
+      new Uint8Array(32).fill(1),
+      'correct',
+    );
+    expect(vaultMod.saveEncryptedKey).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1' }),
+      expect.any(Uint8Array),
+    );
+  });
+
   it('unlockVault with wrong PIN increments attempt counter', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
     await setupLockedVault(result);
+    vi.mocked(vaultMod.savePinAttemptsToIDB).mockClear();
 
     await act(async () => {
       try { await result.current.unlockVault('wrong'); } catch { /* expected */ }
     });
 
-    const raw = localStorage.getItem('hush_pin_attempts_user-1');
-    expect(raw).toBeTruthy();
-    const record = JSON.parse(raw);
-    expect(record.count).toBe(1);
+    expect(vaultMod.savePinAttemptsToIDB).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1' }),
+      expect.objectContaining({ count: 1 }),
+    );
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
   });
 
   it('unlockVault clears attempt counter on success after failures', async () => {
@@ -651,8 +691,10 @@ describe('useAuth - unlockVault', () => {
       await result.current.unlockVault('correct');
     });
 
-    const raw = localStorage.getItem('hush_pin_attempts_user-1');
-    expect(raw).toBeNull();
+    expect(vaultMod.clearPinAttemptsFromIDB).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
   });
 
   it('unlockVault with wrong PIN throws WRONG_PIN error code', async () => {
@@ -714,6 +756,67 @@ describe('useAuth - unlockVault', () => {
 });
 
 describe('useAuth - PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
+  it('stores failed PIN attempts in IDB and survives localStorage clearing', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await act(async () => { await result.current.setPIN('pin'); });
+    act(() => result.current.lockVault());
+    await waitFor(() => expect(result.current.vaultState).toBe('locked'));
+
+    await act(async () => {
+      await expect(result.current.unlockVault('wrong')).rejects.toMatchObject({
+        code: 'WRONG_PIN',
+      });
+    });
+    localStorage.removeItem('hush_pin_attempts_user-1');
+
+    await act(async () => {
+      await expect(result.current.unlockVault('wrong')).rejects.toMatchObject({
+        code: 'WRONG_PIN',
+      });
+    });
+
+    expect(vaultMod.savePinAttemptsToIDB).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: 'user-1' }),
+      expect.objectContaining({ count: 2 }),
+    );
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
+  });
+
+  it('charges a failed PIN attempt before decrypting the vault blob', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await act(async () => { await result.current.setPIN('pin'); });
+    act(() => result.current.lockVault());
+    await waitFor(() => expect(result.current.vaultState).toBe('locked'));
+    vi.mocked(vaultMod.savePinAttemptsToIDB).mockClear();
+    vi.mocked(vaultMod.decryptVaultAndExportKey).mockClear();
+
+    await act(async () => {
+      await expect(result.current.unlockVault('wrong')).rejects.toMatchObject({
+        code: 'WRONG_PIN',
+      });
+    });
+
+    const saveOrder = vi.mocked(vaultMod.savePinAttemptsToIDB).mock.invocationCallOrder[0];
+    const decryptOrder = vi.mocked(vaultMod.decryptVaultAndExportKey).mock.invocationCallOrder[0];
+    expect(saveOrder).toBeLessThan(decryptOrder);
+  });
+
   it('wipes vault after 10 failures and throws VAULT_WIPED', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -730,41 +833,20 @@ describe('useAuth - PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
     act(() => result.current.lockVault());
     await waitFor(() => expect(result.current.vaultState).toBe('locked'));
 
-    // Pre-seed to 9 failures (no delay imposed for count=9: threshold 9 → 60s).
-    // Override with count=9 BUT disable the delay for the test by setting count to 5
-    // so the 5-second delay kicks in… actually we need to avoid all delays.
-    // Use count=0 pre-seed and just make decryptVault always throw.
-    // The wipe fires at count REACHING 10, so seed at 9.
-    // We need the 60s delay check to not block: mock pinDelayMs to return 0.
-    // Since pinDelayMs is internal, let's just seed at count=9 and accept
-    // that the 60s delay will apply. Instead, seed at count=2 so no delay.
-
-    // Reset to count=9 - the wipe will happen but with 60s delay first.
-    // Better: set count=9 but bypass delay by seeding to a count that has no delay
-    // Delay table: threshold 9 → 60s, 7 → 30s, 5 → 5s, 3 → 1s, <3 → 0.
-    // Use count=9 but only advances to 10 (wipe). The delay for count=9 is 60s → too slow.
-    // Solution: Seed at count=9 but mock Date so it appears no time has passed.
-    // Simpler: just pre-seed at count=8 (threshold≤8 → next entry is 9, delay=30s).
-    // Actually, let's just make the initial failures cheap by pre-seeding to count=9
-    // and mocking setTimeout to be immediate.
-
-    // Use fake timers only for the delay portion.
     vi.useFakeTimers();
-
-    localStorage.setItem(
-      'hush_pin_attempts_user-1',
-      JSON.stringify({ count: 9, lastAttemptAt: new Date().toISOString() }),
-    );
-
-    let caught;
-    const unlockPromise = act(async () => {
-      try { await result.current.unlockVault('wrong'); } catch (err) { caught = err; }
+    _pinAttempts.set('user-1', {
+      count: 9,
+      lastAttemptAt: new Date().toISOString(),
     });
 
-    // Advance timers to skip the 60s delay.
-    vi.advanceTimersByTime(61_000);
-
-    await unlockPromise;
+    let caught;
+    await act(async () => {
+      const unlockPromise = result.current.unlockVault('wrong').catch((err) => {
+        caught = err;
+      });
+      await vi.advanceTimersByTimeAsync(61_000);
+      await unlockPromise;
+    });
     vi.useRealTimers();
 
     expect(caught?.code).toBe('VAULT_WIPED');

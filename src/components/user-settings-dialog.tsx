@@ -463,7 +463,7 @@ function PlaceholderPanel({ title }: { title: string }) {
 }
 
 function AccountPanel({ account }: { account?: UserAccountInfo }) {
-  const displayName = account?.displayName ?? "—"
+  const displayName = account?.displayName?.trim() || "—"
   // Username is always rendered as an @-handle. Display name keeps
   // its plain text (set by the user) per the global label rule.
   const username = account?.username

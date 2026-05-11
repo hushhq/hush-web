@@ -91,6 +91,6 @@ describe("PinUnlockPanel", () => {
       await u.click(submit)
     }
 
-    expect(await screen.findByText(/wait 1s/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/wait 1s/i)).length).toBeGreaterThan(0)
   })
 })

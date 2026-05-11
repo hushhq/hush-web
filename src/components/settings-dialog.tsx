@@ -65,11 +65,27 @@ export function SettingsDialog({
   const [activeId, setActiveId] = React.useState<string>(() =>
     resolveActiveSectionId(sections, defaultSectionId)
   )
-
+  const sectionsRef = React.useRef(sections)
+  const defaultSectionIdRef = React.useRef(defaultSectionId)
   React.useEffect(() => {
-    if (!open) return
-    setActiveId(resolveActiveSectionId(sections, defaultSectionId))
-  }, [open, defaultSectionId, sections])
+    sectionsRef.current = sections
+    defaultSectionIdRef.current = defaultSectionId
+  })
+
+  // Reset the active section only when the dialog opens. Recomputing
+  // on every `sections` identity change would clobber the user's
+  // selection whenever upstream state (e.g. voice runtime) causes the
+  // sections array to be rebuilt — a mic-test deafen toggle would
+  // bounce the user from Voice & Video back to My Account.
+  const wasOpenRef = React.useRef(open)
+  React.useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setActiveId(
+        resolveActiveSectionId(sectionsRef.current, defaultSectionIdRef.current)
+      )
+    }
+    wasOpenRef.current = open
+  }, [open])
 
   const active =
     sections.find((s) => s.id === activeId && !s.disabled) ??

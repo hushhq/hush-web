@@ -495,7 +495,12 @@ export function VoiceChannelView({
       await room.unmuteMic()
     }
     setIsMicOn(true)
-  }, [isMicOn, prefs?.audioDeviceId, room])
+    if (isDeafened) {
+      room.playbackManager?.setRemoteAudioMuted(false)
+      micBeforeDeafenRef.current = true
+      setIsDeafened(false)
+    }
+  }, [isMicOn, isDeafened, prefs?.audioDeviceId, room])
 
   const handleToggleDeafen = React.useCallback(() => {
     setIsDeafened((prev) => {

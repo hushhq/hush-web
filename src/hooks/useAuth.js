@@ -36,6 +36,10 @@ import {
   saveVaultMarkerToIDB,
   checkVaultExistsInIDB,
   loadVaultMarkerFromIDB,
+  loadPinAttemptsFromIDB,
+  savePinAttemptsToIDB,
+  clearPinAttemptsFromIDB,
+  isLegacyVaultBlob,
 } from '../lib/identityVault';
 import {
   storeVaultSessionKey,
@@ -412,35 +416,71 @@ function parseLegacyVaultTimeout(raw) {
   }
 }
 
-/**
- * Loads the PIN attempt record from localStorage for a user.
- * @param {string} userId
- * @returns {{ count: number, lastAttemptAt: string|null }}
- */
-function loadPinAttempts(userId) {
+function loadLegacyPinAttempts(userId) {
   const raw = localStorage.getItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
   if (!raw) return { count: 0, lastAttemptAt: null };
   try {
-    return JSON.parse(raw);
+    return normalizePinAttempts(JSON.parse(raw));
   } catch {
     return { count: 0, lastAttemptAt: null };
   }
 }
 
+function normalizePinAttempts(record) {
+  if (!record || typeof record !== 'object') {
+    return { count: 0, lastAttemptAt: null };
+  }
+  const count = Number.isFinite(record.count)
+    ? Math.max(0, Math.floor(record.count))
+    : 0;
+  const lastAttemptAt = typeof record.lastAttemptAt === 'string'
+    ? record.lastAttemptAt
+    : null;
+  return { count, lastAttemptAt };
+}
+
 /**
- * Persists the PIN attempt record to localStorage.
+ * Loads the PIN attempt record from the vault DB for a user. Legacy
+ * localStorage records are migrated once, then removed.
  * @param {string} userId
- * @param {{ count: number, lastAttemptAt: string }} record
+ * @returns {Promise<{ count: number, lastAttemptAt: string|null }>}
  */
-function savePinAttempts(userId, record) {
-  localStorage.setItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`, JSON.stringify(record));
+export async function loadPinAttempts(userId) {
+  let db = null;
+  try {
+    db = await openVaultStore(userId);
+    const record = await loadPinAttemptsFromIDB(db);
+    if (record.count > 0) return record;
+
+    const legacy = loadLegacyPinAttempts(userId);
+    if (legacy.count > 0) {
+      await savePinAttemptsToIDB(db, legacy);
+      localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
+      return legacy;
+    }
+    return record;
+  } catch {
+    return loadLegacyPinAttempts(userId);
+  } finally {
+    db?.close?.();
+  }
 }
 
 /**
  * Resets the PIN attempt counter for a user after successful unlock.
  * @param {string} userId
  */
-function clearPinAttempts(userId) {
+async function clearPinAttempts(userId, existingDb = null) {
+  if (existingDb) {
+    await clearPinAttemptsFromIDB(existingDb);
+  } else {
+    const db = await openVaultStore(userId);
+    try {
+      await clearPinAttemptsFromIDB(db);
+    } finally {
+      db.close();
+    }
+  }
   localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
 }
 
@@ -1402,49 +1442,61 @@ export function useAuth() {
     const userId = user?.id ?? localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
     if (!userId) throw new Error('no active vault user');
 
-    const attempts = loadPinAttempts(userId);
-    const delay = pinDelayMs(attempts.count);
-    if (delay > 0) {
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-
     let privateKey;
     let rawKeyHex;
     let publicKey;
+    let chargedCount = 0;
+    let db = null;
 
     try {
-      const db = await openVaultStore(userId);
-      try {
-        const blob = await loadEncryptedKey(db);
-        if (!blob) {
-          throw new Error('vault is empty');
-        }
-
-        ({ privateKey, rawKeyHex } = await decryptVaultAndExportKey(blob, pin));
-
-        // Derive public key from stored hex marker. If localStorage was evicted
-        // (iOS non-Safari), fall back to IDB backup.
-        let storedHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
-        if (!storedHex) {
-          const idbMarker = await loadVaultMarkerFromIDB(db);
-          if (typeof idbMarker === 'string' && idbMarker) {
-            storedHex = idbMarker;
-            localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, storedHex);
-          }
-        }
-        publicKey = storedHex ? hexToBytes(storedHex) : null;
-      } finally {
-        db.close();
+      db = await openVaultStore(userId);
+      const blob = await loadEncryptedKey(db);
+      if (!blob) {
+        throw new Error('vault is empty');
       }
+
+      let attempts = await loadPinAttemptsFromIDB(db);
+      if (attempts.count === 0) {
+        const legacy = loadLegacyPinAttempts(userId);
+        if (legacy.count > 0) attempts = legacy;
+      }
+      const delay = pinDelayMs(attempts.count);
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      chargedCount = attempts.count + 1;
+      await savePinAttemptsToIDB(db, {
+        count: chargedCount,
+        lastAttemptAt: new Date().toISOString(),
+      });
+      localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
+
+      ({ privateKey, rawKeyHex } = await decryptVaultAndExportKey(blob, pin));
+      await clearPinAttempts(userId, db);
+      if (isLegacyVaultBlob(blob)) {
+        await saveEncryptedKey(db, await encryptVault(privateKey, pin));
+      }
+
+      // Derive public key from stored hex marker. If localStorage was evicted
+      // (iOS non-Safari), fall back to IDB backup.
+      let storedHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
+      if (!storedHex) {
+        const idbMarker = await loadVaultMarkerFromIDB(db);
+        if (typeof idbMarker === 'string' && idbMarker) {
+          storedHex = idbMarker;
+          localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, storedHex);
+        }
+      }
+      publicKey = storedHex ? hexToBytes(storedHex) : null;
     } catch (err) {
       if (!isVaultDecryptFailure(err)) {
         throw err;
       }
 
-      const newCount = attempts.count + 1;
-      savePinAttempts(userId, { count: newCount, lastAttemptAt: new Date().toISOString() });
-
-      if (newCount >= MAX_PIN_FAILURES) {
+      if (chargedCount >= MAX_PIN_FAILURES) {
+        db?.close?.();
+        db = null;
         await deleteVaultDatabase(userId);
         clearSession();
         localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
@@ -1461,11 +1513,13 @@ export function useAuth() {
       }
 
       const wrongPinError = new Error(
-        `incorrect PIN (${MAX_PIN_FAILURES - newCount} attempts remaining)`,
+        `incorrect PIN (${MAX_PIN_FAILURES - chargedCount} attempts remaining)`,
       );
       wrongPinError.code = 'WRONG_PIN';
       wrongPinError.cause = err;
       throw wrongPinError;
+    } finally {
+      db?.close?.();
     }
 
     // The derived wrapping key is NOT persisted to browser storage — any
@@ -1482,7 +1536,6 @@ export function useAuth() {
 
     identityKeyRef.current = { privateKey, publicKey };
     setHasLocalVault(true);
-    clearPinAttempts(userId);
 
     // If no JWT (tab was closed, sessionStorage wiped), re-authenticate
     // with challenge-response to get a fresh session.

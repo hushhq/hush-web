@@ -77,6 +77,20 @@ describe("UserSettingsDialog", () => {
     expect(screen.getByText("@yarin")).toBeInTheDocument()
   })
 
+  it("does not use username as the display name fallback", () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "", username: "yarin" }}
+      />
+    )
+
+    expect(screen.getByText("—")).toBeInTheDocument()
+    expect(screen.getByText("@yarin")).toBeInTheDocument()
+    expect(screen.queryByText("yarin")).not.toBeInTheDocument()
+  })
+
   it("removes AI assistant and disables unwired settings sections", async () => {
     render(
       <UserSettingsDialog

@@ -12,6 +12,10 @@ import {
   deleteVaultDatabase,
   getVaultConfig,
   setVaultConfig,
+  loadPinAttemptsFromIDB,
+  savePinAttemptsToIDB,
+  clearPinAttemptsFromIDB,
+  isLegacyVaultBlob,
 } from './identityVault.js';
 
 // Helpers
@@ -19,6 +23,38 @@ function makePrivateKey() {
   const key = new Uint8Array(32);
   crypto.getRandomValues(key);
   return key;
+}
+
+function bytesToHexForTest(bytes) {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function encryptLegacyVaultForTest(privateKey, pin) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  localStorage.setItem('hush_vault_salt', bytesToHexForTest(salt));
+  const pinBytes = new TextEncoder().encode(pin);
+  const baseKey = await crypto.subtle.importKey('raw', pinBytes, 'PBKDF2', false, [
+    'deriveKey',
+  ]);
+  const key = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 200_000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  );
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce },
+    key,
+    privateKey,
+  ));
+  const blob = new Uint8Array(nonce.length + ciphertext.length);
+  blob.set(nonce, 0);
+  blob.set(ciphertext, nonce.length);
+  return blob;
 }
 
 describe('encryptVault / decryptVault round-trip', () => {
@@ -42,8 +78,10 @@ describe('encryptVault / decryptVault round-trip', () => {
     const pk = makePrivateKey();
     const blob = await encryptVault(pk, '5678');
     expect(blob).toBeInstanceOf(Uint8Array);
-    // 12-byte nonce + 32-byte plaintext + 16-byte GCM tag = 60 minimum
-    expect(blob.length).toBeGreaterThanOrEqual(60);
+    expect(blob.slice(0, 4)).toEqual(new Uint8Array([0x48, 0x56, 0x32, 0x01]));
+    // 4-byte header + 12-byte nonce + 32-byte plaintext + 16-byte GCM tag.
+    expect(blob.length).toBeGreaterThanOrEqual(64);
+    expect(isLegacyVaultBlob(blob)).toBe(false);
   });
 
   it('wrong PIN causes decryptVault to throw (AES-GCM tag mismatch)', async () => {
@@ -75,17 +113,25 @@ describe('encryptVault / decryptVault round-trip', () => {
     expect(await decryptVault(blob2, pin)).toEqual(pk);
   });
 
-  it('nonce uniqueness: first 12 bytes of two blobs differ (crypto.getRandomValues not reused)', async () => {
+  it('nonce uniqueness: nonce bytes of two blobs differ (crypto.getRandomValues not reused)', async () => {
     const pk = makePrivateKey();
     const pin = 'nonce-uniqueness-check';
     const blob1 = await encryptVault(pk, pin);
     const blob2 = await encryptVault(pk, pin);
-    // Extract the 12-byte nonce prefix from each blob
-    const nonce1 = blob1.slice(0, 12);
-    const nonce2 = blob2.slice(0, 12);
+    // Extract the 12-byte nonce after the v2 header.
+    const nonce1 = blob1.slice(4, 16);
+    const nonce2 = blob2.slice(4, 16);
     // Nonces MUST differ: AES-GCM security relies on nonce uniqueness per key.
     // If they match, two ciphertexts share a (nonce, key) pair - catastrophic.
     expect(nonce1).not.toEqual(nonce2);
+  });
+
+  it('decryptVault still reads legacy PBKDF2-200k blobs', async () => {
+    const pk = makePrivateKey();
+    const blob = await encryptLegacyVaultForTest(pk, 'legacy-pin');
+
+    expect(isLegacyVaultBlob(blob)).toBe(true);
+    await expect(decryptVault(blob, 'legacy-pin')).resolves.toEqual(pk);
   });
 });
 
@@ -148,6 +194,41 @@ describe('deleteVaultDatabase', () => {
     expect(result).toBeNull();
 
     await deleteVaultDatabase(userId);
+  });
+});
+
+describe('PIN attempt persistence', () => {
+  const ATTEMPT_USER = 'pin-attempt-user';
+
+  afterEach(async () => {
+    await deleteVaultDatabase(ATTEMPT_USER);
+  });
+
+  it('defaults to zero attempts when no record exists', async () => {
+    const db = await openVaultStore(ATTEMPT_USER);
+    const record = await loadPinAttemptsFromIDB(db);
+    db.close();
+
+    expect(record).toEqual({ count: 0, lastAttemptAt: null });
+  });
+
+  it('saves and clears the local PIN attempt counter', async () => {
+    const db = await openVaultStore(ATTEMPT_USER);
+    await savePinAttemptsToIDB(db, {
+      count: 3,
+      lastAttemptAt: '2026-05-11T12:00:00.000Z',
+    });
+    expect(await loadPinAttemptsFromIDB(db)).toEqual({
+      count: 3,
+      lastAttemptAt: '2026-05-11T12:00:00.000Z',
+    });
+
+    await clearPinAttemptsFromIDB(db);
+    expect(await loadPinAttemptsFromIDB(db)).toEqual({
+      count: 0,
+      lastAttemptAt: null,
+    });
+    db.close();
   });
 });
 

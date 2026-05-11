@@ -6,14 +6,23 @@
  * in IndexedDB per user. Salt is stored in both localStorage and IndexedDB
  * for resilience against iOS storage eviction on non-Safari browsers.
  *
- * Blob format: [12-byte nonce][ciphertext][16-byte GCM tag]
+ * Blob formats:
+ * - v1 legacy: [12-byte nonce][ciphertext][16-byte GCM tag], PBKDF2 200k.
+ * - v2 current: ["H","V","2",1][12-byte nonce][ciphertext][16-byte GCM tag],
+ *   PBKDF2 600k.
  *
- * Key derivation: PBKDF2-SHA256, 200,000 iterations, 256-bit output.
+ * Key derivation: PBKDF2-SHA256, 256-bit output.
  * Salt: 16 bytes, generated once and dual-stored in localStorage + IDB.
  */
 
-/** PBKDF2 iteration count - OWASP minimum for PBKDF2-SHA256 (2023). */
-const PBKDF2_ITERATIONS = 200_000;
+/** Legacy PBKDF2 iteration count used by pre-v2 vault blobs. */
+const LEGACY_PBKDF2_ITERATIONS = 200_000;
+
+/** PBKDF2 iteration count - OWASP recommendation for PBKDF2-SHA256. */
+const PBKDF2_ITERATIONS = 600_000;
+
+/** Current vault blob header: ASCII "HV2" + version byte 1. */
+const VAULT_BLOB_V2_HEADER = new Uint8Array([0x48, 0x56, 0x32, 0x01]);
 
 /** localStorage key for the PBKDF2 salt. */
 const SALT_KEY = 'hush_vault_salt';
@@ -32,6 +41,9 @@ const SALT_IDB_RECORD = 'pbkdf2_salt';
 
 /** IDB record key for the vault marker (public key hex) backup. */
 const VAULT_MARKER_IDB_RECORD = 'vault_marker';
+
+/** IDB record key for local PIN/passphrase failure accounting. */
+const PIN_ATTEMPTS_IDB_RECORD = 'pin_attempts';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -88,7 +100,7 @@ export function bytesToHex(bytes) {
  * @param {string} pin - User-supplied PIN or passphrase.
  * @returns {Promise<CryptoKey>} AES-256-GCM CryptoKey for encrypt/decrypt.
  */
-async function deriveKeyFromPin(pin) {
+async function deriveKeyFromPin(pin, iterations = PBKDF2_ITERATIONS, extractable = false) {
   const salt = generateAndStoreSalt();
   const pinBytes = new TextEncoder().encode(pin);
 
@@ -100,14 +112,53 @@ async function deriveKeyFromPin(pin) {
     {
       name: 'PBKDF2',
       salt,
-      iterations: PBKDF2_ITERATIONS,
+      iterations,
       hash: 'SHA-256',
     },
     rawKey,
     { name: 'AES-GCM', length: 256 },
-    false,
+    extractable,
     ['encrypt', 'decrypt'],
   );
+}
+
+function hasV2Header(blob) {
+  if (!blob || blob.length < VAULT_BLOB_V2_HEADER.length + NONCE_LENGTH) return false;
+  return VAULT_BLOB_V2_HEADER.every((byte, index) => blob[index] === byte);
+}
+
+function parseVaultBlob(blob) {
+  if (hasV2Header(blob)) {
+    const offset = VAULT_BLOB_V2_HEADER.length;
+    return {
+      nonce: blob.slice(offset, offset + NONCE_LENGTH),
+      ciphertext: blob.slice(offset + NONCE_LENGTH),
+      iterations: PBKDF2_ITERATIONS,
+    };
+  }
+  return {
+    nonce: blob.slice(0, NONCE_LENGTH),
+    ciphertext: blob.slice(NONCE_LENGTH),
+    iterations: LEGACY_PBKDF2_ITERATIONS,
+  };
+}
+
+function encodeVaultBlob(nonce, ciphertext) {
+  const blob = new Uint8Array(VAULT_BLOB_V2_HEADER.length + nonce.length + ciphertext.length);
+  blob.set(VAULT_BLOB_V2_HEADER, 0);
+  blob.set(nonce, VAULT_BLOB_V2_HEADER.length);
+  blob.set(ciphertext, VAULT_BLOB_V2_HEADER.length + nonce.length);
+  return blob;
+}
+
+/**
+ * Returns true when a vault blob still uses the legacy PBKDF2-200k format.
+ *
+ * @param {Uint8Array} blob
+ * @returns {boolean}
+ */
+export function isLegacyVaultBlob(blob) {
+  return !hasV2Header(blob);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +171,7 @@ async function deriveKeyFromPin(pin) {
  * A 12-byte random nonce is generated per call, so two encryptions of the
  * same key with the same PIN produce different blobs (nonce differs).
  *
- * Blob format: [12-byte nonce][ciphertext + 16-byte GCM tag]
+ * Blob format: ["H","V","2",1][12-byte nonce][ciphertext + 16-byte GCM tag]
  *
  * @param {Uint8Array} privateKey - 32-byte Ed25519 private key seed.
  * @param {string} pin - User PIN or passphrase.
@@ -136,10 +187,7 @@ export async function encryptVault(privateKey, pin) {
     privateKey,
   );
 
-  const blob = new Uint8Array(NONCE_LENGTH + ciphertext.byteLength);
-  blob.set(nonce, 0);
-  blob.set(new Uint8Array(ciphertext), NONCE_LENGTH);
-  return blob;
+  return encodeVaultBlob(nonce, new Uint8Array(ciphertext));
 }
 
 /**
@@ -154,14 +202,13 @@ export async function encryptVault(privateKey, pin) {
  * @throws {DOMException} If PIN is incorrect (GCM authentication failure).
  */
 export async function decryptVault(blob, pin) {
-  const key = await deriveKeyFromPin(pin);
-  const nonce = blob.slice(0, NONCE_LENGTH);
-  const ciphertext = blob.slice(NONCE_LENGTH);
+  const parsed = parseVaultBlob(blob);
+  const key = await deriveKeyFromPin(pin, parsed.iterations);
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce },
+    { name: 'AES-GCM', iv: parsed.nonce },
     key,
-    ciphertext,
+    parsed.ciphertext,
   );
 
   return new Uint8Array(plaintext);
@@ -180,29 +227,13 @@ export async function decryptVault(blob, pin) {
  * @throws {DOMException} If PIN is incorrect (GCM authentication failure).
  */
 export async function decryptVaultAndExportKey(blob, pin) {
-  const salt = generateAndStoreSalt();
-  const pinBytes = new TextEncoder().encode(pin);
-
-  const baseKey = await crypto.subtle.importKey('raw', pinBytes, 'PBKDF2', false, [
-    'deriveKey',
-  ]);
-
-  // Derive as extractable so we can export the raw bytes for sessionStorage.
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
-    baseKey,
-    { name: 'AES-GCM', length: 256 },
-    true,
-    ['encrypt', 'decrypt'],
-  );
-
-  const nonce = blob.slice(0, NONCE_LENGTH);
-  const ciphertext = blob.slice(NONCE_LENGTH);
+  const parsed = parseVaultBlob(blob);
+  const key = await deriveKeyFromPin(pin, parsed.iterations, true);
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce },
+    { name: 'AES-GCM', iv: parsed.nonce },
     key,
-    ciphertext,
+    parsed.ciphertext,
   );
 
   const exported = await crypto.subtle.exportKey('raw', key);
@@ -233,13 +264,12 @@ export async function decryptVaultWithRawKey(blob, rawKeyHex) {
     ['decrypt'],
   );
 
-  const nonce = blob.slice(0, NONCE_LENGTH);
-  const ciphertext = blob.slice(NONCE_LENGTH);
+  const parsed = parseVaultBlob(blob);
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce },
+    { name: 'AES-GCM', iv: parsed.nonce },
     key,
-    ciphertext,
+    parsed.ciphertext,
   );
 
   return new Uint8Array(plaintext);
@@ -363,6 +393,68 @@ export function loadVaultMarkerFromIDB(db) {
     request.onsuccess = event => resolve(event.target.result ?? null);
     request.onerror = event => reject(event.target.error);
   });
+}
+
+/**
+ * Loads the persisted PIN/passphrase failure counter from the user's vault DB.
+ *
+ * @param {IDBDatabase} db - Open vault IDB handle.
+ * @returns {Promise<{ count: number, lastAttemptAt: string|null }>}
+ */
+export function loadPinAttemptsFromIDB(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OBJECT_STORE_NAME, 'readonly');
+    const store = tx.objectStore(OBJECT_STORE_NAME);
+    const request = store.get(PIN_ATTEMPTS_IDB_RECORD);
+    request.onsuccess = event => resolve(normalizePinAttempts(event.target.result));
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+/**
+ * Persists the PIN/passphrase failure counter in the user's vault DB.
+ *
+ * @param {IDBDatabase} db - Open vault IDB handle.
+ * @param {{ count: number, lastAttemptAt: string|null }} record
+ * @returns {Promise<void>}
+ */
+export function savePinAttemptsToIDB(db, record) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OBJECT_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(OBJECT_STORE_NAME);
+    const request = store.put(normalizePinAttempts(record), PIN_ATTEMPTS_IDB_RECORD);
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+/**
+ * Clears the PIN/passphrase failure counter after a successful unlock.
+ *
+ * @param {IDBDatabase} db - Open vault IDB handle.
+ * @returns {Promise<void>}
+ */
+export function clearPinAttemptsFromIDB(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OBJECT_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(OBJECT_STORE_NAME);
+    const request = store.delete(PIN_ATTEMPTS_IDB_RECORD);
+    request.onsuccess = () => resolve();
+    request.onerror = event => reject(event.target.error);
+  });
+}
+
+function normalizePinAttempts(value) {
+  if (!value || typeof value !== 'object') {
+    return { count: 0, lastAttemptAt: null };
+  }
+  const count = Number.isFinite(value.count)
+    ? Math.max(0, Math.floor(value.count))
+    : 0;
+  const lastAttemptAt = typeof value.lastAttemptAt === 'string'
+    ? value.lastAttemptAt
+    : null;
+  return { count, lastAttemptAt };
 }
 
 /**

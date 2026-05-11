@@ -1712,14 +1712,7 @@ export function AuthenticatedApp() {
         account={
           user
             ? {
-                // displayName falls back to "@username" rather than
-                // the bare handle, so the row never reads as a
-                // free-form name when the user has not set one.
-                displayName:
-                  user.display_name?.trim() ||
-                  (user.username
-                    ? `@${user.username.replace(/^@+/, "")}`
-                    : "you"),
+                displayName: user.display_name?.trim() ?? "",
                 username: user.username ?? "",
               }
             : undefined

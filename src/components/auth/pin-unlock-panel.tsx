@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label"
 import { HushLogo } from "@/components/brand/HushLogo"
 import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
 import { useAuth } from "@/contexts/AuthContext"
+import { loadPinAttempts } from "@/hooks/useAuth"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 const MAX_ATTEMPTS = 10
@@ -48,7 +49,7 @@ interface PinUnlockPanelProps {
 export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const { unlockVault, user } = useAuth() as {
     unlockVault: (pin: string) => Promise<void>
-    user: { username?: string; display_name?: string } | null
+    user: { id?: string; username?: string; display_name?: string } | null
   }
   const [pin, setPin] = React.useState("")
   // Spaced 4-dot OTP cells are only used on mobile so the soft keypad
@@ -58,6 +59,9 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const isMobileViewport = useIsMobile()
   const [submitting, setSubmitting] = React.useState(false)
   const [errorMessage, setErrorMessage] = React.useState("")
+  // Mirrors the vault-level attempt record into the UI. The source of
+  // truth lives in IndexedDB next to the encrypted vault blob; local
+  // React state only drives warning text and button delay.
   const [attemptCount, setAttemptCount] = React.useState(0)
   const [delayRemaining, setDelayRemaining] = React.useState(0)
   const [isDelayed, setIsDelayed] = React.useState(false)
@@ -99,6 +103,29 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
     }, 1000)
   }, [])
 
+  // Re-hydrate attemptCount when the resolved user id arrives after
+  // initial mount (rehydration races). Also kicks the visual delay if
+  // the user is currently inside a progressive-delay window so a page
+  // refresh cannot bypass the cooldown.
+  React.useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    loadPinAttempts(user.id)
+      .then((persisted) => {
+        if (cancelled) return
+        const count = persisted.count ?? 0
+        setAttemptCount(count)
+        const delayMs = getDelayMs(count)
+        if (delayMs > 0) startDelay(delayMs)
+      })
+      .catch(() => {
+        if (!cancelled) setAttemptCount(0)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, startDelay])
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (submitting || isDelayed) return
@@ -112,7 +139,10 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
       await unlockVault(pin)
       // Parent transitions on success.
     } catch (err) {
-      const newCount = attemptCount + 1
+      const persisted = user?.id
+        ? await loadPinAttempts(user.id).catch(() => null)
+        : null
+      const newCount = persisted?.count ?? attemptCount + 1
       setAttemptCount(newCount)
 
       const code = (err as { code?: string })?.code

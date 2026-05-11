@@ -81,6 +81,10 @@ vi.mock('../lib/identityVault', () => ({
   saveVaultMarkerToIDB: vi.fn().mockResolvedValue(undefined),
   checkVaultExistsInIDB: vi.fn().mockResolvedValue({ exists: false, publicKeyHex: null }),
   loadVaultMarkerFromIDB: vi.fn().mockResolvedValue(null),
+  loadPinAttemptsFromIDB: vi.fn().mockResolvedValue({ count: 0, lastAttemptAt: null }),
+  savePinAttemptsToIDB: vi.fn().mockResolvedValue(undefined),
+  clearPinAttemptsFromIDB: vi.fn().mockResolvedValue(undefined),
+  isLegacyVaultBlob: vi.fn().mockReturnValue(false),
 }));
 
 function wrapper({ children }) {
