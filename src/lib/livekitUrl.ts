@@ -3,12 +3,14 @@
  *
  * Inputs come from three places, in priority order:
  *
- *   1. `VITE_LIVEKIT_URL` build-time override (when set, it wins —
+ *   1. Server-provided `/api/livekit/token.livekitUrl` (when set, it
+ *      wins because it is scoped to the selected instance).
+ *   2. `VITE_LIVEKIT_URL` build-time override (when set, it wins —
  *      mirrors the long-standing escape hatch for self-hosters that
  *      run LiveKit on a separate origin from the API).
- *   2. The caller's normalized instance origin (https://chat.example.com)
+ *   3. The caller's normalized instance origin (https://chat.example.com)
  *      → ws+s://chat.example.com/livekit/
- *   3. The current page origin's `/livekit/` path (browser-only fallback;
+ *   4. The current page origin's `/livekit/` path (browser-only fallback;
  *      packaged Electron builds always have an instance origin).
  *
  * Whatever the source, the resolved URL must end up on `ws:` or `wss:`
@@ -21,6 +23,12 @@
 const ALLOWED_LIVEKIT_PROTOCOLS = new Set(["ws:", "wss:"])
 
 export interface BuildLiveKitWsUrlInput {
+  /**
+   * Per-instance public signaling URL returned by `/api/livekit/token`.
+   * This lets the hosted client connect to arbitrary self-hosted instances
+   * whose RTC hostname differs from their app/API hostname.
+   */
+  serverUrl?: string | null
   /**
    * Normalized instance origin from `normalizeInstanceUrl`, or '' /
    * null when the page-origin fallback should be used.
@@ -47,7 +55,15 @@ export interface BuildLiveKitWsUrlInput {
  * error to the user instead of falling back to a silently-wrong URL.
  */
 export function buildLiveKitWsUrl(input: BuildLiveKitWsUrlInput): string {
-  const { instanceOrigin, envOverride, pageOrigin } = input
+  const { serverUrl, instanceOrigin, envOverride, pageOrigin } = input
+
+  if (serverUrl) {
+    const validated = validateAsLiveKitWsUrl(serverUrl)
+    if (validated) return validated
+    throw new Error(
+      `livekitUrl: server livekitUrl must be ws:// or wss://; got ${serverUrl}`,
+    )
+  }
 
   if (envOverride) {
     const validated = validateAsLiveKitWsUrl(envOverride)

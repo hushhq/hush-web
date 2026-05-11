@@ -256,10 +256,10 @@ function makeGetToken() {
 }
 
 // Stub fetch for LiveKit token endpoint
-function stubLivekitFetch() {
+function stubLivekitFetch(body = { token: 'lk-token' }) {
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ token: 'lk-token' }),
+    json: async () => body,
   });
 }
 
@@ -346,6 +346,35 @@ describe('useRoom MLS voice E2EE', () => {
       expect.objectContaining({ method: 'POST' }),
     );
     expect(capturedRooms.at(-1).connectArgs[0]).toBe('wss://app.gethush.live/livekit/');
+  });
+
+  it('uses the per-instance LiveKit URL returned by the token endpoint', async () => {
+    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    stubLivekitFetch({
+      token: 'lk-token',
+      livekitUrl: 'wss://rtc.example.com/',
+    });
+
+    const { result } = renderHook(() =>
+      useRoom({
+        wsClient,
+        getToken,
+        currentUserId: 'u1',
+        getStore,
+        voiceKeyRotationHours: 2,
+        baseUrl: 'https://chat.example.com',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://chat.example.com/api/livekit/token',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(capturedRooms.at(-1).connectArgs[0]).toBe('wss://rtc.example.com/');
   });
 
   it('connectRoom calls exportVoiceFrameKey and applies key via setKey(frameKeyBytes, epoch % 256)', async () => {

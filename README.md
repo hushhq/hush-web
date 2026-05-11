@@ -133,12 +133,12 @@ Variables prefixed with `VITE_` are embedded in the client bundle at build time.
 |-|-|-|
 | `VITE_API_BASE_URL` | Self-host only | Go API base URL (e.g., `https://chat.example.com`) |
 | `VITE_WS_URL` | Self-host only | WebSocket URL (e.g., `wss://chat.example.com/ws`) |
-| `VITE_LIVEKIT_URL` | Self-host only | LiveKit WebSocket URL (e.g., `wss://chat.example.com/livekit`) |
+| `VITE_LIVEKIT_URL` | Legacy/manual override only | LiveKit WebSocket URL (e.g., `wss://rtc.example.com/`) |
 | `VITE_INSTANCE_NAME` | No | Display name shown in the client title |
 
 **Hosted topology:** when the SPA is served from the same origin as the API (via a reverse proxy such as `hush-server/caddy/Caddyfile.prod`), no `VITE_*` variables are needed. Vite builds with relative-path defaults (`/api`, `/ws`, `/livekit`) that route correctly through the proxy.
 
-**Self-hosted instances** where the SPA lives on a different domain than the API must set `VITE_API_BASE_URL`, `VITE_WS_URL`, and `VITE_LIVEKIT_URL`.
+**Self-hosted instances** where the SPA lives on a different domain than the API must set `VITE_API_BASE_URL` and `VITE_WS_URL`. Modern `hush-server` instances return their per-instance LiveKit signaling URL from `/api/livekit/token`; use `VITE_LIVEKIT_URL` only for legacy/manual deployments that cannot return that value.
 
 **Never put private keys, bootstrap secrets, session secrets, or any other server-side secrets in `.env.local`** — Vite embeds these values in the JavaScript bundle.
 
