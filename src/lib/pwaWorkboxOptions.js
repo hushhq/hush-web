@@ -1,0 +1,184 @@
+// Workbox / vite-plugin-pwa configuration for the Hush PWA.
+//
+// Exported from a standalone module so vite.config.js consumes it for the build
+// and the test runner can import the same object to assert on its shape (e.g.
+// confirming that /api, /ws, /livekit, attachments, and external object-storage
+// URLs are never runtime-cached).
+//
+// Design constraints (see prompt + CLAUDE.md):
+//   * SW is conservative: precache the static app shell, nothing else.
+//   * /api/*, /ws, /livekit/*, attachment endpoints, and any presigned /
+//     external storage URL must never be served from the SW cache.
+//   * index.html must always be fetched network-first so a deployed update
+//     becomes visible on the next navigation — users cannot get trapped on a
+//     stale HTML shell.
+//   * No IndexedDB, no localStorage, no auth/vault/MLS access from the SW.
+//
+// Web Push and Background Sync are out of scope for this PWA foundation:
+//   - Web Push for E2EE notifications requires a separate threat model
+//     (notification payload privacy, server-side identity correlation).
+//   - Background Sync for sending messages/files needs an MLS/epoch/idempotency
+//     threat model (a queued send could be replayed against a future epoch).
+// Do not enable either inside this Service Worker without that review.
+
+/**
+ * URL patterns whose responses MUST bypass the Service Worker cache entirely.
+ * Exported so tests can assert the SW config never accidentally caches them.
+ */
+export const NEVER_CACHE_URL_PATTERNS = Object.freeze([
+  // Server API: every response is request-specific (auth-scoped, time-scoped,
+  // or contains opaque encrypted blobs whose freshness matters).
+  /\/api\//,
+  // WebSocket upgrade endpoint - not cacheable by definition.
+  /\/ws(\?|$)/,
+  // LiveKit signaling/HTTP endpoints - real-time, never cached.
+  /\/livekit\//,
+  // Attachment presign + download endpoints (server-relative paths).
+  /\/api\/.*\/attachments\//,
+  /\/api\/attachments\//,
+]);
+
+/**
+ * Build-time globs considered for the precache manifest. These are filtered by
+ * `filterPrecacheManifest` below, because Vite emits many lazy chunks (syntax
+ * highlighter grammars, route bundles, dev tools) that are static files but are
+ * NOT part of the app shell.
+ */
+export const PRECACHE_GLOB_PATTERNS = Object.freeze([
+  "**/*.{js,css,html,ico,png,svg,webp,woff,woff2,wasm}",
+]);
+
+/**
+ * Patterns excluded from the precache manifest. Anything that should not be
+ * shipped as part of the offline shell goes here.
+ */
+export const PRECACHE_GLOB_IGNORE = Object.freeze([
+  // Source maps are dev artefacts even when emitted.
+  "**/*.map",
+  // Service worker itself never precaches itself.
+  "sw.js",
+  "workbox-*.js",
+]);
+
+/**
+ * Exact app-shell allowlist for the generated precache manifest.
+ *
+ * This keeps the offline shell useful without shipping every lazy route,
+ * grammar pack, LiveKit worker, or dev-only debug tool into the SW cache.
+ */
+export const APP_SHELL_PRECACHE_PATTERNS = Object.freeze([
+  /^index\.html$/,
+  /^manifest\.webmanifest$/,
+  /^favicon(?:-light)?\.png$/,
+  /^apple-touch-icon(?:-light)?\.png$/,
+  /^icon-(?:192|512)(?:-light)?\.png$/,
+  /^hush-logo\.svg$/,
+  /^assets\/index-[A-Za-z0-9_-]+\.(?:js|css)$/,
+  /^assets\/vendor-react-[A-Za-z0-9_-]+\.js$/,
+  /^assets\/hush_crypto(?:_bg)?-[A-Za-z0-9_-]+\.(?:js|wasm)$/,
+  /^assets\/geist-[A-Za-z0-9_-]+\.woff2$/,
+  /^assets\/workbox-window(?:\.prod\.es5)?-[A-Za-z0-9_-]+\.js$/,
+]);
+
+export function shouldPrecacheUrl(url) {
+  const normalized = String(url).replace(/^\//, "").split("?")[0];
+  return APP_SHELL_PRECACHE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function filterPrecacheManifest(entries) {
+  const seen = new Set();
+  const manifest = [];
+  for (const entry of entries) {
+    if (!shouldPrecacheUrl(entry.url) || seen.has(entry.url)) continue;
+    seen.add(entry.url);
+    manifest.push(entry);
+  }
+  return {
+    manifest,
+    warnings: [],
+  };
+}
+
+/**
+ * URL paths that must never become the offline fallback for navigations.
+ * navigateFallbackDenylist takes RegExp.
+ */
+export const NAVIGATE_FALLBACK_DENYLIST = Object.freeze([
+  /^\/api\//,
+  /^\/ws(\?|$)/,
+  /^\/livekit\//,
+]);
+
+/**
+ * Runtime caching rules. We declare ONE rule: index.html / navigations go
+ * through NetworkFirst so an update is discovered without a hard refresh.
+ * Everything else either lives in the precache (static shell) or bypasses
+ * the SW entirely (API, WS, LiveKit, attachments).
+ *
+ * urlPattern uses a function so we can keep the denylist authoritative.
+ */
+// The runtime caching `urlPattern` function below is serialized into the
+// generated Service Worker via `Function.prototype.toString()`. Workbox does
+// NOT bundle imports from this module into the SW, so the function MUST be
+// self-contained — every regex it consults is declared inline. Reference
+// `NEVER_CACHE_URL_PATTERNS` from this module body only for tests / vite
+// config; never close over it inside `urlPattern`.
+export const RUNTIME_CACHING = Object.freeze([
+  {
+    // Match top-level navigations (HTML documents) only and refuse to handle
+    // API / WS / LiveKit / attachment URLs even if a navigation somehow
+    // points at them. The denylist is duplicated in literal form so the
+    // function survives serialization into the SW.
+    urlPattern: ({ request, url }) => {
+      if (request.destination !== "document") return false;
+      const denyPatterns = [
+        /\/api\//,
+        /\/ws(\?|$)/,
+        /\/livekit\//,
+        /\/api\/.*\/attachments\//,
+        /\/api\/attachments\//,
+      ];
+      for (let i = 0; i < denyPatterns.length; i++) {
+        if (denyPatterns[i].test(url.pathname)) return false;
+      }
+      return true;
+    },
+    handler: "NetworkFirst",
+    options: {
+      cacheName: "hush-html-shell",
+      networkTimeoutSeconds: 3,
+      expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 },
+    },
+  },
+]);
+
+/**
+ * Top-level options handed to vite-plugin-pwa's `VitePWA({...})`.
+ *
+ * registerType is "prompt": the new SW will activate ONLY after we call
+ * `updateSW(true)` from the Update Required dialog. We never auto-skip-waiting
+ * — auto-activation could swap the JS bundle out from under a tab that is
+ * mid-flight on an MLS commit or vault operation.
+ */
+export const PWA_OPTIONS = Object.freeze({
+  registerType: "prompt",
+  injectRegister: null, // we register manually from src/lib/pwaUpdate.js
+  // Do NOT enable PWA in dev. dev runs with the source modules + HMR; an
+  // active SW would intercept module requests and complicate debugging.
+  devOptions: { enabled: false },
+  workbox: {
+    globPatterns: [...PRECACHE_GLOB_PATTERNS],
+    globIgnores: [...PRECACHE_GLOB_IGNORE],
+    manifestTransforms: [filterPrecacheManifest],
+    navigateFallback: "index.html",
+    navigateFallbackDenylist: [...NAVIGATE_FALLBACK_DENYLIST],
+    // Hush-crypto ships a sizeable WASM module that we DO want precached so
+    // the app stays usable offline; the precache manifest size limit needs
+    // to accommodate it (~10 MB headroom is generous and still cheap).
+    maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+    runtimeCaching: [...RUNTIME_CACHING],
+    cleanupOutdatedCaches: true,
+    clientsClaim: false,
+    skipWaiting: false,
+  },
+});

@@ -10,6 +10,7 @@ import { getReadableDeviceLabel } from './deviceLabel';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
 import { detectSessionInvalidation } from './sessionInvalidationDetector';
 import { CURRENT_MLS_CIPHERSUITE, assertHandshakeMLSCiphersuiteMatches } from './mlsCiphersuite';
+import { requestUpdate } from './updateRequired';
 
 const USERNAME_CHECK_TIMEOUT_MS = 8000;
 const HANDSHAKE_TIMEOUT_MS = 10000;
@@ -133,7 +134,63 @@ export async function fetchWithAuth(token, path, opts = {}, baseUrl = '') {
       }
     } catch { /* ignore — surface the original 401 to the caller */ }
   }
+  // Compatibility-failure surface: when the server reports HTTP 426
+  // (Upgrade Required) or returns a structured body that flags an MLS
+  // ciphersuite mismatch, raise the global Update Required dialog. The
+  // response is still returned to the caller so existing error handling
+  // continues to work; the dialog is purely additive.
+  await maybeDispatchCompatibilityFailure(res, path);
   return res;
+}
+
+/**
+ * Inspect a runtime API response for known compatibility failures and
+ * dispatch the global `hush:update-required` event so the dialog appears.
+ *
+ * Triggers:
+ *   - HTTP 426 Upgrade Required (any endpoint).
+ *   - Response body with `error === 'mls_ciphersuite_mismatch'` (the MLS
+ *     write boundary on the Go server) — typically a 400 with a structured
+ *     body. We tolerate a non-JSON body by silently ignoring it.
+ *
+ * The function never throws: a compatibility-detection failure must not
+ * mask the original response from the caller.
+ */
+async function maybeDispatchCompatibilityFailure(res, path) {
+  if (!res || typeof res !== 'object') return;
+  try {
+    if (res.status === 426) {
+      requestUpdate({ reason: 'api-426', context: { path, status: 426 } });
+      return;
+    }
+    if (res.status >= 400 && typeof res.clone === 'function') {
+      const cloned = res.clone();
+      const body = await cloned.json().catch(() => null);
+      if (body && body.error === 'mls_ciphersuite_mismatch') {
+        requestUpdate({
+          reason: 'api-mls-ciphersuite-mismatch',
+          context: {
+            path,
+            declared: body.declared,
+            current: body.current_ciphersuite,
+          },
+        });
+        return;
+      }
+      if (
+        body &&
+        typeof body.error === 'string' &&
+        body.error.toLowerCase().includes('ciphersuite is required')
+      ) {
+        requestUpdate({
+          reason: 'api-compat-error',
+          context: { path, error: body.error },
+        });
+      }
+    }
+  } catch {
+    /* never let compat detection break the caller's flow */
+  }
 }
 
 /**

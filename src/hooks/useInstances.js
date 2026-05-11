@@ -43,6 +43,7 @@ import {
 } from '../lib/api.js';
 import { signChallenge } from '../lib/bip39Identity.js';
 import { getDeviceId } from './useAuth.js';
+import { evaluateHandshakeCompatibility } from '../lib/handshakeCompatibility';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -497,6 +498,13 @@ export function useInstances() {
       // Step 1: Handshake (public, no auth).
       const handshakeData = await getHandshake(instanceUrl);
       if (!isActiveGeneration()) return;
+
+      // Step 1a: surface a global "Update Required" dialog when this
+      // handshake demands a newer client (`min_client_version`) or runs a
+      // different MLS ciphersuite (`current_mls_ciphersuite`). The boot
+      // continues so the dialog has a chance to render; the dialog itself
+      // is non-dismissible.
+      evaluateHandshakeCompatibility(handshakeData);
 
       // Step 2: Auth.
       const { privateKey, publicKey } = identityKey;

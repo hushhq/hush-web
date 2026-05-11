@@ -5,6 +5,8 @@ import path from 'node:path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { VitePWA } from 'vite-plugin-pwa';
+import { PWA_OPTIONS } from './src/lib/pwaWorkboxOptions.js';
 import fs from 'node:fs';
 
 // Custom middleware to force correct MIME type for WASM files
@@ -55,7 +57,20 @@ const httpsServerOption = hasMkcertPair
     }
   : undefined;
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // Only these env prefixes are allowed to reach the client bundle. Local
+  // debug flags such as VITE_ERUDA / VITE_DEBUG_TOOLBAR are consumed below as
+  // build-time constants and must never appear in production assets.
+  envPrefix: ['VITE_API_', 'VITE_LIVEKIT_'],
+  define: {
+    __HUSH_DEV_DEBUG__: JSON.stringify(mode !== 'production'),
+    __HUSH_DEBUG_TOOLBAR__: JSON.stringify(
+      mode !== 'production' && process.env.VITE_DEBUG_TOOLBAR === 'true',
+    ),
+    __HUSH_ERUDA__: JSON.stringify(
+      mode !== 'production' && process.env.VITE_ERUDA === 'true',
+    ),
+  },
   plugins: [
     wasmContentTypePlugin,
     wasm(),
@@ -66,6 +81,10 @@ export default defineConfig({
     // when an mkcert pair is on disk — Vite reads our cert/key from
     // server.https below instead.
     ...(httpsEnabled && !hasMkcertPair ? [basicSsl()] : []),
+    // PWA / Service Worker. Conservative: precache app-shell only, never
+    // touch /api, /ws, /livekit, or attachment routes. Update activation is
+    // gated by the Update Required dialog (see src/lib/pwaUpdate.js).
+    VitePWA(PWA_OPTIONS),
   ],
   resolve: {
     alias: {
@@ -115,4 +134,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
