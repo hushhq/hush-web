@@ -22,7 +22,37 @@ export function formatHandle(username: string | null | undefined): string {
   if (!username) return ""
   const trimmed = username.trim()
   if (!trimmed) return ""
-  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`
+  return `@${trimmed.replace(/^@+/, "")}`
+}
+
+/**
+ * Returns a display name only when it is distinct from the user's handle.
+ *
+ * Older clients could persist the username/handle into `display_name` when the
+ * optional display-name field was left blank. Treat that legacy value as
+ * missing so two-line account surfaces do not render "@alice" twice.
+ */
+export function sanitizeDisplayName(
+  displayName: string | null | undefined,
+  username?: string | null
+): string {
+  const display = displayName?.trim() ?? ""
+  if (!display) return ""
+
+  const strippedDisplay = display.replace(/^@+/, "")
+  const strippedUsername = username?.trim().replace(/^@+/, "") ?? ""
+  const isHandleShaped = display.startsWith("@")
+  const isExactUsername = strippedUsername && strippedDisplay === strippedUsername
+  const isHandleForUsername =
+    isHandleShaped &&
+    strippedUsername &&
+    strippedDisplay.toLowerCase() === strippedUsername.toLowerCase()
+
+  if (isExactUsername || isHandleForUsername) {
+    return ""
+  }
+
+  return display
 }
 
 /**
@@ -38,7 +68,7 @@ export function formatUserLabel(
     fallback?: string
   } = {}
 ): string {
-  const display = args.displayName?.trim()
+  const display = sanitizeDisplayName(args.displayName, args.username)
   if (display) return display
   const handle = formatHandle(args.username)
   if (handle) return handle

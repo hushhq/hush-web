@@ -93,6 +93,7 @@ import type {
 } from "@/adapters"
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useOnlinePresence } from "@/hooks/useOnlinePresence"
+import { formatHandle, sanitizeDisplayName } from "@/lib/userLabel"
 import { PerInstanceListeners } from "@/components/realtime/PerInstanceListeners"
 import { PerServerListeners } from "@/components/realtime/PerServerListeners"
 
@@ -1230,16 +1231,13 @@ export function AuthenticatedApp() {
       }
     : undefined
 
-  // Sidebar user prop (prototype shape). The `name` field falls
-  // back to "@username" when no display_name is set, and the
-  // `email` row in the user-menu actually surfaces the @-handle
-  // (no email backend yet).
+  // Sidebar user prop (prototype shape). `name` is the display
+  // name only; `email` is the @-handle row (no email backend yet).
   const sidebarUser = React.useMemo(() => {
-    const handle = user?.username ? `@${user.username.replace(/^@+/, "")}` : ""
-    const display = user?.display_name?.trim()
-    const labelForName = display || handle || "you"
+    const handle = formatHandle(user?.username)
+    const display = sanitizeDisplayName(user?.display_name, user?.username)
     return {
-      name: labelForName,
+      name: display || "You",
       email: handle,
       initials: deriveInitials(display || user?.username || "you"),
     }

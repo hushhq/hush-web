@@ -5,7 +5,7 @@
  * when bootState is needs_pin.
  */
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 
@@ -37,6 +37,14 @@ vi.mock("@/hooks/useAuthInstanceSelection", () => ({
 }))
 vi.mock("@/lib/authInstanceStore", () => ({
   getInstanceDisplayName: (url: string) => url,
+}))
+vi.mock("@/lib/api", () => ({
+  checkUsernameAvailable: vi.fn().mockResolvedValue(true),
+}))
+vi.mock("@/lib/bip39Identity", () => ({
+  generateIdentityMnemonic: vi.fn(() =>
+    Array.from({ length: 12 }, (_, i) => `word${i + 1}`).join(" ")
+  ),
 }))
 vi.mock("@/utils/constants", () => ({ APP_VERSION: "0.0.0-test" }))
 
@@ -103,6 +111,60 @@ describe("UnauthenticatedShell", () => {
     expect(
       screen.getByRole("button", { name: /^sign up$/i })
     ).toBeInTheDocument()
+  })
+
+  it("does not save username as display name when display name is blank", async () => {
+    useBootController.mockReturnValue({ bootState: "needs_login" })
+    const performRegister = vi.fn().mockResolvedValue(undefined)
+    useAuth.mockReturnValue({
+      ...DEFAULT_AUTH,
+      performRegister,
+      unlockVault: vi.fn(),
+      setPIN: vi.fn(),
+      skipPinSetup: vi.fn(),
+    })
+    useAuthInstanceSelection.mockReturnValue(DEFAULT_INSTANCE_STATE)
+
+    render(
+      <MemoryRouter>
+        <UnauthenticatedShell />
+      </MemoryRouter>
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^sign up$/i }))
+    await u.type(screen.getByLabelText(/^username$/i), "yarin")
+
+    await waitFor(() => {
+      expect(screen.getByText(/@yarin is available/i)).toBeInTheDocument()
+    })
+
+    await u.click(screen.getByRole("button", { name: /^continue$/i }))
+    await u.click(screen.getByRole("checkbox", { name: /i have saved/i }))
+    await u.click(screen.getByRole("button", { name: /^continue$/i }))
+
+    for (const label of document.querySelectorAll<HTMLLabelElement>(
+      'label[for^="confirm-word-"]'
+    )) {
+      const match = label.textContent?.match(/#(\d+)/)
+      if (!match) continue
+      await u.type(
+        screen.getByLabelText(label.textContent ?? ""),
+        `word${match[1]}`
+      )
+    }
+
+    await u.click(screen.getByRole("button", { name: /^finish$/i }))
+
+    await waitFor(() => {
+      expect(performRegister).toHaveBeenCalledWith(
+        "yarin",
+        "",
+        Array.from({ length: 12 }, (_, i) => `word${i + 1}`).join(" "),
+        undefined,
+        "https://a.example.com"
+      )
+    })
   })
 
   it("forces AuthFlow when the user clicks Not you on the unlock panel", async () => {

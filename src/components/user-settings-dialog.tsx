@@ -36,6 +36,7 @@ import {
   VoiceVideoPanel,
   type VoiceRuntime,
 } from "@/components/settings/voice-video-panel"
+import { formatHandle, sanitizeDisplayName } from "@/lib/userLabel"
 
 interface UserAccountInfo {
   displayName: string
@@ -463,12 +464,13 @@ function PlaceholderPanel({ title }: { title: string }) {
 }
 
 function AccountPanel({ account }: { account?: UserAccountInfo }) {
-  const displayName = account?.displayName?.trim() || "—"
+  const displayName = sanitizeDisplayName(
+    account?.displayName,
+    account?.username
+  ) || "—"
   // Username is always rendered as an @-handle. Display name keeps
   // its plain text (set by the user) per the global label rule.
-  const username = account?.username
-    ? `@${account.username.replace(/^@+/, "")}`
-    : "—"
+  const username = formatHandle(account?.username) || "—"
   // TODO(yarin, 2026-05-04): backend lacks email/phone/password endpoints
   // — identity is currently mnemonic-derived. Edit actions deferred until
   // profile-update API lands.

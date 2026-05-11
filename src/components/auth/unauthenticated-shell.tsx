@@ -16,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useBootController } from "@/hooks/useBootController"
 import { useAuthInstanceSelection } from "@/hooks/useAuthInstanceSelection"
 import { getInstanceDisplayName } from "@/lib/authInstanceStore"
+import { sanitizeDisplayName } from "@/lib/userLabel"
 import { APP_VERSION } from "@/utils/constants"
 
 interface KnownInstance {
@@ -106,8 +107,7 @@ export function UnauthenticatedShell() {
     mnemonic: string
   }) => {
     const instanceUrl = await rememberSelectedInstance(selectedInstanceUrl)
-    // Legacy hush-web behaviour: empty display name falls back to the username.
-    const finalDisplayName = displayName.trim() || username.trim()
+    const finalDisplayName = sanitizeDisplayName(displayName, username)
     await performRegister(username, finalDisplayName, mnemonic, undefined, instanceUrl)
     // performRegister flips bootState to 'pin_setup'; PinSetupPanel mounts
     // on next render and owns the PIN commit through useAuth().setPIN.

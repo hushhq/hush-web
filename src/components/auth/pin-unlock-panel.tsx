@@ -24,6 +24,7 @@ import { PinOtp, PIN_LENGTH } from "@/components/auth/pin-otp"
 import { useAuth } from "@/contexts/AuthContext"
 import { loadPinAttempts } from "@/hooks/useAuth"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { formatHandle, sanitizeDisplayName } from "@/lib/userLabel"
 
 const MAX_ATTEMPTS = 10
 
@@ -67,10 +68,8 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const [isDelayed, setIsDelayed] = React.useState(false)
   const countdownRef = React.useRef<number | null>(null)
 
-  const display = user?.display_name?.trim()
-  const handle = user?.username
-    ? `@${user.username.replace(/^@+/, "")}`
-    : ""
+  const display = sanitizeDisplayName(user?.display_name, user?.username)
+  const handle = formatHandle(user?.username)
   // displayName as-is, otherwise fallback to "@username" so the
   // greeting still reads as a handle rather than a free-form name.
   const username = display || handle || "your account"

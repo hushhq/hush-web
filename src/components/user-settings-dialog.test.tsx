@@ -91,6 +91,19 @@ describe("UserSettingsDialog", () => {
     expect(screen.queryByText("yarin")).not.toBeInTheDocument()
   })
 
+  it("treats legacy @username display names as missing", () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "@yarin", username: "yarin" }}
+      />
+    )
+
+    expect(screen.getByText("—")).toBeInTheDocument()
+    expect(screen.getByText("@yarin")).toBeInTheDocument()
+  })
+
   it("removes AI assistant and disables unwired settings sections", async () => {
     render(
       <UserSettingsDialog
