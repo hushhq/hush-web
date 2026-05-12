@@ -63,6 +63,16 @@ function buildApiUrl(path, baseUrl = '') {
   return normalized ? `${normalized}${path}` : path;
 }
 
+function withApiBaseUrl(api, baseUrl) {
+  const callWithBaseUrl = (method) => (...args) => method(...args, baseUrl);
+  return {
+    ...api,
+    getMLSVoiceGroupInfo: callWithBaseUrl(api.getMLSVoiceGroupInfo),
+    putMLSVoiceGroupInfo: callWithBaseUrl(api.putMLSVoiceGroupInfo),
+    postMLSVoiceCommit: callWithBaseUrl(api.postMLSVoiceCommit),
+  };
+}
+
 function buildLiveKitUrl(baseUrl = '', serverUrl = null) {
   // `buildLiveKitWsUrl` parses every input via the URL constructor and
   // accepts only ws:/wss: in the result. Any non-http(s) instance
@@ -253,6 +263,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         }
 
         const voiceBaseUrl = resolveVoiceBaseUrl(baseUrl);
+        const scopedVoiceApi = withApiBaseUrl(apiLib, voiceBaseUrl);
         const response = await fetch(buildApiUrl('/api/livekit/token', voiceBaseUrl), {
           method: 'POST',
           headers: {
@@ -303,12 +314,12 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             credential,
             mlsStore: mlsStoreLib,
             hushCrypto: hushCryptoLib,
-            api: apiLib,
+            api: scopedVoiceApi,
           };
 
           // Determine whether to create or join: 404 from server = first participant.
           // Catch GroupAlreadyExists to handle React StrictMode double-fire in dev.
-          const existingGroup = await apiLib.getMLSVoiceGroupInfo(accessToken, channelId).catch(() => null);
+          const existingGroup = await scopedVoiceApi.getMLSVoiceGroupInfo(accessToken, channelId).catch(() => null);
           if (existingGroup) {
             await mlsGroupLib.joinVoiceGroup(mlsDeps, channelId);
           } else {
@@ -454,7 +465,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: scopedVoiceApi,
             };
             const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);
             if (e2eeKeyProviderRef.current) {
@@ -528,7 +539,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: scopedVoiceApi,
             };
             const commitBytes = fromBase64(data.commit_bytes);
             await mlsGroupLib.processVoiceCommit(mlsDeps, data.channel_id, commitBytes);
@@ -556,7 +567,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: scopedVoiceApi,
             };
             await mlsGroupLib.destroyVoiceGroup(mlsDeps, data.channel_id);
           } catch (err) {
@@ -584,7 +595,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: scopedVoiceApi,
             };
             await mlsGroupLib.performVoiceSelfUpdate(mlsDeps, channelIdRef.current);
             const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);

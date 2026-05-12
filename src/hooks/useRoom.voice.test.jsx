@@ -31,6 +31,8 @@ const {
   mockDestroyVoiceGroup,
   mockGetCredential,
   mockGetMLSVoiceGroupInfo,
+  mockPutMLSVoiceGroupInfo,
+  mockPostMLSVoiceCommit,
   mockSetKey,
   mockE2EEKeyProvider,
   mockOrchestratorMute,
@@ -90,6 +92,8 @@ const {
       credentialBytes: new Uint8Array([3]),
     }),
     mockGetMLSVoiceGroupInfo: vi.fn().mockRejectedValue(new Error('404')),
+    mockPutMLSVoiceGroupInfo: vi.fn().mockResolvedValue(undefined),
+    mockPostMLSVoiceCommit: vi.fn().mockResolvedValue(undefined),
     mockSetKey,
     mockE2EEKeyProvider,
     mockOrchestratorAcquire,
@@ -124,6 +128,8 @@ vi.mock('../lib/hushCrypto', () => ({}));
 
 vi.mock('../lib/api', () => ({
   getMLSVoiceGroupInfo: mockGetMLSVoiceGroupInfo,
+  putMLSVoiceGroupInfo: mockPutMLSVoiceGroupInfo,
+  postMLSVoiceCommit: mockPostMLSVoiceCommit,
 }));
 
 vi.mock('./useAuth', () => ({
@@ -344,6 +350,11 @@ describe('useRoom MLS voice E2EE', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       'https://app.gethush.live/api/livekit/token',
       expect.objectContaining({ method: 'POST' }),
+    );
+    expect(mockGetMLSVoiceGroupInfo).toHaveBeenCalledWith(
+      'test-token',
+      CHANNEL_ID,
+      'https://app.gethush.live',
     );
     expect(capturedRooms.at(-1).connectArgs[0]).toBe('wss://app.gethush.live/livekit/');
   });
