@@ -65,7 +65,6 @@ function buildApiUrl(path, baseUrl = '') {
 
 function createVoiceMlsApi(baseUrl = '') {
   return {
-    ...apiLib,
     getMLSVoiceGroupInfo: (token, channelId) => apiLib.getMLSVoiceGroupInfo(token, channelId, baseUrl),
     putMLSVoiceGroupInfo: (token, channelId, groupInfoBase64, epoch) => apiLib.putMLSVoiceGroupInfo(token, channelId, groupInfoBase64, epoch, baseUrl),
     postMLSVoiceCommit: (token, channelId, commitBytesBase64, epoch, groupInfoBase64) => apiLib.postMLSVoiceCommit(token, channelId, commitBytesBase64, epoch, groupInfoBase64, baseUrl),
@@ -123,6 +122,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const loadingScreensRef = useRef(new Set());
   const e2eeKeyProviderRef = useRef(null);
   const voiceEpochRef = useRef(null);
+  const voiceMlsApiRef = useRef(null);
   const voiceSelfUpdateTimerRef = useRef(null);
   const voiceWsUnsubscribeRef = useRef(null);
   const roomNameRef = useRef(null);
@@ -263,6 +263,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
         const voiceBaseUrl = resolveVoiceBaseUrl(baseUrl);
         const voiceMlsApi = createVoiceMlsApi(voiceBaseUrl);
+        voiceMlsApiRef.current = voiceMlsApi;
         const response = await fetch(buildApiUrl('/api/livekit/token', voiceBaseUrl), {
           method: 'POST',
           headers: {
@@ -318,7 +319,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
           // Determine whether to create or join: 404 from server = first participant.
           // Catch GroupAlreadyExists to handle React StrictMode double-fire in dev.
-          const existingGroup = await voiceMlsApi.getMLSVoiceGroupInfo(accessToken, channelId).catch(() => null);
+          const existingGroup = await voiceMlsApi.getMLSVoiceGroupInfo(accessToken, channelId);
           if (existingGroup) {
             await mlsGroupLib.joinVoiceGroup(mlsDeps, channelId);
           } else {
@@ -663,8 +664,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       voiceWsUnsubscribeRef.current = null;
     }
 
-    const voiceBaseUrl = resolveVoiceBaseUrl(baseUrl);
-    const voiceMlsApi = createVoiceMlsApi(voiceBaseUrl);
+    const voiceMlsApi = voiceMlsApiRef.current ?? createVoiceMlsApi(resolveVoiceBaseUrl(baseUrl));
 
     if (!roomRef.current) {
       // Still clean up MLS state even if room already gone
@@ -685,6 +685,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         } catch { /* fire-and-forget */ }
       }
       voiceEpochRef.current = null;
+      voiceMlsApiRef.current = null;
       reconnectAttemptCountRef.current = 0;
       setVoiceEpoch(null);
       setIsVoiceReconnecting(false);
@@ -735,6 +736,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       roomRef.current = null;
       e2eeKeyProviderRef.current = null;
       voiceEpochRef.current = null;
+      voiceMlsApiRef.current = null;
       roomNameRef.current = null;
       channelIdRef.current = null;
 

@@ -43,6 +43,8 @@ const {
   MockCaptureOrchestrator,
   MockLiveKitRoomAdapter,
   mockIsMobileWebAudio,
+  mockPutMLSVoiceGroupInfo,
+  mockPostMLSVoiceCommit,
 } = vi.hoisted(() => {
   const mockSetKey = vi.fn().mockResolvedValue(undefined);
   // Must use a regular function (not arrow) so `new ExternalE2EEKeyProvider()` works
@@ -89,7 +91,9 @@ const {
       signingPublicKey: new Uint8Array([2]),
       credentialBytes: new Uint8Array([3]),
     }),
-    mockGetMLSVoiceGroupInfo: vi.fn().mockRejectedValue(new Error('404')),
+    mockGetMLSVoiceGroupInfo: vi.fn().mockResolvedValue(null),
+    mockPutMLSVoiceGroupInfo: vi.fn().mockResolvedValue(undefined),
+    mockPostMLSVoiceCommit: vi.fn().mockResolvedValue(undefined),
     mockSetKey,
     mockE2EEKeyProvider,
     mockOrchestratorAcquire,
@@ -124,6 +128,8 @@ vi.mock('../lib/hushCrypto', () => ({}));
 
 vi.mock('../lib/api', () => ({
   getMLSVoiceGroupInfo: mockGetMLSVoiceGroupInfo,
+  putMLSVoiceGroupInfo: mockPutMLSVoiceGroupInfo,
+  postMLSVoiceCommit: mockPostMLSVoiceCommit,
 }));
 
 vi.mock('./useAuth', () => ({
@@ -292,7 +298,9 @@ describe('useRoom MLS voice E2EE', () => {
     mockProcessVoiceCommit.mockResolvedValue({ type: 'commit', epoch: 2 });
     mockPerformVoiceSelfUpdate.mockResolvedValue({ epoch: 3 });
     mockDestroyVoiceGroup.mockResolvedValue(undefined);
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+    mockPutMLSVoiceGroupInfo.mockResolvedValue(undefined);
+    mockPostMLSVoiceCommit.mockResolvedValue(undefined);
     mockGetCredential.mockResolvedValue({
       signingPrivateKey: new Uint8Array([1]),
       signingPublicKey: new Uint8Array([2]),
@@ -308,8 +316,8 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('connectRoom creates voice MLS group when no existing group on server (first participant)', async () => {
-    // getMLSVoiceGroupInfo throws (404 = no group) → createVoiceGroup path
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    // getMLSVoiceGroupInfo returns null when the server has no voice group yet.
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
 
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
@@ -324,7 +332,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('uses the instance base URL for LiveKit token and websocket in desktop-safe paths', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
 
     const { result } = renderHook(() =>
       useRoom({
@@ -348,8 +356,37 @@ describe('useRoom MLS voice E2EE', () => {
     expect(capturedRooms.at(-1).connectArgs[0]).toBe('wss://app.gethush.live/livekit/');
   });
 
+  it('binds all voice MLS API calls to the selected instance base URL', async () => {
+    const voiceBaseUrl = 'https://chat.example.com';
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+    mockCreateVoiceGroup.mockImplementationOnce(async (deps, channelId) => {
+      await deps.api.putMLSVoiceGroupInfo('test-token', channelId, 'group-info-b64', 1);
+      await deps.api.postMLSVoiceCommit('test-token', channelId, 'commit-b64', 2, 'next-group-info-b64');
+      return { epoch: 1 };
+    });
+
+    const { result } = renderHook(() =>
+      useRoom({
+        wsClient,
+        getToken,
+        currentUserId: 'u1',
+        getStore,
+        voiceKeyRotationHours: 2,
+        baseUrl: voiceBaseUrl,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    expect(mockGetMLSVoiceGroupInfo).toHaveBeenCalledWith('test-token', CHANNEL_ID, voiceBaseUrl);
+    expect(mockPutMLSVoiceGroupInfo).toHaveBeenCalledWith('test-token', CHANNEL_ID, 'group-info-b64', 1, voiceBaseUrl);
+    expect(mockPostMLSVoiceCommit).toHaveBeenCalledWith('test-token', CHANNEL_ID, 'commit-b64', 2, 'next-group-info-b64', voiceBaseUrl);
+  });
+
   it('uses the per-instance LiveKit URL returned by the token endpoint', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     stubLivekitFetch({
       token: 'lk-token',
       livekitUrl: 'wss://rtc.example.com/',
@@ -378,7 +415,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('connectRoom calls exportVoiceFrameKey and applies key via setKey(frameKeyBytes, epoch % 256)', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     mockExportVoiceFrameKey.mockResolvedValue({
       frameKeyBytes: new Uint8Array(32).fill(0xff),
       epoch: 5,
@@ -404,7 +441,7 @@ describe('useRoom MLS voice E2EE', () => {
     // When connectRoom completes successfully, isVoiceReconnecting must be false.
     // The true→false transition happens within connectRoom after the key is applied.
     // We verify the final state here; the Reconnecting indicator is shown in VoiceChannel.jsx.
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
 
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
@@ -420,7 +457,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('mls.commit WS event triggers key re-derivation with new epoch (skips own commits)', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
     );
@@ -454,7 +491,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('mls.commit WS event skips only same-user commits from the same device', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
     );
@@ -481,7 +518,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('mls.commit WS event processes same-user commits from a different device', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
     );
@@ -507,7 +544,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('disconnectRoom destroys local voice group state', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
     );
@@ -530,7 +567,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('publishMic creates orchestrator, acquires desktop-standard, and publishes', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
     );
@@ -547,7 +584,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('muteMic and unmuteMic delegate to orchestrator', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     const { result } = renderHook(() =>
       useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
     );
@@ -571,7 +608,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('publishMic resolves mobile-web-standard when UA is mobile', async () => {
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     mockIsMobileWebAudio.mockReturnValue(true);
 
     const { result } = renderHook(() =>
@@ -591,7 +628,7 @@ describe('useRoom MLS voice E2EE', () => {
   });
 
   it('MLS failure blocks voice entirely - no unencrypted fallback', async () => {
-    // Both getMLSVoiceGroupInfo and createVoiceGroup fail
+    // Non-404 MLS lookup failures must block voice instead of creating a fresh group.
     mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('Network error'));
     mockCreateVoiceGroup.mockRejectedValue(new Error('WASM failure'));
 
@@ -711,7 +748,7 @@ describe('useRoom voice reconnect', () => {
     mockProcessVoiceCommit.mockResolvedValue({ type: 'commit', epoch: 2 });
     mockPerformVoiceSelfUpdate.mockResolvedValue({ epoch: 3 });
     mockDestroyVoiceGroup.mockResolvedValue(undefined);
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     mockGetCredential.mockResolvedValue({
       signingPrivateKey: new Uint8Array([1]),
       signingPublicKey: new Uint8Array([2]),
@@ -804,7 +841,7 @@ describe('useRoom playback manager integration', () => {
       frameKeyBytes: new Uint8Array(32).fill(0xab),
       epoch: 1,
     });
-    mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
     mockGetCredential.mockResolvedValue({
       signingPrivateKey: new Uint8Array([1]),
       signingPublicKey: new Uint8Array([2]),
