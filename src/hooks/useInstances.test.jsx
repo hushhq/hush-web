@@ -335,6 +335,69 @@ describe('useInstances', () => {
     expect(mockConnect).not.toHaveBeenCalled();
   });
 
+  it('local-JWT mount aborts auth/WS/fetchWithAuth fallback when handshake is incompatible', async () => {
+    // Local-JWT shortcut path: when a session JWT exists but no stored
+    // instances, useInstances calls registerLocalInstance for the active
+    // auth origin. That path must also gate on handshake compatibility,
+    // otherwise an incompatible server could still receive WS traffic and
+    // MLS commits via the fallback fetchWithAuth -> registerLocalInstance
+    // dance below.
+    const primaryInstanceUrl = 'https://chat.example.com';
+    localStorage.setItem('hush_auth_instance_selected', primaryInstanceUrl);
+    sessionStorage.setItem('hush_auth_instance_active', primaryInstanceUrl);
+    sessionStorage.setItem('hush_jwt', 'local-jwt');
+
+    // Both the registerLocalInstance attempt and any retry observe the
+    // same mismatch.
+    apiModule.getHandshake.mockResolvedValue({
+      server_version: '1.0',
+      api_version: '1',
+      current_mls_ciphersuite: 1,
+    });
+
+    const { useInstances } = await import('./useInstances.js');
+    const { result } = renderHook(() => useInstances());
+
+    await waitFor(() => expect(apiModule.getHandshake).toHaveBeenCalledWith(primaryInstanceUrl));
+    await waitFor(() => expect(result.current.guildsLoaded).toBe(true));
+
+    expect(apiModule.requestChallenge).not.toHaveBeenCalled();
+    expect(apiModule.verifyChallenge).not.toHaveBeenCalled();
+    expect(apiModule.fetchWithAuth).not.toHaveBeenCalled();
+    expect(wsModule.createWsClient).not.toHaveBeenCalled();
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(registryModule.saveInstance).not.toHaveBeenCalled();
+  });
+
+  it('local-JWT mount still connects when handshake is compatible', async () => {
+    const primaryInstanceUrl = 'https://chat.example.com';
+    localStorage.setItem('hush_auth_instance_selected', primaryInstanceUrl);
+    sessionStorage.setItem('hush_auth_instance_active', primaryInstanceUrl);
+    sessionStorage.setItem('hush_jwt', 'local-jwt');
+
+    apiModule.getHandshake.mockResolvedValue({ server_version: '1.0', api_version: '1' });
+    apiModule.getMyGuilds.mockResolvedValueOnce([]);
+
+    const { useInstances } = await import('./useInstances.js');
+    const { result } = renderHook(() => useInstances());
+
+    await waitFor(() => {
+      expect(result.current.instanceStates.has(primaryInstanceUrl)).toBe(true);
+    });
+
+    expect(wsModule.createWsClient).toHaveBeenCalled();
+    expect(mockConnect).toHaveBeenCalled();
+    expect(registryModule.saveInstance).toHaveBeenCalledWith(
+      fakeDb,
+      expect.objectContaining({ instanceUrl: primaryInstanceUrl, jwt: 'local-jwt' }),
+    );
+    // handshakeData must be stored so downstream consumers can read it.
+    const state = result.current.instanceStates.get(primaryInstanceUrl);
+    expect(state?.handshakeData).toEqual(
+      expect.objectContaining({ server_version: '1.0' }),
+    );
+  });
+
   it('bootInstance throws MVP error when verifyChallenge returns 404 (federated fallback blocked)', async () => {
     const { useInstances } = await import('./useInstances.js');
 
