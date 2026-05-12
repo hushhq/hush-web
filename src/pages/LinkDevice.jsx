@@ -435,12 +435,13 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
 }
 
 
-function ApproveLinkView({ initialPayload, unlockResumePath }) {
+function ApproveLinkView({ initialPayload, unlockResumePath, homeInstanceUrl }) {
   const navigate = useNavigate();
   return (
     <ApproveDeviceLinkFlow
       mode="page"
       initialPayload={initialPayload}
+      homeInstanceUrl={homeInstanceUrl}
       onCancel={() => navigate('/')}
       onVaultUnlockNeeded={() => navigate(unlockResumePath)}
     />
@@ -482,7 +483,11 @@ export default function LinkDevice() {
             onSelectInstance={chooseInstance}
           />
         ) : (
-          <ApproveLinkView initialPayload={qrPayload} unlockResumePath={unlockResumePath} />
+          <ApproveLinkView
+            initialPayload={qrPayload}
+            unlockResumePath={unlockResumePath}
+            homeInstanceUrl={selectedInstanceUrl}
+          />
         )}
       </div>
     </div>
