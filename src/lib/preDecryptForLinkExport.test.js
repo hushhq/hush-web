@@ -219,6 +219,35 @@ describe('preDecryptForLinkExport', () => {
     expect(stubs.localPlaintextStore.get('mRetry').plaintext).toBe('eventually OK');
   });
 
+  it('forwards the trusted baseUrl into the catchup deps (PR #13 JWT leak regression)', async () => {
+    // Regression for the per-instance JWT leak class: the link-export
+    // pre-decrypt path runs a catchup retry on transient decrypt
+    // failures. The catchup must hit the owning instance URL passed
+    // into preDecryptForLinkExport and never silently fall back to
+    // window.location.origin (which would leak the per-instance JWT
+    // to the host that served the SPA).
+    const stubs = makeStubs({
+      guilds: [{ id: 'g' }],
+      channelsByGuild: { g: [{ id: 'c', type: 'text' }] },
+      messagesByChannel: {
+        c: [makeMessage('mRetry', 'alice', 'eventually OK', '2026-04-01T00:00:00Z')],
+      },
+      catchupRecover: true,
+    });
+
+    await preDecryptForLinkExport({
+      activeDb: stubs.activeDb,
+      token: 't',
+      baseUrl: 'https://chat.example.com',
+      _deps: stubs,
+    });
+
+    expect(stubs.mlsGroup.catchupCommits).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: 'https://chat.example.com' }),
+      'c',
+    );
+  });
+
   it('counts a failure when both decrypt and catchup retry fail (TooDistantInThePast)', async () => {
     const stubs = makeStubs({
       guilds: [{ id: 'g' }],

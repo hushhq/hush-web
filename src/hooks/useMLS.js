@@ -25,6 +25,9 @@ import { withChannelMLSMutex, textChannelKey } from '../lib/channelMLSMutex';
  * @param {() => Promise<IDBDatabase|null>} [opts.getHistoryStore] - Optional history-tier IDB factory
  * @param {() => string|null} opts.getToken - Returns the JWT for API calls
  * @param {string} [opts.channelId] - Required for encryptForChannel/decryptFromChannel
+ * @param {string} [opts.baseUrl] - Owning instance base URL. Threaded into MLS deps so cross-instance
+ *   catch-up requests target the per-instance JWT's owning origin instead of falling back to
+ *   `window.location.origin` (a JWT leak vector when the user has joined a non-home instance).
  * @param {object} [opts._deps] - Optional dep injection for testing
  * @returns {{
  *   encryptForChannel: Function,
@@ -33,7 +36,7 @@ import { withChannelMLSMutex, textChannelKey } from '../lib/channelMLSMutex';
  *   setCachedMessage: Function,
  * }}
  */
-export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }) {
+export function useMLS({ getStore, getHistoryStore, getToken, channelId, baseUrl = '', _deps }) {
   const mlsGroup = _deps?.mlsGroup ?? mlsGroupLib;
   const mlsStore = _deps?.mlsStore ?? mlsStoreLib;
   const hushCrypto = _deps?.hushCrypto ?? hushCryptoLib;
@@ -54,7 +57,7 @@ export function useMLS({ getStore, getHistoryStore, getToken, channelId, _deps }
     if (!db) throw new Error('[useMLS] No IDB store available');
     if (!token) throw new Error('[useMLS] No auth token available');
     const credential = await mlsStore.getCredential(db);
-    return { db, token, credential, mlsStore, hushCrypto, api };
+    return { db, token, credential, mlsStore, hushCrypto, api, baseUrl };
   }
 
   // ---------------------------------------------------------------------------
