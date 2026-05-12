@@ -21,6 +21,20 @@ vi.mock('../lib/desktopVaultBridge', () => ({
   clearVaultSessionKey: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../lib/vaultSessionKey', () => ({
+  sealIdentityIntoSession: vi.fn().mockResolvedValue(undefined),
+  getSessionKeyIfAlive: vi.fn().mockResolvedValue(null),
+  readWrappedIdentity: vi.fn().mockResolvedValue(null),
+  unwrapIdentity: vi.fn().mockResolvedValue(null),
+  clearSessionKey: vi.fn().mockResolvedValue(undefined),
+  markAlive: vi.fn(),
+  isMarkerAlive: vi.fn().mockReturnValue(false),
+  createVaultSessionPresence: vi.fn(() => ({
+    close: vi.fn(),
+    joinAndCheckSiblings: vi.fn().mockResolvedValue(false),
+  })),
+}));
+
 // ── authInstanceStore mock ────────────────────────────────────────────────────
 vi.mock('../lib/authInstanceStore', async (importOriginal) => {
   const actual = await importOriginal();
@@ -184,6 +198,31 @@ describe('useAuth - IDB-recovery branch desktop auto-unlock', () => {
     expect(result.current.hasVault).toBe(true);
     expect(result.current.isVaultUnlocked).toBe(true);
     expect(bridgeMod.retrieveVaultSessionKey).toHaveBeenCalledWith('user-idb-1');
+  });
+
+  it('repairs a missing public-key marker during desktop auto-unlock with an existing JWT', async () => {
+    sessionStorage.setItem('hush_jwt', 'jwt-existing');
+    _vaultBlobs.set('user-1', makeFakeBlob());
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ id: 'user-1', username: 'alice', displayName: 'Alice' }),
+    });
+    vi.mocked(vaultMod.checkVaultExistsInIDB).mockImplementation(async (userId) => {
+      if (userId === 'user-1') return { exists: true, publicKeyHex: null };
+      return { exists: false, publicKeyHex: null };
+    });
+    vi.mocked(bridgeMod.retrieveVaultSessionKey).mockResolvedValue('rawkey-desktop');
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.vaultState).toBe('unlocked');
+    expect(result.current.identityKeyRef.current?.publicKey).toBeInstanceOf(Uint8Array);
+    expect(result.current.identityKeyRef.current?.publicKey).toHaveLength(32);
+    expect(localStorage.getItem('hush_vault_user_user-1')).toHaveLength(64);
+    expect(vaultMod.saveVaultMarkerToIDB).toHaveBeenCalled();
   });
 
   it('falls back to vaultState=locked when no session key is stored (browser / no-key path)', async () => {

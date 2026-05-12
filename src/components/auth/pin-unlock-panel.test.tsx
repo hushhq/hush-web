@@ -30,8 +30,12 @@ describe("PinUnlockPanel", () => {
     unlockVault.mockReset()
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup()
+    // input-otp schedules a short post-interaction state sync. Let it drain
+    // before jsdom tears down `window`, otherwise full-suite runs can report
+    // an unhandled "window is not defined" after all assertions passed.
+    await new Promise((resolve) => setTimeout(resolve, 0))
   })
 
   it("calls unlockVault with the entered pin on submit", async () => {
@@ -56,8 +60,9 @@ describe("PinUnlockPanel", () => {
 
   it("triggers onSwitchAccount when the footer button is clicked", async () => {
     const onSwitchAccount = vi.fn()
+    const u = userEvent.setup()
     render(<PinUnlockPanel onSwitchAccount={onSwitchAccount} />)
-    await userEvent.click(screen.getByRole("button", { name: /not you/i }))
+    await u.click(screen.getByRole("button", { name: /not you/i }))
     expect(onSwitchAccount).toHaveBeenCalledTimes(1)
   })
 

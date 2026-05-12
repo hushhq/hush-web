@@ -91,6 +91,10 @@ import {
   getActiveAuthInstanceUrlSync,
   markAuthInstanceUsed,
 } from '../lib/authInstanceStore';
+// Used to repair missing or malformed public-key vault markers after storage
+// eviction. The encrypted vault stores the private seed; the public key is
+// recoverable from that seed and should never be represented as null.
+import * as ed from '@noble/ed25519';
 
 // ── JWT utilities ─────────────────────────────────────────────────────────────
 
@@ -373,6 +377,53 @@ export function clearSession() {
  */
 function toBase64(bytes) {
   return btoa(String.fromCharCode(...bytes));
+}
+
+function isValidEd25519PublicKey(value) {
+  return value instanceof Uint8Array && value.length === 32;
+}
+
+async function resolveVaultPublicKey(userId, db, privateKey) {
+  let storedHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
+
+  if (!storedHex && db) {
+    const idbMarker = await loadVaultMarkerFromIDB(db);
+    if (typeof idbMarker === 'string' && idbMarker) {
+      storedHex = idbMarker;
+    }
+  }
+
+  if (storedHex) {
+    try {
+      const publicKey = hexToBytes(storedHex);
+      if (isValidEd25519PublicKey(publicKey)) {
+        try {
+          localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, storedHex);
+        } catch {
+          // localStorage can be unavailable; the in-memory key remains valid.
+        }
+        return publicKey;
+      }
+    } catch {
+      // Corrupt persisted marker. Fall through and rebuild from the seed.
+    }
+  }
+
+  const publicKey = await ed.getPublicKeyAsync(privateKey);
+  const repairedHex = bytesToHex(publicKey);
+  try {
+    localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, repairedHex);
+  } catch {
+    // localStorage can be unavailable; IDB backup below is best-effort.
+  }
+  if (db) {
+    try {
+      await saveVaultMarkerToIDB(db, repairedHex);
+    } catch {
+      // Marker repair is non-fatal for the current unlocked session.
+    }
+  }
+  return publicKey;
 }
 
 /**
@@ -1478,17 +1529,7 @@ export function useAuth() {
         await saveEncryptedKey(db, await encryptVault(privateKey, pin));
       }
 
-      // Derive public key from stored hex marker. If localStorage was evicted
-      // (iOS non-Safari), fall back to IDB backup.
-      let storedHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
-      if (!storedHex) {
-        const idbMarker = await loadVaultMarkerFromIDB(db);
-        if (typeof idbMarker === 'string' && idbMarker) {
-          storedHex = idbMarker;
-          localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${userId}`, storedHex);
-        }
-      }
-      publicKey = storedHex ? hexToBytes(storedHex) : null;
+      publicKey = await resolveVaultPublicKey(userId, db, privateKey);
     } catch (err) {
       if (!isVaultDecryptFailure(err)) {
         throw err;
@@ -1816,10 +1857,10 @@ export function useAuth() {
     const rawKeyHex = await retrieveVaultSessionKey(userId);
     if (!rawKeyHex) return false;
 
+    let db = null;
     try {
-      const db = await openVaultStore(userId);
+      db = await openVaultStore(userId);
       const blob = await loadEncryptedKey(db);
-      db.close();
 
       if (!blob) {
         clearVaultSessionKey(userId).catch(() => {});
@@ -1827,14 +1868,9 @@ export function useAuth() {
       }
 
       const privateKey = await decryptVaultWithRawKey(blob, rawKeyHex);
-      const pubKeyHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
-      const publicKey = pubKeyHex ? hexToBytes(pubKeyHex) : null;
+      const publicKey = await resolveVaultPublicKey(userId, db, privateKey);
 
       if (!existingJwt) {
-        if (!publicKey) {
-          clearVaultSessionKey(userId).catch(() => {});
-          return false;
-        }
         const reauthBaseUrl = resolveReauthInstanceUrl();
         // performChallengeResponse handles identityKeyRef, token, user,
         // vaultState, transcript cache, and applyVaultTimeout.
@@ -1867,6 +1903,8 @@ export function useAuth() {
       console.warn('[useAuth] desktop auto-unlock failed:', err);
       clearVaultSessionKey(userId).catch(() => {});
       return false;
+    } finally {
+      db?.close?.();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [performChallengeResponse, applyVaultTimeout, clearPinSetup]);
@@ -2111,9 +2149,22 @@ export function useAuth() {
           setToken(stored);
           setUser(u);
 
-          const vaultPublicKeyHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
+          let vaultPublicKeyHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
+          let idbVaultCheck = null;
+          if (!vaultPublicKeyHex) {
+            idbVaultCheck = await checkVaultExistsInIDB(u.id);
+            if (cancelled) return;
+            if (idbVaultCheck.publicKeyHex) {
+              vaultPublicKeyHex = idbVaultCheck.publicKeyHex;
+              try {
+                localStorage.setItem(`${VAULT_USER_KEY_PREFIX}${u.id}`, vaultPublicKeyHex);
+              } catch {
+                // IDB backup is enough to detect the local vault on this boot.
+              }
+            }
+          }
 
-          if (vaultPublicKeyHex) {
+          if (vaultPublicKeyHex || idbVaultCheck?.exists) {
             setHasLocalVault(true);
             // The wrapping key is no longer cached in browser storage
             // (see ans23 / F3). Any leftover entry from a previous

@@ -1,6 +1,6 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // jsdom does not provide AudioContext. Polyfill so useMicMonitor's
 // typeof AudioContext guard passes and the buildCaptureGraph path runs.
@@ -73,6 +73,11 @@ describe('useMicMonitor', () => {
     navigator.mediaDevices = {
       getUserMedia: vi.fn(),
     };
+  });
+
+  afterEach(async () => {
+    cleanup();
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   it('builds loopback constraints that mirror the publish path browser DSP', () => {

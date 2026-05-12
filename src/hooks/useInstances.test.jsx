@@ -201,6 +201,30 @@ describe('useInstances', () => {
     });
   });
 
+  it('bootInstance fails clearly when the identity public key is missing', async () => {
+    useAuthMock.mockReturnValue({
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array(32).fill(1),
+          publicKey: null,
+        },
+      },
+      user: { id: 'local-user', username: 'testuser' },
+      token: 'local-jwt',
+      vaultState: 'unlocked',
+      loading: false,
+    });
+
+    const { useInstances } = await import('./useInstances.js');
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await expect(result.current.bootInstance(INSTANCE_A)).rejects.toThrow(
+      /identity publicKey is missing or empty/,
+    );
+    expect(apiModule.getHandshake).not.toHaveBeenCalled();
+  });
+
   it('bootInstance calls handshake, challenge, verify in sequence', async () => {
     const { useInstances } = await import('./useInstances.js');
     setupAuthMocks(JWT_A, USER_A, GUILDS_A);

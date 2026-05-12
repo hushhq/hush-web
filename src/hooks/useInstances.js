@@ -482,6 +482,16 @@ export function useInstances() {
     if (!identityKey) {
       throw new Error('bootInstance: no identity key available - vault must be unlocked');
     }
+    // Guard against partial identity material. Without this, `toBase64(publicKey)`
+    // crashes with a cryptic `TypeError: e is not iterable` deep in bootInstance,
+    // which blocks WS reconnect, freezes MLS epoch progression, and surfaces to
+    // the user as WrongEpoch decrypt failures plus repeating 403 WS handshakes.
+    if (!(identityKey.privateKey instanceof Uint8Array) || identityKey.privateKey.length === 0) {
+      throw new Error('bootInstance: identity privateKey is missing or empty - relock and unlock the vault');
+    }
+    if (!(identityKey.publicKey instanceof Uint8Array) || identityKey.publicKey.length === 0) {
+      throw new Error('bootInstance: identity publicKey is missing or empty - relock and unlock the vault');
+    }
 
     // Initialise or update entry in instancesRef.
     const existing = instancesRef.current.get(instanceUrl) ?? {};
