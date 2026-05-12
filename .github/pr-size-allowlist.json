@@ -16,7 +16,7 @@
     "src/components/chat/attachment-tile.tsx": 307,
     "src/components/chat/chat-event.tsx": 506,
     "src/components/chat/chat-toolbar.tsx": 365,
-    "src/components/devices/ApproveDeviceLinkFlow.jsx": 813,
+    "src/components/devices/ApproveDeviceLinkFlow.jsx": 814,
     "src/components/members-sidebar.tsx": 416,
     "src/components/novel-composer.tsx": 537,
     "src/components/server-rail.tsx": 419,
@@ -71,7 +71,7 @@
     "src/lib/ws.test.js": 648,
     "src/pages/Invite.jsx": 456,
     "src/pages/Invite.test.jsx": 496,
-    "src/pages/LinkDevice.jsx": 490,
-    "src/pages/LinkDevice.test.jsx": 1690
+    "src/pages/LinkDevice.jsx": 495,
+    "src/pages/LinkDevice.test.jsx": 1797
   }
 }

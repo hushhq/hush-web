@@ -152,7 +152,7 @@ export default function ApproveDeviceLinkFlow({
     return () => {
       cancelled = true;
     };
-  }, [claim, hasUnlockedIdentity]);
+  }, [claim, hasUnlockedIdentity, homeInstanceUrl]);
 
   const resolveRequest = useCallback(
     async (body) => {
@@ -726,7 +726,7 @@ export default function ApproveDeviceLinkFlow({
           <div className={'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Instance</span>
             <strong className="truncate">
-              {claim.instanceUrl || homeInstanceUrl || window.location.origin}
+              {resolveTrustedApiBaseUrl(homeInstanceUrl)}
             </strong>
           </div>
         </div>
