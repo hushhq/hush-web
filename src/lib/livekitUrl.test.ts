@@ -2,14 +2,23 @@ import { describe, it, expect } from "vitest"
 import { buildLiveKitWsUrl } from "./livekitUrl"
 
 describe("buildLiveKitWsUrl", () => {
-  it("trusts a server-provided per-instance URL before build env override", () => {
+  it("env override wins over server-provided per-instance URL", () => {
     expect(
       buildLiveKitWsUrl({
         serverUrl: "wss://rtc.example.com/",
         envOverride: "wss://hosted-rtc.example.net/",
         instanceOrigin: "https://chat.example.com",
       }),
-    ).toBe("wss://rtc.example.com/")
+    ).toBe("wss://hosted-rtc.example.net/")
+  })
+
+  it("accepts server URL when same-host as selected instance", () => {
+    expect(
+      buildLiveKitWsUrl({
+        serverUrl: "wss://chat.example.com:443/",
+        instanceOrigin: "https://chat.example.com:443",
+      }),
+    ).toBe("wss://chat.example.com/")
   })
 
   it("derives wss:// from an https instance origin", () => {
@@ -98,6 +107,24 @@ describe("buildLiveKitWsUrl", () => {
     expect(() =>
       buildLiveKitWsUrl({
         serverUrl: "https://rtc.example.com",
+        instanceOrigin: "https://chat.example.com",
+      }),
+    ).toThrow(/server livekitUrl/)
+  })
+
+  it("rejects server URL that does not match selected instance host", () => {
+    expect(() =>
+      buildLiveKitWsUrl({
+        serverUrl: "wss://attacker.example/",
+        instanceOrigin: "https://chat.example.com",
+      }),
+    ).toThrow(/server livekitUrl/)
+  })
+
+  it("rejects insecure ws:// server URL when selected instance is https", () => {
+    expect(() =>
+      buildLiveKitWsUrl({
+        serverUrl: "ws://chat.example.com/",
         instanceOrigin: "https://chat.example.com",
       }),
     ).toThrow(/server livekitUrl/)
