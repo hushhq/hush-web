@@ -846,6 +846,75 @@ describe('LinkDevice', () => {
     expect(historyDb.close).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores an untrusted claim instance URL for export and verify API calls', async () => {
+    const user = userEvent.setup();
+    const historyDb = { close: vi.fn() };
+
+    authState.current = {
+      completeDeviceLink: vi.fn(),
+      loading: false,
+      isAuthenticated: true,
+      hasSession: true,
+      hasVault: true,
+      isVaultUnlocked: true,
+      needsUnlock: false,
+      vaultState: 'unlocked',
+      token: 'jwt-token',
+      user: { id: 'user-1', username: 'alice', displayName: 'Alice' },
+      identityKeyRef: {
+        current: {
+          privateKey: new Uint8Array([1, 2, 3]),
+          publicKey: new Uint8Array([4, 5, 6]),
+        },
+      },
+    };
+
+    mockResolveDeviceLinkRequest.mockResolvedValue({
+      claimToken: 'claim-1',
+      deviceId: 'device-2',
+      devicePublicKey: 'device-public-key',
+      sessionPublicKey: 'session-public-key',
+      instanceUrl: 'https://evil.example',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockOpenStore.mockResolvedValue(historyDb);
+    mockExportHistorySnapshot.mockResolvedValue({ version: 1, stores: {} });
+    mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    mockBase64ToBytes.mockReturnValue(new Uint8Array([9, 9, 9]));
+    mockCertifyDevice.mockResolvedValue(new Uint8Array([7, 7, 7]));
+    mockBytesToBase64.mockReturnValue('certificate-base64');
+    mockEncryptRelayPayload.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
+    mockVerifyDeviceLinkRequest.mockResolvedValue(undefined);
+
+    renderLinkDevice('/link-device');
+
+    await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+    await user.click(screen.getByRole('button', { name: /resolve code/i }));
+    expect(await screen.findByText('device-2')).toBeInTheDocument();
+    expect(screen.getByText('https://chat.example.com')).toBeInTheDocument();
+    expect(screen.queryByText('https://evil.example')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /approve link/i }));
+
+    await waitFor(() => {
+      expect(mockVerifyDeviceLinkRequest).toHaveBeenCalled();
+    });
+    expect(mockPreDecryptForLinkExport).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: 'https://chat.example.com',
+    }));
+    expect(mockUploadArchiveSession).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: 'https://chat.example.com',
+    }));
+    expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
+      'jwt-token',
+      expect.objectContaining({ claimToken: 'claim-1' }),
+      'https://chat.example.com',
+    );
+  });
+
   it('runs preDecryptForLinkExport before exportHistorySnapshot during approval', async () => {
     const user = userEvent.setup();
     const historyDb = { close: vi.fn() };
@@ -1491,7 +1560,45 @@ describe('LinkDevice', () => {
       // Fresh upload path is NOT taken when resume is chosen.
       expect(mockUploadArchiveSession).not.toHaveBeenCalled();
       // Link verification happens with the resumed descriptor.
-      // Third arg is the base URL resolved from claim.instanceUrl.
+      // Third arg is the trusted auth instance URL, not claim.instanceUrl.
+      await waitFor(() => {
+        expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
+          'jwt-token',
+          expect.objectContaining({ claimToken: 'claim-1' }),
+          'https://chat.example.com',
+        );
+      });
+    });
+
+    it('ignores an untrusted claim instance URL when resuming an upload', async () => {
+      authState.current = unlockedAuth();
+      setupClaimResolution();
+      mockResolveDeviceLinkRequest.mockResolvedValue({
+        claimToken: 'claim-1',
+        deviceId: 'device-2',
+        devicePublicKey: 'device-public-key',
+        sessionPublicKey: 'session-public-key',
+        instanceUrl: 'https://evil.example',
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+      mockFindResumableExport.mockResolvedValue({
+        ...sampleResumable,
+        baseUrl: 'https://evil.example',
+      });
+
+      const user = userEvent.setup();
+      renderLinkDevice('/link-device');
+      await user.type(screen.getByLabelText(/link code/i), 'abcd1234');
+      await user.click(screen.getByRole('button', { name: /resolve code/i }));
+      await screen.findByTestId('ld-resume-banner');
+
+      await user.click(screen.getByRole('button', { name: /resume upload/i }));
+
+      await waitFor(() => {
+        expect(mockResumeUploadArchiveSession).toHaveBeenCalledTimes(1);
+      });
+      const args = mockResumeUploadArchiveSession.mock.calls[0][0];
+      expect(args.baseUrl).toBe('https://chat.example.com');
       await waitFor(() => {
         expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
           'jwt-token',
