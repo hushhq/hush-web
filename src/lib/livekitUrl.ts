@@ -3,11 +3,12 @@
  *
  * Inputs come from three places, in priority order:
  *
- *   1. Server-provided `/api/livekit/token.livekitUrl` (when set, it
- *      wins because it is scoped to the selected instance).
- *   2. `VITE_LIVEKIT_URL` build-time override (when set, it wins —
+ *   1. `VITE_LIVEKIT_URL` build-time override (when set, it wins —
  *      mirrors the long-standing escape hatch for self-hosters that
  *      run LiveKit on a separate origin from the API).
+ *   2. Server-provided `/api/livekit/token.livekitUrl` (when set, it
+ *      is accepted only when same-host as the selected instance/page
+ *      origin and with appropriate ws/wss transport for that origin).
  *   3. The caller's normalized instance origin (https://chat.example.com)
  *      → ws+s://chat.example.com/livekit/
  *   4. The current page origin's `/livekit/` path (browser-only fallback;
@@ -57,19 +58,20 @@ export interface BuildLiveKitWsUrlInput {
 export function buildLiveKitWsUrl(input: BuildLiveKitWsUrlInput): string {
   const { serverUrl, instanceOrigin, envOverride, pageOrigin } = input
 
-  if (serverUrl) {
-    const validated = validateAsLiveKitWsUrl(serverUrl)
-    if (validated) return validated
-    throw new Error(
-      `livekitUrl: server livekitUrl must be ws:// or wss://; got ${serverUrl}`,
-    )
-  }
-
   if (envOverride) {
     const validated = validateAsLiveKitWsUrl(envOverride)
     if (validated) return validated
     throw new Error(
       `livekitUrl: VITE_LIVEKIT_URL must be ws:// or wss://; got ${envOverride}`,
+    )
+  }
+
+  if (serverUrl) {
+    const trustedOrigin = instanceOrigin || pageOrigin
+    const validated = validateServerLiveKitWsUrl(serverUrl, trustedOrigin)
+    if (validated) return validated
+    throw new Error(
+      `livekitUrl: server livekitUrl must be same-host ws(s) URL for selected instance; got ${serverUrl}`,
     )
   }
 
@@ -120,4 +122,31 @@ function validateAsLiveKitWsUrl(candidate: string): string | null {
   if (!ALLOWED_LIVEKIT_PROTOCOLS.has(parsed.protocol)) return null
   if (!parsed.host) return null
   return parsed.toString()
+}
+
+function validateServerLiveKitWsUrl(
+  candidate: string,
+  trustedOrigin?: string | null,
+): string | null {
+  const validated = validateAsLiveKitWsUrl(candidate)
+  if (!validated) return null
+
+  if (!trustedOrigin) return null
+
+  let trusted: URL
+  let server: URL
+  try {
+    trusted = new URL(trustedOrigin)
+    server = new URL(validated)
+  } catch {
+    return null
+  }
+
+  if (!trusted.host || trusted.host !== server.host) return null
+
+  if (trusted.protocol === "https:" && server.protocol !== "wss:") return null
+  if (trusted.protocol === "http:" && !ALLOWED_LIVEKIT_PROTOCOLS.has(server.protocol)) return null
+  if (trusted.protocol !== "https:" && trusted.protocol !== "http:") return null
+
+  return server.toString()
 }
