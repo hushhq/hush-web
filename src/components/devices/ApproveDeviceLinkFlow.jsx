@@ -84,6 +84,10 @@ function formatCountdown(expiresAt, now = Date.now()) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function resolveTrustedApiBaseUrl(homeInstanceUrl) {
+  return homeInstanceUrl || window.location.origin;
+}
+
 export default function ApproveDeviceLinkFlow({
   mode,
   initialPayload,
@@ -135,8 +139,7 @@ export default function ApproveDeviceLinkFlow({
       setResumableExport(null);
       return;
     }
-    const baseUrlForApi
-      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
+    const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
     let cancelled = false;
     findResumableExport(baseUrlForApi)
       .then((rec) => {
@@ -264,8 +267,7 @@ export default function ApproveDeviceLinkFlow({
     let metadataDb = null;
     try {
       historyDb = await mlsStore.openStore(user.id, getDeviceId());
-      const baseUrlForApi
-      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
+      const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
       try {
         const summary = await preDecryptForLinkExport({
           activeDb: historyDb,
@@ -479,8 +481,7 @@ export default function ApproveDeviceLinkFlow({
     setStatus('Resuming previous upload…');
     setIsResuming(true);
     try {
-      const baseUrlForApi
-      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
+      const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
       const archiveDescriptor = await resumeUploadArchiveSession({
         token,
         baseUrl: baseUrlForApi,
