@@ -63,6 +63,15 @@ function buildApiUrl(path, baseUrl = '') {
   return normalized ? `${normalized}${path}` : path;
 }
 
+function createVoiceMlsApi(baseUrl = '') {
+  return {
+    ...apiLib,
+    getMLSVoiceGroupInfo: (token, channelId) => apiLib.getMLSVoiceGroupInfo(token, channelId, baseUrl),
+    putMLSVoiceGroupInfo: (token, channelId, groupInfoBase64, epoch) => apiLib.putMLSVoiceGroupInfo(token, channelId, groupInfoBase64, epoch, baseUrl),
+    postMLSVoiceCommit: (token, channelId, commitBytesBase64, epoch, groupInfoBase64) => apiLib.postMLSVoiceCommit(token, channelId, commitBytesBase64, epoch, groupInfoBase64, baseUrl),
+  };
+}
+
 function buildLiveKitUrl(baseUrl = '', serverUrl = null) {
   // `buildLiveKitWsUrl` parses every input via the URL constructor and
   // accepts only ws:/wss: in the result. Any non-http(s) instance
@@ -253,6 +262,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         }
 
         const voiceBaseUrl = resolveVoiceBaseUrl(baseUrl);
+        const voiceMlsApi = createVoiceMlsApi(voiceBaseUrl);
         const response = await fetch(buildApiUrl('/api/livekit/token', voiceBaseUrl), {
           method: 'POST',
           headers: {
@@ -303,12 +313,12 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             credential,
             mlsStore: mlsStoreLib,
             hushCrypto: hushCryptoLib,
-            api: apiLib,
+            api: voiceMlsApi,
           };
 
           // Determine whether to create or join: 404 from server = first participant.
           // Catch GroupAlreadyExists to handle React StrictMode double-fire in dev.
-          const existingGroup = await apiLib.getMLSVoiceGroupInfo(accessToken, channelId).catch(() => null);
+          const existingGroup = await voiceMlsApi.getMLSVoiceGroupInfo(accessToken, channelId).catch(() => null);
           if (existingGroup) {
             await mlsGroupLib.joinVoiceGroup(mlsDeps, channelId);
           } else {
@@ -454,7 +464,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: voiceMlsApi,
             };
             const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);
             if (e2eeKeyProviderRef.current) {
@@ -528,7 +538,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: voiceMlsApi,
             };
             const commitBytes = fromBase64(data.commit_bytes);
             await mlsGroupLib.processVoiceCommit(mlsDeps, data.channel_id, commitBytes);
@@ -556,7 +566,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: voiceMlsApi,
             };
             await mlsGroupLib.destroyVoiceGroup(mlsDeps, data.channel_id);
           } catch (err) {
@@ -584,7 +594,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
               credential,
               mlsStore: mlsStoreLib,
               hushCrypto: hushCryptoLib,
-              api: apiLib,
+              api: voiceMlsApi,
             };
             await mlsGroupLib.performVoiceSelfUpdate(mlsDeps, channelIdRef.current);
             const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);
@@ -653,6 +663,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       voiceWsUnsubscribeRef.current = null;
     }
 
+    const voiceBaseUrl = resolveVoiceBaseUrl(baseUrl);
+    const voiceMlsApi = createVoiceMlsApi(voiceBaseUrl);
+
     if (!roomRef.current) {
       // Still clean up MLS state even if room already gone
       const chId = channelIdRef.current;
@@ -666,7 +679,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             credential,
             mlsStore: mlsStoreLib,
             hushCrypto: hushCryptoLib,
-            api: apiLib,
+            api: voiceMlsApi,
           };
           await mlsGroupLib.destroyVoiceGroup(mlsDeps, chId);
         } catch { /* fire-and-forget */ }
@@ -712,7 +725,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             credential,
             mlsStore: mlsStoreLib,
             hushCrypto: hushCryptoLib,
-            api: apiLib,
+            api: voiceMlsApi,
           };
           await mlsGroupLib.destroyVoiceGroup(mlsDeps, chId);
         } catch { /* fire-and-forget */ }
