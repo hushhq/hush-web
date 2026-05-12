@@ -35,7 +35,6 @@ import {
 } from '../lib/instanceRegistry.js';
 import { getActiveAuthInstanceUrlSync } from '../lib/authInstanceStore.js';
 import {
-  getHandshake,
   requestChallenge,
   verifyChallenge,
   getMyGuilds,
@@ -43,7 +42,10 @@ import {
 } from '../lib/api.js';
 import { signChallenge } from '../lib/bip39Identity.js';
 import { getDeviceId } from './useAuth.js';
-import { evaluateHandshakeCompatibility } from '../lib/handshakeCompatibility';
+import {
+  assertHandshakeCompatible,
+  isHandshakeCompatibilityError,
+} from '../lib/handshakeCompatibility';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -505,20 +507,14 @@ export function useInstances() {
     flushState();
 
     try {
-      // Step 1: Handshake (public, no auth).
-      const handshakeData = await getHandshake(instanceUrl);
-      if (!isActiveGeneration()) return;
-
-      // Step 1a: Surface a global "Update Required" dialog when this
-      // handshake demands a newer client (`min_client_version`) or runs a
-      // different MLS ciphersuite (`current_mls_ciphersuite`).
+      // Step 1: Handshake (public, no auth) + compatibility gate.
       //
-      // Fail closed: once a mismatch is detected, abort boot before auth/WS
-      // work so incompatible clients cannot mutate durable MLS state.
-      const compatibilityMismatch = evaluateHandshakeCompatibility(handshakeData);
-      if (compatibilityMismatch) {
-        throw new Error(`Update required (${compatibilityMismatch})`);
-      }
+      // Fail closed: assertHandshakeCompatible raises the global
+      // "Update Required" dialog AND throws HandshakeCompatibilityError
+      // before any auth/WS/MLS work so incompatible clients cannot
+      // mutate durable MLS state.
+      const handshakeData = await assertHandshakeCompatible(instanceUrl);
+      if (!isActiveGeneration()) return;
 
       // Step 2: Auth.
       const { privateKey, publicKey } = identityKey;
@@ -692,6 +688,14 @@ export function useInstances() {
 
     const instanceUrl = getActiveAuthInstanceUrlSync();
 
+    // Compatibility gate. Mirrors bootInstance — the local-JWT shortcut
+    // must NEVER open a WS or persist runtime state against an
+    // incompatible instance, or MLS state can corrupt durably.
+    // Throws HandshakeCompatibilityError on mismatch; the outer boot
+    // effect skips the fallback path on that branch.
+    const handshakeData = await assertHandshakeCompatible(instanceUrl);
+    if (!isActiveGeneration()) return;
+
     // Save to IDB.
     try {
       const db = dbRef.current ?? await openInstanceRegistry();
@@ -741,7 +745,7 @@ export function useInstances() {
       wsClient,
       jwt,
       userId: authUser?.id,
-      handshakeData: null,
+      handshakeData,
       guilds,
       connectionState: 'connected',
       reconnectAttempt: 0,
@@ -885,7 +889,7 @@ export function useInstances() {
           return;
         }
 
-        await Promise.allSettled(
+        const bootResults = await Promise.allSettled(
           bootTargets.map((target) => {
             if (target.type === 'local') {
               return registerLocalInstance(localJwt, {
@@ -897,9 +901,20 @@ export function useInstances() {
           }),
         );
 
+        // If any boot target for the local instance failed because the
+        // server is incompatible, the fallback below MUST stay closed.
+        // Re-issuing /api/auth/me + registerLocalInstance would create a
+        // WS against an incompatible server and risk MLS state corruption.
+        const localBootHitCompatError = bootResults.some((res, idx) => {
+          if (res.status !== 'rejected') return false;
+          const target = bootTargets[idx];
+          if (target.instanceUrl !== localUrl) return false;
+          return isHandshakeCompatibilityError(res.reason);
+        });
+
         // Fallback: if bootInstance failed but a local JWT still exists in
         // sessionStorage, use it directly for the local instance.
-        if (localJwt && !cancelled) {
+        if (localJwt && !cancelled && !localBootHitCompatError) {
           const localEntry = instancesRef.current.get(localUrl);
           if (!localEntry || localEntry.connectionState === 'offline') {
             try {
@@ -910,7 +925,11 @@ export function useInstances() {
                   await registerLocalInstance(localJwt, { id: u.id, username: u.username }, generation);
                 }
               }
-            } catch {
+            } catch (err) {
+              if (isHandshakeCompatibilityError(err)) {
+                // Compat dialog already dispatched; do not retry.
+                return;
+              }
               // JWT invalid or network error - will show empty state.
             }
           }

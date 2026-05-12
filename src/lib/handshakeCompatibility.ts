@@ -11,13 +11,49 @@
 //      the client's `CURRENT_MLS_CIPHERSUITE`. Continuing would risk MLS
 //      state corruption on either side, so we raise Update Required.
 //
-// This helper is intentionally synchronous and side-effect-only: it dispatches
-// the global `hush:update-required` event. It does not throw — callers are
-// boot paths that must keep running long enough for the dialog to surface.
+// `evaluateHandshakeCompatibility` is synchronous and side-effect-only: it
+// dispatches the global `hush:update-required` event and returns the reason
+// (or null). The dispatch happens before any caller can throw, so the
+// dialog still surfaces under a fail-closed boot path.
+//
+// `assertHandshakeCompatible` is the boot-side helper that pairs the
+// dispatch with a fail-closed throw of `HandshakeCompatibilityError`.
+// Every code path that opens auth/WS for an instance MUST go through it.
 
+import { getHandshake } from "./api";
 import { CLIENT_VERSION, isClientBelowMinimum } from "./clientVersion";
 import { CURRENT_MLS_CIPHERSUITE } from "./mlsCiphersuite";
 import { requestUpdate } from "./updateRequired";
+
+export type HandshakeCompatibilityReason =
+  | "min-client-version"
+  | "ciphersuite-mismatch";
+
+/**
+ * Thrown by `assertHandshakeCompatible` when the server handshake fails the
+ * compatibility check. Carries the dispatched reason so boot callers can
+ * skip auth/WS work and outer fallback paths can detect the mismatch
+ * without string-sniffing the error message.
+ */
+export class HandshakeCompatibilityError extends Error {
+  readonly reason: HandshakeCompatibilityReason;
+
+  constructor(reason: HandshakeCompatibilityReason) {
+    super(`Update required (${reason})`);
+    this.name = "HandshakeCompatibilityError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * Type guard for callers that catch a generic `unknown` and need to branch
+ * the fallback path on compatibility mismatches.
+ */
+export function isHandshakeCompatibilityError(
+  err: unknown,
+): err is HandshakeCompatibilityError {
+  return err instanceof HandshakeCompatibilityError;
+}
 
 interface HandshakeShape {
   min_client_version?: string | null;
@@ -38,7 +74,7 @@ interface HandshakeShape {
  */
 export function evaluateHandshakeCompatibility(
   handshake: HandshakeShape | null | undefined,
-): "min-client-version" | "ciphersuite-mismatch" | null {
+): HandshakeCompatibilityReason | null {
   if (!handshake) return null;
 
   if (isClientBelowMinimum(handshake.min_client_version)) {
@@ -69,4 +105,26 @@ export function evaluateHandshakeCompatibility(
   }
 
   return null;
+}
+
+/**
+ * Boot-side guard. Fetches the public handshake for `instanceUrl`, runs the
+ * compatibility check, and throws `HandshakeCompatibilityError` when the
+ * server is incompatible. On success returns the raw handshake payload so
+ * callers can persist it as part of per-instance runtime state.
+ *
+ * MUST be called before any auth/WS work for an instance.
+ *
+ * @throws {HandshakeCompatibilityError} when the handshake reports an
+ *   incompatible `min_client_version` or `current_mls_ciphersuite`.
+ */
+export async function assertHandshakeCompatible(
+  instanceUrl: string,
+): Promise<HandshakeShape> {
+  const handshake = (await getHandshake(instanceUrl)) as HandshakeShape;
+  const mismatch = evaluateHandshakeCompatibility(handshake);
+  if (mismatch) {
+    throw new HandshakeCompatibilityError(mismatch);
+  }
+  return handshake;
 }
