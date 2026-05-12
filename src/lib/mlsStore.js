@@ -1,3 +1,5 @@
+import { CURRENT_MLS_CIPHERSUITE } from './mlsCiphersuite';
+
 /**
  * MLS Protocol state in IndexedDB (v2).
  * Store prefix: hush-mls-${userId}-${deviceId} (one DB per local user+device).
@@ -14,10 +16,12 @@ const HISTORY_DB_NAME_PREFIX = 'hush-mls-history-';
 const STORE_CREDENTIAL = 'credential';
 const STORE_KEY_PACKAGES = 'keyPackages';
 const STORE_LAST_RESORT = 'lastResort';
-const DB_VERSION = 4;
+const STORE_PROTOCOL_META = 'protocolMeta';
+const DB_VERSION = 5;
 
 const CREDENTIAL_KEY = 'credential';
 const LAST_RESORT_KEY = 'lastResort';
+const CIPHERSUITE_META_KEY = 'currentMlsCiphersuite';
 
 // ---------------------------------------------------------------------------
 // StorageProvider bridge stores
@@ -57,6 +61,13 @@ const STORAGE_PROVIDER_STORES = [
 // wire (modulo the relay envelope) and at rest on the new device.
 const HISTORY_SNAPSHOT_STORES = [
   STORE_CREDENTIAL,
+  ...STORAGE_PROVIDER_STORES,
+  'groupEpoch',
+];
+
+const CIPHERSUITE_SCOPED_STORES = [
+  STORE_KEY_PACKAGES,
+  STORE_LAST_RESORT,
   ...STORAGE_PROVIDER_STORES,
   'groupEpoch',
 ];
@@ -232,12 +243,22 @@ function openStoreWithPrefix(dbNamePrefix, userId, deviceId, options = {}) {
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       const db = req.result;
-      if (initBridge) {
-        initStorageBridge(db);
-      }
-      // Request persistent storage so iOS WKWebView doesn't evict MLS state.
-      navigator.storage?.persist?.().catch(() => {});
-      resolve(db);
+      (async () => {
+        try {
+          if (dbNamePrefix === DB_NAME_PREFIX) {
+            await ensureCurrentCiphersuite(db);
+          }
+          if (initBridge) {
+            initStorageBridge(db);
+          }
+          // Request persistent storage so iOS WKWebView doesn't evict MLS state.
+          navigator.storage?.persist?.().catch(() => {});
+          resolve(db);
+        } catch (err) {
+          db.close();
+          reject(err);
+        }
+      })();
     };
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
@@ -265,6 +286,9 @@ function openStoreWithPrefix(dbNamePrefix, userId, deviceId, options = {}) {
       if (!db.objectStoreNames.contains('groupEpoch')) {
         db.createObjectStore('groupEpoch', { keyPath: 'key' });
       }
+      if (!db.objectStoreNames.contains(STORE_PROTOCOL_META)) {
+        db.createObjectStore(STORE_PROTOCOL_META, { keyPath: 'key' });
+      }
     };
   });
 }
@@ -290,6 +314,40 @@ export function openStore(userId, deviceId) {
  */
 export function openHistoryStore(userId, deviceId) {
   return openStoreWithPrefix(HISTORY_DB_NAME_PREFIX, userId, deviceId, { initBridge: false });
+}
+
+/**
+ * Ensures active MLS state belongs to the client's current ciphersuite.
+ *
+ * A server-side ciphersuite migration creates fresh GroupInfo / commit /
+ * KeyPackage rows under the new suite, but the browser's IndexedDB can still
+ * contain old OpenMLS group state keyed only by channel UUID. Reusing that
+ * state makes the client skip the new-suite join and later fail with
+ * `ValidationError(WrongEpoch)`. On suite mismatch we clear only suite-scoped
+ * MLS material and preserve identity credentials plus plaintext transcript
+ * cache.
+ *
+ * @param {IDBDatabase} db
+ * @param {number} [currentCiphersuite]
+ * @returns {Promise<boolean>} true when suite-scoped state was reset
+ */
+export async function ensureCurrentCiphersuite(db, currentCiphersuite = CURRENT_MLS_CIPHERSUITE) {
+  const row = await get(db, STORE_PROTOCOL_META, CIPHERSUITE_META_KEY);
+  if (row?.ciphersuite === currentCiphersuite) {
+    return false;
+  }
+
+  storageCache.clear();
+  for (const storeName of CIPHERSUITE_SCOPED_STORES) {
+    if (db.objectStoreNames.contains(storeName)) {
+      await clearStore(db, storeName);
+    }
+  }
+  await put(db, STORE_PROTOCOL_META, CIPHERSUITE_META_KEY, {
+    ciphersuite: currentCiphersuite,
+    updatedAt: Date.now(),
+  });
+  return true;
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import 'fake-indexeddb/auto';
 import {
   openStore,
   openHistoryStore,
+  ensureCurrentCiphersuite,
   getCredential,
   setCredential,
   getKeyPackage,
@@ -20,7 +21,10 @@ import {
   withReadOnlyHistoryScope,
   getLocalPlaintext,
   setLocalPlaintext,
+  getGroupEpoch,
+  setGroupEpoch,
 } from './mlsStore';
+import { CURRENT_MLS_CIPHERSUITE } from './mlsCiphersuite';
 
 // Each test group uses a unique user+device pair to isolate DB instances.
 let storeCounter = 0;
@@ -41,6 +45,7 @@ describe('mlsStore', () => {
     expect(typeof setLastResort).toBe('function');
     expect(typeof listAllKeyPackages).toBe('function');
     expect(typeof withReadOnlyHistoryScope).toBe('function');
+    expect(typeof ensureCurrentCiphersuite).toBe('function');
   });
 
   it('openStore returns an IDBDatabase', async () => {
@@ -92,6 +97,89 @@ describe('mlsStore', () => {
       const retrieved = await getCredential(db);
       expect(Array.from(retrieved.signingPublicKey)).toEqual([10]);
       db.close();
+    });
+  });
+
+  describe('ciphersuite migration guard', () => {
+    it('clears only suite-scoped MLS state when the local marker is stale', async () => {
+      const userId = `suite-user-${++storeCounter}`;
+      const deviceId = `suite-dev-${storeCounter}`;
+      const db = await openStore(userId, deviceId);
+
+      await ensureCurrentCiphersuite(db, 1);
+      await setCredential(db, {
+        signingPublicKey: new Uint8Array([1, 2, 3]),
+        signingPrivateKey: new Uint8Array([4, 5, 6]),
+        credentialBytes: new Uint8Array([7, 8, 9]),
+      });
+      await setLocalPlaintext(db, 'msg-1', {
+        plaintext: 'cached plaintext',
+        timestamp: 123,
+        senderId: 'sender-1',
+      });
+      await setGroupEpoch(db, 'channel-1', 9);
+      await setKeyPackage(db, 'aa', {
+        keyPackageBytes: new Uint8Array([10]),
+        privateKeyBytes: new Uint8Array([11]),
+        createdAt: 1,
+      });
+      await setLastResort(db, {
+        keyPackageBytes: new Uint8Array([12]),
+        privateKeyBytes: new Uint8Array([13]),
+        hashRefHex: 'bb',
+      });
+
+      const bridgeKey = new Uint8Array([0, 1, 2, 3]);
+      window.mlsStorageBridge.writeBytes(
+        'mls_group_context',
+        bridgeKey,
+        new Uint8Array([44, 55]),
+      );
+      await flushStorageCache(db);
+      db.close();
+
+      const reopened = await openStore(userId, deviceId);
+
+      expect(await getCredential(reopened)).toMatchObject({
+        signingPublicKey: new Uint8Array([1, 2, 3]),
+      });
+      expect(await getLocalPlaintext(reopened, 'msg-1')).toMatchObject({
+        plaintext: 'cached plaintext',
+        senderId: 'sender-1',
+      });
+      expect(await getGroupEpoch(reopened, 'channel-1')).toBeNull();
+      expect(await listAllKeyPackages(reopened)).toHaveLength(0);
+      expect(await getLastResort(reopened)).toBeNull();
+
+      await preloadGroupState(reopened);
+      expect(
+        window.mlsStorageBridge.readBytes('mls_group_context', bridgeKey),
+      ).toBeNull();
+      expect(await ensureCurrentCiphersuite(reopened)).toBe(false);
+
+      reopened.close();
+    });
+
+    it('preserves suite-scoped MLS state when the marker already matches', async () => {
+      const userId = `suite-current-user-${++storeCounter}`;
+      const deviceId = `suite-current-dev-${storeCounter}`;
+      const db = await openStore(userId, deviceId);
+
+      await ensureCurrentCiphersuite(db, CURRENT_MLS_CIPHERSUITE);
+      await setGroupEpoch(db, 'channel-1', 3);
+      await setKeyPackage(db, 'cc', {
+        keyPackageBytes: new Uint8Array([21]),
+        privateKeyBytes: new Uint8Array([22]),
+        createdAt: 1,
+      });
+      db.close();
+
+      const reopened = await openStore(userId, deviceId);
+
+      expect(await getGroupEpoch(reopened, 'channel-1')).toBe(3);
+      expect(await listAllKeyPackages(reopened)).toHaveLength(1);
+
+      reopened.close();
     });
   });
 
