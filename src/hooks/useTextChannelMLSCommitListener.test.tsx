@@ -134,6 +134,45 @@ describe("useTextChannelMLSCommitListener", () => {
     })
   })
 
+  it("threads baseUrl into the fallback catchup deps (PR #13 JWT leak regression)", async () => {
+    // Regression: the commit listener fallback runs
+    // mlsGroup.catchupCommits which fetches commits from
+    // api.getMLSCommitsSinceEpoch carrying the per-instance JWT.
+    // Without the owning instance baseUrl threaded through deps, the
+    // request would target window.location.origin and leak the token.
+    // The PerInstanceListeners host now passes instance.instanceUrl
+    // as baseUrl; assert it actually reaches catchupCommits.
+    processCommit.mockRejectedValueOnce(new Error("epoch mismatch"))
+    const ws = makeWs()
+    renderHook(() =>
+      useTextChannelMLSCommitListener({
+        wsClient: ws as Parameters<
+          typeof useTextChannelMLSCommitListener
+        >[0]["wsClient"],
+        currentUserId: "user-self",
+        getToken: () => "tok",
+        baseUrl: "https://chat.example.com",
+      }),
+    )
+
+    ws.emit("mls.commit", {
+      type: "mls.commit",
+      channel_id: "ch-1",
+      commit_bytes: VALID_COMMIT_BYTES,
+      sender_id: "user-other",
+      sender_device_id: "device-other",
+      group_type: "text",
+    })
+
+    await waitFor(() => {
+      expect(catchupCommits).toHaveBeenCalledTimes(1)
+    })
+    expect(catchupCommits).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: "https://chat.example.com" }),
+      "ch-1",
+    )
+  })
+
   it("ignores voice-group mls.commit frames", async () => {
     const ws = makeWs()
     renderHook(() =>

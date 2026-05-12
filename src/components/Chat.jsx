@@ -215,6 +215,7 @@ export default function Chat({
     getHistoryStore: getHistoryStore ?? (() => Promise.resolve(null)),
     getToken: getToken ?? (() => null),
     channelId,
+    baseUrl,
   });
 
   const decryptFromChannelRef = useRef(decryptFromChannel);

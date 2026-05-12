@@ -190,6 +190,63 @@ describe('useMLS', () => {
       expect(result).toBe('after-catchup');
     });
 
+    it('threads baseUrl into the catchup deps so the JWT is not leaked to window.location.origin', async () => {
+      // Regression: PR #13 / instance JWT leakage in MLS catch-up.
+      // The catch-up retry path was previously calling
+      // `api.getMLSCommitsSinceEpoch` without a baseUrl, sending the
+      // per-instance Bearer token to the current origin. The hook must
+      // now forward the owning instance URL through deps so the request
+      // hits the issuing instance.
+      mockDeps.mlsGroup.decryptMessage
+        .mockRejectedValueOnce(new Error('AeadError'))
+        .mockResolvedValueOnce({
+          plaintext: 'recovered',
+          type: 'application',
+          epoch: 2,
+          senderIdentity: 'sender-123',
+        });
+
+      const { decryptFromChannel } = useMLS({
+        getStore,
+        getToken,
+        channelId: 'channel-decrypt',
+        baseUrl: 'https://chat.example.com',
+        _deps: mockDeps,
+      });
+
+      await decryptFromChannel(new Uint8Array([10, 20, 30]));
+
+      expect(mockDeps.mlsGroup.catchupCommits).toHaveBeenCalledWith(
+        expect.objectContaining({ baseUrl: 'https://chat.example.com' }),
+        'channel-decrypt',
+      );
+    });
+
+    it('forwards an empty baseUrl by default so same-origin callers stay backward-compatible', async () => {
+      mockDeps.mlsGroup.decryptMessage
+        .mockRejectedValueOnce(new Error('AeadError'))
+        .mockResolvedValueOnce({
+          plaintext: 'recovered',
+          type: 'application',
+          epoch: 2,
+          senderIdentity: 'sender-123',
+        });
+
+      const { decryptFromChannel } = useMLS({
+        getStore,
+        getToken,
+        channelId: 'channel-decrypt',
+        _deps: mockDeps,
+      });
+
+      await decryptFromChannel(new Uint8Array([10, 20, 30]));
+
+      expect(mockDeps.mlsGroup.catchupCommits).toHaveBeenCalledWith(
+        expect.objectContaining({ baseUrl: '' }),
+        'channel-decrypt',
+      );
+    });
+
     it('rethrows the primary decrypt error when catchup and retry do not recover', async () => {
       const primaryError = new Error('group.process_message failed: ValidationError(UnableToDecrypt(AeadError))');
       mockDeps.mlsGroup.decryptMessage

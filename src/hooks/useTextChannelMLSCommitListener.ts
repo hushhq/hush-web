@@ -46,6 +46,12 @@ interface UseTextChannelMLSCommitListenerArgs {
   /** Returns the JWT for the active instance. Null when the user is
    *  not authenticated or has no session for the instance. */
   getToken: () => string | null
+  /** Owning instance base URL. Threaded into MLS deps so the
+   *  catch-up fallback (`getMLSCommitsSinceEpoch`) targets the
+   *  per-instance JWT's owning origin instead of the current
+   *  `window.location.origin`. Empty string preserves same-origin
+   *  behaviour for callers that have not been migrated yet. */
+  baseUrl?: string
 }
 
 /**
@@ -81,11 +87,14 @@ export function useTextChannelMLSCommitListener({
   wsClient,
   currentUserId,
   getToken,
+  baseUrl = "",
 }: UseTextChannelMLSCommitListenerArgs): void {
   const tokenRef = React.useRef(getToken)
   tokenRef.current = getToken
   const userIdRef = React.useRef(currentUserId)
   userIdRef.current = currentUserId
+  const baseUrlRef = React.useRef(baseUrl)
+  baseUrlRef.current = baseUrl
 
   React.useEffect(() => {
     if (!wsClient) return
@@ -97,7 +106,15 @@ export function useTextChannelMLSCommitListener({
       const db = await mlsStore.openStore(userId, getDeviceId())
       if (!db) return null
       const credential = await mlsStore.getCredential(db)
-      return { db, token, credential, mlsStore, hushCrypto, api }
+      return {
+        db,
+        token,
+        credential,
+        mlsStore,
+        hushCrypto,
+        api,
+        baseUrl: baseUrlRef.current,
+      }
     }
 
     const onCommit = async (raw: unknown) => {

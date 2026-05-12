@@ -21,6 +21,7 @@ import {
   removeMemberFromChannel,
   encryptMessage,
   decryptMessage,
+  catchupCommits,
 } from './mlsGroup.js';
 
 // ---------------------------------------------------------------------------
@@ -564,5 +565,48 @@ describe('decryptMessage', () => {
     await expect(
       decryptMessage(deps, 'ch-6', new Uint8Array([1, 2])),
     ).rejects.toThrow('decryption failed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// catchupCommits
+// ---------------------------------------------------------------------------
+
+describe('catchupCommits', () => {
+  let deps;
+
+  beforeEach(() => {
+    deps = makeDeps();
+  });
+
+  it('forwards the trusted baseUrl to api.getMLSCommitsSinceEpoch (PR #13 JWT leak regression)', async () => {
+    // Without explicit baseUrl threading, the per-instance JWT was
+    // sent to the current origin instead of the issuing instance,
+    // leaking it cross-origin. catchupCommits must pass the baseUrl
+    // from deps as the 5th argument so the request hits the owning
+    // instance.
+    deps.baseUrl = 'https://chat.example.com';
+
+    await catchupCommits(deps, 'ch-7');
+
+    expect(deps.api.getMLSCommitsSinceEpoch).toHaveBeenCalledWith(
+      'test-token',
+      'ch-7',
+      0,
+      100,
+      'https://chat.example.com',
+    );
+  });
+
+  it('defaults baseUrl to empty string when omitted from deps (backward-compat)', async () => {
+    await catchupCommits(deps, 'ch-7');
+
+    expect(deps.api.getMLSCommitsSinceEpoch).toHaveBeenCalledWith(
+      'test-token',
+      'ch-7',
+      0,
+      100,
+      '',
+    );
   });
 });

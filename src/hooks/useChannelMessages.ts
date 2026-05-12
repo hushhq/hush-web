@@ -380,6 +380,7 @@ export function useChannelMessages(
     getHistoryStore: (getHistoryStore ?? (() => Promise.resolve(null))) as unknown as IdbStoreFactory,
     getToken: getToken ?? (() => null),
     channelId: channelId ?? undefined,
+    baseUrl,
   }) as {
     encryptForChannel: (plaintext: string) => Promise<{ ciphertext: Uint8Array }>
     decryptFromChannel: (bytes: Uint8Array) => Promise<string>
