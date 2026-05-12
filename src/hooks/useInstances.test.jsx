@@ -313,6 +313,28 @@ describe('useInstances', () => {
     });
   });
 
+  it('bootInstance aborts before auth when handshake compatibility check fails', async () => {
+    const { useInstances } = await import('./useInstances.js');
+
+    apiModule.getHandshake.mockResolvedValueOnce({
+      server_version: '1.0',
+      api_version: '1',
+      current_mls_ciphersuite: 1,
+    });
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await expect(result.current.bootInstance(INSTANCE_A)).rejects.toThrow(
+      'Update required (ciphersuite-mismatch)',
+    );
+
+    expect(apiModule.requestChallenge).not.toHaveBeenCalled();
+    expect(apiModule.verifyChallenge).not.toHaveBeenCalled();
+    expect(wsModule.createWsClient).not.toHaveBeenCalled();
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+
   it('bootInstance throws MVP error when verifyChallenge returns 404 (federated fallback blocked)', async () => {
     const { useInstances } = await import('./useInstances.js');
 

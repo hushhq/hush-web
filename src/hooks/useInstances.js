@@ -509,12 +509,16 @@ export function useInstances() {
       const handshakeData = await getHandshake(instanceUrl);
       if (!isActiveGeneration()) return;
 
-      // Step 1a: surface a global "Update Required" dialog when this
+      // Step 1a: Surface a global "Update Required" dialog when this
       // handshake demands a newer client (`min_client_version`) or runs a
-      // different MLS ciphersuite (`current_mls_ciphersuite`). The boot
-      // continues so the dialog has a chance to render; the dialog itself
-      // is non-dismissible.
-      evaluateHandshakeCompatibility(handshakeData);
+      // different MLS ciphersuite (`current_mls_ciphersuite`).
+      //
+      // Fail closed: once a mismatch is detected, abort boot before auth/WS
+      // work so incompatible clients cannot mutate durable MLS state.
+      const compatibilityMismatch = evaluateHandshakeCompatibility(handshakeData);
+      if (compatibilityMismatch) {
+        throw new Error(`Update required (${compatibilityMismatch})`);
+      }
 
       // Step 2: Auth.
       const { privateKey, publicKey } = identityKey;
