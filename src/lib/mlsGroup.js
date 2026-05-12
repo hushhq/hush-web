@@ -456,10 +456,10 @@ export async function processCommit(deps, channelId, commitBytes) {
  * @returns {Promise<void>}
  */
 export async function catchupCommits(deps, channelId) {
-  const { db, token, mlsStore, api } = deps;
+  const { db, token, mlsStore, api, baseUrl = '' } = deps;
 
   const lastEpoch = (await mlsStore.getGroupEpoch(db, channelId)) ?? 0;
-  const { commits } = await api.getMLSCommitsSinceEpoch(token, channelId, lastEpoch);
+  const { commits } = await api.getMLSCommitsSinceEpoch(token, channelId, lastEpoch, 100, baseUrl);
 
   if (!commits?.length) return;
 

@@ -230,7 +230,7 @@ export async function preDecryptForLinkExport({ activeDb, token, baseUrl = '', _
   summary.channels = channels.length;
   if (channels.length === 0) return summary;
 
-  const deps = { db: activeDb, token, credential, mlsStore, hushCrypto, api };
+  const deps = { db: activeDb, token, credential, mlsStore, hushCrypto, api, baseUrl };
 
   for (const { guildId, channelId } of channels) {
     let messages;
