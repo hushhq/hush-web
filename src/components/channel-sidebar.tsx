@@ -236,6 +236,54 @@ interface ChannelSidebarProps {
 
 const CHANNELS_SECTION_LABEL = "Channels"
 
+/**
+ * Two-line version readout for the About dialog.
+ *
+ * Renders `<v.x.y.z> hush-web` on the first line and, when running inside
+ * the Electron renderer, `<v.x.y.z> hush-desktop` on the second line in
+ * identical typography. Browser builds show only the web line.
+ */
+interface DesktopBridge {
+  isDesktop?: boolean
+  getAppVersion?: () => Promise<string>
+}
+
+function AppVersionLines() {
+  const [desktopVersion, setDesktopVersion] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const api = (window as unknown as { hushDesktop?: DesktopBridge }).hushDesktop
+    if (!api || api.isDesktop !== true) return
+    if (typeof api.getAppVersion !== "function") return
+    let cancelled = false
+    api.getAppVersion()
+      .then((value: string) => {
+        if (cancelled) return
+        if (typeof value === "string" && value.length > 0) setDesktopVersion(value)
+      })
+      .catch(() => {
+        // Best-effort: a missing version simply hides the desktop line.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 font-mono text-[10px] text-muted-foreground/70">
+      <span>
+        v{APP_VERSION} <span className="text-muted-foreground/50">hush-web</span>
+      </span>
+      {desktopVersion && (
+        <span>
+          v{desktopVersion} <span className="text-muted-foreground/50">hush-desktop</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function ChannelSidebar({
   serverName,
   serverPlan,
@@ -613,7 +661,7 @@ function ServerHeader({
                 ·
               </span>
               <a
-                href="https://x.com/sonoyarin"
+                href="https://yarincardillo.com/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
@@ -622,9 +670,7 @@ function ServerHeader({
                 <ArrowUpRightIcon className="size-3.5" />
               </a>
             </div>
-            <p className="font-mono text-[10px] text-muted-foreground/70">
-              v{APP_VERSION}
-            </p>
+            <AppVersionLines />
           </div>
         </DialogContent>
       </Dialog>

@@ -71,6 +71,8 @@ function main() {
 
   const violations = []
   for (const file of listTrackedCodeFiles()) {
+    if (!fs.existsSync(path.resolve(file))) continue
+
     const lines = countLines(file)
     if (lines <= maxLines) continue
 
@@ -98,6 +100,7 @@ function main() {
 
   if (violations.length > 0) {
     fail("Code size guard failed.", violations)
+    return
   }
 
   console.log(

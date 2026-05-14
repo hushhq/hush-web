@@ -31,11 +31,12 @@ describe("PinUnlockPanel", () => {
   })
 
   afterEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60))
     cleanup()
-    // input-otp schedules a short post-interaction state sync. Let it drain
-    // before jsdom tears down `window`, otherwise full-suite runs can report
-    // an unhandled "window is not defined" after all assertions passed.
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    // input-otp schedules 0/10/50ms post-interaction state sync timers. Let
+    // them drain before jsdom tears down `window`, otherwise full-suite runs
+    // can report an unhandled "window is not defined" after assertions pass.
+    await new Promise((resolve) => setTimeout(resolve, 60))
   })
 
   it("calls unlockVault with the entered pin on submit", async () => {

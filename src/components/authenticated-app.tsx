@@ -1206,6 +1206,18 @@ export function AuthenticatedApp() {
     handleToggleDeafen,
   ])
 
+  // Bridge: the desktop topbar omnibar dispatches a window-level event to
+  // open this palette without coupling to its React state. Mirrors the
+  // existing Cmd/Ctrl+K handler above.
+  React.useEffect(() => {
+    function handleOpenPalette() {
+      setIsCommandOpen(true)
+    }
+    window.addEventListener("hush:open-command-palette", handleOpenPalette)
+    return () =>
+      window.removeEventListener("hush:open-command-palette", handleOpenPalette)
+  }, [])
+
   // Channel palette: only the active server has its channel list fetched
   // (useChannelsForServer keys on activeServer.id). Earlier this code
   // flat-mapped every server across the same active-server channel list,

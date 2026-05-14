@@ -5,7 +5,8 @@ import { InstanceProvider, useInstanceContext } from './contexts/InstanceContext
 import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
 import { BlockedTabView } from './components/blocked-tab-view.tsx';
-import { ElectronDragRegion } from './components/desktop/ElectronDragRegion.jsx';
+import { DesktopShell } from './components/desktop/DesktopShell.jsx';
+import { DesktopWindowFloorSync } from './components/desktop/DesktopWindowFloorSync.jsx';
 import { applyThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useDesktopShell } from './hooks/useDesktopShell';
@@ -244,9 +245,11 @@ export default function App() {
       <InstanceProvider>
         <BootProvider>
           <FaviconThemeSync />
+          <DesktopWindowFloorSync />
           <AppBackground />
-          <ElectronDragRegion />
-          <AppContent />
+          <DesktopShell>
+            <AppContent />
+          </DesktopShell>
           <UpdateRequiredDialog />
           <Toaster position="bottom-right" richColors />
         </BootProvider>

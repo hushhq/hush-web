@@ -3,8 +3,7 @@
 // a registration helper on this virtual specifier; the type below mirrors
 // the subset of the API the Hush web client uses.
 //
-// In vitest the module is not resolvable; src/lib/pwaUpdate.ts dynamically
-// imports it inside a try/catch so the absence is non-fatal at runtime.
+// In vitest this module resolves through a test-only alias in vitest.config.js.
 
 declare module "virtual:pwa-register" {
   export interface RegisterSWOptions {

@@ -29,8 +29,20 @@ import { registerSW } from "virtual:pwa-register";
  */
 let hasRegistered = false;
 
+function isDesktopRenderer(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const desktopWindow = window as typeof window & {
+    hushDesktop?: { isDesktop?: boolean };
+  };
+
+  return desktopWindow.hushDesktop?.isDesktop === true
+    || window.location.protocol === "app:";
+}
+
 export function registerPWA(): void {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  if (isDesktopRenderer()) return;
   if (hasRegistered) return;
 
   try {
