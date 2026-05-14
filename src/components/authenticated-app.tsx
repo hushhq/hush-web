@@ -15,6 +15,7 @@
  */
 import * as React from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { toast } from "sonner"
 import {
   ScrollTextIcon,
   ShieldAlertIcon,
@@ -63,6 +64,7 @@ import { getDeviceId, HOME_INSTANCE_KEY } from "@/hooks/useAuth"
 import { useInstanceContext } from "@/contexts/InstanceContext"
 import * as mlsStore from "@/lib/mlsStore"
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
+import { buildGuildInviteLink } from "@/lib/inviteLinks"
 import { getActiveAuthInstanceUrlSync } from "@/lib/authInstanceStore"
 import {
   kickUser,
@@ -102,6 +104,14 @@ import { PerInstanceListeners } from "@/components/realtime/PerInstanceListeners
 import { PerServerListeners } from "@/components/realtime/PerServerListeners"
 
 const noopRefetch = async () => {}
+
+interface DesktopUpdateBridge {
+  isDesktop?: boolean
+  checkForDesktopUpdates?: () => Promise<{
+    phase?: string
+    error?: string | null
+  }>
+}
 
 interface FavoriteEntry {
   id: string
@@ -615,9 +625,38 @@ export function AuthenticatedApp() {
     }
     const code = result.code ?? result.inviteCode
     if (!code) return null
-    const host = new URL(instanceUrl).host
-    return `${window.location.origin}/join/${encodeURIComponent(host)}/${encodeURIComponent(code)}`
+    // Anchor on the instance public origin; `window.location.origin` is `app://localhost` on desktop.
+    return buildGuildInviteLink(new URL(instanceUrl).origin, instanceUrl, code, null)
   }, [activeServer, token, baseUrl, instanceUrl])
+
+  const canCheckForDesktopUpdates = React.useMemo(() => {
+    if (typeof window === "undefined") return false
+    const api = (window as unknown as { hushDesktop?: DesktopUpdateBridge }).hushDesktop
+    return api?.isDesktop === true && typeof api.checkForDesktopUpdates === "function"
+  }, [])
+
+  const handleCheckForDesktopUpdates = React.useCallback(async () => {
+    const api = (window as unknown as { hushDesktop?: DesktopUpdateBridge }).hushDesktop
+    if (!api || api.isDesktop !== true || typeof api.checkForDesktopUpdates !== "function") {
+      return
+    }
+    try {
+      const state = await api.checkForDesktopUpdates()
+      if (state.phase === "skipped" && state.error === "no-update") {
+        toast.success("System is up to date.")
+        return
+      }
+      if (state.phase === "skipped") {
+        toast.message("Update check skipped. Try again when the network is available.")
+        return
+      }
+      if (state.phase === "checking" || state.phase === "downloading" || state.phase === "downloaded") {
+        toast.message("Desktop update found. Installing...")
+      }
+    } catch {
+      toast.error("Could not check for updates.")
+    }
+  }, [])
 
   const [isCreateServerOpen, setIsCreateServerOpen] = React.useState(false)
   const [createServerName, setCreateServerName] = React.useState("")
@@ -1649,6 +1688,9 @@ export function AuthenticatedApp() {
             : undefined
         }
         onOpenSettings={() => setIsUserSettingsOpen(true)}
+        onCheckForUpdates={
+          canCheckForDesktopUpdates ? handleCheckForDesktopUpdates : undefined
+        }
         onSignOut={handleSignOut}
       />
       <CheatSheet open={isCheatSheetOpen} onOpenChange={setIsCheatSheetOpen} />

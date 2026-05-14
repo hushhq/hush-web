@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
 
+const FAIL_OPEN_STATE = Object.freeze({
+  phase: 'error',
+  currentVersion: '',
+  targetVersion: null,
+  progress: null,
+  error: 'desktop-update-ipc-error',
+});
+
 /**
  * Subscribes to the desktop auto-update state machine exposed by the Electron
  * preload bridge (`window.hushDesktop.onDesktopUpdateState`). Returns `null`
@@ -24,22 +32,30 @@ export function useDesktopUpdateState() {
     if (typeof api.onDesktopUpdateState !== 'function') return undefined;
 
     let cancelled = false;
+    let failedOpen = false;
 
     api
       .getDesktopUpdateState()
       .then((snapshot) => {
-        if (cancelled) return;
+        if (cancelled || failedOpen) return;
         setState(snapshot ?? null);
       })
       .catch(() => {
-        // Bridge errors are swallowed: a missing snapshot just keeps the gate
-        // hidden. The push subscription below still has a chance to populate.
+        if (cancelled) return;
+        failedOpen = true;
+        setState(FAIL_OPEN_STATE);
       });
 
-    const unsubscribe = api.onDesktopUpdateState((next) => {
-      if (cancelled) return;
-      setState(next ?? null);
-    });
+    let unsubscribe;
+    try {
+      unsubscribe = api.onDesktopUpdateState((next) => {
+        if (cancelled) return;
+        setState(next ?? null);
+      });
+    } catch {
+      failedOpen = true;
+      setState(FAIL_OPEN_STATE);
+    }
 
     return () => {
       cancelled = true;

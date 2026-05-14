@@ -62,6 +62,7 @@ describe("CommandPalette", () => {
         isDark={overrides.isDark ?? false}
         onDiscoverServers={overrides.onDiscoverServers}
         onOpenSettings={overrides.onOpenSettings}
+        onCheckForUpdates={overrides.onCheckForUpdates}
         onSignOut={overrides.onSignOut}
         onCreateServer={overrides.onCreateServer}
         onCreateChannel={overrides.onCreateChannel}
@@ -108,6 +109,24 @@ describe("CommandPalette", () => {
     await userEvent.click(screen.getByText(/sign out/i))
 
     expect(onSignOut).toHaveBeenCalledTimes(1)
+  })
+
+  it("invokes onCheckForUpdates from the preferences group", async () => {
+    const onCheckForUpdates = vi.fn()
+    const onOpenChange = vi.fn()
+    setup({ onCheckForUpdates, onOpenChange })
+
+    await userEvent.click(screen.getByText(/check for updates/i))
+
+    expect(onCheckForUpdates).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("disables Check for updates when desktop update handler is absent", () => {
+    setup()
+
+    const item = screen.getByText(/check for updates/i).closest("[role='option']")
+    expect(item).toHaveAttribute("data-disabled")
   })
 
   // Discover servers is unconditionally disabled+muted until the

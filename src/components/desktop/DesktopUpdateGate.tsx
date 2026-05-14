@@ -3,7 +3,9 @@ import { Progress } from '@/components/ui/progress';
 import { useDesktopUpdateState } from '@/hooks/useDesktopUpdateState';
 
 /**
- * Phases for which the renderer must render a non-dismissible update gate.
+ * Phases that force the renderer into the full-screen, non-dismissible update
+ * gate. Everything else (idle / skipped / error) is a fail-open and lets the
+ * normal app shell render.
  *
  * Duplicated here (and not imported from `hush-desktop/src/shared/desktop-update`)
  * because the web bundle is built independently and must not cross-import from
@@ -12,6 +14,10 @@ import { useDesktopUpdateState } from '@/hooks/useDesktopUpdateState';
  */
 const VISIBLE_PHASES = new Set(['checking', 'downloading', 'downloaded']);
 
+export function isGateVisibleForPhase(phase: string | undefined | null): boolean {
+  return typeof phase === 'string' && VISIBLE_PHASES.has(phase);
+}
+
 interface DesktopUpdateProgressLike {
   readonly percent: number;
   readonly transferred: number;
@@ -19,7 +25,7 @@ interface DesktopUpdateProgressLike {
   readonly bytesPerSecond: number;
 }
 
-interface DesktopUpdateStateLike {
+export interface DesktopUpdateStateLike {
   readonly phase: string;
   readonly currentVersion: string;
   readonly targetVersion: string | null;
@@ -50,22 +56,35 @@ const COPY: Record<'checking' | 'downloading' | 'downloaded', CopyBlock> = {
  * Non-dismissible full-screen gate that overlays every other surface (login,
  * PIN unlock, authenticated shell) while the desktop auto-updater runs.
  *
- * The gate is rendered above the app shell. It uses semantic theme tokens
- * (`bg-background`, `text-foreground`, `text-muted-foreground`) so it adapts
- * to light/dark mode without per-theme code paths. There is no close button,
- * no Escape handler, and no overlay click-through — the user can only exit
- * by completing the install or by an explicit fail-open transition emitted
- * from the main process.
+ * Accepts an optional `state` prop so the boundary can inject a synthetic
+ * checking snapshot when the renderer has not yet received the first push
+ * from main. When `state` is omitted, the gate reads from the live IPC hook
+ * — the original public contract is preserved for existing call sites.
  *
- * Renders `null` in the browser, in dev (idle state), or after a fail-open
- * (skipped / error) so the underlying app remains fully interactive.
+ * The gate uses semantic theme tokens (`bg-background`, `text-foreground`,
+ * `text-muted-foreground`) so light/dark themes work without per-theme code.
+ * There is no close button, no Escape handler, and no overlay click-through.
  */
-export function DesktopUpdateGate(): ReactElement | null {
-  const rawState = useDesktopUpdateState() as DesktopUpdateStateLike | null;
-
-  const view = useMemo(() => computeView(rawState), [rawState]);
+export function DesktopUpdateGate({
+  state,
+}: { state?: DesktopUpdateStateLike | null } = {}): ReactElement | null {
+  const hookState = useDesktopUpdateState() as DesktopUpdateStateLike | null;
+  const effective = state === undefined ? hookState : state;
+  const view = useMemo(() => computeView(effective), [effective]);
   if (!view) return null;
+  return <DesktopUpdateGateSurface view={view} />;
+}
 
+interface ViewModel {
+  readonly phase: 'checking' | 'downloading' | 'downloaded';
+  readonly title: string;
+  readonly description: string;
+  readonly percent: number;
+  readonly progressLabel: string | null;
+  readonly versionLabel: string;
+}
+
+function DesktopUpdateGateSurface({ view }: { view: ViewModel }): ReactElement {
   return (
     <div
       data-testid="desktop-update-gate"
@@ -101,16 +120,7 @@ export function DesktopUpdateGate(): ReactElement | null {
   );
 }
 
-interface ViewModel {
-  readonly phase: 'checking' | 'downloading' | 'downloaded';
-  readonly title: string;
-  readonly description: string;
-  readonly percent: number;
-  readonly progressLabel: string | null;
-  readonly versionLabel: string;
-}
-
-function computeView(state: DesktopUpdateStateLike | null): ViewModel | null {
+function computeView(state: DesktopUpdateStateLike | null | undefined): ViewModel | null {
   if (!state) return null;
   if (!VISIBLE_PHASES.has(state.phase)) return null;
 

@@ -6,7 +6,7 @@ import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
 import { BlockedTabView } from './components/blocked-tab-view.tsx';
 import { DesktopShell } from './components/desktop/DesktopShell.jsx';
-import { DesktopUpdateGate } from './components/desktop/DesktopUpdateGate.tsx';
+import { DesktopUpdateBoundary } from './components/desktop/DesktopUpdateBoundary.jsx';
 import { DesktopWindowFloorSync } from './components/desktop/DesktopWindowFloorSync.jsx';
 import { applyThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
@@ -242,20 +242,21 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <InstanceProvider>
-        <BootProvider>
-          <FaviconThemeSync />
-          <DesktopWindowFloorSync />
-          <AppBackground />
-          <DesktopShell>
-            <AppContent />
-          </DesktopShell>
-          <UpdateRequiredDialog />
-          <DesktopUpdateGate />
-          <Toaster position="bottom-right" richColors />
-        </BootProvider>
-      </InstanceProvider>
-    </AuthProvider>
+    <DesktopUpdateBoundary>
+      <AuthProvider>
+        <InstanceProvider>
+          <BootProvider>
+            <FaviconThemeSync />
+            <DesktopWindowFloorSync />
+            <AppBackground />
+            <DesktopShell>
+              <AppContent />
+            </DesktopShell>
+            <UpdateRequiredDialog />
+            <Toaster position="bottom-right" richColors />
+          </BootProvider>
+        </InstanceProvider>
+      </AuthProvider>
+    </DesktopUpdateBoundary>
   );
 }

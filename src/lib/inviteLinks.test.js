@@ -87,6 +87,33 @@ describe('buildGuildInviteLink', () => {
   });
 });
 
+describe('buildGuildInviteLink — desktop renderer origin discipline', () => {
+  it('never leaks app://localhost into the generated URL when caller derives appOrigin from instanceUrl', () => {
+    const instanceUrl = 'https://app.gethush.live';
+    const instanceOrigin = new URL(instanceUrl).origin;
+    const link = buildGuildInviteLink(instanceOrigin, instanceUrl, 'AbC12345', null);
+    expect(link).toBe('https://app.gethush.live/invite/AbC12345');
+    expect(link).not.toContain('app://localhost');
+  });
+
+  it('produces the same public URL regardless of whether caller is desktop or browser', () => {
+    const instanceUrl = 'https://app.gethush.live';
+    const instanceOrigin = new URL(instanceUrl).origin;
+    const desktopLink = buildGuildInviteLink(instanceOrigin, instanceUrl, 'AbC12345', null);
+    const browserLink = buildGuildInviteLink(instanceOrigin, instanceUrl, 'AbC12345', null);
+    expect(desktopLink).toBe(browserLink);
+  });
+
+  it('keeps the cross-instance guard when the caller forgets to anchor on the instance origin', () => {
+    expect(() => buildGuildInviteLink(
+      'app://localhost',
+      'https://app.gethush.live',
+      'AbC12345',
+      null,
+    )).toThrow(CROSS_INSTANCE_INVITES_UNSUPPORTED_MESSAGE);
+  });
+});
+
 describe('isCrossInstanceInviteLink', () => {
   it('returns true only when app origin and invite instance differ', () => {
     expect(isCrossInstanceInviteLink('https://app.gethush.live', 'https://remote.example.com')).toBe(true);

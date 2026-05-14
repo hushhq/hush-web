@@ -10,7 +10,7 @@
     "src/components/Chat.jsx": 811,
     "src/components/Chat.realtime.test.jsx": 434,
     "src/components/auth/auth-flow.tsx": 954,
-    "src/components/authenticated-app.tsx": 1812,
+    "src/components/authenticated-app.tsx": 1854,
     "src/components/channel-sidebar.tsx": 1693,
     "src/components/chat-real.tsx": 638,
     "src/components/chat/attachment-tile.tsx": 307,

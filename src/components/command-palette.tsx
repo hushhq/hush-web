@@ -13,6 +13,7 @@ import {
   UserPlusIcon,
   ShieldAlertIcon,
   KeyboardIcon,
+  RefreshCwIcon,
 } from "lucide-react"
 
 import {
@@ -64,6 +65,7 @@ interface CommandPaletteProps {
    */
   onCreateChannel?: (kind: "text" | "voice" | "category") => void
   onOpenSettings?: () => void
+  onCheckForUpdates?: () => void | Promise<void>
   onSignOut?: () => void | Promise<void>
 }
 
@@ -83,6 +85,7 @@ export function CommandPalette({
   onCreateServer,
   onCreateChannel,
   onOpenSettings,
+  onCheckForUpdates,
   onSignOut,
 }: CommandPaletteProps) {
   const [query, setQuery] = React.useState("")
@@ -235,6 +238,15 @@ export function CommandPalette({
             >
               <SettingsIcon />
               <span>Open settings</span>
+            </CommandItem>
+            <CommandItem
+              disabled={!onCheckForUpdates}
+              onSelect={runAction(() => {
+                void onCheckForUpdates?.()
+              })}
+            >
+              <RefreshCwIcon />
+              <span>Check for updates</span>
             </CommandItem>
             <CommandItem
               disabled={!onSignOut}
