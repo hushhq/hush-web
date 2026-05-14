@@ -76,6 +76,28 @@ html[data-desktop] [data-slot="sidebar-inset"] {
     margin-top: 0 !important;
 }
 
+/* Server rail (`ServerRail` <aside>) ships with `py-3` (12px top + bottom)
+   so its first icon (Home) floats 12px below the top edge. On desktop
+   the topbar already supplies that breathing space, so the rail's first
+   icon must butt up against the topbar bottom for the three columns
+   (rail / channel sidebar / channel view) to share the same top line.
+   Only the top half of the `py-3` pair is neutralised; the bottom 12px
+   stays so the last rail icon never touches the window edge. */
+html[data-desktop] [data-slot="server-rail"] {
+    padding-top: 0 !important;
+}
+
+/* Channel sidebar (`ChannelSidebar` <aside>) ships with `p-2` (8px on
+   every side) so the rounded channels card sits inset from its column.
+   On desktop the topbar absorbs the top gutter for the same reason as
+   above; zero the top inset only, keep the side / bottom insets so
+   the rounded card still floats inside its column. Use the app-specific
+   slot instead of shadcn's generic `sidebar` slot to avoid affecting
+   unrelated sidebar primitives. */
+html[data-desktop] [data-slot="channel-sidebar"] {
+    padding-top: 0 !important;
+}
+
 .hush-desktop-topbar {
     flex: 0 0 var(--desktop-topbar-h);
     height: var(--desktop-topbar-h);

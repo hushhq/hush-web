@@ -417,7 +417,7 @@ export function ChannelSidebar({
 
   return (
     <aside
-      data-slot="sidebar"
+      data-slot="channel-sidebar"
       className="hidden h-full min-h-0 w-full flex-col gap-2 p-2 md:flex"
     >
       {inner}

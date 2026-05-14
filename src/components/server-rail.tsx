@@ -124,7 +124,7 @@ export function ServerRail({
   }, [servers.length])
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-(--rail-width) flex-col items-center bg-sidebar py-3 pl-2 md:flex">
+    <aside data-slot="server-rail" className="fixed inset-y-0 left-0 z-30 hidden w-(--rail-width) flex-col items-center bg-sidebar py-3 pl-2 md:flex">
       <div className="flex flex-col items-center gap-2 pb-2">
         <RailIcon
           label="Home"

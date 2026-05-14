@@ -72,7 +72,8 @@ describe("ChannelSidebar", () => {
   afterEach(() => cleanup())
 
   it("renders the server name in the header", () => {
-    setup()
+    const { container } = setup()
+    expect(container.querySelector('[data-slot="channel-sidebar"]')).toBeInTheDocument()
     expect(screen.getByText("Alpha")).toBeInTheDocument()
   })
 

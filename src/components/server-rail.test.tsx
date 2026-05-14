@@ -44,7 +44,8 @@ describe("ServerRail", () => {
   }
 
   it("renders one button per server", () => {
-    setup()
+    const { container } = setup()
+    expect(container.querySelector('[data-slot="server-rail"]')).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Alpha" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Beta" })).toBeInTheDocument()
   })
