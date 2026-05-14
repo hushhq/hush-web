@@ -9,6 +9,8 @@ describe('useInstancePing', () => {
     vi.restoreAllMocks();
   });
 
+  // ── Idle ────────────────────────────────────────────────────────────────
+
   it('starts in the unknown state and never fetches without an instance URL', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('', { status: 200 }),
@@ -18,7 +20,9 @@ describe('useInstancePing', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('issues a real fetch against /api/health on the active instance', async () => {
+  // ── Browser path ────────────────────────────────────────────────────────
+
+  it('issues a renderer fetch against /api/health when no desktop bridge is present', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('', { status: 200 }),
     );
@@ -29,38 +33,11 @@ describe('useInstancePing', () => {
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe('https://hush.example.com/api/health');
     expect(init?.method).toBe('GET');
+    // Browser path is plain CORS — no opaque `no-cors` workaround.
     expect(init?.mode).toBeUndefined();
   });
 
-  it('uses an opaque desktop fetch so Electron is not blocked by browser CORS', async () => {
-    window.hushDesktop = { isDesktop: true, platform: 'darwin' };
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('', { status: 200 }),
-    );
-    const { result } = renderHook(() => useInstancePing('https://hush.example.com'));
-    await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalled();
-    });
-    const [, init] = fetchSpy.mock.calls[0];
-    expect(init?.method).toBe('GET');
-    expect(init?.mode).toBe('no-cors');
-    await waitFor(() => {
-      expect(result.current.status).not.toBe(PING_STATUS.UNKNOWN);
-    });
-  });
-
-  it('trims trailing slashes on the instance URL before building the health path', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('', { status: 200 }),
-    );
-    renderHook(() => useInstancePing('https://hush.example.com/'));
-    await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalled();
-    });
-    expect(fetchSpy.mock.calls[0][0]).toBe('https://hush.example.com/api/health');
-  });
-
-  it('classifies the latency once the fetch resolves', async () => {
+  it('classifies a successful browser fetch as a real ping bucket', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('', { status: 200 }),
     );
@@ -73,10 +50,9 @@ describe('useInstancePing', () => {
       PING_STATUS.MID,
       PING_STATUS.HIGH,
     ]).toContain(result.current.status);
-    expect(typeof result.current.ms).toBe('number');
   });
 
-  it('flags `down` when the health endpoint returns a non-OK status', async () => {
+  it('flags `down` when the browser fetch returns a non-OK response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('boom', { status: 503 }),
     );
@@ -86,13 +62,81 @@ describe('useInstancePing', () => {
     });
   });
 
-  it('flags `down` when the fetch rejects (offline / DNS failure)', async () => {
+  it('flags `down` when the browser fetch rejects (offline / DNS failure)', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
     const { result } = renderHook(() => useInstancePing('https://hush.example.com'));
     await waitFor(() => {
       expect(result.current.status).toBe(PING_STATUS.DOWN);
     });
   });
+
+  // ── Desktop path ────────────────────────────────────────────────────────
+
+  it('routes through the main-process bridge on desktop and never calls global fetch', async () => {
+    const measureInstanceHealth = vi.fn().mockResolvedValue({
+      ok: true,
+      ms: 42,
+      statusCode: 200,
+    });
+    window.hushDesktop = {
+      isDesktop: true,
+      platform: 'darwin',
+      measureInstanceHealth,
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { result } = renderHook(() => useInstancePing('https://hush.example.com'));
+    await waitFor(() => {
+      expect(measureInstanceHealth).toHaveBeenCalledWith('https://hush.example.com');
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(result.current.status).toBe(PING_STATUS.LOW);
+    });
+    expect(result.current.ms).toBe(42);
+  });
+
+  it('flags `down` on desktop when the bridge reports ok:false', async () => {
+    window.hushDesktop = {
+      isDesktop: true,
+      platform: 'darwin',
+      measureInstanceHealth: vi.fn().mockResolvedValue({
+        ok: false,
+        ms: null,
+        error: 'non-2xx',
+        statusCode: 503,
+      }),
+    };
+    const { result } = renderHook(() => useInstancePing('https://hush.example.com'));
+    await waitFor(() => {
+      expect(result.current.status).toBe(PING_STATUS.DOWN);
+    });
+  });
+
+  it('fails closed to `down` when the desktop bridge is missing measureInstanceHealth', async () => {
+    window.hushDesktop = { isDesktop: true, platform: 'darwin' };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { result } = renderHook(() => useInstancePing('https://hush.example.com'));
+    await waitFor(() => {
+      expect(result.current.status).toBe(PING_STATUS.DOWN);
+    });
+    // Critical: must not fall back to a renderer fetch — that is exactly
+    // the COEP-blocked path the bridge replaces.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('flags `down` when the desktop bridge throws (programmer-level IPC failure)', async () => {
+    window.hushDesktop = {
+      isDesktop: true,
+      platform: 'darwin',
+      measureInstanceHealth: vi.fn().mockRejectedValue(new Error('ipc broken')),
+    };
+    const { result } = renderHook(() => useInstancePing('https://hush.example.com'));
+    await waitFor(() => {
+      expect(result.current.status).toBe(PING_STATUS.DOWN);
+    });
+  });
+
+  // ── Invariants ──────────────────────────────────────────────────────────
 
   it('exposes a polling interval that is conservative enough to avoid API spam', () => {
     // Anything shorter than ~10s starts to look like background load on

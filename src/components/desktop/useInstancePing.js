@@ -15,35 +15,84 @@ export const PING_INTERVAL_MS = 15_000;
  */
 export const PING_TIMEOUT_MS = 4_000;
 
-function isDesktopRenderer() {
-  if (typeof window === 'undefined') return false;
-  return window.hushDesktop?.isDesktop === true;
+function readDesktopBridge() {
+  if (typeof window === 'undefined') return null;
+  const api = window.hushDesktop;
+  if (!api || api.isDesktop !== true) return null;
+  return api;
 }
 
 function buildHealthUrl(instanceUrl) {
   return new URL('/api/health', instanceUrl).toString();
 }
 
-function buildPingRequestInit(signal) {
-  if (!isDesktopRenderer()) {
-    return {
+/**
+ * Browser-only fetch path. The packaged renderer is served from
+ * `app://localhost` under a strict COEP / COOP policy, which blocks
+ * cross-origin fetches to the live Hush instance even with `mode: 'no-cors'`
+ * (the response is silently turned into a network error). Desktop builds
+ * therefore route through the main process — see `measureFromMainProcess`.
+ *
+ * @param {string} instanceUrl
+ * @param {AbortSignal} signal
+ * @returns {Promise<{ ms: number | null, status: ReturnType<typeof classifyPing> }>}
+ */
+async function measureFromRendererFetch(instanceUrl, signal) {
+  const start = performance.now();
+  try {
+    const response = await fetch(buildHealthUrl(instanceUrl), {
       method: 'GET',
       cache: 'no-store',
       signal,
-    };
+    });
+    const elapsed = performance.now() - start;
+    if (!response.ok) {
+      return { ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN };
+    }
+    return { ms: elapsed, status: classifyPing(elapsed) };
+  } catch {
+    return { ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN };
   }
-
-  return {
-    method: 'GET',
-    cache: 'no-store',
-    mode: 'no-cors',
-    signal,
-  };
 }
 
 /**
- * Measures round-trip latency to `${instanceUrl}/api/health` on a fixed
- * cadence. Returns a `{ ms, status }` snapshot the UI can render directly.
+ * Desktop path. Delegates to the main-process IPC handler which runs the
+ * actual HTTP request through Electron's `net` module — that stack is not
+ * subject to renderer COEP / CORS rules, so the request is never silently
+ * blocked the way a renderer `fetch` would be.
+ *
+ * `measureInstanceHealth` is only present on desktop builds whose preload
+ * exposes the bridge method. Older builds without it fail closed to
+ * `DOWN` rather than silently doing nothing.
+ *
+ * @param {{ measureInstanceHealth?: (url: string) => Promise<{ ok: boolean, ms: number | null, statusCode?: number, error?: string }> }} api
+ * @param {string} instanceUrl
+ * @returns {Promise<{ ms: number | null, status: ReturnType<typeof classifyPing> }>}
+ */
+async function measureFromMainProcess(api, instanceUrl) {
+  if (typeof api.measureInstanceHealth !== 'function') {
+    return { ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN };
+  }
+  try {
+    const result = await api.measureInstanceHealth(instanceUrl);
+    if (result?.ok === true && typeof result.ms === 'number') {
+      return { ms: result.ms, status: classifyPing(result.ms) };
+    }
+    return { ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN };
+  } catch {
+    return { ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN };
+  }
+}
+
+/**
+ * Measures round-trip latency against the active Hush instance and exposes
+ * it as a `{ ms, status }` snapshot for the topbar telemetry pill.
+ *
+ * Routing:
+ *   - Browser: direct `fetch('/api/health')` from the renderer.
+ *   - Desktop: IPC bridge `window.hushDesktop.measureInstanceHealth()` so
+ *     the request bypasses renderer COEP / CORS constraints. Missing
+ *     bridge method → fail closed to `DOWN`.
  *
  * Behaviour:
  *   - `instanceUrl` is `null` / empty → no traffic. Snapshot stays at
@@ -67,11 +116,12 @@ export function useInstancePing(instanceUrl) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
-    if (typeof fetch !== 'function') return undefined;
     if (!instanceUrl) {
       setSnapshot({ ms: null, status: PING_STATUS.UNKNOWN });
       return undefined;
     }
+    const desktopApi = readDesktopBridge();
+    if (!desktopApi && typeof fetch !== 'function') return undefined;
 
     let cancelled = false;
 
@@ -80,22 +130,12 @@ export function useInstancePing(instanceUrl) {
       const controller = new AbortController();
       activeAbortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-      const start = performance.now();
       try {
-        const response = await fetch(
-          buildHealthUrl(instanceUrl),
-          buildPingRequestInit(controller.signal),
-        );
-        const elapsed = performance.now() - start;
+        const next = desktopApi
+          ? await measureFromMainProcess(desktopApi, instanceUrl)
+          : await measureFromRendererFetch(instanceUrl, controller.signal);
         if (cancelled) return;
-        if (!isDesktopRenderer() && !response.ok) {
-          setSnapshot({ ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN });
-          return;
-        }
-        setSnapshot({ ms: elapsed, status: classifyPing(elapsed) });
-      } catch {
-        if (cancelled) return;
-        setSnapshot({ ms: Number.POSITIVE_INFINITY, status: PING_STATUS.DOWN });
+        setSnapshot(next);
       } finally {
         clearTimeout(timeoutId);
       }

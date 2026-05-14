@@ -10,7 +10,10 @@
 
 :root {
     --rail-width: 4rem;
-    --desktop-topbar-h: 40px;
+    /* Compact desktop-chrome height. Keep above 28px so the omnibar's
+       28px hit target still fits the strip without overflow, and below
+       36px so the bar reads as utility chrome rather than primary nav. */
+    --desktop-topbar-h: 32px;
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -44,7 +47,7 @@
 }
 
 /* Tailwind `h-svh` / `min-h-svh` resolve against the visual viewport, which
-   on desktop still includes the 40px topbar strip. Override only when the
+   on desktop still includes the desktop topbar strip. Override only when the
    desktop shell is mounted so browser builds are untouched. */
 html[data-desktop] .h-svh {
     height: 100% !important;
@@ -61,8 +64,10 @@ html[data-desktop] .min-h-svh {
     align-items: center;
     gap: 12px;
     padding-inline: 12px;
-    background-color: var(--sidebar);
-    border-bottom: 1px solid var(--border);
+    /* Quiet chrome: use a softly-darker tint than the sidebar instead of a
+       hard 1px divider so the bar reads as part of the window shell, not
+       as a separator line. */
+    background-color: color-mix(in oklch, var(--sidebar) 88%, var(--background));
     color: var(--muted-foreground);
     font-size: 12px;
     line-height: 1;

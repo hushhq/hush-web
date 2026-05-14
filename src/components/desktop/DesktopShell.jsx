@@ -13,12 +13,12 @@ function readDesktopApi() {
 
 /**
  * Wraps the existing app shell so the Electron renderer gets a real, visible
- * 40px topbar above the content area. In browser builds (no preload bridge)
+ * compact topbar (`--desktop-topbar-h`) above the content area. In browser builds (no preload bridge)
  * this is a transparent pass-through: zero DOM impact.
  *
  * Layout (desktop only):
  *   <div class="hush-desktop-shell">          // fixed inset, flex column
- *     <DesktopTopBar />                        // 40px draggable bar
+ *     <DesktopTopBar />                        // compact draggable bar
  *     <div class="hush-desktop-shell__content">// flex-1, min-h-0, overflow hidden
  *       {children}                             // existing app shell
  *     </div>

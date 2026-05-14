@@ -150,6 +150,17 @@ describe('DesktopTopBar', () => {
     window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, listener);
   });
 
+  it('does not paint a visible bottom-divider line (quiet desktop chrome)', () => {
+    installBridge('darwin');
+    const { container } = render(<DesktopTopBar />);
+    const bar = container.querySelector('.hush-desktop-topbar');
+    // The CSS class drops `border-bottom` in favour of a subtle background
+    // tint. Inline `borderBottom` must remain empty so nothing else on the
+    // page can sneak a hairline divider back via override.
+    expect(bar.style.borderBottom).toBe('');
+    expect(bar.style.borderBottomWidth).toBe('');
+  });
+
   it('marks every interactive child of the topbar with -webkit-app-region: no-drag', () => {
     installBridge('darwin');
     const { container } = render(<DesktopTopBar />);

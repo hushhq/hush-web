@@ -65,7 +65,8 @@ function pickActiveInstanceUrl(mergedGuilds) {
 }
 
 /**
- * Fixed-height (40px) desktop window topbar.
+ * Compact fixed-height desktop window topbar (see `--desktop-topbar-h`,
+ * currently 32px).
  *
  * Composition (post-login):
  *   - macOS  : [drag-safe area + traffic lights] [omnibar centered] [telemetry]
