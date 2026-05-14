@@ -6,6 +6,7 @@ import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
 import { BlockedTabView } from './components/blocked-tab-view.tsx';
 import { DesktopShell } from './components/desktop/DesktopShell.jsx';
+import { DesktopUpdateGate } from './components/desktop/DesktopUpdateGate.tsx';
 import { DesktopWindowFloorSync } from './components/desktop/DesktopWindowFloorSync.jsx';
 import { applyThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
@@ -251,6 +252,7 @@ export default function App() {
             <AppContent />
           </DesktopShell>
           <UpdateRequiredDialog />
+          <DesktopUpdateGate />
           <Toaster position="bottom-right" richColors />
         </BootProvider>
       </InstanceProvider>
