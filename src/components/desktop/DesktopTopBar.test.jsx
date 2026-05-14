@@ -150,6 +150,25 @@ describe('DesktopTopBar', () => {
     window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, listener);
   });
 
+  it('paints the sidebar tint when the user is authenticated (matches rail + channel sidebar)', () => {
+    installBridge('darwin');
+    const { container } = render(<DesktopTopBar />);
+    const bar = container.querySelector('.hush-desktop-topbar');
+    expect(bar.dataset.bgMode).toBe('sidebar');
+    // Inline custom property drives the `background-color: var(--desktop-topbar-bg)`
+    // declaration in the stylesheet, so theme tokens still resolve at runtime.
+    expect(bar.style.getPropertyValue('--desktop-topbar-bg')).toBe('var(--sidebar)');
+  });
+
+  it('paints the background tint on auth screens (matches auth-wrapper bg)', () => {
+    installBridge('darwin');
+    mockBoot('needs_login');
+    const { container } = render(<DesktopTopBar />);
+    const bar = container.querySelector('.hush-desktop-topbar');
+    expect(bar.dataset.bgMode).toBe('background');
+    expect(bar.style.getPropertyValue('--desktop-topbar-bg')).toBe('var(--background)');
+  });
+
   it('does not paint a visible bottom-divider line (quiet desktop chrome)', () => {
     installBridge('darwin');
     const { container } = render(<DesktopTopBar />);

@@ -10,10 +10,18 @@
 
 :root {
     --rail-width: 4rem;
-    /* Compact desktop-chrome height. Keep above 28px so the omnibar's
-       28px hit target still fits the strip without overflow, and below
-       36px so the bar reads as utility chrome rather than primary nav. */
-    --desktop-topbar-h: 32px;
+    /* Topbar height covers the chrome strip *and* absorbs the 8px top
+       gap above the channel view (`SidebarInset` `m-2`), so the bar's
+       bottom edge meets the top edge of the channel/server columns
+       with no visible seam. Pair with the desktop override below that
+       neutralises the inset's top margin. */
+    --desktop-topbar-h: 40px;
+    /* Background color the topbar paints with. Defaults to the sidebar
+       tint so the bar fuses with the rail / channel sidebar on the
+       authenticated shell. Auth surfaces set the same property on the
+       topbar root to `var(--background)` so the bar fuses with their
+       `bg-background` wrapper instead. */
+    --desktop-topbar-bg: var(--sidebar);
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -56,6 +64,18 @@ html[data-desktop] .min-h-svh {
     min-height: 100% !important;
 }
 
+/* Channel-view "rounded panel" margin: the shadcn `SidebarInset` adds a
+   `md:m-2` (8px) top margin on the inset-variant sidebar so the panel
+   floats below the chrome with a tiny gap. On desktop the topbar
+   already provides that gap (its height absorbs the same 8px), so
+   keeping the inset margin would push the channel column visibly
+   lower than the rail / channel sidebar.
+   Zero the top margin on desktop only — browser builds keep the
+   original floating-panel look. */
+html[data-desktop] [data-slot="sidebar-inset"] {
+    margin-top: 0 !important;
+}
+
 .hush-desktop-topbar {
     flex: 0 0 var(--desktop-topbar-h);
     height: var(--desktop-topbar-h);
@@ -64,10 +84,13 @@ html[data-desktop] .min-h-svh {
     align-items: center;
     gap: 12px;
     padding-inline: 12px;
-    /* Quiet chrome: use a softly-darker tint than the sidebar instead of a
-       hard 1px divider so the bar reads as part of the window shell, not
-       as a separator line. */
-    background-color: color-mix(in oklch, var(--sidebar) 88%, var(--background));
+    /* Background matches whichever surface the bar borders. The default
+       is the sidebar tint so the authenticated shell reads as one block
+       (rail + channel sidebar + topbar share the colour). Auth surfaces
+       flip `--desktop-topbar-bg` to `var(--background)` so the bar
+       fuses with their card wrapper instead; see the inline style
+       on the topbar root for the per-screen override. */
+    background-color: var(--desktop-topbar-bg);
     color: var(--muted-foreground);
     font-size: 12px;
     line-height: 1;

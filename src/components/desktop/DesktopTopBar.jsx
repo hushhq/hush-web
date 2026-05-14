@@ -98,12 +98,27 @@ export function DesktopTopBar() {
   const isMac = api.platform === 'darwin';
   const instanceUrl = isAuthenticated ? pickActiveInstanceUrl(mergedGuilds) : null;
 
+  // Match the bar's bg to whatever surface it borders so the topbar
+  // fuses with the screen instead of reading as a separate stripe:
+  //   - Authenticated shell: bordered by the rail + channel sidebar →
+  //     `var(--sidebar)`.
+  //   - Auth screens (login / link-device / pin-unlock / pin-setup):
+  //     bordered by the auth wrapper's `bg-background` → `var(--background)`.
+  // Driven through a CSS custom property so the value tracks the active
+  // theme tokens automatically.
+  const topbarBgVar = isAuthenticated ? 'var(--sidebar)' : 'var(--background)';
+
   return (
     <header
       className="hush-desktop-topbar"
       data-platform={api.platform}
+      data-bg-mode={isAuthenticated ? 'sidebar' : 'background'}
       role="banner"
-      style={{ WebkitAppRegion: 'drag', ...safeAreaStyle }}
+      style={{
+        WebkitAppRegion: 'drag',
+        '--desktop-topbar-bg': topbarBgVar,
+        ...safeAreaStyle,
+      }}
     >
       <div className="hush-desktop-topbar__cluster hush-desktop-topbar__cluster--left">
         {/* macOS keeps the left column empty so the traffic lights have a
