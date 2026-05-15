@@ -43,9 +43,12 @@ function base64ToUint8Array(b64: string): Uint8Array {
 interface UseTextChannelMLSCommitListenerArgs {
   wsClient: WsClientLike | null | undefined
   currentUserId: string | null
-  /** Returns the JWT for the active instance. Null when the user is
+  /** Returns the JWT for the instance listener. Null when the user is
    *  not authenticated or has no session for the instance. */
   getToken: () => string | null
+  /** Instance base URL used to scope MLS HTTP calls to the emitting
+   *  realtime connection. */
+  instanceUrl?: string
 }
 
 /**
@@ -81,6 +84,7 @@ export function useTextChannelMLSCommitListener({
   wsClient,
   currentUserId,
   getToken,
+  instanceUrl,
 }: UseTextChannelMLSCommitListenerArgs): void {
   const tokenRef = React.useRef(getToken)
   tokenRef.current = getToken
@@ -97,7 +101,38 @@ export function useTextChannelMLSCommitListener({
       const db = await mlsStore.openStore(userId, getDeviceId())
       if (!db) return null
       const credential = await mlsStore.getCredential(db)
-      return { db, token, credential, mlsStore, hushCrypto, api }
+      const scopedApi = {
+        ...api,
+        postMLSCommit: (
+          jwt: string,
+          targetChannelId: string,
+          commitBytesBase64: string,
+          groupInfoBase64: string,
+          epoch: number,
+        ) =>
+          api.postMLSCommit(
+            jwt,
+            targetChannelId,
+            commitBytesBase64,
+            groupInfoBase64,
+            epoch,
+            instanceUrl || "",
+          ),
+        getMLSCommitsSinceEpoch: (
+          jwt: string,
+          targetChannelId: string,
+          sinceEpoch: number,
+          limit = 100,
+        ) =>
+          api.getMLSCommitsSinceEpoch(
+            jwt,
+            targetChannelId,
+            sinceEpoch,
+            limit,
+            instanceUrl || "",
+          ),
+      }
+      return { db, token, credential, mlsStore, hushCrypto, api: scopedApi }
     }
 
     const onCommit = async (raw: unknown) => {

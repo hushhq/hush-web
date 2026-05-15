@@ -59,6 +59,7 @@ export function PerInstanceListeners({
     >[0]["wsClient"],
     currentUserId: userId,
     getToken,
+    instanceUrl,
   })
 
   useTransparencyVerification({
