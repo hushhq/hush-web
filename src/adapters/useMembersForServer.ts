@@ -5,6 +5,7 @@
  */
 import * as React from "react"
 import { getGuildMembers } from "@/lib/api"
+import { formatUserLabel } from "@/lib/userLabel"
 
 import {
   type ServerMember,
@@ -15,10 +16,13 @@ import {
 interface RawMember {
   id?: string
   userId?: string
-  username?: string
-  displayName?: string
+  username?: string | null
+  displayName?: string | null
   permissionLevel?: number
   role?: string
+  createdAt?: string | null
+  joinedAt?: string | null
+  homeInstance?: string | null
 }
 
 interface UseMembersArgs {
@@ -81,33 +85,55 @@ export function useMembersForServer({
   }, [refetch])
 
   const members = React.useMemo<ServerMember[]>(
-    () =>
-      raw.map((m) => {
-        const id = m.id ?? m.userId ?? ""
-        const name = m.displayName ?? m.username ?? "user"
-        // Derive presence from the WS-driven online set ONLY when
-        // a snapshot has actually arrived. Without that gate the
-        // initial empty set would render every member offline
-        // until the first `presence.update` frame.
-        const presence: ServerMember["presence"] =
-          onlineUserIds && hasOnlineSnapshot
-            ? onlineUserIds.has(id)
-              ? "online"
-              : "offline"
-            : "online"
-        return {
-          id,
-          name,
-          initials: deriveInitials(name),
-          presence,
-          role: memberRoleFromRaw({
-            permissionLevel: m.permissionLevel,
-            role: m.role,
-          }),
-        }
-      }),
+    () => raw.map((m) => mapRawMember(m, onlineUserIds, hasOnlineSnapshot)),
     [raw, onlineUserIds, hasOnlineSnapshot]
   )
 
   return { members, loading, error, refetch }
+}
+
+/**
+ * Exported for unit testing. Pure projection of the wire payload into the UI
+ * row shape. Preserves the raw profile fields so the profile card and system
+ * log can render real values instead of collapsing into the summary label.
+ */
+export function mapRawMember(
+  m: RawMember,
+  onlineUserIds: ReadonlySet<string> | undefined,
+  hasOnlineSnapshot: boolean | undefined
+): ServerMember {
+  const id = m.id ?? m.userId ?? ""
+  const username = nonBlankOrNull(m.username)
+  const displayName = nonBlankOrNull(m.displayName)
+  const name = formatUserLabel({
+    displayName: displayName ?? undefined,
+    username: username ?? undefined,
+    fallback: "user",
+  })
+  return {
+    id,
+    name,
+    initials: deriveInitials(name),
+    presence:
+      onlineUserIds && hasOnlineSnapshot
+        ? onlineUserIds.has(id)
+          ? "online"
+          : "offline"
+        : "online",
+    role: memberRoleFromRaw({
+      permissionLevel: m.permissionLevel,
+      role: m.role,
+    }),
+    username,
+    displayName,
+    createdAt: nonBlankOrNull(m.createdAt),
+    joinedAt: nonBlankOrNull(m.joinedAt),
+    homeInstance: nonBlankOrNull(m.homeInstance),
+  }
+}
+
+function nonBlankOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
 }

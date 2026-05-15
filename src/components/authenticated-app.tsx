@@ -65,6 +65,7 @@ import { useInstanceContext } from "@/contexts/InstanceContext"
 import * as mlsStore from "@/lib/mlsStore"
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
 import { buildGuildInviteLink } from "@/lib/inviteLinks"
+import { resolveActorLabel } from "@/lib/systemActorLabel"
 import { getActiveAuthInstanceUrlSync } from "@/lib/authInstanceStore"
 import {
   kickUser,
@@ -226,6 +227,7 @@ function normalizeOrigin(url: string | null | undefined): string | null {
     return null
   }
 }
+
 
 export function AuthenticatedApp() {
   const params = useParams<{
@@ -1396,9 +1398,7 @@ export function AuthenticatedApp() {
               token={token}
               baseUrl={baseUrl}
               wsClient={wsClient as Parameters<typeof SystemChannelView>[0]["wsClient"]}
-              resolveActor={(id) =>
-                members.find((m) => m.id === id)?.name ?? null
-              }
+              resolveActorLabel={(id) => resolveActorLabel(members, id)}
             />
           }
         />

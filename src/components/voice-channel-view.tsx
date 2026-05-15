@@ -65,7 +65,7 @@ interface VoiceChannelViewProps {
   serverId: string
   getToken: () => string | null
   wsClient: unknown
-  members?: Array<{ id?: string; userId?: string; displayName?: string }>
+  members?: Array<{ id?: string; userId?: string; displayName?: string | null }>
   myRole?: string
   onLeave: () => void | Promise<void>
   voiceControlsRef?: React.RefObject<VoiceControlsApi | null> | null
@@ -161,6 +161,32 @@ async function listDevices(
 }
 
 /**
+ * Picks the participant name sent to LiveKit. Trims each candidate and falls
+ * back through `displayName → display_name → username → "Anonymous"` so an
+ * empty display name does not produce the server-default `Participant` label.
+ *
+ * Exported for unit testing.
+ */
+export function pickVoiceDisplayName(
+  user:
+    | {
+        displayName?: string | null
+        display_name?: string | null
+        username?: string | null
+      }
+    | null
+    | undefined
+): string {
+  const candidates = [user?.displayName, user?.display_name, user?.username]
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue
+    const trimmed = candidate.trim()
+    if (trimmed) return trimmed
+  }
+  return "Anonymous"
+}
+
+/**
  * Voice channel orchestrator. Owns the connection lifecycle to the
  * MLS-backed LiveKit room (`useRoom`), the published track state, and
  * the prejoin / device / quality dialogs that wrap that lifecycle.
@@ -181,11 +207,18 @@ export function VoiceChannelView({
   screenShareResolutionCap = "1080p",
 }: VoiceChannelViewProps) {
   const { user } = useAuth() as {
-    user: { id?: string; displayName?: string; display_name?: string } | null
+    user: {
+      id?: string
+      displayName?: string
+      display_name?: string
+      username?: string
+    } | null
   }
   const currentUserId = user?.id ?? ""
-  const displayName =
-    user?.displayName ?? user?.display_name ?? "Anonymous"
+  // Pick the first non-blank label so an empty `displayName` falls back to
+  // `username` before defaulting to "Anonymous". The previous nullish-only
+  // fallback let `""` through, which the backend then rewrote to "Participant".
+  const displayName = pickVoiceDisplayName(user)
   const roomName = `channel-${channel.id}`
 
   const getStore = React.useCallback(

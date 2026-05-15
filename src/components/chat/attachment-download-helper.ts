@@ -8,6 +8,10 @@
  */
 import * as api from "@/lib/api"
 import { decryptBlob } from "@/lib/attachmentCrypto"
+import {
+  buildAttachmentFetchInit,
+  resolveAttachmentBlobUrl,
+} from "@/lib/attachmentTransport"
 import type { AttachmentRef } from "@/lib/messageEnvelope"
 
 interface Options {
@@ -18,7 +22,11 @@ interface Options {
 
 export default async function download({ ref, token, baseUrl = "" }: Options): Promise<void> {
   const { url } = await api.getAttachmentDownloadUrl(token, ref.id, baseUrl)
-  const res = await fetch(url)
+  const resolved = resolveAttachmentBlobUrl(url, baseUrl)
+  if (!resolved) {
+    throw new Error(`invalid download URL: ${url}`)
+  }
+  const res = await fetch(resolved.url, buildAttachmentFetchInit(resolved, token))
   if (!res.ok) throw new Error(`download ${res.status}`)
   const ciphertext = await res.arrayBuffer()
   const blob = await decryptBlob({ ciphertext, key: ref.key, iv: ref.iv })

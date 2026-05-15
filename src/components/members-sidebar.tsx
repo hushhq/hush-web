@@ -52,6 +52,13 @@ export interface ServerMember {
   initials: string
   presence?: MemberPresence
   role: MemberRole
+  /** Raw profile fields preserved from the API roster. Optional so internal
+   *  mocks/legacy callers that still build summary-only members keep working. */
+  username?: string | null
+  displayName?: string | null
+  createdAt?: string | null
+  joinedAt?: string | null
+  homeInstance?: string | null
 }
 
 interface MembersSidebarProps {
@@ -333,6 +340,8 @@ function ProfileCard({
   member: ServerMember
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }) {
+  const handle = member.username ? `@${member.username.replace(/^@+/, "")}` : null
+  const memberSince = formatMemberSince(member.joinedAt ?? member.createdAt)
   return (
     <div className="flex flex-col">
       <div className="h-14 rounded-t-md bg-gradient-to-br from-primary/30 to-primary/5" />
@@ -342,6 +351,9 @@ function ProfileCard({
         </span>
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-semibold">{member.name}</span>
+          {handle && handle !== member.name ? (
+            <span className="text-xs text-muted-foreground">{handle}</span>
+          ) : null}
           <span className="text-xs text-muted-foreground">
             {ROLE_BADGE_LABEL[member.role]}
           </span>
@@ -349,7 +361,7 @@ function ProfileCard({
         <div className="flex flex-col gap-1.5 rounded-md bg-muted/40 p-2 text-xs">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Member since</span>
-            <span>Apr 2025</span>
+            <span>{memberSince}</span>
           </div>
         </div>
         {/* Send message is intentionally inert until DMs ship from
@@ -367,6 +379,18 @@ function ProfileCard({
       </div>
     </div>
   )
+}
+
+/**
+ * Formats an ISO timestamp into a `"MMM yyyy"` label (e.g. "May 2026"). Returns
+ * "Unknown" when the input is null/undefined/unparseable so the profile card
+ * has a stable label without the previously hardcoded date.
+ */
+export function formatMemberSince(iso: string | null | undefined): string {
+  if (!iso) return "Unknown"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "Unknown"
+  return d.toLocaleDateString(undefined, { month: "short", year: "numeric" })
 }
 
 interface GroupedMembers {

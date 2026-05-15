@@ -20,19 +20,28 @@ class MockUploadXHR {
   static instances: MockUploadXHR[] = []
   status = 0
   readyState = 0
+  responseText = ""
   upload = { onprogress: null as ((e: ProgressEvent) => void) | null }
   onload: (() => void) | null = null
   onerror: (() => void) | null = null
   onabort: (() => void) | null = null
   body: unknown = null
   aborted = false
+  url: string | null = null
+  method: string | null = null
+  requestHeaders = new Map<string, string>()
 
   constructor() {
     MockUploadXHR.instances.push(this)
   }
 
-  open() {}
-  setRequestHeader() {}
+  open(method: string, url: string) {
+    this.method = method
+    this.url = url
+  }
+  setRequestHeader(key: string, value: string) {
+    this.requestHeaders.set(key, value)
+  }
   send(body: unknown) {
     this.body = body
     queueMicrotask(() => {
@@ -179,6 +188,68 @@ describe("useAttachmentUploader", () => {
     })
     expect(mockPresignAttachment).toHaveBeenCalledTimes(1)
     expect(MockUploadXHR.instances).toHaveLength(1)
+  })
+
+  it("RelativeUploadUrl_IsResolvedAgainstBaseUrl_AndCarriesAuthHeader", async () => {
+    mockPresignAttachment.mockResolvedValueOnce({
+      id: "att-server-2",
+      // postgres_bytea backend returns the in-API blob route relative to the
+      // instance origin. The client must resolve against `baseUrl` and attach
+      // a Bearer token — without this the desktop `app://localhost` origin
+      // would resolve the URL into an unreachable scheme.
+      uploadUrl: "/api/attachments/att-server-2/blob",
+      method: "PUT",
+      headers: null,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+    const { result } = renderHook(() =>
+      useAttachmentUploader({
+        serverId: "srv-1",
+        channelId: "ch-1",
+        getToken: () => "test-token",
+        baseUrl: "https://chat.example.com",
+      })
+    )
+    await act(async () => {
+      result.current.add([makeFile("relative.png", 256)])
+    })
+    await waitFor(() => {
+      expect(result.current.uploads[0]?.status).toBe("ready")
+    })
+    expect(MockUploadXHR.instances).toHaveLength(1)
+    const xhr = MockUploadXHR.instances[0]
+    expect(xhr.url).toBe(
+      "https://chat.example.com/api/attachments/att-server-2/blob"
+    )
+    expect(xhr.requestHeaders.get("Authorization")).toBe("Bearer test-token")
+  })
+
+  it("AbsoluteUploadUrl_PassesThrough_WithoutAuthHeader", async () => {
+    mockPresignAttachment.mockResolvedValueOnce({
+      id: "att-server-3",
+      uploadUrl: "https://example.test/upload/x",
+      method: "PUT",
+      headers: { "x-amz-meta-foo": "bar" },
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+    const { result } = renderHook(() =>
+      useAttachmentUploader({
+        serverId: "srv-1",
+        channelId: "ch-1",
+        getToken: () => "test-token",
+        baseUrl: "https://chat.example.com",
+      })
+    )
+    await act(async () => {
+      result.current.add([makeFile("s3.png", 256)])
+    })
+    await waitFor(() => {
+      expect(result.current.uploads[0]?.status).toBe("ready")
+    })
+    const xhr = MockUploadXHR.instances[0]
+    expect(xhr.url).toBe("https://example.test/upload/x")
+    expect(xhr.requestHeaders.get("Authorization")).toBeUndefined()
+    expect(xhr.requestHeaders.get("x-amz-meta-foo")).toBe("bar")
   })
 
   it("rejects a non-allowlisted mime type without hitting the network", async () => {

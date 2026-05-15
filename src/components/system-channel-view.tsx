@@ -29,12 +29,17 @@ interface SystemChannelViewProps {
    *  system events as the backend broadcasts them, so a long-lived
    *  log surface stays current without manual refresh. */
   wsClient?: WsClientLike | null
-  /** Resolves a user id to its `@username` for display. The system
-   *  message rows fall back to a shortened id when this returns
-   *  null. Pass the same members snapshot the surrounding chrome
-   *  uses so actor / target read the same identity in the log and
-   *  in the members sidebar. */
-  resolveActor?: (id: string) => string | null
+  /** Resolves a user id to a render-ready label.
+   *
+   *  Callers MUST return the exact string the row should display:
+   *  - a display name without the `@` prefix when one is known, or
+   *  - `@username` (with the `@`) when falling back to the handle.
+   *
+   *  Returning `null` yields a short-id fallback. Returning an empty
+   *  string is treated the same as `null`. The component does NOT
+   *  prepend `@` itself — pinning that semantic here prevents the
+   *  `@@username` / `@Display Name` rendering bug. */
+  resolveActorLabel?: (id: string) => string | null
 }
 
 /**
@@ -64,7 +69,7 @@ export function SystemChannelView({
   token,
   baseUrl,
   wsClient,
-  resolveActor,
+  resolveActorLabel,
 }: SystemChannelViewProps) {
   const { events, loading, error } = useSystemEvents({
     serverId,
@@ -99,7 +104,7 @@ export function SystemChannelView({
             <SystemEventRow
               key={event.id}
               event={event}
-              resolveActor={resolveActor}
+              resolveActorLabel={resolveActorLabel}
             />
           ))}
         </div>
@@ -120,10 +125,10 @@ function SystemSkeleton() {
 
 function SystemEventRow({
   event,
-  resolveActor,
+  resolveActorLabel,
 }: {
   event: SystemEvent
-  resolveActor?: (id: string) => string | null
+  resolveActorLabel?: (id: string) => string | null
 }) {
   const ts = formatTimestamp(event.createdAt)
   return (
@@ -133,11 +138,11 @@ function SystemEventRow({
         <span className="text-xs text-muted-foreground tabular-nums">{ts}</span>
       </div>
       <div className="text-xs text-muted-foreground">
-        Actor: <ActorTag id={event.actorId} resolveActor={resolveActor} />
+        Actor: <ActorTag id={event.actorId} resolveActorLabel={resolveActorLabel} />
         {event.targetId ? (
           <>
             {" · Target: "}
-            <ActorTag id={event.targetId} resolveActor={resolveActor} />
+            <ActorTag id={event.targetId} resolveActorLabel={resolveActorLabel} />
           </>
         ) : null}
       </div>
@@ -148,18 +153,28 @@ function SystemEventRow({
   )
 }
 
-function ActorTag({
+export function ActorTag({
   id,
-  resolveActor,
+  resolveActorLabel,
 }: {
   id: string
-  resolveActor?: (id: string) => string | null
+  resolveActorLabel?: (id: string) => string | null
 }) {
-  const username = resolveActor?.(id) ?? null
-  if (username) {
-    return <span className="font-medium text-foreground">@{username}</span>
+  // Caller pre-formats the label so the row renders it verbatim. The component
+  // does NOT prepend `@` here — that would produce `@@alice` when the caller
+  // already returned `@alice`, or `@Mario Rossi` when the caller returned a
+  // display name that should not carry a handle prefix.
+  const label = trimOrNull(resolveActorLabel?.(id))
+  if (label) {
+    return <span className="font-medium text-foreground">{label}</span>
   }
   return <span className="font-mono">{shortId(id)}</span>
+}
+
+function trimOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
 
 function humanizeEventType(t: string): string {

@@ -17,6 +17,10 @@ import * as React from "react"
 
 import * as api from "@/lib/api"
 import { decryptBlob } from "@/lib/attachmentCrypto"
+import {
+  buildAttachmentFetchInit,
+  resolveAttachmentBlobUrl,
+} from "@/lib/attachmentTransport"
 import type { AttachmentRef } from "@/lib/messageEnvelope"
 
 export type DownloadState = "idle" | "loading" | "ready" | "failed" | "gone"
@@ -76,7 +80,11 @@ export function useAttachmentDownloader(
       setErrorMessage(null)
       try {
         const { url } = await api.getAttachmentDownloadUrl(token, ref.id, baseUrl)
-        const res = await fetch(url)
+        const resolved = resolveAttachmentBlobUrl(url, baseUrl)
+        if (!resolved) {
+          throw new Error(`invalid download URL: ${url}`)
+        }
+        const res = await fetch(resolved.url, buildAttachmentFetchInit(resolved, token))
         if (!res.ok) throw new Error(`download ${res.status}`)
         const ciphertext = await res.arrayBuffer()
         const blob = await decryptBlob({

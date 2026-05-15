@@ -135,6 +135,53 @@ describe("useMembersForServer", () => {
     ])
   })
 
+  it("preserves the raw profile fields needed by ProfileCard", async () => {
+    getGuildMembers.mockResolvedValue([
+      {
+        id: "u1",
+        username: "alice",
+        displayName: "Alice",
+        createdAt: "2025-04-12T10:00:00Z",
+        joinedAt: "2026-05-14T22:53:00Z",
+        homeInstance: "https://app.gethush.live",
+        permissionLevel: 0,
+      },
+    ])
+    const { result } = renderHook(() =>
+      useMembersForServer({
+        serverId: "g1",
+        token: "tok",
+        baseUrl: "https://a.example.com",
+        currentUserId: "u-self",
+      }),
+    )
+    await waitFor(() => expect(result.current.members).toHaveLength(1))
+    const row = result.current.members[0]
+    expect(row.username).toBe("alice")
+    expect(row.displayName).toBe("Alice")
+    expect(row.createdAt).toBe("2025-04-12T10:00:00Z")
+    expect(row.joinedAt).toBe("2026-05-14T22:53:00Z")
+    expect(row.homeInstance).toBe("https://app.gethush.live")
+  })
+
+  it("falls back to @username label when displayName is blank", async () => {
+    getGuildMembers.mockResolvedValue([
+      { id: "u1", username: "alice", displayName: "", permissionLevel: 0 },
+    ])
+    const { result } = renderHook(() =>
+      useMembersForServer({
+        serverId: "g1",
+        token: "tok",
+        baseUrl: "https://a.example.com",
+        currentUserId: "u-self",
+      }),
+    )
+    await waitFor(() => expect(result.current.members).toHaveLength(1))
+    expect(result.current.members[0].name).toBe("@alice")
+    expect(result.current.members[0].displayName).toBeNull()
+    expect(result.current.members[0].username).toBe("alice")
+  })
+
   it("derives presence from onlineUserIds once a snapshot has arrived", async () => {
     getGuildMembers.mockResolvedValue([
       { id: "u1", username: "alice", permissionLevel: 0 },

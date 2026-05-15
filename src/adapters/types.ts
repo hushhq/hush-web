@@ -52,10 +52,24 @@ export type MemberRole = "owner" | "admin" | "moderator" | "member" | "bot"
 
 export interface ServerMember {
   id: string
+  /** Best display label — prefers displayName, falls back to @username, then "user". */
   name: string
   initials: string
   presence?: MemberPresence
   role: MemberRole
+  /**
+   * Raw profile fields preserved from the server `ServerMemberWithUser` payload.
+   * UI surfaces (profile card, system log actor) read these directly instead of
+   * collapsing every member into the `name` summary.
+   */
+  username: string | null
+  displayName: string | null
+  /** Account creation timestamp (ISO string). */
+  createdAt: string | null
+  /** Guild membership timestamp (ISO string). */
+  joinedAt: string | null
+  /** Home-instance URL for federated identities. `null` for local users. */
+  homeInstance: string | null
 }
 
 export interface Server {
