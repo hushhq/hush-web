@@ -339,3 +339,99 @@ describe("computeDeviceApplyPlan", () => {
     expect(plan.audio).toEqual({ changed: true, nextDeviceId: "mic-b" })
   })
 })
+
+describe("voiceDevicePrefs — instance scope", () => {
+  const USER_SCOPED = "user-vdp-scope"
+  const ORIGIN_A = "https://app.gethush.live"
+  const ORIGIN_B = "https://peer.example.com"
+
+  beforeEach(async () => {
+    await clearVoiceDevicePrefs(USER_SCOPED, ORIGIN_A).catch(() => {})
+    await clearVoiceDevicePrefs(USER_SCOPED, ORIGIN_B).catch(() => {})
+    await clearVoiceDevicePrefs(USER_SCOPED).catch(() => {})
+  })
+
+  it("does not bleed prefs across instance scopes for the same userId", async () => {
+    await saveVoiceDevicePrefs(
+      USER_SCOPED,
+      {
+        audioDeviceId: "mic-A",
+        videoDeviceId: null,
+        audioEnabled: true,
+        videoEnabled: false,
+        dontAskAgain: true,
+      },
+      ORIGIN_A
+    )
+
+    expect(await readVoiceDevicePrefs(USER_SCOPED, ORIGIN_A)).toMatchObject({
+      audioDeviceId: "mic-A",
+      dontAskAgain: true,
+    })
+    expect(await readVoiceDevicePrefs(USER_SCOPED, ORIGIN_B)).toBeNull()
+    expect(await shouldSkipPrejoin(USER_SCOPED, ORIGIN_A)).toBe(true)
+    expect(await shouldSkipPrejoin(USER_SCOPED, ORIGIN_B)).toBe(false)
+  })
+
+  it("treats path/trailing-slash variants of the same origin as one scope", async () => {
+    await saveVoiceDevicePrefs(
+      USER_SCOPED,
+      {
+        audioDeviceId: "mic-norm",
+        videoDeviceId: null,
+        audioEnabled: true,
+        videoEnabled: false,
+        dontAskAgain: true,
+      },
+      `${ORIGIN_A}/`
+    )
+
+    expect(
+      await readVoiceDevicePrefs(USER_SCOPED, `${ORIGIN_A}/api`)
+    ).toMatchObject({ audioDeviceId: "mic-norm", dontAskAgain: true })
+    expect(await shouldSkipPrejoin(USER_SCOPED, ORIGIN_A)).toBe(true)
+  })
+
+  it("isolates pub/sub listeners per scope", async () => {
+    const listenerA = vi.fn()
+    const listenerB = vi.fn()
+    const unsubA = subscribeVoiceDevicePrefs(USER_SCOPED, listenerA, ORIGIN_A)
+    const unsubB = subscribeVoiceDevicePrefs(USER_SCOPED, listenerB, ORIGIN_B)
+
+    await saveVoiceDevicePrefs(
+      USER_SCOPED,
+      {
+        audioDeviceId: "mic-A",
+        videoDeviceId: null,
+        audioEnabled: true,
+        videoEnabled: false,
+        dontAskAgain: false,
+      },
+      ORIGIN_A
+    )
+
+    expect(listenerA).toHaveBeenCalledTimes(1)
+    expect(listenerB).not.toHaveBeenCalled()
+
+    unsubA()
+    unsubB()
+  })
+
+  it("preserves backward-compatible unscoped storage when no scope is provided", async () => {
+    await saveVoiceDevicePrefs(USER_SCOPED, {
+      audioDeviceId: "mic-unscoped",
+      videoDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: true,
+    })
+
+    expect(await readVoiceDevicePrefs(USER_SCOPED)).toMatchObject({
+      audioDeviceId: "mic-unscoped",
+      dontAskAgain: true,
+    })
+    // A scoped read for the same user must NOT see the legacy
+    // unscoped record — they live in different IDB databases.
+    expect(await readVoiceDevicePrefs(USER_SCOPED, ORIGIN_A)).toBeNull()
+  })
+})

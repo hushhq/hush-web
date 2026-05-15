@@ -187,7 +187,12 @@ describe("VoiceVideoPanel — permission posture", () => {
       ],
     })
 
-    render(<VoiceVideoPanel voiceRuntime={null} />)
+    render(
+      <VoiceVideoPanel
+        voiceRuntime={null}
+        prefsScope="https://app.gethush.live"
+      />
+    )
 
     await waitFor(() => expect(enumerateDevicesMock).toHaveBeenCalledTimes(1))
     expect(getUserMediaMock).not.toHaveBeenCalled()
@@ -201,7 +206,12 @@ describe("VoiceVideoPanel — permission posture", () => {
       ],
     })
 
-    render(<VoiceVideoPanel voiceRuntime={null} />)
+    render(
+      <VoiceVideoPanel
+        voiceRuntime={null}
+        prefsScope="https://app.gethush.live"
+      />
+    )
 
     expect(
       await screen.findByRole("button", { name: /grant microphone access/i })
@@ -219,7 +229,12 @@ describe("VoiceVideoPanel — permission posture", () => {
         ],
       })
 
-    render(<VoiceVideoPanel voiceRuntime={null} />)
+    render(
+      <VoiceVideoPanel
+        voiceRuntime={null}
+        prefsScope="https://app.gethush.live"
+      />
+    )
 
     const grantBtn = await screen.findByRole("button", {
       name: /grant camera access/i,
@@ -497,7 +512,12 @@ describe("VoiceVideoPanel — Default option label", () => {
       ],
     })
 
-    render(<VoiceVideoPanel voiceRuntime={null} />)
+    render(
+      <VoiceVideoPanel
+        voiceRuntime={null}
+        prefsScope="https://app.gethush.live"
+      />
+    )
 
     const trigger = await screen.findByRole("combobox", { name: /microphone/i })
     await userEvent.click(trigger)
@@ -600,7 +620,12 @@ describe("VoiceVideoPanel — device persistence", () => {
       ],
     })
 
-    render(<VoiceVideoPanel voiceRuntime={null} />)
+    render(
+      <VoiceVideoPanel
+        voiceRuntime={null}
+        prefsScope="https://app.gethush.live"
+      />
+    )
 
     const trigger = await screen.findByRole("combobox", { name: /microphone/i })
     await userEvent.click(trigger)
@@ -614,5 +639,8 @@ describe("VoiceVideoPanel — device persistence", () => {
     expect(saveVoiceDevicePrefs.mock.calls[0][1]).toMatchObject({
       audioDeviceId: "mic-b",
     })
+    expect(saveVoiceDevicePrefs.mock.calls[0][2]).toBe(
+      "https://app.gethush.live"
+    )
   })
 })

@@ -233,7 +233,10 @@ afterEach(() => {
   cleanup()
 })
 
-async function mount(props: { screenShareResolutionCap?: "1080p" | "720p" } = {}) {
+async function mount(props: {
+  screenShareResolutionCap?: "1080p" | "720p"
+  baseUrl?: string
+} = {}) {
   let result!: ReturnType<typeof render>
   await act(async () => {
     result = render(
@@ -244,6 +247,7 @@ async function mount(props: { screenShareResolutionCap?: "1080p" | "720p" } = {}
         wsClient={WS_CLIENT}
         onLeave={vi.fn()}
         screenShareResolutionCap={props.screenShareResolutionCap}
+        baseUrl={props.baseUrl}
       />
     )
     // Let the prefs-load effect resolve.
@@ -260,6 +264,7 @@ async function mount(props: { screenShareResolutionCap?: "1080p" | "720p" } = {}
         wsClient={WS_CLIENT}
         onLeave={vi.fn()}
         screenShareResolutionCap={props.screenShareResolutionCap}
+        baseUrl={props.baseUrl}
       />
     )
     await Promise.resolve()
@@ -592,6 +597,70 @@ describe("VoiceChannelView — live re-publish on prefs change", () => {
     })
 
     expect(roomMock.api.unpublishMic).not.toHaveBeenCalled()
+    expect(roomMock.api.publishMic).not.toHaveBeenCalled()
+  })
+})
+
+describe("VoiceChannelView — prejoin prefs scoped by instance origin", () => {
+  const ORIGIN_HOME = "https://app.gethush.live"
+  const ORIGIN_PEER = "https://peer.example.com"
+
+  beforeEach(async () => {
+    await clearVoiceDevicePrefs("user-1", ORIGIN_HOME).catch(() => {})
+    await clearVoiceDevicePrefs("user-1", ORIGIN_PEER).catch(() => {})
+  })
+
+  it("skips prejoin and auto-joins when scoped dontAskAgain is set for the active baseUrl", async () => {
+    await saveVoiceDevicePrefs(
+      "user-1",
+      {
+        audioDeviceId: null,
+        videoDeviceId: null,
+        outputDeviceId: null,
+        audioEnabled: true,
+        videoEnabled: false,
+        dontAskAgain: true,
+      },
+      ORIGIN_HOME
+    )
+
+    await mount({ baseUrl: ORIGIN_HOME })
+
+    await waitFor(() => {
+      expect(roomMock.api.connectRoom).toHaveBeenCalled()
+    })
+    // Auto-publish kicked in because prejoin was skipped.
+    await waitFor(() => {
+      expect(roomMock.api.publishMic).toHaveBeenCalled()
+    })
+  })
+
+  it("does not skip prejoin when dontAskAgain is set only for a different baseUrl", async () => {
+    // Prefs saved against ORIGIN_PEER must not satisfy a join via
+    // ORIGIN_HOME — the prejoin dialog must still surface.
+    await saveVoiceDevicePrefs(
+      "user-1",
+      {
+        audioDeviceId: null,
+        videoDeviceId: null,
+        outputDeviceId: null,
+        audioEnabled: true,
+        videoEnabled: false,
+        dontAskAgain: true,
+      },
+      ORIGIN_PEER
+    )
+
+    await mount({ baseUrl: ORIGIN_HOME })
+
+    // The component opens prejoin when no scoped prefs exist for the
+    // active baseUrl. `prejoinProps.onDevicePrefsChange` is wired by
+    // the dialog when it mounts.
+    await waitFor(() => {
+      expect(prejoinProps.onDevicePrefsChange).toBeTypeOf("function")
+    })
+    // No auto-publish — the user has not confirmed prejoin for this
+    // origin yet.
     expect(roomMock.api.publishMic).not.toHaveBeenCalled()
   })
 })

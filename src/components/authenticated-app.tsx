@@ -1768,6 +1768,9 @@ export function AuthenticatedApp() {
         homeInstanceUrl={homeInstance.url}
         homeLogPublicKey={homeInstance.logPublicKey}
         voiceRuntime={voiceRuntime}
+        voicePrefsScope={
+          joinedVoiceInstanceUrl ?? instanceUrl ?? homeInstance.url
+        }
         onSignOut={async () => {
           await performLogout()
           setIsUserSettingsOpen(false)
