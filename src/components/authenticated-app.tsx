@@ -106,6 +106,7 @@ import {
   normalizeOrigin,
   resolveTrustedHomeInstance,
 } from "./authenticated-app-home-instance"
+import { runInstanceBanAction } from "./authenticated-app-instance-ban"
 
 const noopRefetch = async () => {}
 
@@ -394,24 +395,20 @@ export function AuthenticatedApp() {
 
   const handleInstanceBanned = React.useCallback(
     (bannedInstanceUrl: string) => {
-      // If the affected instance is the one we are currently
-      // viewing, clear the active route and force a sign out.
-      // Otherwise just disconnect that instance and leave the user
-      // on the active session.
-      if (instanceUrl === bannedInstanceUrl) {
-        setTimeout(() => {
-          Promise.resolve(performLogout()).finally(() => navigate("/"))
-        }, 1500)
-        return
-      }
-      void disconnectInstance(bannedInstanceUrl).catch((err) => {
-        console.warn("[realtime] disconnectInstance failed", {
-          bannedInstanceUrl,
-          err: err instanceof Error ? err.message : err,
-        })
+      // Server-side ban from one instance must NOT trigger
+      // performLogout — that would scorched-earth the entire local
+      // profile (auth + vault + transcript + MLS + caches) and drop
+      // unrelated authenticated instance sessions. Disconnect only
+      // the offending instance; if it was active, defer-navigate so
+      // the suspension toast remains visible.
+      runInstanceBanAction({
+        activeInstanceUrl: instanceUrl,
+        bannedInstanceUrl,
+        disconnectInstance,
+        navigate,
       })
     },
-    [instanceUrl, performLogout, navigate, disconnectInstance],
+    [instanceUrl, navigate, disconnectInstance],
   )
 
   // Resolve a server name from the merged guild list when the
