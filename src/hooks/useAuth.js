@@ -318,7 +318,13 @@ async function tryVaultSessionResume(userId, effectiveConfig) {
     let aliveTabExists = false;
     let probe = null;
     if (policy === 'browser_close' && !isVaultSessionMarkerAlive(userId)) {
-      probe = createVaultSessionPresence(userId);
+      // Probe-only mode: a one-shot startup probe must NOT also act as
+      // a persistent `alive` responder, otherwise two concurrent
+      // fresh-locked tabs would satisfy each other's probe and resume
+      // the vault under `browser_close` with no genuinely-unlocked
+      // sibling. The unlocked-tab presence below the auth effect
+      // keeps default responder behavior.
+      probe = createVaultSessionPresence(userId, { respondToJoining: false });
       try {
         aliveTabExists = await probe.joinAndCheckSiblings();
       } finally {

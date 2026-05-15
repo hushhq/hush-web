@@ -370,11 +370,27 @@ export async function unwrapIdentity(
 // ─── Multi-tab presence (BroadcastChannel) ────────────────────────────────
 
 /**
+ * Options for `createVaultSessionPresence`.
+ *
+ * `respondToJoining` controls whether this presence answers sibling
+ * `{type:"joining"}` probes with `{type:"alive"}`. Default `true`
+ * preserves the original responder behavior used by an unlocked tab.
+ * Set to `false` when constructing a startup probe — a probe-only
+ * presence may still call `joinAndCheckSiblings`, but must not
+ * advertise itself as alive, otherwise two concurrent fresh-locked
+ * tabs would satisfy each other under `browser_close` and resume the
+ * vault with no genuinely-unlocked sibling.
+ */
+export interface CreateVaultSessionPresenceOptions {
+  respondToJoining?: boolean
+}
+
+/**
  * Creates a per-tab presence subscription on the shared
- * `hush_vault_session_${userId}` BroadcastChannel. The returned object
- * answers sibling probes with `{type: "alive"}` for as long as it
- * stays open; `joinAndCheckSiblings` posts `{type: "joining"}` and
- * waits up to `timeoutMs` for replies.
+ * `hush_vault_session_${userId}` BroadcastChannel. By default, the
+ * returned object answers sibling probes with `{type: "alive"}` for as
+ * long as it stays open; `joinAndCheckSiblings` posts
+ * `{type: "joining"}` and waits up to `timeoutMs` for replies.
  *
  * Returns a no-op stub when `BroadcastChannel` is unavailable
  * (legacy Safari, certain test environments). The caller treats
@@ -382,7 +398,8 @@ export async function unwrapIdentity(
  * back to the per-tab marker.
  */
 export function createVaultSessionPresence(
-  userId: string
+  userId: string,
+  options: CreateVaultSessionPresenceOptions = {}
 ): VaultSessionPresence {
   if (!userId || typeof BroadcastChannel === "undefined") {
     return {
@@ -391,25 +408,31 @@ export function createVaultSessionPresence(
     }
   }
 
+  const respondToJoining = options.respondToJoining !== false
   const channel = new BroadcastChannel(`${PRESENCE_CHANNEL_PREFIX}${userId}`)
   let closed = false
 
-  // Persistent reply handler: any sibling that posts `joining` gets an
-  // immediate `alive` reply from this tab. Posting on a closed channel
-  // throws, hence the inner try/catch even though `closed` gates the
-  // broader path — `pagehide` and React unmount can race.
-  const onMessage = (event: MessageEvent<PresenceMessage>) => {
-    const msg = event.data
-    if (!msg || closed) return
-    if (msg.type === "joining") {
-      try {
-        channel.postMessage({ type: "alive" })
-      } catch {
-        // channel closed mid-send; nothing to do
+  // Persistent reply handler: an unlocked sibling that posts `joining`
+  // gets an immediate `alive` reply from this tab. Probe-only presences
+  // (`respondToJoining: false`) skip wiring this handler entirely so a
+  // startup probe cannot spoof its own liveness to a concurrent peer.
+  // Posting on a closed channel throws, hence the inner try/catch even
+  // though `closed` gates the broader path — `pagehide` and React
+  // unmount can race.
+  const onMessage = respondToJoining
+    ? (event: MessageEvent<PresenceMessage>) => {
+        const msg = event.data
+        if (!msg || closed) return
+        if (msg.type === "joining") {
+          try {
+            channel.postMessage({ type: "alive" })
+          } catch {
+            // channel closed mid-send; nothing to do
+          }
+        }
       }
-    }
-  }
-  channel.addEventListener("message", onMessage)
+    : null
+  if (onMessage) channel.addEventListener("message", onMessage)
 
   return {
     joinAndCheckSiblings(timeoutMs = PRESENCE_PROBE_TIMEOUT_MS) {
@@ -446,7 +469,7 @@ export function createVaultSessionPresence(
       } catch {
         // closing anyway
       }
-      channel.removeEventListener("message", onMessage)
+      if (onMessage) channel.removeEventListener("message", onMessage)
       channel.close()
     },
   }
