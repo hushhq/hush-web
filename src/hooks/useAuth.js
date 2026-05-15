@@ -1011,10 +1011,22 @@ export function useAuth() {
 
     if (timeout === 'refresh') {
       // Drop in-memory identity on page unload so a same-process navigation
-      // re-locks. The previous beforeunload handler that wiped the persisted
-      // wrapping key from sessionStorage is no longer needed.
+      // re-locks. On desktop the PIN-derived vault session key can also
+      // live in the Electron main process across renderer reloads via
+      // desktopVaultBridge; without clearing it here, the 'refresh'
+      // policy would be silently downgraded by desktop auto-unlock after
+      // the next reload. Fire-and-forget: any bridge error must not
+      // block the unload event.
+      // CORE-INVARIANTS - Authentication, Vault, and Device Identity +
+      // "Desktop and web must behave as one product": refresh-lock
+      // policy must hold on both runtimes.
       const handler = () => {
         identityKeyRef.current = null;
+        try {
+          clearVaultSessionKey(userId)?.catch?.(() => {});
+        } catch {
+          /* unload must not throw */
+        }
       };
       window.addEventListener('beforeunload', handler);
       beforeUnloadRef.current = handler;
