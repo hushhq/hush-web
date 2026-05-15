@@ -377,9 +377,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         });
 
         // ParticipantDisconnected: update list and clean tracks/screens.
-        // Frame key rotates automatically via epoch advancement on leave
-        // (triggered by the mls.commit from remaining participants).
-        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        // Also issue a voice MLS Remove commit so the departed participant
+        // is excluded from subsequent frame keys immediately.
+        room.on(RoomEvent.ParticipantDisconnected, async (participant) => {
           if (isStale()) return;
           console.log(`[livekit] Participant disconnected: ${participant.identity}`);
           setParticipants((prev) =>
@@ -399,6 +399,33 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             }
           }
           scheduleRemoteTracksUpdate();
+
+          try {
+            const db = await getStore();
+            const credential = await mlsStoreLib.getCredential(db);
+            const tok = getToken();
+            const mlsDeps = {
+              db,
+              token: tok,
+              credential,
+              mlsStore: mlsStoreLib,
+              hushCrypto: hushCryptoLib,
+              api: apiLib,
+            };
+            await mlsGroupLib.removeMemberFromVoiceGroup(
+              mlsDeps,
+              channelIdRef.current,
+              participant.identity,
+            );
+            const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);
+            if (e2eeKeyProviderRef.current) {
+              await e2eeKeyProviderRef.current.setKey(new Uint8Array(frameKeyBytes), epoch % 256);
+            }
+            setVoiceEpoch(epoch);
+            voiceEpochRef.current = epoch;
+          } catch (err) {
+            console.warn('[livekit] Voice MLS remove on participant disconnect failed:', err);
+          }
         });
 
         const trackRefs = {

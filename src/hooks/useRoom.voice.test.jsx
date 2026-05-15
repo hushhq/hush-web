@@ -27,6 +27,7 @@ const {
   mockJoinVoiceGroup,
   mockExportVoiceFrameKey,
   mockProcessVoiceCommit,
+  mockRemoveMemberFromVoiceGroup,
   mockPerformVoiceSelfUpdate,
   mockDestroyVoiceGroup,
   mockGetCredential,
@@ -82,6 +83,7 @@ const {
       epoch: 1,
     }),
     mockProcessVoiceCommit: vi.fn().mockResolvedValue({ type: 'commit', epoch: 2 }),
+    mockRemoveMemberFromVoiceGroup: vi.fn().mockResolvedValue({ epoch: 4 }),
     mockPerformVoiceSelfUpdate: vi.fn().mockResolvedValue({ epoch: 3 }),
     mockDestroyVoiceGroup: vi.fn().mockResolvedValue(undefined),
     mockGetCredential: vi.fn().mockResolvedValue({
@@ -110,6 +112,7 @@ vi.mock('../lib/mlsGroup', () => ({
   joinVoiceGroup: mockJoinVoiceGroup,
   exportVoiceFrameKey: mockExportVoiceFrameKey,
   processVoiceCommit: mockProcessVoiceCommit,
+  removeMemberFromVoiceGroup: mockRemoveMemberFromVoiceGroup,
   performVoiceSelfUpdate: mockPerformVoiceSelfUpdate,
   destroyVoiceGroup: mockDestroyVoiceGroup,
   voiceChannelIdToBytes: (id) => new TextEncoder().encode(`voice:${id}`),
@@ -290,6 +293,7 @@ describe('useRoom MLS voice E2EE', () => {
       epoch: 1,
     });
     mockProcessVoiceCommit.mockResolvedValue({ type: 'commit', epoch: 2 });
+    mockRemoveMemberFromVoiceGroup.mockResolvedValue({ epoch: 4 });
     mockPerformVoiceSelfUpdate.mockResolvedValue({ epoch: 3 });
     mockDestroyVoiceGroup.mockResolvedValue(undefined);
     mockGetMLSVoiceGroupInfo.mockRejectedValue(new Error('404'));
@@ -778,6 +782,27 @@ describe('useRoom voice reconnect', () => {
     });
 
     expect(result.current.voiceReconnectFailed).toBe(true);
+  });
+
+  it('ParticipantDisconnected triggers voice member removal commit', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    const room = capturedRooms[capturedRooms.length - 1];
+    await act(async () => {
+      room.emit('participantDisconnected', { identity: 'u2', name: 'OtherUser' });
+    });
+
+    expect(mockRemoveMemberFromVoiceGroup).toHaveBeenCalledWith(
+      expect.any(Object),
+      CHANNEL_ID,
+      'u2',
+    );
   });
 });
 

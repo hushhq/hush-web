@@ -863,6 +863,38 @@ export async function performVoiceSelfUpdate(deps, channelId) {
 }
 
 /**
+ * Remove a member from the voice MLS group and publish the commit.
+ * Used when a participant leaves/disconnects so they are excluded from
+ * subsequent frame keys immediately.
+ *
+ * @param {object} deps
+ * @param {string} channelId
+ * @param {string} memberIdentity
+ * @returns {Promise<{ epoch: number }>}
+ */
+export async function removeMemberFromVoiceGroup(deps, channelId, memberIdentity) {
+  const { db, token, mlsStore, hushCrypto, api } = deps;
+  const { sigPriv, sigPub, credBytes } = getCredFields(deps);
+  const groupIdBytes = voiceChannelIdToBytes(channelId);
+  const memberIdentitiesJson = JSON.stringify([memberIdentity]);
+
+  await mlsStore.preloadGroupState(db);
+  const result = await hushCrypto.removeMembers(groupIdBytes, sigPriv, sigPub, credBytes, memberIdentitiesJson);
+  await mlsStore.flushStorageCache(db);
+
+  await api.postMLSVoiceCommit(
+    token,
+    channelId,
+    toBase64(result.commitBytes),
+    result.epoch,
+    toBase64(result.groupInfoBytes),
+  );
+
+  await mlsStore.setGroupEpoch(db, `voice:${channelId}`, result.epoch);
+  return { epoch: result.epoch };
+}
+
+/**
  * Destroy local voice MLS group state when leaving a voice channel.
  * Does NOT call a server delete - the server handles cleanup via the LiveKit
  * webhook when the last participant leaves (voice_group_destroyed WS event).

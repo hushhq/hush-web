@@ -6,6 +6,7 @@ import {
   destroyVoiceGroup,
   performVoiceSelfUpdate,
   processVoiceCommit,
+  removeMemberFromVoiceGroup,
   voiceChannelIdToBytes,
 } from './mlsGroup';
 
@@ -53,6 +54,11 @@ function makeHushCrypto() {
     exportVoiceFrameKey: vi.fn().mockResolvedValue({
       frameKeyBytes: new Uint8Array(32).fill(0xab),
       epoch: 1,
+    }),
+    removeMembers: vi.fn().mockResolvedValue({
+      commitBytes: new Uint8Array([30, 31, 32]),
+      groupInfoBytes: new Uint8Array([40, 41, 42]),
+      epoch: 4,
     }),
   };
 }
@@ -250,5 +256,26 @@ describe('mlsGroup voice lifecycle', () => {
     expect(deps.mlsStore.flushStorageCache).toHaveBeenCalledWith(deps.db);
     expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 3);
     expect(result).toEqual({ type: 'commit', epoch: 3 });
+  });
+
+  it('removeMemberFromVoiceGroup removes departed member and publishes commit', async () => {
+    const result = await removeMemberFromVoiceGroup(deps, 'ch-1', 'user-2');
+
+    expect(deps.hushCrypto.removeMembers).toHaveBeenCalledWith(
+      voiceChannelIdToBytes('ch-1'),
+      deps.credential.signingPrivateKey,
+      deps.credential.signingPublicKey,
+      deps.credential.credentialBytes,
+      JSON.stringify(['user-2']),
+    );
+    expect(deps.api.postMLSVoiceCommit).toHaveBeenCalledWith(
+      'test-token',
+      'ch-1',
+      expect.any(String),
+      4,
+      expect.any(String),
+    );
+    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 4);
+    expect(result).toEqual({ epoch: 4 });
   });
 });
