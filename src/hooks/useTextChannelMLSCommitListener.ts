@@ -31,6 +31,7 @@ interface MlsAddRequestFrame {
   action?: string
   proposal_bytes?: string
   requester_id?: string
+  requester_device_id?: string
 }
 
 function base64ToUint8Array(b64: string): Uint8Array {
@@ -156,15 +157,28 @@ export function useTextChannelMLSCommitListener({
 
       const channelId = data.channel_id
       const requesterId = data.requester_id
+      const requesterDeviceId = data.requester_device_id
+      const requesterIdentity =
+        requesterDeviceId && requesterId
+          ? `${requesterId}:${requesterDeviceId}`
+          : null
       try {
         const deps = await buildDeps(channelId)
         if (!deps) return
         await withChannelMLSMutex(textChannelKey(channelId), async () => {
           try {
+            if (!requesterIdentity) {
+              console.warn("[mls] add_request remove skipped: missing requester_device_id", {
+                channelId,
+                requesterId,
+              })
+              return
+            }
+
             await mlsGroup.removeMemberFromChannel(
               deps,
               channelId,
-              requesterId,
+              requesterIdentity,
             )
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
