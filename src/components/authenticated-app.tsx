@@ -102,6 +102,10 @@ import {
 } from "@/lib/userLabel"
 import { PerInstanceListeners } from "@/components/realtime/PerInstanceListeners"
 import { PerServerListeners } from "@/components/realtime/PerServerListeners"
+import {
+  normalizeOrigin,
+  resolveTrustedHomeInstance,
+} from "./authenticated-app-home-instance"
 
 const noopRefetch = async () => {}
 
@@ -218,15 +222,6 @@ interface ShellChannel {
   kind: ShellChannelKind
 }
 
-function normalizeOrigin(url: string | null | undefined): string | null {
-  if (!url) return null
-  try {
-    return new URL(url).origin
-  } catch {
-    return null
-  }
-}
-
 export function AuthenticatedApp() {
   const params = useParams<{
     instance?: string
@@ -304,15 +299,7 @@ export function AuthenticatedApp() {
         : null
     const fallback =
       typeof window !== "undefined" ? window.location.origin : null
-    const homeUrl = normalizeOrigin(stored) ?? normalizeOrigin(fallback)
-    if (!homeUrl) return { url: null, logPublicKey: null }
-    const match = connectedInstances.find(
-      (inst) => normalizeOrigin(inst.instanceUrl) === homeUrl
-    )
-    return {
-      url: homeUrl,
-      logPublicKey: match?.handshakeData?.log_public_key ?? null,
-    }
+    return resolveTrustedHomeInstance(stored, fallback, connectedInstances)
   }, [connectedInstances])
 
   const { servers } = useGuilds()
