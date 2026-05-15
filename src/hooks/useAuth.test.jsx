@@ -1397,6 +1397,39 @@ describe('useAuth - session rehydration', () => {
     expect(result.current.isVaultUnlocked).toBe(false);
     expect(result.current.needsUnlock).toBe(true);
   });
+
+  it('still requires PIN when a stale authInvalidation marker is present alongside a valid session', async () => {
+    // Regression for PR #19: a persisted `hush_auth_invalidation` marker
+    // must NOT short-circuit the PIN gate when there is still a live
+    // JWT/user session. Otherwise a stale or planted marker would route
+    // an authenticated browser into the app while the local vault is
+    // locked.
+    const userId = 'user-stale-invalidation';
+    sessionStorage.setItem(JWT_KEY, 'valid-jwt');
+    localStorage.setItem(`hush_vault_user_${userId}`, 'aabb');
+    localStorage.setItem(
+      'hush_auth_invalidation',
+      JSON.stringify({ reason: 'server_session_invalid', at: '2026-05-15T00:00:00Z' }),
+    );
+
+    // Vault blob must exist in IDB so the locked-vault path resolves.
+    const fakeBlob = new Uint8Array(44);
+    fakeBlob.set(new Uint8Array(32).fill(1), 12);
+    _vaultBlobs.set(userId, fakeBlob);
+
+    vi.mocked(apiMod.fetchWithAuth).mockResolvedValue(
+      mockFetchOk({ id: userId, username: 'eve', displayName: 'Eve' }),
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.hasSession).toBe(true);
+    expect(result.current.authInvalidation?.reason).toBe('server_session_invalid');
+    expect(result.current.hasVault).toBe(true);
+    expect(result.current.isVaultUnlocked).toBe(false);
+    expect(result.current.needsUnlock).toBe(true);
+  });
 });
 
 describe('useAuth - setPIN', () => {
