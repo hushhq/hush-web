@@ -288,4 +288,27 @@ describe('useAuth - desktop session key clearing', () => {
     expect(bridgeMod.clearVaultSessionKey).toHaveBeenCalledWith('user-1');
   });
 
+  it("beforeunload under timeout='refresh' clears the desktop vault session key", async () => {
+    // Effective vault config for user-1 is 'refresh' — applyVaultTimeout
+    // installs a beforeunload handler that must drop both the in-memory
+    // identity key AND the desktop main-process session key. Without the
+    // bridge clear, an Electron renderer reload could silently
+    // auto-unlock from the still-cached main-process key, downgrading
+    // the 'On refresh' policy.
+    vi.mocked(vaultMod.getVaultConfig).mockImplementation((userId) =>
+      userId === 'user-1' ? { timeout: 'refresh', pinType: 'pin' } : null,
+    );
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await buildUnlockedSession(result);
+
+    vi.mocked(bridgeMod.clearVaultSessionKey).mockClear();
+
+    act(() => {
+      window.dispatchEvent(new Event('beforeunload'));
+    });
+
+    expect(bridgeMod.clearVaultSessionKey).toHaveBeenCalledWith('user-1');
+  });
 });
