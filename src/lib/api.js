@@ -467,7 +467,10 @@ export async function verifyTransparency(token, pubkeyHex, baseUrl = '') {
  * @returns {Promise<{ nonce: string }>} Hex-encoded nonce.
  */
 export async function requestChallenge(publicKeyBase64, baseUrl = '') {
-  const authBaseUrl = resolveAuthBaseUrl(baseUrl);
+  // Security hardening: challenge signing must remain same-origin/selected-auth-instance
+  // only. Allowing caller-provided baseUrl here enables cross-instance signing oracle
+  // attacks because the signed payload is a raw nonce without audience binding.
+  const authBaseUrl = resolveAuthBaseUrl('');
   const targetUrl = `${authBaseUrl}/api/auth/challenge`;
   let res;
   try {
@@ -498,7 +501,9 @@ export async function requestChallenge(publicKeyBase64, baseUrl = '') {
  * @returns {Promise<{ token: string, user: object }>}
  */
 export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, baseUrl = '') {
-  const authBaseUrl = resolveAuthBaseUrl(baseUrl);
+  // Keep verify endpoint aligned with requestChallenge origin to avoid relaying
+  // signatures to attacker-controlled instances.
+  const authBaseUrl = resolveAuthBaseUrl('');
   const targetUrl = `${authBaseUrl}/api/auth/verify`;
   let res;
   try {
