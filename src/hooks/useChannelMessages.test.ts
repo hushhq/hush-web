@@ -15,6 +15,10 @@ const mockDecryptFromChannel = vi.fn()
 const mockGetCachedMessage = vi.fn()
 const mockSetCachedMessage = vi.fn()
 
+const { mockGetChannelMessages } = vi.hoisted(() => ({
+  mockGetChannelMessages: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock("./useAuth", () => ({
   getDeviceId: () => "device-self",
 }))
@@ -29,8 +33,16 @@ vi.mock("./useMLS", () => ({
 }))
 
 vi.mock("@/lib/api", () => ({
-  getChannelMessages: vi.fn().mockResolvedValue([]),
+  getChannelMessages: mockGetChannelMessages,
 }))
+
+// Base64 fixtures for the MLS wire-format guard.
+// OpenMLS serializes MLSMessage as:
+//   ProtocolVersion (u16, MLS 1.0 = 0x0001)
+//   WireFormat (u16, PrivateMessage = 0x0002 / PublicMessage = 0x0001)
+// followed by the selected body.
+const MLS_PRIVATE = "AAEAAkFiYw==" // [0x00, 0x01, 0x00, 0x02, ...]
+const MLS_PUBLIC = "AAEAAUFiYw==" // [0x00, 0x01, 0x00, 0x01, ...]
 
 interface FakeWsClient {
   send: ReturnType<typeof vi.fn>
@@ -81,6 +93,7 @@ beforeEach(() => {
   mockEncryptForChannel.mockResolvedValue({ ciphertext: new Uint8Array(32) })
   mockDecryptFromChannel.mockReset()
   mockGetCachedMessage.mockResolvedValue(null)
+  mockGetChannelMessages.mockResolvedValue([])
 })
 
 describe("useChannelMessages — send", () => {
@@ -224,7 +237,7 @@ describe("useChannelMessages — realtime receive", () => {
         channel_id: "ch-1",
         sender_id: "user-self",
         sender_device_id: "device-other",
-        ciphertext: "YWJj",
+        ciphertext: MLS_PRIVATE,
         timestamp: "2026-04-01T23:16:31.998122Z",
       })
     })
@@ -250,7 +263,7 @@ describe("useChannelMessages — realtime receive", () => {
         id: "rt-2",
         channel_id: "ch-1",
         sender_id: "user-other",
-        ciphertext: "YWJj",
+        ciphertext: MLS_PRIVATE,
         timestamp: "2026-04-01T23:16:31.998122Z",
       })
     })
@@ -260,6 +273,38 @@ describe("useChannelMessages — realtime receive", () => {
     })
     expect(result.current.messages[0].decryptionFailed).toBe(true)
     expect(result.current.messages[0].envelope).toBeNull()
+  })
+
+  it("rejects realtime ciphertext with non-private MLS wire byte (no decrypt, no cache, flagged failed)", async () => {
+    const ws = makeWsClient()
+    mockDecryptFromChannel.mockResolvedValue(
+      JSON.stringify({ v: 1, text: "should never run" })
+    )
+    const { result } = renderHook(() =>
+      useChannelMessages(defaultOpts(ws))
+    )
+    await waitFor(() => expect(result.current.isInitialLoading).toBe(false))
+
+    await act(async () => {
+      ws.emit("message.new", {
+        id: "rt-bad-wire",
+        channel_id: "ch-1",
+        sender_id: "user-other",
+        ciphertext: MLS_PUBLIC,
+        timestamp: "2026-04-01T23:16:31.998122Z",
+      })
+    })
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1)
+    })
+    const msg = result.current.messages[0]
+    expect(msg.decryptionFailed).toBe(true)
+    expect(msg.envelope).toBeNull()
+    // Decrypt path must be skipped entirely for non-private wire bytes.
+    expect(mockDecryptFromChannel).not.toHaveBeenCalled()
+    // No plaintext is produced, so nothing must be cached.
+    expect(mockSetCachedMessage).not.toHaveBeenCalled()
   })
 
   it("dedupes duplicate realtime ids", async () => {
@@ -276,7 +321,7 @@ describe("useChannelMessages — realtime receive", () => {
       id: "rt-3",
       channel_id: "ch-1",
       sender_id: "user-other",
-      ciphertext: "YWJj",
+      ciphertext: MLS_PRIVATE,
       timestamp: "2026-04-01T23:16:31.998122Z",
     }
     await act(async () => {
@@ -311,7 +356,7 @@ describe("useChannelMessages — mark_read", () => {
         id: "rt-mr-1",
         channel_id: "ch-1",
         sender_id: "user-other",
-        ciphertext: "YWJj",
+        ciphertext: MLS_PRIVATE,
         timestamp: "2026-04-01T23:16:31.998122Z",
       })
     })
@@ -340,7 +385,7 @@ describe("useChannelMessages — mark_read", () => {
         channel_id: "ch-1",
         sender_id: "user-self",
         sender_device_id: "device-self",
-        ciphertext: "YWJj",
+        ciphertext: MLS_PRIVATE,
         timestamp: "2026-04-01T23:16:31.998122Z",
       })
     })
@@ -349,5 +394,64 @@ describe("useChannelMessages — mark_read", () => {
       ws.send.mock.calls.find(([t]) => t === "message.mark_read")
     ).toBeUndefined()
     expect(mockDecryptFromChannel).not.toHaveBeenCalled()
+  })
+})
+
+describe("useChannelMessages — historical decrypt MLS wire-format guard", () => {
+  it("rejects historical rows whose ciphertext is not an MLS private message", async () => {
+    const ws = makeWsClient()
+    mockGetChannelMessages.mockResolvedValueOnce([
+      {
+        id: "hist-bad",
+        channelId: "ch-1",
+        senderId: "user-other",
+        ciphertext: MLS_PUBLIC,
+        timestamp: "2026-04-01T23:16:31.998122Z",
+      },
+    ])
+    mockDecryptFromChannel.mockResolvedValue(
+      JSON.stringify({ v: 1, text: "should never run" })
+    )
+
+    const { result } = renderHook(() =>
+      useChannelMessages(defaultOpts(ws))
+    )
+    await waitFor(() => expect(result.current.isInitialLoading).toBe(false))
+    await waitFor(() => expect(result.current.messages).toHaveLength(1))
+
+    const msg = result.current.messages[0]
+    expect(msg.id).toBe("hist-bad")
+    expect(msg.decryptionFailed).toBe(true)
+    expect(msg.envelope).toBeNull()
+    expect(mockDecryptFromChannel).not.toHaveBeenCalled()
+    expect(mockSetCachedMessage).not.toHaveBeenCalled()
+  })
+
+  it("decrypts historical rows that carry the MLS private wire byte", async () => {
+    const ws = makeWsClient()
+    mockGetChannelMessages.mockResolvedValueOnce([
+      {
+        id: "hist-good",
+        channelId: "ch-1",
+        senderId: "user-other",
+        ciphertext: MLS_PRIVATE,
+        timestamp: "2026-04-01T23:16:31.998122Z",
+      },
+    ])
+    mockDecryptFromChannel.mockResolvedValue(
+      JSON.stringify({ v: 1, text: "history hi" })
+    )
+
+    const { result } = renderHook(() =>
+      useChannelMessages(defaultOpts(ws))
+    )
+    await waitFor(() => expect(result.current.isInitialLoading).toBe(false))
+    await waitFor(() => expect(result.current.messages).toHaveLength(1))
+
+    const msg = result.current.messages[0]
+    expect(msg.id).toBe("hist-good")
+    expect(msg.decryptionFailed).toBe(false)
+    expect(msg.envelope?.text).toBe("history hi")
+    expect(mockDecryptFromChannel).toHaveBeenCalledTimes(1)
   })
 })

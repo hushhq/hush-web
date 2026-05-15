@@ -33,6 +33,33 @@ import {
 const CHANNEL_MESSAGES_PAGE_LIMIT = 50
 const PENDING_SEND_TTL = 60_000
 
+// OpenMLS serializes an `MlsMessageOut` as:
+//   ProtocolVersion version (u16, MLS 1.0 = 0x0001)
+//   WireFormat wire_format (u16, PrivateMessage = 0x0002)
+// Chat application data MUST only ride on MLS private messages; public
+// messages, KeyPackages, GroupInfo, Welcome, and proposal/commit frames
+// must never be fed to the chat decrypt path because they carry signalling
+// that the message decoder cannot safely turn into application plaintext.
+const MLS10_PROTOCOL_VERSION = 0x0001
+const MLS_PRIVATE_MESSAGE_WIRE_TYPE = 0x0002
+
+/**
+ * Guard incoming MLS ciphertext bytes for the chat decrypt path. Returns
+ * true only when the bytes are an MLS 1.0 private message. Anything else
+ * (too short, non-array, unsupported protocol version, or a non-private
+ * wire format) is rejected upstream of MLS decrypt so the chat path never
+ * tries to decode signalling frames as plaintext.
+ */
+function isMLSPrivateMessage(bytes: unknown): bytes is Uint8Array {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 4) return false
+  const version = (bytes[0] << 8) | bytes[1]
+  const wireFormat = (bytes[2] << 8) | bytes[3]
+  return (
+    version === MLS10_PROTOCOL_VERSION &&
+    wireFormat === MLS_PRIVATE_MESSAGE_WIRE_TYPE
+  )
+}
+
 /**
  * One row in the channel message list. `envelope` is `null` only when
  * decryption failed; the chat surface renders the recovery placeholder
@@ -256,6 +283,24 @@ async function decryptMessageRow(
 
   try {
     const ct = base64ToUint8Array(row.ciphertext)
+    if (!isMLSPrivateMessage(ct)) {
+      // Server stored bytes that are not an MLS private message. Treat
+      // exactly like a decrypt failure: surface the recovery placeholder,
+      // do not call the MLS decoder, do not write anything to the cache.
+      console.warn(
+        "[useChannelMessages] rejecting non-private MLS wire message",
+        row.id,
+        "from",
+        row.senderId
+      )
+      return {
+        id: row.id,
+        sender: row.senderId,
+        envelope: null,
+        decryptionFailed: true,
+        timestamp: ts,
+      }
+    }
     const plaintext = await deps.decryptFromChannel(ct)
     // Strict v1 cutover on the wire — anything else is a corrupt
     // payload and renders the recovery placeholder.
@@ -600,15 +645,27 @@ export function useChannelMessages(
       if (ciphertext) {
         try {
           const ct = base64ToUint8Array(ciphertext)
-          const plaintext = await decryptDepsRef.current.decryptFromChannel(ct)
-          envelope = decodePlaintext(plaintext, false)
-          decryptionFailed = envelope === null
-          if (envelope !== null) {
-            await decryptDepsRef.current.setCachedMessage?.(id, {
-              content: plaintext,
-              senderId,
-              timestamp: ts,
-            })
+          if (!isMLSPrivateMessage(ct)) {
+            // Drop signalling/control frames silently from the chat
+            // surface: they are never valid application data. No
+            // decryptFromChannel call, no plaintext, no cache write.
+            console.warn(
+              "[useChannelMessages] realtime non-private MLS wire message rejected",
+              { channelId, messageId: id, senderId }
+            )
+            decryptionFailed = true
+          } else {
+            const plaintext =
+              await decryptDepsRef.current.decryptFromChannel(ct)
+            envelope = decodePlaintext(plaintext, false)
+            decryptionFailed = envelope === null
+            if (envelope !== null) {
+              await decryptDepsRef.current.setCachedMessage?.(id, {
+                content: plaintext,
+                senderId,
+                timestamp: ts,
+              })
+            }
           }
         } catch (err) {
           console.warn(
