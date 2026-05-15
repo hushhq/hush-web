@@ -45,8 +45,10 @@ const {
   mockIsMobileWebAudio,
   mockPutMLSVoiceGroupInfo,
   mockPostMLSVoiceCommit,
+  mockSetE2EEEnabled,
 } = vi.hoisted(() => {
   const mockSetKey = vi.fn().mockResolvedValue(undefined);
+  const mockSetE2EEEnabled = vi.fn().mockResolvedValue(undefined);
   // Must use a regular function (not arrow) so `new ExternalE2EEKeyProvider()` works
   function MockExternalE2EEKeyProvider() {
     this.setKey = mockSetKey;
@@ -106,6 +108,7 @@ const {
     MockCaptureOrchestrator,
     MockLiveKitRoomAdapter,
     mockIsMobileWebAudio: vi.fn().mockReturnValue(false),
+    mockSetE2EEEnabled,
   };
 });
 
@@ -156,6 +159,7 @@ vi.mock('livekit-client', () => {
     constructor() {
       this._handlers = {};
       this.remoteParticipants = new Map();
+      this.e2eeEnabled = false;
     }
     on(event, handler) {
       this._handlers[event] = handler;
@@ -168,6 +172,10 @@ vi.mock('livekit-client', () => {
     }
     async connect(...args) { this.connectArgs = args; }
     async disconnect() {}
+    async setE2EEEnabled(enabled) {
+      await mockSetE2EEEnabled(enabled);
+      this.e2eeEnabled = enabled;
+    }
   }
 
   class MockLocalAudioTrack {
@@ -313,6 +321,7 @@ describe('useRoom MLS voice E2EE', () => {
     mockOrchestratorUnpublish.mockResolvedValue(undefined);
     mockOrchestratorTeardown.mockResolvedValue(undefined);
     mockSetKey.mockResolvedValue(undefined);
+    mockSetE2EEEnabled.mockResolvedValue(undefined);
   });
 
   it('connectRoom creates voice MLS group when no existing group on server (first participant)', async () => {
@@ -646,6 +655,43 @@ describe('useRoom MLS voice E2EE', () => {
     expect(result.current.isE2EEEnabled).toBe(false);
     expect(result.current.isVoiceReconnecting).toBe(false);
   });
+
+  it('connectRoom enables LiveKit per-frame E2EE on the created room before completing', async () => {
+    // Configuring `roomOptions.e2ee` only wires the manager. Without an
+    // explicit `setE2EEEnabled(true)` call, audio frames would publish in
+    // clear. CORE-INVARIANTS Voice Rooms and LiveKit forbids that.
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    expect(mockSetE2EEEnabled).toHaveBeenCalledWith(true);
+    expect(result.current.isReady).toBe(true);
+    expect(result.current.isE2EEEnabled).toBe(true);
+  });
+
+  it('connectRoom fails closed when setE2EEEnabled rejects', async () => {
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+    mockSetE2EEEnabled.mockRejectedValueOnce(new Error('e2ee init failed'));
+
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    expect(mockSetE2EEEnabled).toHaveBeenCalledWith(true);
+    expect(result.current.isReady).toBe(false);
+    expect(result.current.isE2EEEnabled).toBe(false);
+    expect(result.current.error).toMatch(/encrypted voice/i);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -693,6 +739,7 @@ vi.mock('livekit-client', () => {
     constructor() {
       this._handlers = {};
       this.remoteParticipants = new Map();
+      this.e2eeEnabled = false;
       capturedRooms.push(this);
     }
     on(event, handler) {
@@ -706,6 +753,10 @@ vi.mock('livekit-client', () => {
     }
     async connect(...args) { this.connectArgs = args; }
     async disconnect() {}
+    async setE2EEEnabled(enabled) {
+      await mockSetE2EEEnabled(enabled);
+      this.e2eeEnabled = enabled;
+    }
   }
 
   class MockLocalAudioTrack {
@@ -755,6 +806,7 @@ describe('useRoom voice reconnect', () => {
       credentialBytes: new Uint8Array([3]),
     });
     mockSetKey.mockResolvedValue(undefined);
+    mockSetE2EEEnabled.mockResolvedValue(undefined);
   });
 
   it('RoomEvent.Reconnected triggers frame key re-derivation via exportVoiceFrameKey', async () => {
@@ -848,6 +900,7 @@ describe('useRoom playback manager integration', () => {
       credentialBytes: new Uint8Array([3]),
     });
     mockSetKey.mockResolvedValue(undefined);
+    mockSetE2EEEnabled.mockResolvedValue(undefined);
     mockOrchestratorAcquire.mockResolvedValue(undefined);
     mockOrchestratorPublishTo.mockResolvedValue(undefined);
     mockOrchestratorTeardown.mockResolvedValue(undefined);

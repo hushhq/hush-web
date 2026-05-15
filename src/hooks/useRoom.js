@@ -367,6 +367,27 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
         const room = new Room(roomOptions);
 
+        // LiveKit's E2EE manager is configured by `roomOptions.e2ee`, but the
+        // per-frame encryption transformer stays dormant until
+        // `setE2EEEnabled(true)` runs. Without this, audio frames would be
+        // published in clear even though MLS export_secret already derived a
+        // frame key. Voice MUST fail closed: any rejection here aborts the
+        // connect, tears the half-built room down, and surfaces an error.
+        // CORE-INVARIANTS - Voice Rooms and LiveKit: voice media must never
+        // run without E2EE when the runtime advertises encrypted voice.
+        try {
+          await room.setE2EEEnabled(true);
+        } catch (e2eeErr) {
+          try { await room.disconnect(); } catch { /* noop */ }
+          e2eeKeyProviderRef.current = null;
+          voiceEpochRef.current = null;
+          setVoiceEpoch(null);
+          setIsE2EEEnabled(false);
+          throw new Error(
+            `Could not enable encrypted voice: ${e2eeErr?.message ?? e2eeErr}`,
+          );
+        }
+
         // ParticipantConnected: update participant list.
         // In MLS, no per-user key exchange is needed. The new participant joins
         // the MLS group independently via External Commit. The mls.commit WS
