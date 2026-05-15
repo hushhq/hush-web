@@ -77,6 +77,7 @@ export interface VoiceRuntime {
 
 interface VoiceVideoPanelProps {
   voiceRuntime?: VoiceRuntime | null
+  prefsScope?: string | null
 }
 
 interface IsolationSnapshot {
@@ -196,7 +197,10 @@ function getMicMonitorErrorMessage(error: unknown): string {
   return message || "Unable to start mic test."
 }
 
-export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
+export function VoiceVideoPanel({
+  voiceRuntime,
+  prefsScope = null,
+}: VoiceVideoPanelProps) {
   const { user } = useAuth() as { user: { id?: string } | null }
   const userId = user?.id ?? null
   const isMobile = useIsMobile()
@@ -249,23 +253,27 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
   React.useEffect(() => {
     if (!userId) return
     let cancelled = false
-    void readVoiceDevicePrefs(userId).then((stored) => {
+    void readVoiceDevicePrefs(userId, prefsScope).then((stored) => {
       if (!cancelled) setPrefs(stored)
     })
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, prefsScope])
 
   // Stay in lockstep with prefs changes from elsewhere (prejoin
   // dialog, in-call device popover) so the panel never displays a
   // stale "don't ask again" or device pick.
   React.useEffect(() => {
     if (!userId) return
-    return subscribeVoiceDevicePrefs(userId, (next) => {
-      setPrefs(next)
-    })
-  }, [userId])
+    return subscribeVoiceDevicePrefs(
+      userId,
+      (next) => {
+        setPrefs(next)
+      },
+      prefsScope
+    )
+  }, [userId, prefsScope])
 
   const refreshDevices = React.useCallback(async () => {
     try {
@@ -378,9 +386,9 @@ export function VoiceVideoPanel({ voiceRuntime }: VoiceVideoPanelProps) {
       if (!userId) return
       const merged = mergeVoiceDevicePrefs(prefs, patch)
       setPrefs(merged)
-      await saveVoiceDevicePrefs(userId, merged)
+      await saveVoiceDevicePrefs(userId, merged, prefsScope)
     },
-    [prefs, userId]
+    [prefs, userId, prefsScope]
   )
 
   const handleAudioDeviceChange = React.useCallback(

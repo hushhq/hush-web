@@ -61,6 +61,8 @@ interface UserSettingsDialogProps {
    *  isolate the mic test from the live room and push filter changes
    *  into the published capture graph. */
   voiceRuntime?: VoiceRuntime | null
+  /** Instance origin used to scope persisted voice device preferences. */
+  voicePrefsScope?: string | null
 }
 
 export function UserSettingsDialog({
@@ -71,6 +73,7 @@ export function UserSettingsDialog({
   homeInstanceUrl,
   homeLogPublicKey,
   voiceRuntime,
+  voicePrefsScope,
 }: UserSettingsDialogProps) {
   // Keep unfinished surfaces visible but disabled so the settings map
   // stays recognizable while only wired panels are reachable.
@@ -137,7 +140,12 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Voice & video",
       icon: <MicIcon />,
-      content: <VoiceVideoPanel voiceRuntime={voiceRuntime ?? null} />,
+      content: (
+        <VoiceVideoPanel
+          voiceRuntime={voiceRuntime ?? null}
+          prefsScope={voicePrefsScope ?? null}
+        />
+      ),
     },
     {
       id: "notifications",

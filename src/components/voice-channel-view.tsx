@@ -240,7 +240,7 @@ export function VoiceChannelView({
   React.useEffect(() => {
     if (!currentUserId) return
     let cancelled = false
-    readVoiceDevicePrefs(currentUserId)
+    readVoiceDevicePrefs(currentUserId, baseUrl)
       .then((stored) => {
         if (cancelled) return
         setPrefs(stored)
@@ -256,7 +256,7 @@ export function VoiceChannelView({
     return () => {
       cancelled = true
     }
-  }, [currentUserId])
+  }, [currentUserId, baseUrl])
 
   // Live-apply prefs changes that originate elsewhere (settings
   // panel, prejoin dialog, in-call device popover). Without this,
@@ -265,10 +265,14 @@ export function VoiceChannelView({
   // ignore it until the next join.
   React.useEffect(() => {
     if (!currentUserId) return
-    return subscribeVoiceDevicePrefs(currentUserId, (next) => {
-      setPrefs(next)
-    })
-  }, [currentUserId])
+    return subscribeVoiceDevicePrefs(
+      currentUserId,
+      (next) => {
+        setPrefs(next)
+      },
+      baseUrl
+    )
+  }, [currentUserId, baseUrl])
 
   React.useEffect(() => {
     const pm = room.playbackManager
@@ -454,7 +458,7 @@ export function VoiceChannelView({
       })
       setPrefs(next)
       if (currentUserId) {
-        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+        void saveVoiceDevicePrefs(currentUserId, next, baseUrl).catch(() => {})
       }
       try {
         await connectRoomRef.current(roomName, displayName, channel.id)
@@ -463,7 +467,7 @@ export function VoiceChannelView({
         console.error("[VoiceChannel] connect after prejoin failed:", err)
       }
     },
-    [currentUserId, roomName, displayName, channel.id]
+    [currentUserId, roomName, displayName, channel.id, baseUrl]
   )
 
   const handlePrejoinDevicePrefsChange = React.useCallback(
@@ -471,10 +475,10 @@ export function VoiceChannelView({
       const next = mergeVoiceDevicePrefs(prefsRef.current, patch)
       setPrefs(next)
       if (currentUserId) {
-        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+        void saveVoiceDevicePrefs(currentUserId, next, baseUrl).catch(() => {})
       }
     },
-    [currentUserId]
+    [currentUserId, baseUrl]
   )
 
   const handlePrejoinCancel = React.useCallback(() => {
@@ -603,7 +607,7 @@ export function VoiceChannelView({
       })
       setPrefs(next)
       if (currentUserId) {
-        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+        void saveVoiceDevicePrefs(currentUserId, next, baseUrl).catch(() => {})
       }
       try {
         await room.playbackManager?.setSinkId(deviceId)
@@ -616,7 +620,7 @@ export function VoiceChannelView({
         console.error("[VoiceChannel] output device switch failed:", err)
       }
     },
-    [currentUserId, room.playbackManager]
+    [currentUserId, room.playbackManager, baseUrl]
   )
 
   const handlePickMic = React.useCallback(
@@ -628,7 +632,7 @@ export function VoiceChannelView({
       })
       setPrefs(next)
       if (currentUserId) {
-        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+        void saveVoiceDevicePrefs(currentUserId, next, baseUrl).catch(() => {})
       }
       if (micPublishedRef.current) await room.unpublishMic()
       await room.publishMic(deviceId)
@@ -638,7 +642,7 @@ export function VoiceChannelView({
       // re-publish effect, otherwise we'd unpub+pub again here.
       lastAppliedAudioDeviceRef.current = deviceId
     },
-    [currentUserId, room]
+    [currentUserId, room, baseUrl]
   )
 
   const handlePickWebcam = React.useCallback(
@@ -650,14 +654,14 @@ export function VoiceChannelView({
       })
       setPrefs(next)
       if (currentUserId) {
-        void saveVoiceDevicePrefs(currentUserId, next).catch(() => {})
+        void saveVoiceDevicePrefs(currentUserId, next, baseUrl).catch(() => {})
       }
       if (isWebcamOn) await room.unpublishWebcam()
       await room.publishWebcam(deviceId)
       setIsWebcamOn(true)
       lastAppliedVideoDeviceRef.current = deviceId
     },
-    [currentUserId, isWebcamOn, room]
+    [currentUserId, isWebcamOn, room, baseUrl]
   )
 
   const handleLeave = React.useCallback(async () => {

@@ -51,18 +51,51 @@ export interface VoiceDevicePrefs {
   updatedAt: number
 }
 
-function dbName(userId: string): string {
-  if (!userId) throw new Error("voiceDevicePrefs: userId is required")
-  return `${DB_NAME_PREFIX}${userId}`
+/**
+ * Normalize an instance scope to its origin so prefs persisted under
+ * a path/trailing-slash form land in the same scope bucket. Returns
+ * `null` when the scope is empty/invalid; the caller then falls back
+ * to legacy unscoped storage.
+ */
+function normalizeScope(scope?: string | null): string | null {
+  if (!scope) return null
+  try {
+    return new URL(scope).origin
+  } catch {
+    return null
+  }
 }
 
-function openDb(userId: string): Promise<IDBDatabase> {
+/**
+ * Encode an origin into an IDB-database-name-safe segment. The IDB
+ * spec accepts any DOMString, but `://` and other URL punctuation
+ * make admin tooling and Electron's chromium devtools harder to read.
+ * `encodeURIComponent` is reversible and stable, which is enough.
+ */
+function encodeScopeForDbName(origin: string): string {
+  return encodeURIComponent(origin)
+}
+
+function dbName(userId: string, scope?: string | null): string {
+  if (!userId) throw new Error("voiceDevicePrefs: userId is required")
+  const normalized = normalizeScope(scope)
+  if (!normalized) return `${DB_NAME_PREFIX}${userId}`
+  return `${DB_NAME_PREFIX}${userId}__${encodeScopeForDbName(normalized)}`
+}
+
+/** Listener bucket key. Mirrors `dbName` so listeners and storage stay aligned. */
+function listenerKey(userId: string, scope?: string | null): string {
+  const normalized = normalizeScope(scope)
+  return normalized ? `${userId}__${normalized}` : userId
+}
+
+function openDb(userId: string, scope?: string | null): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
       reject(new Error("voiceDevicePrefs: indexedDB unavailable"))
       return
     }
-    const req = indexedDB.open(dbName(userId), DB_VERSION)
+    const req = indexedDB.open(dbName(userId, scope), DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -114,13 +147,20 @@ function deleteRecord(db: IDBDatabase): Promise<void> {
 }
 
 /**
- * Read the saved voice device prefs for `userId`, or `null` when no
- * prejoin has ever been confirmed on this device.
+ * Read the saved voice device prefs for `userId`, optionally scoped
+ * to an instance origin (`scope`). Returns `null` when no prejoin has
+ * ever been confirmed for that user/scope.
+ *
+ * CORE-INVARIANTS - "Voice Rooms and LiveKit" + "Instance boundaries
+ * must never leak credentials": prejoin choices like `dontAskAgain`
+ * and auto-publish are per-origin and must not bleed across
+ * instances even when the same `userId` exists on both.
  */
 export async function readVoiceDevicePrefs(
-  userId: string
+  userId: string,
+  scope?: string | null
 ): Promise<VoiceDevicePrefs | null> {
-  const db = await openDb(userId)
+  const db = await openDb(userId, scope)
   try {
     return await readRecord(db)
   } finally {
@@ -133,37 +173,41 @@ export async function readVoiceDevicePrefs(
  * `Date.now()` so callers do not need to fill it in.
  *
  * Notifies in-process subscribers (see `subscribeVoiceDevicePrefs`)
- * after the IDB write succeeds so the active voice channel + the
- * settings panel stay in lockstep without each having to mount the
- * other or roll their own broadcast channel.
+ * after the IDB write succeeds. Subscribers are keyed by
+ * `userId + normalized scope`, so a save for one instance does not
+ * wake listeners attached to another instance.
  */
 export async function saveVoiceDevicePrefs(
   userId: string,
-  prefs: Omit<VoiceDevicePrefs, "updatedAt">
+  prefs: Omit<VoiceDevicePrefs, "updatedAt">,
+  scope?: string | null
 ): Promise<void> {
   const stamped: VoiceDevicePrefs = { ...prefs, updatedAt: Date.now() }
-  const db = await openDb(userId)
+  const db = await openDb(userId, scope)
   try {
     await writeRecord(db, stamped)
   } finally {
     db.close()
   }
-  notifyVoiceDevicePrefs(userId, stamped)
+  notifyVoiceDevicePrefs(userId, stamped, scope)
 }
 
 /**
- * Wipe the device prefs record for `userId`. Used on logout and from
- * the device-switch popover when the user explicitly clears the
- * "don't ask again" choice.
+ * Wipe the device prefs record for `userId`+`scope`. Used on logout
+ * and from the device-switch popover when the user explicitly clears
+ * the "don't ask again" choice.
  */
-export async function clearVoiceDevicePrefs(userId: string): Promise<void> {
-  const db = await openDb(userId)
+export async function clearVoiceDevicePrefs(
+  userId: string,
+  scope?: string | null
+): Promise<void> {
+  const db = await openDb(userId, scope)
   try {
     await deleteRecord(db)
   } finally {
     db.close()
   }
-  notifyVoiceDevicePrefs(userId, null)
+  notifyVoiceDevicePrefs(userId, null, scope)
 }
 
 // ─── Pub/sub for in-process prefs changes ──────────────────
@@ -177,9 +221,11 @@ const _voiceDevicePrefsListeners: Map<
 
 function notifyVoiceDevicePrefs(
   userId: string,
-  prefs: VoiceDevicePrefs | null
+  prefs: VoiceDevicePrefs | null,
+  scope?: string | null
 ): void {
-  const listeners = _voiceDevicePrefsListeners.get(userId)
+  const key = listenerKey(userId, scope)
+  const listeners = _voiceDevicePrefsListeners.get(key)
   if (!listeners) return
   for (const listener of listeners) {
     try {
@@ -192,10 +238,10 @@ function notifyVoiceDevicePrefs(
 }
 
 /**
- * Subscribe to in-process prefs changes for `userId`. Fires whenever
- * `saveVoiceDevicePrefs` or `clearVoiceDevicePrefs` succeeds, with
- * the new record (or `null` after a clear). Returns an unsubscribe
- * function.
+ * Subscribe to in-process prefs changes for `userId`+`scope`. Fires
+ * whenever `saveVoiceDevicePrefs` or `clearVoiceDevicePrefs` succeeds
+ * for the same scope, with the new record (or `null` after a clear).
+ * Returns an unsubscribe function.
  *
  * Used by `voice-channel-view` to live-apply device picks made in the
  * settings panel, and by the panel itself when changes originate from
@@ -203,28 +249,34 @@ function notifyVoiceDevicePrefs(
  */
 export function subscribeVoiceDevicePrefs(
   userId: string,
-  listener: VoiceDevicePrefsListener
+  listener: VoiceDevicePrefsListener,
+  scope?: string | null
 ): () => void {
-  let bucket = _voiceDevicePrefsListeners.get(userId)
+  const key = listenerKey(userId, scope)
+  let bucket = _voiceDevicePrefsListeners.get(key)
   if (!bucket) {
     bucket = new Set()
-    _voiceDevicePrefsListeners.set(userId, bucket)
+    _voiceDevicePrefsListeners.set(key, bucket)
   }
   bucket.add(listener)
   return () => {
     bucket?.delete(listener)
     if (bucket && bucket.size === 0) {
-      _voiceDevicePrefsListeners.delete(userId)
+      _voiceDevicePrefsListeners.delete(key)
     }
   }
 }
 
 /**
- * `true` when prejoin should be skipped on the next join. Convenience
- * helper for components that only need the gating boolean.
+ * `true` when prejoin should be skipped on the next join, scoped to
+ * the optional instance origin. Convenience helper for components
+ * that only need the gating boolean.
  */
-export async function shouldSkipPrejoin(userId: string): Promise<boolean> {
-  const prefs = await readVoiceDevicePrefs(userId)
+export async function shouldSkipPrejoin(
+  userId: string,
+  scope?: string | null
+): Promise<boolean> {
+  const prefs = await readVoiceDevicePrefs(userId, scope)
   return prefs?.dontAskAgain === true
 }
 
