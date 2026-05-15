@@ -33,6 +33,9 @@ interface RawChannel {
   unreadCount?: number
   mentionCount?: number
   systemChannelType?: string | null
+  // Newer backends include the owning server id on the channel object.
+  // Used by the cross-server scoping guard in the WS handlers.
+  server_id?: string
 }
 
 interface WsClientLike {
@@ -52,11 +55,13 @@ interface UseChannelsArgs {
 interface ChannelCreatedEvent {
   type: "channel_created"
   channel: RawChannel
+  server_id?: string
 }
 
 interface ChannelDeletedEvent {
   type: "channel_deleted"
   channel_id: string
+  server_id?: string
 }
 
 interface ChannelMovedEvent {
@@ -64,6 +69,31 @@ interface ChannelMovedEvent {
   channel_id: string
   parent_id: string | null
   position: number
+  server_id?: string
+}
+
+/**
+ * Decide whether a channel websocket event belongs to the active
+ * server. `useInstances` owns server-room subscriptions and may
+ * subscribe every guild on the same instance, so the active server's
+ * `wsClient` can receive broadcasts for foreign servers. When the
+ * event carries a `server_id` (top-level or on the channel object),
+ * filter strictly. When it does not (legacy backend payloads), fall
+ * through to preserve current behavior.
+ *
+ * CORE-INVARIANTS - "Realtime state must converge without manual
+ * reload" + "Instance boundaries must never leak credentials".
+ */
+function eventBelongsToServer(
+  activeServerId: string,
+  eventServerId: string | undefined,
+  channelServerId?: string | undefined
+): boolean {
+  const scopes = [eventServerId, channelServerId].filter(
+    (scope): scope is string => scope !== undefined
+  )
+  if (scopes.length === 0) return true
+  return scopes.every((scope) => scope === activeServerId)
 }
 
 interface UseChannelsResult {
@@ -197,6 +227,8 @@ export function useChannelsForServer({
     const onCreated = (raw: unknown) => {
       const msg = raw as ChannelCreatedEvent
       if (msg?.type !== "channel_created" || !msg.channel?.id) return
+      if (!eventBelongsToServer(serverId, msg.server_id, msg.channel.server_id))
+        return
       setRaw((prev) => {
         if (prev.some((c) => c.id === msg.channel.id)) return prev
         return [...prev, msg.channel]
@@ -206,6 +238,7 @@ export function useChannelsForServer({
     const onDeleted = (raw: unknown) => {
       const msg = raw as ChannelDeletedEvent
       if (msg?.type !== "channel_deleted" || !msg.channel_id) return
+      if (!eventBelongsToServer(serverId, msg.server_id)) return
       setRaw((prev) => {
         if (!prev.some((c) => c.id === msg.channel_id)) return prev
         return prev.filter((c) => c.id !== msg.channel_id)
@@ -215,6 +248,7 @@ export function useChannelsForServer({
     const onMoved = (raw: unknown) => {
       const msg = raw as ChannelMovedEvent
       if (msg?.type !== "channel_moved" || !msg.channel_id) return
+      if (!eventBelongsToServer(serverId, msg.server_id)) return
       setRaw((prev) => {
         const target = prev.find((c) => c.id === msg.channel_id)
         if (!target) return prev
