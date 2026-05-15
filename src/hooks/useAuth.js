@@ -716,7 +716,16 @@ export function useAuth() {
   const isAuthenticated = hasSession;
   const isVaultUnlocked = vaultState === 'unlocked' && Boolean(identityKeyRef.current?.privateKey);
   const hasVault = hasLocalVault || vaultState === 'locked' || (vaultState === 'unlocked' && !isGuest);
-  const needsUnlock = hasVault && !isVaultUnlocked && !authInvalidation;
+  // An `authInvalidation` marker only short-circuits the PIN gate when
+  // there is no live JWT/user session left. With a session still
+  // present, a stale or locally-planted marker must NOT route an
+  // authenticated browser into the app while the local vault is locked
+  // - PIN unlock has to run first.
+  // CORE-INVARIANTS - Authentication, Vault, and Device Identity:
+  // PIN policy and vault session policy remain enforceable.
+  const shouldBypassUnlockForInvalidation = Boolean(authInvalidation && !hasSession);
+  const needsUnlock =
+    hasVault && !isVaultUnlocked && !shouldBypassUnlockForInvalidation;
   const isKnownBrowserProfile = hasVault;
 
   const clearError = useCallback(() => setError(null), []);
