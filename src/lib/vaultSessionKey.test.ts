@@ -244,8 +244,9 @@ describe("vaultSessionKey — clearSessionKey", () => {
 })
 
 describe("vaultSessionKey — multi-tab presence (P21 step 5)", () => {
-  it("returns false from joinAndCheckSiblings when no other presence is open", async () => {
-    const probe = createVaultSessionPresence(USER)
+  it("returns false from a probe-only presence when no other presence is open", async () => {
+    // Models a startup probe: no real responder anywhere on the channel.
+    const probe = createVaultSessionPresence(USER, { respondToJoining: false })
     try {
       const aliveSibling = await probe.joinAndCheckSiblings(40)
       expect(aliveSibling).toBe(false)
@@ -254,11 +255,11 @@ describe("vaultSessionKey — multi-tab presence (P21 step 5)", () => {
     }
   })
 
-  it("returns true when a sibling presence is alive on the same channel", async () => {
+  it("returns true when a default-mode sibling responder is alive on the same channel", async () => {
     if (typeof BroadcastChannel === "undefined") return
-    const sibling = createVaultSessionPresence(USER)
+    const sibling = createVaultSessionPresence(USER) // default: responds to joining
     try {
-      const probe = createVaultSessionPresence(USER)
+      const probe = createVaultSessionPresence(USER, { respondToJoining: false })
       try {
         const aliveSibling = await probe.joinAndCheckSiblings(120)
         expect(aliveSibling).toBe(true)
@@ -272,9 +273,11 @@ describe("vaultSessionKey — multi-tab presence (P21 step 5)", () => {
 
   it("isolates presence per-userId", async () => {
     if (typeof BroadcastChannel === "undefined") return
-    const sibling = createVaultSessionPresence(USER)
+    const sibling = createVaultSessionPresence(USER) // default responder
     try {
-      const probe = createVaultSessionPresence("user-vsk-different")
+      const probe = createVaultSessionPresence("user-vsk-different", {
+        respondToJoining: false,
+      })
       try {
         const aliveSibling = await probe.joinAndCheckSiblings(40)
         expect(aliveSibling).toBe(false)
@@ -292,12 +295,57 @@ describe("vaultSessionKey — multi-tab presence (P21 step 5)", () => {
     sibling.close()
     sibling.close()
 
-    const probe = createVaultSessionPresence(USER)
+    const probe = createVaultSessionPresence(USER, { respondToJoining: false })
     try {
       const aliveSibling = await probe.joinAndCheckSiblings(40)
       expect(aliveSibling).toBe(false)
     } finally {
       probe.close()
+    }
+  })
+
+  it("two concurrent probe-only presences cannot satisfy each other (no spoofed liveness)", async () => {
+    // Regression for PR #27: two fresh-locked tabs starting concurrently
+    // must NOT each see the other as alive — neither should be acting
+    // as a responder. Without the probe-only mode, the previous
+    // implementation answered every `joining` with `alive`, so both
+    // probes resolved true and `browser_close` would resume the vault
+    // with no genuinely-unlocked sibling anywhere.
+    if (typeof BroadcastChannel === "undefined") return
+    const probeA = createVaultSessionPresence(USER, { respondToJoining: false })
+    const probeB = createVaultSessionPresence(USER, { respondToJoining: false })
+    try {
+      const [a, b] = await Promise.all([
+        probeA.joinAndCheckSiblings(80),
+        probeB.joinAndCheckSiblings(80),
+      ])
+      expect(a).toBe(false)
+      expect(b).toBe(false)
+    } finally {
+      probeA.close()
+      probeB.close()
+    }
+  })
+
+  it("a probe-only presence does not answer another checker's joining probe", async () => {
+    // Symmetric guarantee: a probe-only presence must never advertise
+    // itself as alive even if some other tab posts a `joining` message.
+    if (typeof BroadcastChannel === "undefined") return
+    const probeOnly = createVaultSessionPresence(USER, {
+      respondToJoining: false,
+    })
+    try {
+      const otherChecker = createVaultSessionPresence(USER, {
+        respondToJoining: false,
+      })
+      try {
+        const aliveSibling = await otherChecker.joinAndCheckSiblings(40)
+        expect(aliveSibling).toBe(false)
+      } finally {
+        otherChecker.close()
+      }
+    } finally {
+      probeOnly.close()
     }
   })
 })
