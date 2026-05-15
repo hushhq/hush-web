@@ -3,7 +3,8 @@
   "maxLinesPerFile": 300,
   "oversizedFiles": {
     "src/App.test.jsx": 394,
-    "src/adapters/useChannelsForServer.ts": 395,
+    "src/adapters/useChannelsForServer.test.tsx": 446,
+    "src/adapters/useChannelsForServer.ts": 429,
     "src/audio/__tests__/CaptureGraphFactory.test.ts": 302,
     "src/audio/__tests__/CaptureOrchestrator.test.ts": 452,
     "src/audio/capture/CaptureOrchestrator.ts": 372,

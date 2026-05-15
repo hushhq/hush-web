@@ -217,4 +217,230 @@ describe("useChannelsForServer", () => {
     expect(sentTypes).not.toContain("subscribe.server")
     expect(sentTypes).not.toContain("unsubscribe.server")
   })
+
+  // ──────────────────────────────────────────────────────────────────
+  // Cross-server scoping for channel_* websocket events.
+  // `useInstances` may subscribe every guild on the same instance,
+  // so the active server's wsClient can receive broadcasts that
+  // belong to a different server. Those events must not mutate the
+  // active channel list. Legacy payloads without `server_id` keep
+  // the previous behavior.
+  // ──────────────────────────────────────────────────────────────────
+  function makeWsClient() {
+    const handlers = new Map<string, (msg: unknown) => void>()
+    return {
+      isConnected: () => true,
+      send: vi.fn(),
+      on: vi.fn((event: string, handler: (msg: unknown) => void) => {
+        handlers.set(event, handler)
+      }),
+      off: vi.fn((event: string) => {
+        handlers.delete(event)
+      }),
+      emit: (event: string, msg: unknown) => handlers.get(event)?.(msg),
+    }
+  }
+
+  it("ignores foreign channel_created (top-level server_id mismatch)", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    act(() => {
+      ws.emit("channel_created", {
+        type: "channel_created",
+        server_id: "g-other",
+        channel: {
+          id: "ch-foreign",
+          name: "alien",
+          type: "text",
+          parentId: null,
+          position: 1,
+        },
+      })
+    })
+
+    expect(result.current.channels.map((c) => c.id)).toEqual(["ch-active"])
+  })
+
+  it("ignores foreign channel_created (channel.server_id mismatch)", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    act(() => {
+      ws.emit("channel_created", {
+        type: "channel_created",
+        // No top-level server_id; scope on channel.server_id only.
+        channel: {
+          id: "ch-foreign",
+          name: "alien",
+          type: "text",
+          parentId: null,
+          position: 1,
+          server_id: "g-other",
+        },
+      })
+    })
+
+    expect(result.current.channels.map((c) => c.id)).toEqual(["ch-active"])
+  })
+
+  it("ignores channel_created when top-level and channel server scopes disagree", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    act(() => {
+      ws.emit("channel_created", {
+        type: "channel_created",
+        server_id: "g1",
+        channel: {
+          id: "ch-confused",
+          name: "confused",
+          type: "text",
+          parentId: null,
+          position: 1,
+          server_id: "g-other",
+        },
+      })
+    })
+
+    expect(result.current.channels.map((c) => c.id)).toEqual(["ch-active"])
+  })
+
+  it("ignores foreign channel_deleted (server_id mismatch)", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    // Foreign delete that targets the same channel id by accident:
+    // it must not be applied because the event is for a different server.
+    act(() => {
+      ws.emit("channel_deleted", {
+        type: "channel_deleted",
+        server_id: "g-other",
+        channel_id: "ch-active",
+      })
+    })
+
+    expect(result.current.channels.map((c) => c.id)).toEqual(["ch-active"])
+  })
+
+  it("ignores foreign channel_moved (server_id mismatch)", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: "cat-a", position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    act(() => {
+      ws.emit("channel_moved", {
+        type: "channel_moved",
+        server_id: "g-other",
+        channel_id: "ch-active",
+        parent_id: "cat-z",
+        position: 99,
+      })
+    })
+
+    expect(result.current.channels[0].categoryId).toBe("cat-a")
+  })
+
+  it("applies channel_created when server_id matches the active server", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    act(() => {
+      ws.emit("channel_created", {
+        type: "channel_created",
+        server_id: "g1",
+        channel: {
+          id: "ch-new",
+          name: "new",
+          type: "text",
+          parentId: null,
+          position: 1,
+        },
+      })
+    })
+
+    expect(result.current.channels.map((c) => c.id)).toEqual([
+      "ch-active",
+      "ch-new",
+    ])
+  })
+
+  it("preserves legacy channel_created without server_id (backward compatibility)", async () => {
+    getGuildChannels.mockResolvedValue([
+      { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
+    ])
+    const ws = makeWsClient()
+    const { result } = renderHook(() =>
+      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
+        typeof useChannelsForServer
+      >[0])
+    )
+    await waitFor(() => expect(result.current.channels).toHaveLength(1))
+
+    act(() => {
+      ws.emit("channel_created", {
+        type: "channel_created",
+        // No server_id anywhere — legacy payload, must still apply.
+        channel: {
+          id: "ch-legacy",
+          name: "legacy",
+          type: "text",
+          parentId: null,
+          position: 2,
+        },
+      })
+    })
+
+    expect(result.current.channels.map((c) => c.id)).toEqual([
+      "ch-active",
+      "ch-legacy",
+    ])
+  })
 })
