@@ -211,7 +211,34 @@ describe("useTextChannelMLSCommitListener", () => {
     })
   })
 
-  it("commits a remove on mls.add_request action=remove from a peer", async () => {
+  it("commits a remove when requester_id is an MLS identity", async () => {
+    const ws = makeWs()
+    renderHook(() =>
+      useTextChannelMLSCommitListener({
+        wsClient: ws as Parameters<
+          typeof useTextChannelMLSCommitListener
+        >[0]["wsClient"],
+        currentUserId: "user-self",
+        getToken: () => "tok",
+      }),
+    )
+
+    ws.emit("mls.add_request", {
+      type: "mls.add_request",
+      channel_id: "ch-1",
+      action: "remove",
+      requester_id: "user-leaver:device-1",
+    })
+
+    await waitFor(() => {
+      expect(removeMemberFromChannel).toHaveBeenCalledTimes(1)
+    })
+    expect(removeMemberFromChannel.mock.calls[0][1]).toBe("ch-1")
+    expect(removeMemberFromChannel.mock.calls[0][2]).toBe("user-leaver:device-1")
+  })
+
+
+  it("uses catchup for non-MLS requester_id values", async () => {
     const ws = makeWs()
     renderHook(() =>
       useTextChannelMLSCommitListener({
@@ -231,10 +258,9 @@ describe("useTextChannelMLSCommitListener", () => {
     })
 
     await waitFor(() => {
-      expect(removeMemberFromChannel).toHaveBeenCalledTimes(1)
+      expect(catchupCommits).toHaveBeenCalledTimes(1)
     })
-    expect(removeMemberFromChannel.mock.calls[0][1]).toBe("ch-1")
-    expect(removeMemberFromChannel.mock.calls[0][2]).toBe("user-leaver")
+    expect(removeMemberFromChannel).not.toHaveBeenCalled()
   })
 
   it("skips own mls.add_request remove", async () => {
@@ -279,7 +305,7 @@ describe("useTextChannelMLSCommitListener", () => {
       type: "mls.add_request",
       channel_id: "ch-1",
       action: "remove",
-      requester_id: "user-leaver",
+      requester_id: "user-leaver:device-2",
     })
 
     await waitFor(() => {

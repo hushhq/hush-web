@@ -156,10 +156,20 @@ export function useTextChannelMLSCommitListener({
 
       const channelId = data.channel_id
       const requesterId = data.requester_id
+      const isLikelyMlsIdentity = requesterId.includes(":")
       try {
         const deps = await buildDeps(channelId)
         if (!deps) return
         await withChannelMLSMutex(textChannelKey(channelId), async () => {
+          if (!isLikelyMlsIdentity) {
+            console.warn("[mls] add_request remove: requester_id is not an MLS identity; syncing via catchup", {
+              channelId,
+              requesterId,
+            })
+            await mlsGroup.catchupCommits(deps, channelId)
+            return
+          }
+
           try {
             await mlsGroup.removeMemberFromChannel(
               deps,
@@ -171,9 +181,7 @@ export function useTextChannelMLSCommitListener({
             // Benign races: another online member committed the
             // removal first, or the local group state already reflects
             // the removal because a prior `mls.commit` arrived first.
-            if (
-              /already removed|unknown member|not.*member/i.test(message)
-            ) {
+            if (/already removed|not.*member/i.test(message)) {
               console.info("[mls] add_request remove: idempotent skip", {
                 channelId,
                 requesterId,
