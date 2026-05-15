@@ -115,6 +115,7 @@ export default function ApproveDeviceLinkFlow({
     && !!identityKeyRef.current?.privateKey
     && !!identityKeyRef.current?.publicKey
     && !!token;
+  const authenticatedInstanceUrl = homeInstanceUrl || window.location.origin;
   const needsVaultUnlock = needsUnlock;
 
   useEffect(() => {
@@ -135,8 +136,7 @@ export default function ApproveDeviceLinkFlow({
       setResumableExport(null);
       return;
     }
-    const baseUrlForApi
-      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
+    const baseUrlForApi = authenticatedInstanceUrl;
     let cancelled = false;
     findResumableExport(baseUrlForApi)
       .then((rec) => {
@@ -149,7 +149,7 @@ export default function ApproveDeviceLinkFlow({
     return () => {
       cancelled = true;
     };
-  }, [claim, hasUnlockedIdentity]);
+  }, [claim, hasUnlockedIdentity, authenticatedInstanceUrl]);
 
   const resolveRequest = useCallback(
     async (body) => {
@@ -264,8 +264,7 @@ export default function ApproveDeviceLinkFlow({
     let metadataDb = null;
     try {
       historyDb = await mlsStore.openStore(user.id, getDeviceId());
-      const baseUrlForApi
-      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
+      const baseUrlForApi = authenticatedInstanceUrl;
       try {
         const summary = await preDecryptForLinkExport({
           activeDb: historyDb,
@@ -479,8 +478,7 @@ export default function ApproveDeviceLinkFlow({
     setStatus('Resuming previous upload…');
     setIsResuming(true);
     try {
-      const baseUrlForApi
-      = claim.instanceUrl || homeInstanceUrl || window.location.origin;
+      const baseUrlForApi = authenticatedInstanceUrl;
       const archiveDescriptor = await resumeUploadArchiveSession({
         token,
         baseUrl: baseUrlForApi,
@@ -725,7 +723,7 @@ export default function ApproveDeviceLinkFlow({
           <div className={'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Instance</span>
             <strong className="truncate">
-              {claim.instanceUrl || homeInstanceUrl || window.location.origin}
+              {authenticatedInstanceUrl}
             </strong>
           </div>
         </div>

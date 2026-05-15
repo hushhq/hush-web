@@ -250,7 +250,7 @@ describe('LinkDevice', () => {
       userId: 'user-1',
       username: 'alice',
       displayName: 'Alice',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       exportedAt: new Date().toISOString(),
       rootPrivateKey: new Uint8Array([1, 2, 3]),
       rootPublicKey: new Uint8Array([4, 5, 6]),
@@ -605,14 +605,14 @@ describe('LinkDevice', () => {
       relayIv: 'relay-iv',
       relayPublicKey: 'relay-public-key',
       deviceId: 'device-2',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
     });
     mockDecodeTransferBundle.mockResolvedValue({
       version: 3,
       userId: 'user-1',
       username: 'alice',
       displayName: 'Alice',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       exportedAt: new Date().toISOString(),
       rootPrivateKey: new Uint8Array([1, 2, 3]),
       rootPublicKey: new Uint8Array([4, 5, 6]),
@@ -643,7 +643,7 @@ describe('LinkDevice', () => {
       expect(mockDeleteArchive).toHaveBeenCalledWith(
         'arch-import-fail',
         { downloadToken: 'dtok-import-fail' },
-        'https://app.gethush.live',
+        window.location.origin,
       );
     });
     expect(completeDeviceLink).not.toHaveBeenCalled();
@@ -746,7 +746,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -804,7 +804,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -840,7 +840,7 @@ describe('LinkDevice', () => {
           relayIv: 'relay-iv',
           relayPublicKey: 'relay-public-key',
         },
-        'https://app.gethush.live',
+        window.location.origin,
       );
     });
     expect(historyDb.close).toHaveBeenCalledTimes(1);
@@ -874,7 +874,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -904,7 +904,7 @@ describe('LinkDevice', () => {
     expect(mockPreDecryptForLinkExport).toHaveBeenCalledWith(expect.objectContaining({
       activeDb: historyDb,
       token: 'jwt-token',
-      baseUrl: 'https://app.gethush.live',
+      baseUrl: window.location.origin,
     }));
     expect(mockExportHistorySnapshot).toHaveBeenCalled();
     const preDecryptOrder = mockPreDecryptForLinkExport.mock.invocationCallOrder[0];
@@ -945,7 +945,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -1022,7 +1022,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -1089,7 +1089,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -1164,7 +1164,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -1233,7 +1233,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -1297,7 +1297,7 @@ describe('LinkDevice', () => {
       deviceId: 'device-2',
       devicePublicKey: 'device-public-key',
       sessionPublicKey: 'session-public-key',
-      instanceUrl: 'https://app.gethush.live',
+      instanceUrl: window.location.origin,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
     mockOpenStore.mockResolvedValue(historyDb);
@@ -1425,7 +1425,7 @@ describe('LinkDevice', () => {
         deviceId: 'device-2',
         devicePublicKey: 'device-public-key',
         sessionPublicKey: 'session-public-key',
-        instanceUrl: 'https://app.gethush.live',
+        instanceUrl: window.location.origin,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       });
       mockEncodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
@@ -1442,7 +1442,7 @@ describe('LinkDevice', () => {
 
     const sampleResumable = {
       archiveId: 'arch-prior',
-      baseUrl: 'https://app.gethush.live',
+      baseUrl: window.location.origin,
       backendKind: 's3',
       totalChunks: 1,
       status: 'in_progress',
@@ -1487,7 +1487,7 @@ describe('LinkDevice', () => {
       const args = mockResumeUploadArchiveSession.mock.calls[0][0];
       expect(args.exportRecord).toEqual(sampleResumable);
       expect(args.token).toBe('jwt-token');
-      expect(args.baseUrl).toBe('https://app.gethush.live');
+      expect(args.baseUrl).toBe(window.location.origin);
       // Fresh upload path is NOT taken when resume is chosen.
       expect(mockUploadArchiveSession).not.toHaveBeenCalled();
       // Link verification happens with the resumed descriptor.
@@ -1496,7 +1496,7 @@ describe('LinkDevice', () => {
         expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
           'jwt-token',
           expect.objectContaining({ claimToken: 'claim-1' }),
-          'https://app.gethush.live',
+          window.location.origin,
         );
       });
     });
@@ -1588,7 +1588,7 @@ describe('LinkDevice', () => {
       mockDecodeTransferBundle.mockResolvedValue({
         version: 3,
         userId: 'user-1', username: 'alice', displayName: 'Alice',
-        instanceUrl: 'https://app.gethush.live',
+        instanceUrl: window.location.origin,
         rootPrivateKey: new Uint8Array([1, 2, 3]),
         rootPublicKey: new Uint8Array([4, 5, 6]),
         archive: null,
@@ -1624,7 +1624,7 @@ describe('LinkDevice', () => {
         deviceId: '11111111-2222-3333-4444-555555555555',
         devicePublicKey: 'device-public-key',
         sessionPublicKey: 'session-public-key',
-        instanceUrl: 'https://app.gethush.live',
+        instanceUrl: window.location.origin,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         label: 'Chrome on iOS',
       });
@@ -1645,7 +1645,7 @@ describe('LinkDevice', () => {
         deviceId: 'device-2',
         devicePublicKey: 'device-public-key',
         sessionPublicKey: 'session-public-key',
-        instanceUrl: 'https://app.gethush.live',
+        instanceUrl: window.location.origin,
         expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       });
       const user = userEvent.setup();
