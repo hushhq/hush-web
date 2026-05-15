@@ -251,7 +251,10 @@ export class TransparencyVerifier {
       for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
         const proof = proofs[i];
-        if (!proof?.logSignature) continue;
+        if (!proof) continue;
+        if (!proof.logSignature) {
+          return { verified: false, entries, treeHead };
+        }
 
         const sig = base64ToBytes(proof.logSignature);
         const entryBytes = base64ToBytes(entry.entryCbor);

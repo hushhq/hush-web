@@ -500,6 +500,25 @@ describe('TransparencyVerifier', () => {
     vi.restoreAllMocks();
   });
 
+
+  it('verify() returns { verified: false } when a proof is present without logSignature', async () => {
+    const pubKeyHex = bytesToHex(pubKey);
+    const entryBytes = new TextEncoder().encode('entry-missing-log-signature');
+    const mockResponse = await buildMockApiResponse(entryBytes, pubKeyHex);
+
+    delete mockResponse.proofs[0].logSignature;
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
+    });
+
+    const verifier = new TransparencyVerifier('https://example.com', pubKeyHex);
+    const result = await verifier.verify(pubKeyHex, 'mock-token');
+    expect(result.verified).toBe(false);
+    vi.restoreAllMocks();
+  });
+
   it('verify() returns { verified: true } when some proofs are missing (partial response)', async () => {
     const pubKeyHex = bytesToHex(pubKey);
     const entryBytes = new TextEncoder().encode('entry-with-proof');
