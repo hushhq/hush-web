@@ -41,7 +41,7 @@ import {
   fetchWithAuth,
 } from '../lib/api.js';
 import { signChallenge } from '../lib/bip39Identity.js';
-import { getDeviceId } from './useAuth.js';
+import { getDeviceId, getLocalToken, getTokenForInstanceUrl } from './useAuth.js';
 import {
   assertHandshakeCompatible,
   isHandshakeCompatibilityError,
@@ -874,9 +874,14 @@ export function useInstances() {
         _setGuildOrderState(storedOrder);
 
         const localUrl = getActiveAuthInstanceUrlSync();
-        // Read the per-instance namespaced JWT first, fall back to legacy key.
-        const localJwt = sessionStorage.getItem(`hush_jwt_${new URL(localUrl).host}`)
-          || sessionStorage.getItem('hush_jwt');
+        let localJwt = localUrl ? getTokenForInstanceUrl(localUrl) : null;
+        if (!localJwt && localUrl) {
+          // One-time legacy migration for the resolved active auth
+          // instance. Explicit instance lookups above never fall back
+          // to `hush_jwt`; `getLocalToken` is the only place allowed
+          // to consume and clear the legacy slot.
+          localJwt = getLocalToken();
+        }
         const storedUrls = new Set(storedInstances.map(({ instanceUrl }) => instanceUrl));
         const bootTargets = storedInstances.map(({ instanceUrl }) => ({ type: 'stored', instanceUrl }));
 

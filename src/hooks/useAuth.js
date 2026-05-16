@@ -131,51 +131,93 @@ export const HOME_INSTANCE_KEY = 'hush_home_instance';
 // ── Per-instance JWT storage ─────────────────────────────────────────────────
 
 /**
- * Derives the sessionStorage key for a given instance URL.
- * Falls back to the legacy global key for malformed or empty URLs.
+ * Derives the sessionStorage key for a given instance URL. Returns
+ * `null` when the URL cannot be parsed so callers FAIL CLOSED instead
+ * of silently routing to the legacy global `hush_jwt` key. The legacy
+ * global key is only ever read by `getLocalToken` (active-instance
+ * migration); explicit per-instance lookups must never fall back to
+ * it because the same token would otherwise be sent to a different
+ * origin than the user authenticated against.
  *
  * @param {string} instanceUrl
- * @returns {string}
+ * @returns {string|null}
  */
 function jwtKeyForInstance(instanceUrl) {
   try {
     return `${JWT_KEY}_${new URL(instanceUrl).host}`;
   } catch {
-    return JWT_KEY;
+    return null;
   }
 }
 
 /**
- * Stores a JWT token keyed by the instance host.
+ * Stores a JWT token keyed by the instance host. Also clears any
+ * stale legacy `hush_jwt` so a subsequent unrelated request cannot
+ * accidentally pick it up. No-op when the URL is malformed (caller
+ * bug — better to drop the write than corrupt the legacy slot).
  *
- * @param {string} instanceUrl - The instance origin (e.g. "https://chat.example.com")
+ * @param {string} instanceUrl - The instance origin
  * @param {string} token - The JWT string to store
  */
 export function setInstanceToken(instanceUrl, token) {
-  sessionStorage.setItem(jwtKeyForInstance(instanceUrl), token);
+  const key = jwtKeyForInstance(instanceUrl);
+  if (!key) return;
+  sessionStorage.setItem(key, token);
+  // Clear stale legacy so it cannot fall back to this same JWT under
+  // a different (or no) instance later.
+  sessionStorage.removeItem(JWT_KEY);
 }
 
 /**
- * Retrieves the JWT token for a given instance.
+ * Retrieves the JWT token for a given instance. STRICT: never falls
+ * back to the legacy global `hush_jwt` key, even when the URL is
+ * malformed. Use `getLocalToken` for the active-instance + legacy
+ * migration path.
  *
  * @param {string} instanceUrl - The instance origin
  * @returns {string|null}
  */
 export function getInstanceToken(instanceUrl) {
-  return sessionStorage.getItem(jwtKeyForInstance(instanceUrl));
+  const key = jwtKeyForInstance(instanceUrl);
+  if (!key) return null;
+  return sessionStorage.getItem(key);
+}
+
+/**
+ * Explicit-target token helper. Alias for `getInstanceToken` that
+ * makes the namespaced-only contract self-documenting at call sites
+ * that previously rolled their own `sessionStorage.getItem`. Use this
+ * whenever the caller knows the target instance URL up front.
+ *
+ * @param {string} instanceUrl
+ * @returns {string|null}
+ */
+export function getTokenForInstanceUrl(instanceUrl) {
+  return getInstanceToken(instanceUrl);
 }
 
 /**
  * Reads the JWT for the currently active auth instance.
- * If a legacy global key (`hush_jwt`) exists and no namespaced key does,
- * migrates it to the namespaced key transparently.
+ *
+ * If a legacy global key (`hush_jwt`) exists AND there is an active
+ * auth instance AND no namespaced key, migrate the legacy value to
+ * the namespaced key and clear the global. This is the only place
+ * the legacy fallback is allowed — every other call site must use
+ * `getInstanceToken` / `getTokenForInstanceUrl` so a legacy token
+ * cannot be sent to an unrelated instance.
+ *
+ * Without an active auth instance, the legacy value is still
+ * returned for boot-time profile lookups that have no specific
+ * target — callers must NOT use the returned value as a Bearer for
+ * a cross-instance request.
  *
  * @returns {string|null}
  */
 export function getLocalToken() {
   const activeUrl = getActiveAuthInstanceUrlSync();
-  if (activeUrl) {
-    const namespaced = sessionStorage.getItem(jwtKeyForInstance(activeUrl));
+  const activeKey = activeUrl ? jwtKeyForInstance(activeUrl) : null;
+  if (activeKey) {
+    const namespaced = sessionStorage.getItem(activeKey);
     if (namespaced) return namespaced;
   }
 
@@ -183,7 +225,7 @@ export function getLocalToken() {
   const legacy = sessionStorage.getItem(JWT_KEY);
   if (legacy && activeUrl) {
     setInstanceToken(activeUrl, legacy);
-    sessionStorage.removeItem(JWT_KEY);
+    // setInstanceToken already removes the legacy key.
     return legacy;
   }
 
@@ -1098,7 +1140,15 @@ export function useAuth() {
     clearAuthInvalidation();
     setIsGuest(false);
     setGuestExpiresAt(null);
-    sessionStorage.setItem(baseUrl ? jwtKeyForInstance(baseUrl) : JWT_KEY, jwt);
+    // Prefer the namespaced path: `setInstanceToken` also clears the
+    // legacy `hush_jwt` so a later cross-instance request cannot
+    // accidentally pick it up. Fall back to the legacy slot only when
+    // no `baseUrl` is known (true active/local boot path).
+    if (baseUrl) {
+      setInstanceToken(baseUrl, jwt);
+    } else {
+      sessionStorage.setItem(JWT_KEY, jwt);
+    }
     setToken(jwt);
     setUser(user);
   }, [clearGuestTimers, clearAuthInvalidation]);
@@ -1121,7 +1171,11 @@ export function useAuth() {
     const claims = parseJwtClaims(jwt);
     if (claims?.is_guest) {
       clearAuthInvalidation();
-      sessionStorage.setItem(baseUrl ? jwtKeyForInstance(baseUrl) : JWT_KEY, jwt);
+      if (baseUrl) {
+        setInstanceToken(baseUrl, jwt);
+      } else {
+        sessionStorage.setItem(JWT_KEY, jwt);
+      }
       setToken(jwt);
       // Build a synthetic guest user object so isAuthenticated returns true.
       const guestUser = {

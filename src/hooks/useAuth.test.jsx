@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { JWT_KEY } from './useAuth';
+import { JWT_KEY, getTokenForInstanceUrl } from './useAuth';
 import {
   readWrappedIdentity,
   isMarkerAlive,
@@ -1883,6 +1883,63 @@ describe('useAuth - per-instance JWT storage', () => {
     expect(getInstanceToken('https://instance-a.com')).toBe('jwt-a');
     expect(getInstanceToken('https://instance-b.com')).toBe('jwt-b');
     expect(getInstanceToken('https://instance-a.com')).not.toBe(getInstanceToken('https://instance-b.com'));
+  });
+
+  it('getInstanceToken returns null when only the legacy hush_jwt key exists (no namespaced for target)', () => {
+    // Legacy global is present but no namespaced key for the target
+    // instance. The explicit-target lookup must NOT fall back — that
+    // would route the legacy token to the wrong origin.
+    sessionStorage.setItem(JWT_KEY, 'legacy-only-token');
+    expect(getInstanceToken('https://chat.example.com')).toBeNull();
+    expect(sessionStorage.getItem(JWT_KEY)).toBe('legacy-only-token');
+  });
+
+  it('getInstanceToken returns the namespaced token and ignores an unrelated legacy token', () => {
+    sessionStorage.setItem(JWT_KEY, 'legacy-token');
+    sessionStorage.setItem('hush_jwt_chat.example.com', 'namespaced-token');
+    expect(getInstanceToken('https://chat.example.com')).toBe('namespaced-token');
+    expect(getTokenForInstanceUrl('https://chat.example.com')).toBe('namespaced-token');
+  });
+
+  it('getInstanceToken returns null (not legacy) when the instance URL is malformed', () => {
+    // The malformed-URL path used to fall back to the legacy global
+    // slot, leaking the token to any unspecified target.
+    sessionStorage.setItem(JWT_KEY, 'legacy-token');
+    expect(getInstanceToken('not-a-url')).toBeNull();
+    expect(getTokenForInstanceUrl('not-a-url')).toBeNull();
+  });
+
+  it('setInstanceToken clears any stale legacy hush_jwt after writing the namespaced key', () => {
+    sessionStorage.setItem(JWT_KEY, 'old-legacy');
+    setInstanceToken('https://chat.example.com', 'fresh-namespaced');
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('fresh-namespaced');
+    expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
+  });
+
+  it('setInstanceToken is a no-op for a malformed URL (does not corrupt legacy slot)', () => {
+    sessionStorage.setItem(JWT_KEY, 'preserved-legacy');
+    setInstanceToken('not-a-url', 'should-not-write');
+    expect(sessionStorage.getItem(JWT_KEY)).toBe('preserved-legacy');
+  });
+
+  it('getLocalToken does NOT migrate legacy to namespaced when no active instance is set', () => {
+    _mockActiveInstanceUrl = '';
+    sessionStorage.setItem(JWT_KEY, 'legacy-no-active');
+    // Returned for boot-time profile lookups, but the legacy slot is
+    // intentionally NOT moved into a namespaced bucket because there
+    // is no concrete instance to scope it to.
+    expect(getLocalToken()).toBe('legacy-no-active');
+    expect(sessionStorage.getItem(JWT_KEY)).toBe('legacy-no-active');
+  });
+
+  it('getLocalToken does not read or write a null storage key for malformed active instance URLs', () => {
+    _mockActiveInstanceUrl = 'not-a-url';
+    sessionStorage.setItem('null', 'poison');
+    sessionStorage.setItem(JWT_KEY, 'legacy-token');
+
+    expect(getLocalToken()).toBe('legacy-token');
+    expect(sessionStorage.getItem('null')).toBe('poison');
+    expect(sessionStorage.getItem(JWT_KEY)).toBe('legacy-token');
   });
 });
 

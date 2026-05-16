@@ -16,6 +16,8 @@ const getGuildOrder = vi.hoisted(() => vi.fn());
 const getMyGuilds = vi.hoisted(() => vi.fn());
 const useAuth = vi.hoisted(() => vi.fn());
 const getDeviceId = vi.hoisted(() => vi.fn(() => 'device-1'));
+const getLocalToken = vi.hoisted(() => vi.fn(() => 'local-jwt'));
+const getTokenForInstanceUrl = vi.hoisted(() => vi.fn(() => 'local-jwt'));
 
 vi.mock('../lib/ws.js', () => ({
   createWsClient,
@@ -45,6 +47,8 @@ vi.mock('../contexts/AuthContext.jsx', () => ({
 
 vi.mock('./useAuth.js', () => ({
   getDeviceId,
+  getLocalToken,
+  getTokenForInstanceUrl,
 }));
 
 describe('useInstances active auth instance boot', () => {
@@ -91,5 +95,6 @@ describe('useInstances active auth instance boot', () => {
         jwt: 'local-jwt',
       }),
     );
+    expect(getTokenForInstanceUrl).toHaveBeenCalledWith(primaryInstanceUrl);
   });
 });
