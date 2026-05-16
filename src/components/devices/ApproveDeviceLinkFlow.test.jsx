@@ -9,7 +9,7 @@
  *   - locked vault surfaces an Unlock button that calls
  *     onVaultUnlockNeeded (caller-owned navigation)
  */
-import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -43,8 +43,10 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => authState,
 }));
 
+const getInstanceToken = vi.fn(() => null);
 vi.mock('../../hooks/useAuth', () => ({
   getDeviceId: () => 'device-current',
+  getInstanceToken: (url) => getInstanceToken(url),
 }));
 
 const resolveDeviceLinkRequest = vi.fn();
@@ -114,12 +116,49 @@ vi.mock('../QRCodeScanner', () => ({
 }));
 
 import ApproveDeviceLinkFlow from './ApproveDeviceLinkFlow.jsx';
+import * as mlsStore from '../../lib/mlsStore';
+import {
+  certifyDevice,
+  encodeTransferBundle,
+  encryptRelayPayload,
+} from '../../lib/deviceLinking';
+import { preDecryptForLinkExport } from '../../lib/preDecryptForLinkExport';
+import { uploadArchiveSession } from '../../lib/linkArchiveSession';
 
 describe('ApproveDeviceLinkFlow (embedded mode)', () => {
-  afterEach(() => {
-    cleanup();
+  beforeEach(() => {
+    // Default: explicit homeInstanceUrl resolves to the same active
+    // token so existing assertions stay valid. Per-test overrides
+    // exercise the cross-instance security branches.
+    getInstanceToken.mockReset();
+    getInstanceToken.mockImplementation(() => 'tok');
     resolveDeviceLinkRequest.mockReset();
     verifyDeviceLinkRequest.mockReset();
+    preDecryptForLinkExport.mockClear();
+    uploadArchiveSession.mockReset();
+    uploadArchiveSession.mockResolvedValue({
+      id: 'archive-1',
+      downloadToken: 'download-token',
+      uploadToken: 'upload-token',
+      totalChunks: 1,
+      totalBytes: 128,
+      chunkSize: 128,
+      manifestHash: 'manifest-hash',
+      archiveSha256: 'archive-sha256',
+      format: 'hush-link-archive/v1',
+      chunkPlaintextHashes: ['plain-hash'],
+      ephPub: 'eph-pub',
+      nonceBase: 'nonce-base',
+      transcriptBlobOmitted: true,
+    });
+    mlsStore.openStore.mockResolvedValue({ close: vi.fn() });
+    encodeTransferBundle.mockReturnValue(new Uint8Array([1, 2, 3]));
+    certifyDevice.mockResolvedValue(new Uint8Array([4, 5, 6]));
+    encryptRelayPayload.mockResolvedValue({
+      relayPayload: 'relay-payload',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+    });
     authState.hasSession = true;
     authState.hasVault = true;
     authState.isVaultUnlocked = true;
@@ -130,6 +169,10 @@ describe('ApproveDeviceLinkFlow (embedded mode)', () => {
         publicKey: new Uint8Array(32),
       },
     };
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('uses a bare flex shell, not the legacy ld-card / home-form-card layout', () => {
@@ -383,5 +426,117 @@ describe('ApproveDeviceLinkFlow (embedded mode)', () => {
       { code: 'ABCDEFGH' },
       'https://home.example.com',
     );
+  });
+
+  it('resolveDeviceLinkRequest uses the home-instance namespaced token, not the active token', async () => {
+    // Active token belongs to a different instance; home instance has
+    // its own namespaced token. Resolve MUST use the home token.
+    authState.token = 'active-tok-foreign';
+    getInstanceToken.mockImplementation((url) =>
+      url === 'https://home.example.com' ? 'home-tok' : null,
+    );
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk',
+      devicePublicKey: 'dk',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{ requestId: 'req', secret: 'sec' }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/new phone/i);
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledWith(
+      'home-tok',
+      { requestId: 'req', secret: 'sec' },
+      'https://home.example.com',
+    );
+    expect(resolveDeviceLinkRequest).not.toHaveBeenCalledWith(
+      'active-tok-foreign',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('approve flow uses the home-instance namespaced token for predecrypt, upload, and verify', async () => {
+    authState.token = 'active-tok-foreign';
+    getInstanceToken.mockImplementation((url) =>
+      url === 'https://home.example.com' ? 'home-tok' : null,
+    );
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk',
+      devicePublicKey: 'dk',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{ requestId: 'req', secret: 'sec' }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole('button', { name: /approve link/i }));
+
+    expect(preDecryptForLinkExport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: 'home-tok',
+        baseUrl: 'https://home.example.com',
+      }),
+    );
+    expect(uploadArchiveSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: 'home-tok',
+        baseUrl: 'https://home.example.com',
+      }),
+    );
+    expect(verifyDeviceLinkRequest).toHaveBeenCalledWith(
+      'home-tok',
+      expect.objectContaining({ claimToken: 'ct' }),
+      'https://home.example.com',
+    );
+    expect(verifyDeviceLinkRequest).not.toHaveBeenCalledWith(
+      'active-tok-foreign',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('does NOT call resolveDeviceLinkRequest when explicit homeInstanceUrl has no namespaced token', async () => {
+    authState.token = 'active-tok';
+    getInstanceToken.mockImplementation(() => null);
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{ requestId: 'req', secret: 'sec' }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    expect(
+      await screen.findByText(/sign in to the home instance/i),
+    ).toBeInTheDocument();
+    expect(resolveDeviceLinkRequest).not.toHaveBeenCalled();
   });
 });

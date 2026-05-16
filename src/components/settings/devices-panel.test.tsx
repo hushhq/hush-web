@@ -9,7 +9,7 @@
  *  - revoke without home log key still succeeds; transparency verify
  *    is skipped (logged) rather than throwing
  */
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
+import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from "vitest"
 import {
   render,
   screen,
@@ -45,8 +45,10 @@ vi.mock("@/lib/api", () => ({
 }))
 
 const getDeviceId = vi.fn(() => "device-current")
+const getInstanceToken = vi.fn<(url: string) => string | null>(() => null)
 vi.mock("@/hooks/useAuth", () => ({
   getDeviceId: () => getDeviceId(),
+  getInstanceToken: (url: string) => getInstanceToken(url),
 }))
 
 const setTransparencyError = vi.fn()
@@ -103,9 +105,12 @@ vi.mock("@/components/devices/ApproveDeviceLinkFlow.jsx", () => ({
 import { DevicesPanel } from "./devices-panel"
 
 describe("DevicesPanel", () => {
-  afterEach(() => {
-    cleanup()
-    navigateMock.mockReset()
+  beforeEach(() => {
+    // Default: explicit homeInstanceUrl resolves to a namespaced token
+    // matching the active token so existing assertions stay valid.
+    // Cross-instance / missing-token cases override per test.
+    getInstanceToken.mockReset()
+    getInstanceToken.mockImplementation(() => "tok")
     listDeviceKeys.mockReset()
     revokeDeviceKey.mockReset()
     setTransparencyError.mockReset()
@@ -113,6 +118,11 @@ describe("DevicesPanel", () => {
     verifyOwnKey.mockResolvedValue({ ok: true })
     getDeviceId.mockReturnValue("device-current")
     authState.token = "tok"
+  })
+
+  afterEach(() => {
+    cleanup()
+    navigateMock.mockReset()
   })
 
   it("renders the legacy description copy verbatim", () => {
@@ -339,6 +349,44 @@ describe("DevicesPanel", () => {
     authState.token = null
 
     render(<DevicesPanel />)
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/loading devices/i)
+      ).not.toBeInTheDocument()
+    )
+    expect(listDeviceKeys).not.toHaveBeenCalled()
+  })
+
+  it("listDeviceKeys uses the home-instance namespaced token, not the active token", async () => {
+    // Active session is on a different (federated) instance; the home
+    // instance has its own namespaced token. Devices panel calls
+    // against `homeInstanceUrl` MUST use the home token.
+    authState.token = "active-tok-foreign"
+    getInstanceToken.mockImplementation((url: string) =>
+      url === "https://home.example.com" ? "home-tok" : null
+    )
+    listDeviceKeys.mockResolvedValueOnce([])
+
+    render(<DevicesPanel homeInstanceUrl="https://home.example.com" />)
+
+    await waitFor(() =>
+      expect(listDeviceKeys).toHaveBeenCalledWith(
+        "home-tok",
+        "https://home.example.com"
+      )
+    )
+    expect(listDeviceKeys).not.toHaveBeenCalledWith(
+      "active-tok-foreign",
+      expect.anything()
+    )
+  })
+
+  it("does NOT call listDeviceKeys when explicit homeInstanceUrl has no namespaced token", async () => {
+    authState.token = "active-tok"
+    getInstanceToken.mockImplementation(() => null)
+
+    render(<DevicesPanel homeInstanceUrl="https://home.example.com" />)
 
     await waitFor(() =>
       expect(

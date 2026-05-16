@@ -22,7 +22,12 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getDeviceId } from '../../hooks/useAuth';
+import { getDeviceId, getInstanceToken } from '../../hooks/useAuth';
+
+function resolveHomeInstanceToken(homeInstanceUrl, fallbackToken) {
+  if (homeInstanceUrl) return getInstanceToken(homeInstanceUrl);
+  return fallbackToken;
+}
 import { Button as ShadcnButton } from '../ui/button.tsx';
 import { Card } from '../ui/card.tsx';
 import { Alert, AlertDescription } from '../ui/alert.tsx';
@@ -115,11 +120,13 @@ export default function ApproveDeviceLinkFlow({
   const [isApproving, setIsApproving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
+  const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token);
+  const isMissingHomeInstanceToken = !!homeInstanceUrl && !homeInstanceToken;
   const hasUnlockedIdentity = hasSession
     && isVaultUnlocked
     && !!identityKeyRef.current?.privateKey
     && !!identityKeyRef.current?.publicKey
-    && !!token;
+    && !!homeInstanceToken;
   const needsVaultUnlock = needsUnlock;
 
   useEffect(() => {
@@ -157,7 +164,7 @@ export default function ApproveDeviceLinkFlow({
 
   const resolveRequest = useCallback(
     async (body, committedKeys = null) => {
-      if (!token) return;
+      if (!homeInstanceToken) return;
       setError('');
       setStatus('');
       setIsResolving(true);
@@ -167,7 +174,7 @@ export default function ApproveDeviceLinkFlow({
         // to window.location.origin in a federated context. Page mode
         // omits it intentionally — the page lives at the home origin.
         const resolved = await resolveDeviceLinkRequest(
-          token,
+          homeInstanceToken,
           body,
           homeInstanceUrl ?? '',
         );
@@ -196,7 +203,7 @@ export default function ApproveDeviceLinkFlow({
         setIsResolving(false);
       }
     },
-    [token, homeInstanceUrl],
+    [homeInstanceToken, homeInstanceUrl],
   );
 
   useEffect(() => {
@@ -276,7 +283,7 @@ export default function ApproveDeviceLinkFlow({
   const handleApprove = useCallback(async () => {
     if (
       !claim
-      || !token
+      || !homeInstanceToken
       || !user?.id
       || !identityKeyRef.current?.privateKey
       || !identityKeyRef.current?.publicKey
@@ -295,7 +302,7 @@ export default function ApproveDeviceLinkFlow({
       try {
         const summary = await preDecryptForLinkExport({
           activeDb: historyDb,
-          token,
+          token: homeInstanceToken,
           baseUrl: baseUrlForApi,
         });
         console.info(
@@ -378,7 +385,7 @@ export default function ApproveDeviceLinkFlow({
       let archiveDescriptor = null;
       try {
         archiveDescriptor = await uploadArchiveSession({
-          token,
+          token: homeInstanceToken,
           sessionPublicKeyBase64: claim.sessionPublicKey,
           baseUrl: baseUrlForApi,
           historySnapshot,
@@ -435,7 +442,7 @@ export default function ApproveDeviceLinkFlow({
 
       try {
         await verifyDeviceLinkRequest(
-          token,
+          homeInstanceToken,
           {
             claimToken: claim.claimToken,
             certificate: bytesToBase64(certificate),
@@ -482,9 +489,9 @@ export default function ApproveDeviceLinkFlow({
   }, [
     claim,
     homeInstanceUrl,
+    homeInstanceToken,
     identityKeyRef,
     onSuccess,
-    token,
     user?.displayName,
     user?.id,
     user?.username,
@@ -493,7 +500,7 @@ export default function ApproveDeviceLinkFlow({
   const handleResume = useCallback(async () => {
     if (
       !claim
-      || !token
+      || !homeInstanceToken
       || !user?.id
       || !identityKeyRef.current?.privateKey
       || !identityKeyRef.current?.publicKey
@@ -507,7 +514,7 @@ export default function ApproveDeviceLinkFlow({
     try {
       const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
       const archiveDescriptor = await resumeUploadArchiveSession({
-        token,
+        token: homeInstanceToken,
         baseUrl: baseUrlForApi,
         rootPrivateKey: identityKeyRef.current.privateKey,
         exportRecord: resumableExport,
@@ -545,7 +552,7 @@ export default function ApproveDeviceLinkFlow({
       );
       try {
         await verifyDeviceLinkRequest(
-          token,
+          homeInstanceToken,
           {
             claimToken: claim.claimToken,
             certificate: bytesToBase64(certificate),
@@ -578,10 +585,10 @@ export default function ApproveDeviceLinkFlow({
   }, [
     claim,
     homeInstanceUrl,
+    homeInstanceToken,
     identityKeyRef,
     onSuccess,
     resumableExport,
-    token,
     user?.displayName,
     user?.id,
     user?.username,
@@ -645,11 +652,17 @@ export default function ApproveDeviceLinkFlow({
     return (
       <FlowShell mode={mode}>
         <Heading mode={mode}>Approve device link</Heading>
-        <Subtitle mode={mode}>
-          Open this page in a browser profile that is already signed in to the
-          account you want to link.
-        </Subtitle>
-        {initialPayload && !hasVault && (
+        {isMissingHomeInstanceToken ? (
+          <Subtitle mode={mode}>
+            Sign in to the home instance before approving this device link.
+          </Subtitle>
+        ) : (
+          <Subtitle mode={mode}>
+            Open this page in a browser profile that is already signed in to the
+            account you want to link.
+          </Subtitle>
+        )}
+        {initialPayload && !hasVault && !isMissingHomeInstanceToken && (
           <div className={'text-xs text-muted-foreground'}>
             QR request detected. This browser does not have a local Hush vault for that account.
           </div>
