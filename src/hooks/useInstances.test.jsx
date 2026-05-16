@@ -52,6 +52,19 @@ vi.mock('../lib/api.js', () => ({
   registerWithPublicKey: vi.fn(),
   getMyGuilds: vi.fn(),
   fetchWithAuth: vi.fn(),
+  // Mirror the real implementation closely enough to exercise the
+  // audience-bind contract: every explicit instance URL gets reduced
+  // to its canonical origin form so v2 signatures can be pinned in
+  // assertions.
+  resolveAuthAudience: vi.fn((baseUrl) => {
+    if (!baseUrl) return '';
+    try {
+      const u = new URL(baseUrl);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return '';
+    }
+  }),
 }));
 
 vi.mock('../lib/instanceRegistry.js', () => ({
@@ -241,6 +254,34 @@ describe('useInstances', () => {
       expect(apiModule.requestChallenge).toHaveBeenCalled();
       expect(apiModule.verifyChallenge).toHaveBeenCalled();
     });
+  });
+
+  it('bootInstance signs the v2 challenge bound to the instance origin', async () => {
+    // Regression for the cross-instance signing oracle: bootInstance
+    // must bind the challenge signature to the URL it was asked to
+    // boot, never to window.location.origin or some other source.
+    const { useInstances } = await import('./useInstances.js');
+    setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.bootInstance(INSTANCE_A);
+    });
+
+    await waitFor(() => {
+      expect(apiModule.verifyChallenge).toHaveBeenCalledTimes(1);
+    });
+    const [publicKeyArg, nonceArg, sigArg, deviceArg, baseUrlArg, audienceArg] =
+      apiModule.verifyChallenge.mock.calls[0];
+    expect(typeof publicKeyArg).toBe('string');
+    expect(nonceArg).toBe('deadbeef');
+    expect(typeof sigArg).toBe('string');
+    expect(typeof deviceArg).toBe('string');
+    expect(baseUrlArg).toBe(INSTANCE_A);
+    expect(audienceArg).toBe(INSTANCE_A);
+    expect(apiModule.resolveAuthAudience).toHaveBeenCalledWith(INSTANCE_A);
   });
 
   it('bootInstance saves JWT to IDB after successful auth', async () => {

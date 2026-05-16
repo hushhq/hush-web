@@ -13,11 +13,20 @@ vi.mock('../lib/api', () => ({
   }),
   registerWithPublicKey: vi.fn(),
   requestGuestSession: vi.fn(),
+  resolveAuthAudience: vi.fn((baseUrl) => {
+    if (!baseUrl) return 'https://default.example';
+    try {
+      const u = new URL(baseUrl);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return '';
+    }
+  }),
 }));
 
 vi.mock('../lib/bip39Identity', () => ({
   mnemonicToIdentityKey: vi.fn(),
-  signChallenge: vi.fn().mockResolvedValue(new Uint8Array(64).fill(3)),
+  signAuthChallengeV2: vi.fn().mockResolvedValue(new Uint8Array(64).fill(3)),
   signTransparencyEntry: vi.fn().mockResolvedValue({
     signature: new Uint8Array(64).fill(4),
   }),

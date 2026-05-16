@@ -8,6 +8,9 @@ import {
   mnemonicToIdentityKey,
   isMnemonicValid,
   signChallenge,
+  signAuthChallengeV2,
+  buildAuthChallengeV2Payload,
+  AUTH_CHALLENGE_V2_HEADER,
   getEnglishWordlist,
 } from './bip39Identity.js';
 
@@ -114,6 +117,65 @@ describe('signChallenge', () => {
     const sigA = await signChallenge(nonceA, privateKey);
     const sigB = await signChallenge(nonceB, privateKey);
     expect(sigA).not.toEqual(sigB);
+  });
+});
+
+describe('buildAuthChallengeV2Payload', () => {
+  it('uses the canonical UTF-8 format pinned by the v2 spec', () => {
+    const bytes = buildAuthChallengeV2Payload('deadbeef', 'https://home.example');
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toBe(`${AUTH_CHALLENGE_V2_HEADER}\naudience=https://home.example\nnonce=deadbeef`);
+  });
+
+  it('produces different bytes for different audiences with the same nonce', () => {
+    // This is the property that closes the cross-instance signing
+    // oracle: a signature valid for `https://evil.example` cannot
+    // satisfy verification under `https://home.example`, because the
+    // signed bytes are not equal.
+    const a = buildAuthChallengeV2Payload('deadbeef', 'https://home.example');
+    const b = buildAuthChallengeV2Payload('deadbeef', 'https://evil.example');
+    expect(a).not.toEqual(b);
+  });
+
+  it('rejects missing nonce or audience', () => {
+    expect(() => buildAuthChallengeV2Payload('', 'https://x')).toThrow(TypeError);
+    expect(() => buildAuthChallengeV2Payload('deadbeef', '')).toThrow(TypeError);
+  });
+});
+
+describe('signAuthChallengeV2', () => {
+  it('produces a valid Ed25519 signature over the v2 payload', async () => {
+    const ed = await import('@noble/ed25519');
+    const mnemonic = generateIdentityMnemonic();
+    const { privateKey, publicKey } = await mnemonicToIdentityKey(mnemonic);
+    const audience = 'https://home.example';
+    const nonce = 'deadbeefcafef00d';
+    const sig = await signAuthChallengeV2(nonce, audience, privateKey);
+    const payload = buildAuthChallengeV2Payload(nonce, audience);
+    expect(await ed.verifyAsync(sig, payload, publicKey)).toBe(true);
+  });
+
+  it('binds the signature to the audience: same nonce, different audience, different signature', async () => {
+    const mnemonic = generateIdentityMnemonic();
+    const { privateKey } = await mnemonicToIdentityKey(mnemonic);
+    const sigHome = await signAuthChallengeV2('deadbeef', 'https://home.example', privateKey);
+    const sigEvil = await signAuthChallengeV2('deadbeef', 'https://evil.example', privateKey);
+    expect(sigHome).not.toEqual(sigEvil);
+  });
+
+  it('v2 signature does not validate against the raw nonce (v1) payload', async () => {
+    // Catches accidental regression to the v1 (raw nonce) protocol on
+    // either side: a v2 signature must be over the audience-bound
+    // payload, NOT the raw nonce bytes.
+    const ed = await import('@noble/ed25519');
+    const mnemonic = generateIdentityMnemonic();
+    const { privateKey, publicKey } = await mnemonicToIdentityKey(mnemonic);
+    const nonce = 'deadbeefcafef00d';
+    const sig = await signAuthChallengeV2(nonce, 'https://home.example', privateKey);
+    const rawNonceBytes = new Uint8Array(
+      nonce.match(/.{2}/g).map((h) => parseInt(h, 16)),
+    );
+    expect(await ed.verifyAsync(sig, rawNonceBytes, publicKey)).toBe(false);
   });
 });
 

@@ -44,6 +44,17 @@ vi.mock('../lib/api', () => ({
   requestGuestSession: vi.fn(),
   listDeviceKeys: vi.fn().mockResolvedValue([]),
   revokeDeviceKey: vi.fn().mockResolvedValue(undefined),
+  // Real implementation: normalize the explicit base URL to a canonical
+  // origin so the audience-bind assertions can pin exact strings.
+  resolveAuthAudience: vi.fn((baseUrl) => {
+    if (!baseUrl) return 'https://default.example';
+    try {
+      const u = new URL(baseUrl);
+      return `${u.protocol}//${u.host}`.replace(/\/$/, '');
+    } catch {
+      return '';
+    }
+  }),
 }));
 
 vi.mock('../lib/transcriptVault', () => ({
@@ -59,7 +70,7 @@ vi.mock('../lib/bip39Identity', () => ({
     privateKey: new Uint8Array(32).fill(1),
     publicKey: new Uint8Array(32).fill(2),
   }),
-  signChallenge: vi.fn().mockResolvedValue(new Uint8Array(64).fill(3)),
+  signAuthChallengeV2: vi.fn().mockResolvedValue(new Uint8Array(64).fill(3)),
   signTransparencyEntry: vi.fn().mockResolvedValue({
     signature: new Uint8Array(64).fill(4),
   }),
@@ -255,6 +266,7 @@ describe('useAuth - performChallengeResponse', () => {
       expect.any(String),
       expect.any(String),
       'https://chat.example.com',
+      'https://chat.example.com',
     );
     expect(apiMod.uploadKeyPackagesAfterAuth).toHaveBeenCalledWith(
       'jwt-test',
@@ -262,6 +274,35 @@ describe('useAuth - performChallengeResponse', () => {
       expect.any(String),
       {},
       'https://chat.example.com',
+    );
+  });
+
+  it('signs the v2 audience-bound payload for performChallengeResponse, never the raw nonce', async () => {
+    // Regression for the cross-instance signing-oracle bug fixed in
+    // PR #39: performChallengeResponse must call signAuthChallengeV2
+    // with (nonceHex, audienceOrigin, privateKey) so the signature is
+    // useless when redeemed at any origin other than the one the user
+    // intended to authenticate to.
+    const bipMod = await import('../lib/bip39Identity');
+    vi.mocked(bipMod.signAuthChallengeV2).mockClear();
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const privateKey = new Uint8Array(32).fill(1);
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        privateKey,
+        new Uint8Array(32).fill(2),
+        'https://chat.example.com',
+      );
+    });
+
+    expect(bipMod.signAuthChallengeV2).toHaveBeenCalledTimes(1);
+    expect(bipMod.signAuthChallengeV2).toHaveBeenCalledWith(
+      'deadbeef',
+      'https://chat.example.com',
+      privateKey,
     );
   });
 

@@ -55,6 +55,15 @@ vi.mock('../lib/api', () => ({
   requestGuestSession: vi.fn(),
   listDeviceKeys: vi.fn().mockResolvedValue([]),
   revokeDeviceKey: vi.fn().mockResolvedValue(undefined),
+  resolveAuthAudience: vi.fn((baseUrl) => {
+    if (!baseUrl) return 'https://default.example';
+    try {
+      const u = new URL(baseUrl);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return '';
+    }
+  }),
 }));
 
 vi.mock('../lib/transcriptVault', () => ({
@@ -71,7 +80,7 @@ vi.mock('../lib/bip39Identity', () => ({
     privateKey: new Uint8Array(32).fill(1),
     publicKey: new Uint8Array(32).fill(2),
   }),
-  signChallenge: vi.fn().mockResolvedValue(new Uint8Array(64).fill(3)),
+  signAuthChallengeV2: vi.fn().mockResolvedValue(new Uint8Array(64).fill(3)),
   signTransparencyEntry: vi.fn().mockResolvedValue({
     signature: new Uint8Array(64).fill(4),
   }),

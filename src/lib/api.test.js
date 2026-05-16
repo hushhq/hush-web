@@ -10,12 +10,15 @@ import {
   getChannelMessages,
   leaveGuild,
   getHandshake,
+  normalizeAudience,
   registerWithPublicKey,
   requestChallenge,
+  resolveAuthAudience,
   uploadMLSCredential,
   uploadMLSKeyPackages,
   getKeyPackageCount,
   uploadKeyPackagesAfterAuth,
+  verifyChallenge,
 } from './api';
 
 // ── leaveGuild ────────────────────────────────────────────────────────────────
@@ -635,6 +638,104 @@ describe('auth instance routing', () => {
       'https://chat.example.com/api/auth/challenge',
       expect.any(Object),
     );
+  });
+
+  it('requestChallenge honors an explicit baseUrl over the selected instance', async () => {
+    // Regression for the original PR #39 over-correction: that diff
+    // collapsed baseUrl to same-origin and broke selected-instance
+    // sign-in. The explicit baseUrl must always win.
+    localStorage.setItem('hush_auth_instance_selected', 'https://selected.example.com');
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ nonce: 'abc123' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await requestChallenge('public-key', 'https://chat.example.com');
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://chat.example.com/api/auth/challenge',
+      expect.any(Object),
+    );
+  });
+
+  it('verifyChallenge honors an explicit baseUrl and sends the v2 audience + challengeVersion', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: 'jwt', user: { id: 'u1' } }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await verifyChallenge(
+      'pk',
+      'deadbeef',
+      'sigb64',
+      'dev-1',
+      'https://chat.example.com',
+      'https://chat.example.com',
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://chat.example.com/api/auth/verify');
+    const body = JSON.parse(opts.body);
+    expect(body).toMatchObject({
+      publicKey: 'pk',
+      nonce: 'deadbeef',
+      signature: 'sigb64',
+      deviceId: 'dev-1',
+      audience: 'https://chat.example.com',
+      challengeVersion: 2,
+    });
+  });
+
+  it('verifyChallenge omits v2 fields when no audience is provided (legacy path)', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: 'jwt', user: { id: 'u1' } }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await verifyChallenge('pk', 'deadbeef', 'sigb64', 'dev-1', 'https://chat.example.com');
+
+    const [, opts] = mockFetch.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    expect(body.audience).toBeUndefined();
+    expect(body.challengeVersion).toBeUndefined();
+  });
+});
+
+describe('normalizeAudience', () => {
+  it.each([
+    ['https://Home.Example.com', 'https://home.example.com'],
+    ['https://home.example.com/', 'https://home.example.com'],
+    ['https://home.example.com/path?q=1#frag', 'https://home.example.com'],
+    ['http://localhost:8080', 'http://localhost:8080'],
+    ['https://home.example.com:443', 'https://home.example.com'],
+    ['http://home.example.com:80', 'http://home.example.com'],
+    ['  https://home.example.com  ', 'https://home.example.com'],
+    ['', ''],
+    ['app://localhost', ''],
+    ['not-a-url', ''],
+  ])('normalizes %s to %s', (input, expected) => {
+    expect(normalizeAudience(input)).toBe(expected);
+  });
+});
+
+describe('resolveAuthAudience', () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('uses the explicit baseUrl when provided', () => {
+    expect(resolveAuthAudience('https://chat.example.com/'))
+      .toBe('https://chat.example.com');
+  });
+
+  it('falls back to the selected auth instance when baseUrl is empty', () => {
+    localStorage.setItem('hush_auth_instance_selected', 'https://selected.example.com');
+    expect(resolveAuthAudience('')).toBe('https://selected.example.com');
   });
 });
 

@@ -5,7 +5,7 @@
  * Auth flow:
  *   1. Derive keypair from mnemonic via bip39Identity.mnemonicToIdentityKey
  *   2. Request challenge nonce via api.requestChallenge
- *   3. Sign nonce via bip39Identity.signChallenge
+ *   3. Sign the v2 challenge payload via bip39Identity.signAuthChallengeV2
  *   4. Submit signature via api.verifyChallenge → receive JWT
  *
  * Vault states:
@@ -17,7 +17,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   mnemonicToIdentityKey,
-  signChallenge,
+  signAuthChallengeV2,
   signTransparencyEntry,
 } from '../lib/bip39Identity';
 import {
@@ -86,6 +86,7 @@ import {
   verifyChallenge,
   registerWithPublicKey,
   requestGuestSession,
+  resolveAuthAudience,
 } from '../lib/api';
 import {
   getActiveAuthInstanceUrlSync,
@@ -1214,13 +1215,23 @@ export function useAuth() {
     const deviceId = getDeviceId();
     const publicKeyBase64 = toBase64(publicKey);
 
+    // Bind the challenge signature to the exact API origin we are
+    // authenticating to (auth challenge v2). Without an audience the
+    // signature is a cross-instance oracle: a malicious instance could
+    // relay this nonce from the legitimate home instance and redeem
+    // the returned signature there. Fail closed if we can't resolve a
+    // canonical origin rather than fall back to a raw-nonce signature.
+    const audience = resolveAuthAudience(baseUrl);
+    if (!audience) {
+      throw new Error('Cannot determine auth instance origin for challenge.');
+    }
+
     const { nonce } = await requestChallenge(publicKeyBase64, baseUrl);
 
-    const nonceBytes = hexToBytes(nonce);
-    const signature = await signChallenge(nonceBytes, privateKey);
+    const signature = await signAuthChallengeV2(nonce, audience, privateKey);
     const signatureBase64 = toBase64(signature);
 
-    const data = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, baseUrl);
+    const data = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, baseUrl, audience);
 
     // Keep private key in memory for vault lock/unlock, not in any storage.
     identityKeyRef.current = { privateKey, publicKey };
@@ -1435,11 +1446,18 @@ export function useAuth() {
       const deviceId = getDeviceId();
       const publicKeyBase64 = toBase64(bundle.rootPublicKey);
 
+      // Audience-bind the device-link verification signature to the
+      // resolved home/selected instance so a relay attack cannot trade
+      // the signature for a JWT on a different instance. See
+      // performChallengeResponse for the threat-model details.
+      const audience = resolveAuthAudience(authBaseUrl);
+      if (!audience) {
+        throw new Error('Cannot determine auth instance origin for device link verification.');
+      }
       const { nonce } = await requestChallenge(publicKeyBase64, authBaseUrl);
-      const nonceBytes = hexToBytes(nonce);
-      const signature = await signChallenge(nonceBytes, bundle.rootPrivateKey);
+      const signature = await signAuthChallengeV2(nonce, audience, bundle.rootPrivateKey);
       const signatureBase64 = toBase64(signature);
-      const data = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, authBaseUrl);
+      const data = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, authBaseUrl, audience);
 
       // Keep private key in memory for vault lock/unlock, not in any storage.
       identityKeyRef.current = { privateKey: bundle.rootPrivateKey, publicKey: bundle.rootPublicKey };
