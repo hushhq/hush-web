@@ -2,7 +2,7 @@
   "maxFilesPerPullRequest": 400,
   "maxLinesPerFile": 300,
   "oversizedFiles": {
-    "src/App.test.jsx": 394,
+    "src/App.test.jsx": 465,
     "src/adapters/useChannelsForServer.test.tsx": 446,
     "src/adapters/useChannelsForServer.ts": 429,
     "src/audio/__tests__/CaptureGraphFactory.test.ts": 302,

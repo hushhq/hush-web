@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { InstanceProvider, useInstanceContext } from './contexts/InstanceContext';
 import { BootProvider, useBootController } from './hooks/useBootController.jsx';
 import AppBackground from './components/AppBackground';
@@ -111,6 +111,32 @@ function PostLoginRedirect() {
   return fallback;
 }
 
+function TransparencyErrorScreen() {
+  const { transparencyError } = useAuth();
+  const message = transparencyError
+    || 'A security check on your account failed. Do not continue on this device.';
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      data-testid="transparency-error-screen"
+      className="flex min-h-svh w-full items-center justify-center bg-background p-6"
+    >
+      <div className="flex max-w-md flex-col gap-3 rounded-lg border border-destructive/40 bg-card p-6 text-card-foreground shadow-sm">
+        <h1 className="text-lg font-semibold text-destructive">
+          Security check failed
+        </h1>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        <p className="text-xs text-muted-foreground">
+          Your transparency log entries could not be verified. To protect
+          your account, the app cannot continue on this device. Recover
+          from another trusted device.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── AppContent ────────────────────────────────────────────────────────────────
 
 /**
@@ -120,12 +146,13 @@ function PostLoginRedirect() {
  * independently checks auth/vault/guild state for routing decisions.
  *
  * Boot states:
- *   'loading'     → blank screen (auth rehydrating)
- *   'needs_login' → Home (login/register UI) for all non-public routes
- *   'needs_pin'   → Home (PIN unlock screen) for all non-public routes
- *   'pin_setup'   → Home (PIN setup after registration) for all non-public routes
- *   'ready'       → full route tree (instances still booting)
- *   'booted'      → full route tree (everything loaded)
+ *   'loading'             → blank screen (auth rehydrating)
+ *   'needs_login'         → Home (login/register UI) for all non-public routes
+ *   'needs_pin'           → Home (PIN unlock screen) for all non-public routes
+ *   'pin_setup'           → Home (PIN setup after registration) for all non-public routes
+ *   'transparency_error'  → full-screen blocking security failure (no route tree)
+ *   'ready'               → full route tree (instances still booting)
+ *   'booted'              → full route tree (everything loaded)
  */
 function AppContent() {
   const { bootState } = useBootController();
@@ -150,6 +177,10 @@ function AppContent() {
         </Routes>
       </Suspense>
     );
+  }
+
+  if (bootState === 'transparency_error') {
+    return <TransparencyErrorScreen />;
   }
 
   // ── Authenticated (ready or booted): full route tree ─────────────────────

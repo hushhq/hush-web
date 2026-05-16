@@ -27,6 +27,7 @@ function mockState({
   needsUnlock = false,
   hasSession = false,
   needsPinSetup = false,
+  transparencyError = null,
   guildsLoaded = false,
 } = {}) {
   useAuth.mockReturnValue({
@@ -34,6 +35,7 @@ function mockState({
     needsUnlock,
     hasSession,
     needsPinSetup,
+    transparencyError,
     user: hasSession ? { id: 'u1' } : null,
   });
   useInstanceContext.mockReturnValue({ guildsLoaded, mergedGuilds: guildsLoaded ? [{ id: 'g1' }] : [] });
@@ -98,5 +100,46 @@ describe('useBootController', () => {
     mockState({ needsUnlock: true, hasSession: true, needsPinSetup: true, guildsLoaded: true });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('needs_pin');
+  });
+
+  it('returns transparency_error when authenticated, unlocked, and transparencyError is set', () => {
+    mockState({
+      hasSession: true,
+      guildsLoaded: true,
+      transparencyError: 'Key mismatch detected.',
+    });
+    const { result } = renderHook(() => useBootController(), { wrapper });
+    expect(result.current.bootState).toBe('transparency_error');
+  });
+
+  it('transparency_error preempts ready when guilds are still loading', () => {
+    mockState({
+      hasSession: true,
+      guildsLoaded: false,
+      transparencyError: 'No transparency log entries found for your key.',
+    });
+    const { result } = renderHook(() => useBootController(), { wrapper });
+    expect(result.current.bootState).toBe('transparency_error');
+  });
+
+  it('needs_pin takes priority over transparency_error', () => {
+    mockState({
+      needsUnlock: true,
+      hasSession: true,
+      transparencyError: 'Key mismatch detected.',
+    });
+    const { result } = renderHook(() => useBootController(), { wrapper });
+    expect(result.current.bootState).toBe('needs_pin');
+  });
+
+  it('pin_setup takes priority over transparency_error', () => {
+    mockState({
+      hasSession: true,
+      needsPinSetup: true,
+      transparencyError: 'Key mismatch detected.',
+      guildsLoaded: true,
+    });
+    const { result } = renderHook(() => useBootController(), { wrapper });
+    expect(result.current.bootState).toBe('pin_setup');
   });
 });

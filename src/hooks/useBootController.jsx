@@ -8,12 +8,18 @@
  *
  * Boot states (sequential, deterministic):
  *
- *   'loading'     - auth is rehydrating (IDB/JWT check in progress)
- *   'needs_login' - no session, no vault - show login/register
- *   'needs_pin'   - vault exists but locked - show PIN screen
- *   'pin_setup'   - just registered/recovered, PIN setup prompt before proceeding
- *   'ready'       - authenticated, identity key available, instances booting
- *   'booted'      - authenticated, instances connected, guilds loaded
+ *   'loading'             - auth is rehydrating (IDB/JWT check in progress)
+ *   'needs_login'         - no session, no vault - show login/register
+ *   'needs_pin'           - vault exists but locked - show PIN screen
+ *   'pin_setup'           - just registered/recovered, PIN setup prompt before proceeding
+ *   'transparency_error'  - authenticated + unlocked, but own-key transparency
+ *                           verification failed; block the app with a
+ *                           full-screen security failure UI
+ *   'ready'               - authenticated, identity key available, instances booting
+ *   'booted'              - authenticated, instances connected, guilds loaded
+ *
+ * Priority: needs_pin > pin_setup > transparency_error > ready > booted. A
+ * non-null `transparencyError` must not preempt the local vault/PIN state.
  *
  * The BootController is exposed via context so AppContent can consume a single
  * boot-state value without duplicating auth/loading checks.
@@ -39,6 +45,7 @@ export function BootProvider({ children }) {
     needsUnlock,
     hasSession,
     needsPinSetup,
+    transparencyError,
     user,
   } = useAuth();
 
@@ -60,11 +67,17 @@ export function BootProvider({ children }) {
     // Authenticated. Check if post-registration PIN setup is pending.
     if (needsPinSetup) return 'pin_setup';
 
+    // Step 2b: own-key transparency verification failed. Block the
+    // whole authenticated route tree behind a full-screen security
+    // failure surface. Runs AFTER vault/PIN so the user is never
+    // shown the integrity failure ahead of resolving local state.
+    if (transparencyError) return 'transparency_error';
+
     // Step 3: wait for instance boot to finish.
     if (!guildsLoaded) return 'ready';
 
     return 'booted';
-  }, [authLoading, needsUnlock, hasSession, needsPinSetup, guildsLoaded]);
+  }, [authLoading, needsUnlock, hasSession, needsPinSetup, transparencyError, guildsLoaded]);
 
   const value = useMemo(() => ({
     bootState,
@@ -84,7 +97,7 @@ export function BootProvider({ children }) {
  * Consumes the boot state from the nearest BootProvider.
  *
  * @returns {{
- *   bootState: 'loading' | 'needs_login' | 'needs_pin' | 'pin_setup' | 'ready' | 'booted',
+ *   bootState: 'loading' | 'needs_login' | 'needs_pin' | 'pin_setup' | 'transparency_error' | 'ready' | 'booted',
  *   user: object | null,
  *   mergedGuilds: Array<object>,
  *   guildsLoaded: boolean,
