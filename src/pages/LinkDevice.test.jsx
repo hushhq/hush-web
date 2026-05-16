@@ -85,6 +85,7 @@ vi.mock('../hooks/useBodyScrollMode', () => ({
 
 vi.mock('../hooks/useAuth', () => ({
   getDeviceId: () => 'device-1',
+  getInstanceToken: () => 'tok',
 }));
 
 vi.mock('../hooks/useAuthInstanceSelection.js', () => ({
@@ -983,7 +984,7 @@ describe('LinkDevice', () => {
 
     await waitFor(() => {
       expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
-        'jwt-token',
+        'tok',
         {
           claimToken: 'claim-1',
           certificate: 'certificate-base64',
@@ -1061,7 +1062,7 @@ describe('LinkDevice', () => {
       baseUrl: 'https://chat.example.com',
     }));
     expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
-      'jwt-token',
+      'tok',
       expect.objectContaining({ claimToken: 'claim-1' }),
       'https://chat.example.com',
     );
@@ -1124,7 +1125,7 @@ describe('LinkDevice', () => {
 
     expect(mockPreDecryptForLinkExport).toHaveBeenCalledWith(expect.objectContaining({
       activeDb: historyDb,
-      token: 'jwt-token',
+      token: 'tok',
       baseUrl: 'https://chat.example.com',
     }));
     expect(mockExportHistorySnapshot).toHaveBeenCalled();
@@ -1707,7 +1708,7 @@ describe('LinkDevice', () => {
       });
       const args = mockResumeUploadArchiveSession.mock.calls[0][0];
       expect(args.exportRecord).toEqual(sampleResumable);
-      expect(args.token).toBe('jwt-token');
+      expect(args.token).toBe('tok');
       expect(args.baseUrl).toBe('https://chat.example.com');
       // Fresh upload path is NOT taken when resume is chosen.
       expect(mockUploadArchiveSession).not.toHaveBeenCalled();
@@ -1715,7 +1716,7 @@ describe('LinkDevice', () => {
       // Third arg is the trusted auth instance URL, not claim.instanceUrl.
       await waitFor(() => {
         expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
-          'jwt-token',
+          'tok',
           expect.objectContaining({ claimToken: 'claim-1' }),
           'https://chat.example.com',
         );
@@ -1753,7 +1754,7 @@ describe('LinkDevice', () => {
       expect(args.baseUrl).toBe('https://chat.example.com');
       await waitFor(() => {
         expect(mockVerifyDeviceLinkRequest).toHaveBeenCalledWith(
-          'jwt-token',
+          'tok',
           expect.objectContaining({ claimToken: 'claim-1' }),
           'https://chat.example.com',
         );

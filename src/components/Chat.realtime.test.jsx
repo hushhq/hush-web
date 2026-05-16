@@ -7,6 +7,7 @@ const mockDecryptFromChannel = vi.fn();
 
 vi.mock('../hooks/useAuth', () => ({
   getDeviceId: () => 'device-1',
+  getInstanceToken: () => 'tok',
 }));
 
 vi.mock('../hooks/useMLS', () => ({

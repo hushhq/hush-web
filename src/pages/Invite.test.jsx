@@ -30,6 +30,7 @@ vi.mock('../lib/guildMetadataKeyStore', () => ({
 vi.mock('../hooks/useAuth', () => ({
   HOME_INSTANCE_KEY: 'hush_home_instance',
   getDeviceId: vi.fn(() => 'device-1'),
+  getInstanceToken: vi.fn(() => 'tok'),
 }));
 
 // ── Imports after mocks ───────────────────────────────────────────────────────

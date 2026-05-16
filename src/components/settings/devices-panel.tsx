@@ -17,7 +17,15 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { listDeviceKeys, revokeDeviceKey } from "@/lib/api"
 import { getReadableDeviceLabel } from "@/lib/deviceLabel"
-import { getDeviceId } from "@/hooks/useAuth"
+import { getDeviceId, getInstanceToken } from "@/hooks/useAuth"
+
+function resolveHomeInstanceToken(
+  homeInstanceUrl: string | null | undefined,
+  fallbackToken: string | null
+): string | null {
+  if (homeInstanceUrl) return getInstanceToken(homeInstanceUrl)
+  return fallbackToken
+}
 import { TransparencyVerifier } from "@/lib/transparencyVerifier"
 import { bytesToHex } from "@/lib/identityVault"
 import ApproveDeviceLinkFlow from "@/components/devices/ApproveDeviceLinkFlow.jsx"
@@ -78,16 +86,18 @@ export function DevicesPanel({
   const currentDeviceId = React.useMemo(() => getDeviceId(), [])
 
   const fetchDevices = React.useCallback(async () => {
-    if (!token) {
+    const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
+    if (!homeInstanceToken) {
       setLoading(false)
+      if (homeInstanceUrl) {
+        setError("Sign in to the home instance to manage devices.")
+      }
       return
     }
     try {
       setError(null)
-      // listDeviceKeys' JSDoc shape is stale; backend returns
-      // { id, deviceId, label, certifiedAt, lastSeen }.
       const data = (await listDeviceKeys(
-        token,
+        homeInstanceToken,
         homeInstanceUrl ?? ""
       )) as unknown as DeviceRow[]
       setDevices(Array.isArray(data) ? data : [])
@@ -114,7 +124,8 @@ export function DevicesPanel({
         return
       }
       const pubKey = identityKeyRef.current?.publicKey
-      if (!pubKey || !token) return
+      const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
+      if (!pubKey || !homeInstanceToken) return
       try {
         const verifier = new TransparencyVerifier(
           homeInstanceUrl,
@@ -122,7 +133,7 @@ export function DevicesPanel({
         )
         const result = (await verifier.verifyOwnKey(
           bytesToHex(pubKey),
-          token
+          homeInstanceToken
         )) as { ok: boolean; error?: unknown }
         if (!result.ok) {
           console.error(
@@ -138,11 +149,16 @@ export function DevicesPanel({
   )
 
   const handleRevoke = React.useCallback(async () => {
-    if (!confirmRevoke || !token) return
+    if (!confirmRevoke) return
+    const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
+    if (!homeInstanceToken) {
+      setError("Sign in to the home instance to revoke devices.")
+      return
+    }
     setRevoking(true)
     try {
       await revokeDeviceKey(
-        token,
+        homeInstanceToken,
         confirmRevoke.deviceId,
         homeInstanceUrl ?? ""
       )
