@@ -112,6 +112,7 @@ import {
   serverTargetsMatch,
   type ServerActionTarget,
 } from "./authenticated-app-server-actions"
+import { shouldLeaveVoiceAfterSelfRemoval } from "./authenticated-app-self-removal"
 
 const noopRefetch = async () => {}
 
@@ -400,7 +401,10 @@ export function AuthenticatedApp() {
   const identityPublicKey = identityKeyRef.current?.publicKey ?? null
 
   // Self kick/ban handler. The shell already toasts; this handler
-  // routes the user away if they were viewing the affected server.
+  // also tears down persisted voice for the exact removed server
+  // instance so voice membership follows server membership.
+  const joinedVoiceRef = React.useRef<JoinedVoice | null>(null)
+  const handleVoiceLeaveRef = React.useRef<(() => void) | null>(null)
   const handleSelfRemovedFromServer = React.useCallback(
     (info: { instanceUrl: string; serverId: string }) => {
       if (
@@ -409,6 +413,13 @@ export function AuthenticatedApp() {
         activeServer.raw.instanceUrl === info.instanceUrl
       ) {
         navigate("/home")
+      }
+      if (shouldLeaveVoiceAfterSelfRemoval(info, joinedVoiceRef.current)) {
+        try {
+          handleVoiceLeaveRef.current?.()
+        } catch (err) {
+          console.warn("[authenticated-app] voice leave after self-removal failed:", err)
+        }
       }
     },
     [activeServer, navigate],
@@ -827,6 +838,9 @@ export function AuthenticatedApp() {
   // joinedVoice holds the active voice channel descriptor; mount/unmount of
   // <VoiceChannelView /> drives connect/disconnect.
   const [joinedVoice, setJoinedVoice] = React.useState<JoinedVoice | null>(null)
+  React.useEffect(() => {
+    joinedVoiceRef.current = joinedVoice
+  }, [joinedVoice])
   // Channel id the user just hung up on. Suppresses the auto-rejoin
   // effect so leaving lands on the placeholder lobby rather than
   // immediately reconnecting. Cleared when the user navigates away
@@ -1079,6 +1093,9 @@ export function AuthenticatedApp() {
       isWebcamOn: false,
     })
   }, [joinedVoice?.channelId])
+  React.useEffect(() => {
+    handleVoiceLeaveRef.current = handleVoiceLeave
+  }, [handleVoiceLeave])
 
   const handleJoinFromPlaceholder = React.useCallback(() => {
     if (!activeServer || !instanceUrl) return
