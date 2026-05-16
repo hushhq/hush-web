@@ -65,7 +65,7 @@
     "src/lib/transcriptVault.js": 1127,
     "src/lib/transcriptVault.test.js": 859,
     "src/lib/transparencyVerifier.js": 346,
-    "src/lib/transparencyVerifier.test.js": 592,
+    "src/lib/transparencyVerifier.test.js": 593,
     "src/lib/updateRequired.test.tsx": 522,
     "src/lib/vaultSessionKey.test.ts": 367,
     "src/lib/vaultSessionKey.ts": 577,
