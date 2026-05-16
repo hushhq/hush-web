@@ -31,7 +31,7 @@ import {
   SystemChannelView,
   SYSTEM_CHANNEL_HEADERS,
 } from "@/components/system-channel-view"
-import { ServerRail } from "@/components/server-rail"
+import { ServerRail, type RailSelection } from "@/components/server-rail"
 import { CheatSheet } from "@/components/cheat-sheet"
 import { ServerSettingsDialog } from "@/components/server-settings-dialog"
 import { UserSettingsDialog } from "@/components/user-settings-dialog"
@@ -107,6 +107,11 @@ import {
   resolveTrustedHomeInstance,
 } from "./authenticated-app-home-instance"
 import { runInstanceBanAction } from "./authenticated-app-instance-ban"
+import {
+  resolveServerForAction,
+  serverTargetsMatch,
+  type ServerActionTarget,
+} from "./authenticated-app-server-actions"
 
 const noopRefetch = async () => {}
 
@@ -304,6 +309,22 @@ export function AuthenticatedApp() {
   }, [connectedInstances])
 
   const { servers } = useGuilds()
+
+  // Rail Server shape includes the owning `instanceUrl` so the rail's
+  // destructive/settings callbacks can carry the full identity (id +
+  // instance) to the action handlers below. The adapter Server keeps
+  // `instanceUrl` on its nested `raw` object; flatten it here for the
+  // rail consumer.
+  const railServers = React.useMemo(
+    () =>
+      servers.map((s) => ({
+        id: s.id,
+        name: s.name,
+        initials: s.initials,
+        instanceUrl: s.raw.instanceUrl,
+      })),
+    [servers]
+  )
 
   const parsedGuild = React.useMemo(
     () => (params.guildSlug ? parseGuildRouteRef(params.guildSlug) : { guildId: null }),
@@ -528,43 +549,63 @@ export function AuthenticatedApp() {
     [activeServer, token, baseUrl, applyChannelsDeleted]
   )
 
+  const activeServerTarget = React.useMemo<ServerActionTarget | null>(
+    () =>
+      activeServer
+        ? { id: activeServer.id, instanceUrl: activeServer.raw.instanceUrl }
+        : null,
+    [activeServer]
+  )
+
   const handleLeaveServer = React.useCallback(
-    async (serverId: string) => {
-      const target = servers.find((s) => s.id === serverId)
-      if (!target?.raw.instanceUrl) return
-      const tk = getTokenForInstance(target.raw.instanceUrl)
+    async (target: ServerActionTarget) => {
+      const server = resolveServerForAction(servers, target)
+      if (!server?.raw.instanceUrl) return
+      const tk = getTokenForInstance(server.raw.instanceUrl)
       if (!tk) return
       try {
-        await leaveGuild(tk, serverId, target.raw.instanceUrl)
-        await refreshGuilds(target.raw.instanceUrl)
-        if (activeServer?.id === serverId) navigate("/home")
+        await leaveGuild(tk, server.id, server.raw.instanceUrl)
+        await refreshGuilds(server.raw.instanceUrl)
+        if (serverTargetsMatch(activeServerTarget, target)) navigate("/home")
       } catch (err) {
         console.error("leaveGuild failed", err)
       }
     },
-    [servers, getTokenForInstance, refreshGuilds, activeServer, navigate]
+    [
+      servers,
+      getTokenForInstance,
+      refreshGuilds,
+      activeServerTarget,
+      navigate,
+    ]
   )
 
   const handleDeleteServer = React.useCallback(
-    async (serverId: string) => {
-      const target = servers.find((s) => s.id === serverId)
-      if (!target?.raw.instanceUrl) return
-      const tk = getTokenForInstance(target.raw.instanceUrl)
+    async (target: ServerActionTarget) => {
+      const server = resolveServerForAction(servers, target)
+      if (!server?.raw.instanceUrl) return
+      const tk = getTokenForInstance(server.raw.instanceUrl)
       if (!tk) return
       try {
-        await deleteGuild(tk, serverId, target.raw.instanceUrl)
+        await deleteGuild(tk, server.id, server.raw.instanceUrl)
         // Navigate away immediately so the confirmation dialog can
         // close and the user is no longer mounted on the dead server.
         // Refresh the guild list in the background — awaiting it kept
         // the dialog open through a heavy authenticated-app re-render
         // and made the UI feel frozen.
-        if (activeServer?.id === serverId) navigate("/home")
-        void refreshGuilds(target.raw.instanceUrl).catch(() => {})
+        if (serverTargetsMatch(activeServerTarget, target)) navigate("/home")
+        void refreshGuilds(server.raw.instanceUrl).catch(() => {})
       } catch (err) {
         console.error("deleteGuild failed", err)
       }
     },
-    [servers, getTokenForInstance, refreshGuilds, activeServer, navigate]
+    [
+      servers,
+      getTokenForInstance,
+      refreshGuilds,
+      activeServerTarget,
+      navigate,
+    ]
   )
 
   // Role resolution per server: prefer the active server's full member list
@@ -572,14 +613,22 @@ export function AuthenticatedApp() {
   // (`permissionLevel` int or `ownerId === currentUserId`). Servers we have
   // no signal for return undefined; callers must treat that as "unknown",
   // not "member".
+  //
+  // The active-server fallback MUST match on both `id` and `instanceUrl`;
+  // otherwise a foreign-instance server with a colliding id would inherit
+  // the active server's role (e.g. "owner") and unlock destructive
+  // actions on the wrong instance.
   const getServerRole = React.useCallback(
-    (serverId: string): MemberRole | undefined => {
-      if (serverId === activeServer?.id && currentUserRole) {
+    (target: ServerActionTarget): MemberRole | undefined => {
+      if (
+        currentUserRole &&
+        serverTargetsMatch(activeServerTarget, target)
+      ) {
         return currentUserRole
       }
-      return servers.find((s) => s.id === serverId)?.role
+      return resolveServerForAction(servers, target)?.role
     },
-    [activeServer, currentUserRole, servers]
+    [activeServerTarget, currentUserRole, servers]
   )
 
   const handleDirectMessage = React.useCallback(
@@ -648,10 +697,16 @@ export function AuthenticatedApp() {
   const [createServerError, setCreateServerError] =
     React.useState<string | null>(null)
 
-  const handleOpenServerSettings = React.useCallback((serverId: string) => {
-    setSettingsTargetServerId(serverId)
-    setIsServerSettingsOpen(true)
-  }, [])
+  const handleOpenServerSettings = React.useCallback(
+    (target: ServerActionTarget) => {
+      // Store the full target identity so the dialog can disambiguate
+      // same-id servers across instances. A bare id is ambiguous in a
+      // federated/multi-instance client.
+      setSettingsTarget(target)
+      setIsServerSettingsOpen(true)
+    },
+    []
+  )
 
   const openCreateServerDialog = React.useCallback(() => {
     setCreateServerName("")
@@ -798,8 +853,8 @@ export function AuthenticatedApp() {
   const [isCommandOpen, setIsCommandOpen] = React.useState(false)
   const [isCheatSheetOpen, setIsCheatSheetOpen] = React.useState(false)
   const [isServerSettingsOpen, setIsServerSettingsOpen] = React.useState(false)
-  const [settingsTargetServerId, setSettingsTargetServerId] =
-    React.useState<string | null>(null)
+  const [settingsTarget, setSettingsTarget] =
+    React.useState<ServerActionTarget | null>(null)
   const [isUserSettingsOpen, setIsUserSettingsOpen] = React.useState(false)
   const [favorites, setFavorites] = React.useState<FavoriteEntry[]>([])
   const favoriteIds = React.useMemo(
@@ -879,12 +934,15 @@ export function AuthenticatedApp() {
   }, [navigateToServer])
 
   const handleSelectRail = React.useCallback(
-    (id: string) => {
-      if (id === "home") {
+    (target: RailSelection | string) => {
+      if (target === "home") {
         navigate("/home")
         return
       }
-      const server = servers.find((s) => s.id === id)
+      const server =
+        typeof target === "string"
+          ? servers.find((s) => s.id === target)
+          : resolveServerForAction(servers, target)
       if (server) navigateToServer(server)
     },
     [navigate, navigateToServer, servers]
@@ -1200,7 +1258,13 @@ export function AuthenticatedApp() {
         event.preventDefault()
         const idx = Number(key) - 1
         const target = railEntries[idx]
-        if (target) handleSelectRail(target.id)
+        if (target) {
+          handleSelectRail(
+            target.id === "home" || !("raw" in target)
+              ? target.id
+              : { id: target.id, instanceUrl: target.raw.instanceUrl }
+          )
+        }
         return
       }
       if (mod && event.shiftKey && key.toLowerCase() === "m") {
@@ -1452,8 +1516,8 @@ export function AuthenticatedApp() {
         </React.Fragment>
       ))}
       <ServerRail
-        servers={servers}
-        activeRailId={activeServer?.id ?? "home"}
+        servers={railServers}
+        activeRailTarget={activeServerTarget ?? "home"}
         onSelect={handleSelectRail}
         getServerRole={getServerRole}
         onLeaveServer={handleLeaveServer}
@@ -1481,7 +1545,11 @@ export function AuthenticatedApp() {
                 onSelectRail={handleSelectRail}
                 voice={voiceProps}
                 onOpenServerSettings={() => {
-                  if (activeServer) handleOpenServerSettings(activeServer.id)
+                  if (activeServer)
+                    handleOpenServerSettings({
+                      id: activeServer.id,
+                      instanceUrl: activeServer.raw.instanceUrl,
+                    })
                 }}
                 onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                 onSignOut={handleSignOut}
@@ -1542,7 +1610,11 @@ export function AuthenticatedApp() {
                   onSelectRail={handleSelectRail}
                   voice={voiceProps}
                   onOpenServerSettings={() => {
-                    if (activeServer) handleOpenServerSettings(activeServer.id)
+                    if (activeServer)
+                      handleOpenServerSettings({
+                        id: activeServer.id,
+                        instanceUrl: activeServer.raw.instanceUrl,
+                      })
                   }}
                   onOpenUserSettings={() => setIsUserSettingsOpen(true)}
                   onSignOut={handleSignOut}
@@ -1731,22 +1803,28 @@ export function AuthenticatedApp() {
         </DialogContent>
       </Dialog>
       {(() => {
-        const targetServerId = settingsTargetServerId
-        const targetServer = targetServerId
-          ? servers.find((s) => s.id === targetServerId)
-          : null
-        const targetRole = targetServerId
-          ? getServerRole(targetServerId)
+        // Resolve the target by BOTH id and instanceUrl. If the
+        // target no longer exists in `servers` (e.g. instance
+        // disconnected after the dialog opened), we must NOT expose
+        // owner-only destructive actions — a bare-id fallback could
+        // act on a foreign instance with a colliding id.
+        const targetServer = resolveServerForAction(servers, settingsTarget)
+        const targetRole = settingsTarget
+          ? getServerRole(settingsTarget)
           : undefined
+        const canDelete =
+          Boolean(targetServer) &&
+          Boolean(settingsTarget) &&
+          targetRole === "owner"
         return (
           <ServerSettingsDialog
             open={isServerSettingsOpen}
             onOpenChange={setIsServerSettingsOpen}
             serverName={targetServer?.name ?? activeServer?.name ?? "Server"}
             onDeleteServer={
-              targetServerId && targetRole === "owner"
+              canDelete
                 ? async () => {
-                    await handleDeleteServer(targetServerId)
+                    await handleDeleteServer(settingsTarget!)
                     setIsServerSettingsOpen(false)
                   }
                 : undefined
@@ -1804,7 +1882,7 @@ function HomeSidebar({
   user: { name: string; email: string; initials: string }
   railEntries: { id: string; name: string; initials: string }[]
   activeRailId: string
-  onSelectRail: (id: string) => void
+  onSelectRail: (target: RailSelection | string) => void
   activeChannelId: string
   onSelectChannel: (id: string) => void
   voice?: React.ComponentProps<typeof ChannelSidebar>["voice"]

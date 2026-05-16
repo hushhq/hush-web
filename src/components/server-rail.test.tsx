@@ -22,9 +22,12 @@ beforeAll(() => {
 import { ServerRail } from "./server-rail"
 import { TooltipProvider } from "./ui/tooltip"
 
+const HOME = "https://home.example.com"
+const PEER = "https://peer.example.com"
+
 const SERVERS = [
-  { id: "srv-1", name: "Alpha", initials: "AL" },
-  { id: "srv-2", name: "Beta", initials: "BE" },
+  { id: "srv-1", name: "Alpha", initials: "AL", instanceUrl: HOME },
+  { id: "srv-2", name: "Beta", initials: "BE", instanceUrl: HOME },
 ]
 
 describe("ServerRail", () => {
@@ -35,7 +38,7 @@ describe("ServerRail", () => {
       <TooltipProvider>
         <ServerRail
           servers={SERVERS}
-          activeRailId="srv-1"
+          activeRailTarget={{ id: "srv-1", instanceUrl: HOME }}
           onSelect={() => {}}
           {...overrides}
         />
@@ -50,12 +53,15 @@ describe("ServerRail", () => {
     expect(screen.getByRole("button", { name: "Beta" })).toBeInTheDocument()
   })
 
-  it("calls onSelect with the server id when clicked", async () => {
+  it("calls onSelect with the concrete server target when clicked", async () => {
     const onSelect = vi.fn()
     setup({ onSelect })
 
     await userEvent.click(screen.getByRole("button", { name: "Beta" }))
-    expect(onSelect).toHaveBeenCalledWith("srv-2")
+    expect(onSelect).toHaveBeenCalledWith({
+      id: "srv-2",
+      instanceUrl: HOME,
+    })
   })
 
   it("shows Leave server (not Delete) when current user is a non-owner member", async () => {
@@ -87,7 +93,7 @@ describe("ServerRail", () => {
     // Before the role-per-server fix, this surface wrongly fell back to
     // "Open server first" because getServerRole returned undefined.
     setup({
-      getServerRole: (id) => (id === "srv-2" ? "owner" : "member"),
+      getServerRole: (target) => (target.id === "srv-2" ? "owner" : "member"),
       onDeleteServer: vi.fn(),
     })
 
@@ -101,4 +107,91 @@ describe("ServerRail", () => {
 
   // Dialog-confirm flow tested via integration in App.test.jsx — Radix
   // AlertDialog uses portals which complicate user-event clicks here.
+
+  it("getServerRole receives the full { id, instanceUrl } target for each rendered server", () => {
+    const seen: Array<{ id: string; instanceUrl: string | null }> = []
+    setup({
+      getServerRole: (target) => {
+        seen.push(target)
+        return undefined
+      },
+    })
+    // Both rail servers must show up by their (id, instanceUrl) pair.
+    expect(seen).toEqual(
+      expect.arrayContaining([
+        { id: "srv-1", instanceUrl: HOME },
+        { id: "srv-2", instanceUrl: HOME },
+      ]),
+    )
+  })
+
+  it("onOpenSettings receives the target object, not a bare id", async () => {
+    const onOpenServerSettings = vi.fn()
+    setup({
+      getServerRole: () => "owner",
+      onOpenServerSettings,
+    })
+
+    await userEvent.pointer({
+      keys: "[MouseRight]",
+      target: screen.getByRole("button", { name: "Alpha" }),
+    })
+    await userEvent.click(screen.getByText(/server settings/i))
+
+    expect(onOpenServerSettings).toHaveBeenCalledWith({
+      id: "srv-1",
+      instanceUrl: HOME,
+    })
+  })
+
+  it("distinguishes same-id servers across instances by passing the right instanceUrl", () => {
+    // Two rail entries with the same id but different instanceUrls
+    // must each surface their own target to getServerRole.
+    const seen: Array<{ id: string; instanceUrl: string | null }> = []
+    render(
+      <TooltipProvider>
+        <ServerRail
+          servers={[
+            { id: "shared", name: "Home Shared", initials: "HS", instanceUrl: HOME },
+            { id: "shared", name: "Peer Shared", initials: "PS", instanceUrl: PEER },
+          ]}
+          activeRailTarget={{ id: "shared", instanceUrl: PEER }}
+          onSelect={() => {}}
+          getServerRole={(target) => {
+            seen.push(target)
+            return undefined
+          }}
+        />
+      </TooltipProvider>
+    )
+    // React may invoke the render function more than once (StrictMode
+    // or concurrent rendering). Assert containment + uniqueness rather
+    // than strict-equality on the call sequence.
+    const uniq = Array.from(new Set(seen.map((t) => `${t.id}@${t.instanceUrl}`)))
+    expect(uniq.sort()).toEqual(
+      [`shared@${HOME}`, `shared@${PEER}`].sort()
+    )
+  })
+
+  it("marks only the matching same-id same-instance entry active", () => {
+    render(
+      <TooltipProvider>
+        <ServerRail
+          servers={[
+            { id: "shared", name: "Home Shared", initials: "HS", instanceUrl: HOME },
+            { id: "shared", name: "Peer Shared", initials: "PS", instanceUrl: PEER },
+          ]}
+          activeRailTarget={{ id: "shared", instanceUrl: PEER }}
+          onSelect={() => {}}
+        />
+      </TooltipProvider>
+    )
+
+    expect(screen.getByRole("button", { name: "Home Shared" })).not.toHaveClass(
+      "bg-primary"
+    )
+    expect(screen.getByRole("button", { name: "Peer Shared" })).toHaveClass(
+      "bg-primary"
+    )
+  })
 })

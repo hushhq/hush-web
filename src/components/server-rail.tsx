@@ -41,31 +41,43 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx"
+import {
+  serverTargetsMatch,
+  type ServerActionTarget,
+} from "./authenticated-app-server-actions"
 
 type Server = {
   id: string
   name: string
   initials: string
+  /**
+   * Instance origin that owns this guild. Required so destructive /
+   * settings callbacks fired from this rail can be scoped to the
+   * exact instance even when the same `id` exists on more than one
+   * connected instance. `null` only for shells that have not wired
+   * the field yet — handlers should treat that as "no target".
+   */
+  instanceUrl: string | null
 }
 
-type RailSelection = "home" | string
+export type RailSelection = "home" | ServerActionTarget
 
 interface ServerRailProps {
   servers: Server[]
-  activeRailId: RailSelection
-  onSelect: (id: RailSelection) => void
+  activeRailTarget: RailSelection
+  onSelect: (target: RailSelection) => void
   /** Returns the current user's role on the given server. */
-  getServerRole?: (serverId: string) => MemberRole | undefined
-  onLeaveServer?: (serverId: string) => Promise<void> | void
-  onDeleteServer?: (serverId: string) => Promise<void> | void
-  onOpenServerSettings?: (serverId: string) => void
+  getServerRole?: (target: ServerActionTarget) => MemberRole | undefined
+  onLeaveServer?: (target: ServerActionTarget) => Promise<void> | void
+  onDeleteServer?: (target: ServerActionTarget) => Promise<void> | void
+  onOpenServerSettings?: (target: ServerActionTarget) => void
   onCreateServer?: () => void
   onDiscoverServers?: () => void
 }
 
 export function ServerRail({
   servers,
-  activeRailId,
+  activeRailTarget,
   onSelect,
   getServerRole,
   onLeaveServer,
@@ -80,14 +92,20 @@ export function ServerRail({
   React.useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (!event.ctrlKey || !event.altKey) return
-      const order: string[] = ["home", ...servers.map((s) => s.id)]
-      const idx = order.indexOf(activeRailId)
+      const order: RailSelection[] = [
+        "home",
+        ...servers.map((s) => ({ id: s.id, instanceUrl: s.instanceUrl })),
+      ]
+      const idx = order.findIndex((entry) =>
+        railSelectionsMatch(entry, activeRailTarget)
+      )
+      const currentIndex = idx >= 0 ? idx : 0
       if (event.key === "ArrowDown") {
         event.preventDefault()
-        onSelect(order[(idx + 1) % order.length])
+        onSelect(order[(currentIndex + 1) % order.length])
       } else if (event.key === "ArrowUp") {
         event.preventDefault()
-        onSelect(order[(idx - 1 + order.length) % order.length])
+        onSelect(order[(currentIndex - 1 + order.length) % order.length])
       } else if (event.key === "Home") {
         event.preventDefault()
         onSelect("home")
@@ -95,7 +113,7 @@ export function ServerRail({
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [servers, activeRailId, onSelect])
+  }, [servers, activeRailTarget, onSelect])
 
   React.useEffect(() => {
     const viewport = scrollRootRef.current
@@ -129,7 +147,7 @@ export function ServerRail({
         <RailIcon
           label="Home"
           icon={<HushLogo className="size-5" />}
-          active={activeRailId === "home"}
+          active={activeRailTarget === "home"}
           onClick={() => onSelect("home")}
         />
         <RailDivider />
@@ -142,11 +160,17 @@ export function ServerRail({
           <div className="flex flex-col items-center gap-2 px-2 py-1">
             {servers.map((server) => (
               <RailServer
-                key={server.id}
+                key={`${server.id}@${server.instanceUrl ?? ""}`}
                 server={server}
-                active={server.id === activeRailId}
-                onClick={() => onSelect(server.id)}
-                role={getServerRole?.(server.id)}
+                active={railSelectionsMatch(
+                  { id: server.id, instanceUrl: server.instanceUrl },
+                  activeRailTarget
+                )}
+                onClick={(target) => onSelect(target)}
+                role={getServerRole?.({
+                  id: server.id,
+                  instanceUrl: server.instanceUrl,
+                })}
                 onLeave={onLeaveServer}
                 onDelete={onDeleteServer}
                 onOpenSettings={onOpenServerSettings}
@@ -207,12 +231,16 @@ function RailServer({
 }: {
   server: Server
   active: boolean
-  onClick: () => void
+  onClick: (target: ServerActionTarget) => void
   role?: MemberRole
-  onLeave?: (serverId: string) => Promise<void> | void
-  onDelete?: (serverId: string) => Promise<void> | void
-  onOpenSettings?: (serverId: string) => void
+  onLeave?: (target: ServerActionTarget) => Promise<void> | void
+  onDelete?: (target: ServerActionTarget) => Promise<void> | void
+  onOpenSettings?: (target: ServerActionTarget) => void
 }) {
+  const target: ServerActionTarget = {
+    id: server.id,
+    instanceUrl: server.instanceUrl,
+  }
   const [leaveOpen, setLeaveOpen] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const isOwner = role === "owner"
@@ -232,7 +260,7 @@ function RailServer({
             <Button
               variant="ghost"
               size="icon"
-              onClick={onClick}
+              onClick={() => onClick(target)}
               className={cn(
                 "group relative !size-11 rounded-2xl bg-sidebar-accent p-0 text-sm font-semibold text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
                 active && "rounded-xl bg-primary text-primary-foreground"
@@ -288,7 +316,7 @@ function RailServer({
         <ContextMenuItem
           disabled={!canOpenSettings || !onOpenSettings}
           onSelect={() => {
-            setTimeout(() => onOpenSettings?.(server.id), 0)
+            setTimeout(() => onOpenSettings?.(target), 0)
           }}
         >
           <SettingsIcon className="size-4" />
@@ -337,7 +365,7 @@ function RailServer({
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                void onLeave?.(server.id)
+                void onLeave?.(target)
               }}
             >
               Leave server
@@ -359,7 +387,7 @@ function RailServer({
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                void onDelete?.(server.id)
+                void onDelete?.(target)
               }}
             >
               Delete forever
@@ -369,6 +397,14 @@ function RailServer({
       </AlertDialog>
     </ContextMenu>
   )
+}
+
+function railSelectionsMatch(
+  a: RailSelection,
+  b: RailSelection
+): boolean {
+  if (a === "home" || b === "home") return a === b
+  return serverTargetsMatch(a, b)
 }
 
 function RailIcon({
