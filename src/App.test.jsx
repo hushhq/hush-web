@@ -21,7 +21,15 @@ import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('./contexts/AuthContext', () => ({
   AuthProvider: ({ children }) => children,
-  useAuth: () => ({ vaultState: 'locked', isAuthenticated: false, loading: false }),
+  // useAuth is a `vi.fn()` so individual tests can override its return
+  // for the new transparency-hard-fail surface. Default keeps the
+  // pre-existing public-route shape.
+  useAuth: vi.fn(() => ({
+    vaultState: 'locked',
+    isAuthenticated: false,
+    loading: false,
+    transparencyError: null,
+  })),
 }));
 
 vi.mock('./contexts/InstanceContext', () => ({
@@ -90,6 +98,7 @@ vi.mock('./pages/ExplorePage', () => ({ default: () => <div>ExplorePage</div> })
 import App from './App';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useBootController } from './hooks/useBootController.jsx';
+import { useAuth } from './contexts/AuthContext';
 import { cleanup } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
@@ -390,5 +399,67 @@ describe('App - blocked-tab overlay', () => {
     await userEvent.click(buttons[0]);
 
     expect(takeOver).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('App - transparency hard-fail gate', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    cleanup();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders the blocking security failure screen when bootState is transparency_error', () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({
+      bootState: 'transparency_error',
+      user: { id: 'u1' },
+      mergedGuilds: [],
+      guildsLoaded: true,
+    });
+    useAuth.mockReturnValue({
+      vaultState: 'unlocked',
+      isAuthenticated: true,
+      loading: false,
+      transparencyError: 'Key mismatch detected. Your account may be compromised.',
+    });
+
+    render(<MemoryRouter><App /></MemoryRouter>);
+
+    const alert = screen.getByTestId('transparency-error-screen');
+    expect(alert).toBeInTheDocument();
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(
+      screen.getByText(/Key mismatch detected\. Your account may be compromised\./i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /security check failed/i })).toBeInTheDocument();
+    expect(screen.queryByText('ServerLayout')).not.toBeInTheDocument();
+    expect(screen.queryByText('Home')).not.toBeInTheDocument();
+  });
+
+  it('uses a generic fallback message when transparencyError is set but empty', () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({
+      bootState: 'transparency_error',
+      user: { id: 'u1' },
+      mergedGuilds: [],
+      guildsLoaded: true,
+    });
+    useAuth.mockReturnValue({
+      vaultState: 'unlocked',
+      isAuthenticated: true,
+      loading: false,
+      transparencyError: '',
+    });
+
+    render(<MemoryRouter><App /></MemoryRouter>);
+
+    expect(screen.getByTestId('transparency-error-screen')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Do not continue on this device/i),
+    ).toBeInTheDocument();
   });
 });
