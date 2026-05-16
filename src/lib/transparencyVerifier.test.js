@@ -500,7 +500,7 @@ describe('TransparencyVerifier', () => {
     vi.restoreAllMocks();
   });
 
-  it('verify() returns { verified: true } when some proofs are missing (partial response)', async () => {
+  it('verify() returns { verified: false } when any entry is missing its proof (partial response fail closed)', async () => {
     const pubKeyHex = bytesToHex(pubKey);
     const entryBytes = new TextEncoder().encode('entry-with-proof');
     const mockResponse = await buildMockApiResponse(entryBytes, pubKeyHex);
@@ -525,7 +525,31 @@ describe('TransparencyVerifier', () => {
 
     const verifier = new TransparencyVerifier('https://example.com', pubKeyHex);
     const result = await verifier.verify(pubKeyHex, 'mock-token');
-    expect(result.verified).toBe(true);
+    expect(result.verified).toBe(false);
+    vi.restoreAllMocks();
+  });
+
+  it('verify() returns { verified: false } when configured log public key + proof has no logSignature', async () => {
+    const pubKeyHex = bytesToHex(pubKey);
+    const logPubKeyHex = bytesToHex(pubKey);
+    const entryBytes = new TextEncoder().encode('entry-no-logsig');
+    const mockResponse = await buildMockApiResponse(entryBytes, pubKeyHex);
+    // Remove the log signature from the otherwise-valid proof.
+    delete mockResponse.proofs[0].logSignature;
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockResponse,
+    });
+
+    // Constructor signature is (instanceUrl, logPublicKeyHex);
+    // configured log key activates the signature-required branch.
+    const verifier = new TransparencyVerifier(
+      'https://example.com',
+      logPubKeyHex,
+    );
+    const result = await verifier.verify(pubKeyHex, 'mock-token');
+    expect(result.verified).toBe(false);
     vi.restoreAllMocks();
   });
 
