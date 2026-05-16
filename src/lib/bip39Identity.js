@@ -61,11 +61,17 @@ export function isMnemonicValid(mnemonic) {
 }
 
 /**
- * Signs a challenge nonce with an Ed25519 private key.
+ * Signs a challenge nonce with an Ed25519 private key (v1 challenge).
  *
- * Used in the cryptographic authentication flow: the server issues a nonce,
- * the client signs it, the server verifies the signature against the stored
- * public key to authenticate without transmitting the private key.
+ * Used in the legacy BIP39 challenge-response flow where the signed
+ * message is the raw nonce bytes. This protocol is vulnerable to a
+ * cross-instance signing oracle: a malicious instance can relay a real
+ * nonce from the victim's home instance and obtain a signature it can
+ * redeem there. New code MUST prefer {@link signAuthChallengeV2}, which
+ * binds the signature to the API origin being authenticated to.
+ *
+ * Retained for backward compatibility with code paths that have not
+ * been migrated yet; do not introduce new callers.
  *
  * @param {Uint8Array} nonce - Challenge nonce to sign (typically 32 bytes).
  * @param {Uint8Array} privateKey - 32-byte Ed25519 private key seed.
@@ -73,6 +79,60 @@ export function isMnemonicValid(mnemonic) {
  */
 export async function signChallenge(nonce, privateKey) {
   return ed.signAsync(nonce, privateKey);
+}
+
+/**
+ * Domain-separation tag for the v2 auth challenge signature payload.
+ * Must stay byte-identical to the server's `auth.ChallengeV2Header`
+ * (Go: `internal/auth/challenge.go`).
+ */
+export const AUTH_CHALLENGE_V2_HEADER = 'HUSH-AUTH-CHALLENGE-V2';
+
+/**
+ * Builds the canonical UTF-8 byte encoding of the v2 auth-challenge
+ * signature payload:
+ *
+ *     HUSH-AUTH-CHALLENGE-V2\naudience=<origin>\nnonce=<hex>
+ *
+ * The audience is expected to already be in normalized origin form
+ * (`scheme://host[:port]`, no path, no trailing slash); this helper
+ * does NOT re-normalize so callers can pin the exact bytes that get
+ * signed. The encoding is the contract that lets the server reproduce
+ * the same bytes during verification.
+ *
+ * @param {string} nonceHex - Hex nonce returned by `/api/auth/challenge`.
+ * @param {string} audience - Normalized canonical API origin.
+ * @returns {Uint8Array} UTF-8 bytes of the v2 payload.
+ * @throws {TypeError} if either argument is missing or empty.
+ */
+export function buildAuthChallengeV2Payload(nonceHex, audience) {
+  if (typeof nonceHex !== 'string' || nonceHex.length === 0) {
+    throw new TypeError('buildAuthChallengeV2Payload: nonceHex required');
+  }
+  if (typeof audience !== 'string' || audience.length === 0) {
+    throw new TypeError('buildAuthChallengeV2Payload: audience required');
+  }
+  const text = `${AUTH_CHALLENGE_V2_HEADER}\naudience=${audience}\nnonce=${nonceHex}`;
+  return new TextEncoder().encode(text);
+}
+
+/**
+ * Signs the v2 auth-challenge payload with an Ed25519 private key.
+ *
+ * Use in place of {@link signChallenge} for any new login or
+ * device-link verification flow. Binding the signature to the API
+ * origin via {@link buildAuthChallengeV2Payload} prevents a malicious
+ * instance from relaying signatures captured for one origin into
+ * `/api/auth/verify` requests against another origin.
+ *
+ * @param {string} nonceHex - Hex nonce returned by `/api/auth/challenge`.
+ * @param {string} audience - Normalized canonical API origin.
+ * @param {Uint8Array} privateKey - 32-byte Ed25519 private key seed.
+ * @returns {Promise<Uint8Array>} 64-byte Ed25519 signature.
+ */
+export async function signAuthChallengeV2(nonceHex, audience, privateKey) {
+  const payload = buildAuthChallengeV2Payload(nonceHex, audience);
+  return ed.signAsync(payload, privateKey);
 }
 
 /**

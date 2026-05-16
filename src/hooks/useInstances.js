@@ -39,8 +39,9 @@ import {
   verifyChallenge,
   getMyGuilds,
   fetchWithAuth,
+  resolveAuthAudience,
 } from '../lib/api.js';
-import { signChallenge } from '../lib/bip39Identity.js';
+import { signAuthChallengeV2 } from '../lib/bip39Identity.js';
 import { getDeviceId, getLocalToken, getTokenForInstanceUrl } from './useAuth.js';
 import {
   assertHandshakeCompatible,
@@ -62,19 +63,6 @@ const RECONNECT_MULTIPLIER = 2;
  */
 function toBase64(bytes) {
   return btoa(String.fromCharCode(...bytes));
-}
-
-/**
- * Converts a hex string to a Uint8Array.
- * @param {string} hex
- * @returns {Uint8Array}
- */
-function hexToBytes(hex) {
-  const result = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    result[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return result;
 }
 
 /**
@@ -527,11 +515,19 @@ export function useInstances() {
       let authUser;
 
       try {
+        // bootInstance always targets a specific instance URL, so its
+        // challenge signature must be bound to that instance's origin.
+        // resolveAuthAudience() normalizes the passed instanceUrl
+        // (scheme + host + non-default port) so v2 signatures match
+        // what the server reconstructs from the request.
+        const audience = resolveAuthAudience(instanceUrl);
+        if (!audience) {
+          throw new Error('Cannot determine instance origin for challenge.');
+        }
         const { nonce } = await requestChallenge(publicKeyBase64, instanceUrl);
-        const nonceBytes = hexToBytes(nonce);
-        const signature = await signChallenge(nonceBytes, privateKey);
+        const signature = await signAuthChallengeV2(nonce, audience, privateKey);
         const signatureBase64 = toBase64(signature);
-        const result = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, instanceUrl);
+        const result = await verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, instanceUrl, audience);
         if (!isActiveGeneration()) return;
         jwt = result.token;
         authUser = result.user;

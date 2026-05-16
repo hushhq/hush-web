@@ -19,6 +19,54 @@ function resolveAuthBaseUrl(baseUrl = '') {
   return baseUrl || getSelectedAuthInstanceUrlSync();
 }
 
+/**
+ * Reduces an audience URL to canonical `scheme://host[:port]` form:
+ * scheme/host lowercased, default port stripped, no path/query/fragment,
+ * no trailing slash. Returns `''` for inputs that lack a usable
+ * http(s) scheme + host — callers must treat `''` as "no usable
+ * audience" and refuse to sign rather than substituting a default.
+ *
+ * This mirrors the server's `auth.NormalizeAudience` byte-for-byte so
+ * the v2 challenge payload produced on either side matches.
+ *
+ * @param {string} raw
+ * @returns {string} normalized origin, or `''` when input is unusable.
+ */
+export function normalizeAudience(raw) {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return '';
+  }
+  const scheme = parsed.protocol.replace(/:$/, '').toLowerCase();
+  if (scheme !== 'http' && scheme !== 'https') return '';
+  const host = parsed.hostname.toLowerCase();
+  if (!host) return '';
+  let port = parsed.port;
+  if ((scheme === 'https' && port === '443') || (scheme === 'http' && port === '80')) {
+    port = '';
+  }
+  return port ? `${scheme}://${host}:${port}` : `${scheme}://${host}`;
+}
+
+/**
+ * Derives the canonical audience origin for the BIP39 challenge flow
+ * from the same `baseUrl` resolution used by `requestChallenge` /
+ * `verifyChallenge`. Returns `''` if no usable origin can be derived
+ * (e.g. desktop running without a selected instance). Callers must
+ * treat `''` as a hard error — never sign without a real audience.
+ *
+ * @param {string} [baseUrl]
+ * @returns {string}
+ */
+export function resolveAuthAudience(baseUrl = '') {
+  return normalizeAudience(resolveAuthBaseUrl(baseUrl));
+}
+
 function resolveFetchBaseUrl(path, baseUrl = '') {
   if (baseUrl || path.startsWith('http')) {
     return baseUrl;
@@ -491,21 +539,37 @@ export async function requestChallenge(publicKeyBase64, baseUrl = '') {
 /**
  * Verify a signed challenge nonce and receive a JWT session token.
  *
+ * `audience` is the canonical API origin the v2 signature was produced
+ * for. When present it is sent along with `challengeVersion: 2` so the
+ * server enforces the audience-bound v2 protocol; when omitted the
+ * request stays in the legacy v1 path so older callers that have not
+ * been migrated keep working. Migrated callers must always pass it.
+ *
  * @param {string} publicKeyBase64 - Base64-encoded Ed25519 public key.
  * @param {string} nonce - Hex nonce from requestChallenge.
  * @param {string} signatureBase64 - Base64-encoded 64-byte Ed25519 signature.
  * @param {string} deviceId - Stable per-device identifier (UUID).
+ * @param {string} [baseUrl] - Auth instance base URL. Honored exactly as
+ *   given; this function does NOT collapse explicit `baseUrl` to
+ *   same-origin.
+ * @param {string} [audience] - Canonical API origin the signature was
+ *   produced for. Must already be normalized.
  * @returns {Promise<{ token: string, user: object }>}
  */
-export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, baseUrl = '') {
+export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, baseUrl = '', audience = '') {
   const authBaseUrl = resolveAuthBaseUrl(baseUrl);
   const targetUrl = `${authBaseUrl}/api/auth/verify`;
+  const body = { publicKey: publicKeyBase64, nonce, signature: signatureBase64, deviceId };
+  if (audience) {
+    body.audience = audience;
+    body.challengeVersion = 2;
+  }
   let res;
   try {
     res = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: publicKeyBase64, nonce, signature: signatureBase64, deviceId }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     throw createNetworkError('verify challenge', targetUrl, err);

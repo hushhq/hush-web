@@ -39,6 +39,15 @@ vi.mock('../lib/api.js', () => ({
   registerWithPublicKey: vi.fn(),
   getMyGuilds,
   fetchWithAuth: vi.fn(),
+  resolveAuthAudience: vi.fn((baseUrl) => {
+    if (!baseUrl) return '';
+    try {
+      const u = new URL(baseUrl);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return '';
+    }
+  }),
 }));
 
 vi.mock('../contexts/AuthContext.jsx', () => ({
