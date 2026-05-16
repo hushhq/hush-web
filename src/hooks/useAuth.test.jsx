@@ -602,6 +602,102 @@ describe('useAuth - completeDeviceLink', () => {
     openHistoryStoreSpy.mockRestore();
     importHistorySnapshotSpy.mockRestore();
   });
+
+  it('rejects when caller-provided baseUrl and bundle.instanceUrl differ after normalization', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: null,
+      // Untrusted bundle field points at a different instance than
+      // the device originally selected/polled.
+      instanceUrl: 'https://attacker.example.com',
+    };
+
+    await act(async () => {
+      try {
+        await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
+      } catch {
+        // The mismatch guard rethrows after recording state; the rethrow
+        // is the caller-visible signal of fail-closed.
+      }
+    });
+
+    // Fail-closed: no JWT stored for either origin, no auth-instance
+    // marked, no markAuthInstanceUsed against the attacker URL.
+    expect(result.current.token).toBeNull();
+    expect(String(result.current.error?.message ?? result.current.error)).toMatch(
+      /instance mismatch/i,
+    );
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBeNull();
+    expect(sessionStorage.getItem('hush_jwt_attacker.example.com')).toBeNull();
+    expect(_mockMarkAuthInstanceUsed).not.toHaveBeenCalledWith('https://attacker.example.com');
+  });
+
+  it('accepts equivalent normalized origins for selected and bundle URLs', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: null,
+      // Bundle carries a trailing-slash form of the same origin.
+      instanceUrl: 'https://chat.example.com/',
+    };
+
+    await act(async () => {
+      await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
+    });
+
+    expect(result.current.token).toBe('jwt-test');
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+    expect(_mockMarkAuthInstanceUsed).toHaveBeenCalledWith('https://chat.example.com');
+  });
+
+  it('still works for legacy callers that pass only bundle.instanceUrl', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: null,
+      instanceUrl: 'https://chat.example.com',
+    };
+
+    await act(async () => {
+      // Legacy call without expected baseUrl — bundle.instanceUrl
+      // is the only source available, so it is used.
+      await result.current.completeDeviceLink(bundle);
+    });
+
+    expect(result.current.token).toBe('jwt-test');
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+    expect(_mockMarkAuthInstanceUsed).toHaveBeenCalledWith('https://chat.example.com');
+  });
+
+  it('accepts a selected baseUrl when the bundle omits instanceUrl', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const bundle = {
+      rootPrivateKey: new Uint8Array(32).fill(1),
+      rootPublicKey: new Uint8Array(32).fill(2),
+      historySnapshot: null,
+      // No instanceUrl on the bundle — caller-provided baseUrl wins.
+    };
+
+    await act(async () => {
+      await result.current.completeDeviceLink(bundle, 'https://chat.example.com');
+    });
+
+    expect(result.current.token).toBe('jwt-test');
+    expect(sessionStorage.getItem('hush_jwt_chat.example.com')).toBe('jwt-test');
+    expect(_mockMarkAuthInstanceUsed).toHaveBeenCalledWith('https://chat.example.com');
+  });
 });
 
 describe('useAuth - unlockVault', () => {

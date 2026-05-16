@@ -90,6 +90,7 @@ import {
 import {
   getActiveAuthInstanceUrlSync,
   markAuthInstanceUsed,
+  normalizeInstanceUrl,
 } from '../lib/authInstanceStore';
 // Used to repair missing or malformed public-key vault markers after storage
 // eviction. The encrypted vault stores the private seed; the public key is
@@ -1342,7 +1343,41 @@ export function useAuth() {
         throw new Error('invalid device link bundle');
       }
 
-      const authBaseUrl = bundle.instanceUrl || baseUrl || '';
+      // Resolve the trusted auth-instance base URL for this link.
+      //
+      // SECURITY: A device-link bundle is transferred from the OLD
+      // device and `bundle.instanceUrl` is therefore attacker- or
+      // confusion-controlled from this device's point of view. The
+      // NEW device polled / selected its own instance during the
+      // link request; that caller-provided `baseUrl` is the only
+      // value this device has ever explicitly trusted. We MUST
+      // prefer it over the bundle field, and we MUST fail closed
+      // when both are present and disagree after origin
+      // normalization — otherwise challenge-response, JWT storage,
+      // key-package upload, and post-auth calls could all be
+      // redirected to a different instance than the user picked.
+      //
+      // CORE-INVARIANTS - "Authentication, Vault, and Device
+      // Identity" + "Instance boundaries must never leak
+      // credentials" + "Device linking".
+      const expectedAuthBaseUrl = normalizeInstanceUrl(baseUrl);
+      const bundleAuthBaseUrl = normalizeInstanceUrl(bundle.instanceUrl);
+      if (
+        expectedAuthBaseUrl &&
+        bundleAuthBaseUrl &&
+        expectedAuthBaseUrl !== bundleAuthBaseUrl
+      ) {
+        throw new Error(
+          'Device link instance mismatch. Restart the link from this device.',
+        );
+      }
+      // Prefer the caller-provided selected instance. Fall back to
+      // the bundle field only for legacy / internal callers that
+      // omit `baseUrl` (in which case there is no second source to
+      // disagree with). Last-ditch `''` keeps the legacy
+      // empty-string contract for callers that pass neither.
+      const authBaseUrl =
+        expectedAuthBaseUrl || bundleAuthBaseUrl || baseUrl || bundle.instanceUrl || '';
       const deviceId = getDeviceId();
       const publicKeyBase64 = toBase64(bundle.rootPublicKey);
 

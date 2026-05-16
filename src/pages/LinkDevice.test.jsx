@@ -650,6 +650,149 @@ describe('LinkDevice', () => {
     expect(await screen.findByText(/boom/i)).toBeInTheDocument();
   });
 
+  it('passes the originally selected/polled instanceUrl into completeDeviceLink', async () => {
+    // Regression for PR #31: completion must enforce the device's
+    // selected instance over the untrusted bundle field. The shell
+    // delivers `requestState.instanceUrl` as the second arg so
+    // useAuth.completeDeviceLink can fail closed on mismatch.
+    const completeDeviceLink = vi.fn().mockResolvedValue(undefined);
+    authState.current = {
+      ...authState.current,
+      completeDeviceLink,
+    };
+    mockCreateDeviceIdentity.mockResolvedValue({
+      publicKeyBase64: 'device-public-key',
+    });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-trust-instance',
+      secret: 'secret-1',
+      code: 'TRUSTINST',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+      deviceId: 'device-2',
+      // The selected/polled instance URL — must flow into
+      // completeDeviceLink as the trusted base URL.
+      instanceUrl: 'https://chat.example.com',
+    });
+    mockDecodeTransferBundle.mockResolvedValue({
+      version: 3,
+      userId: 'user-1',
+      username: 'alice',
+      displayName: 'Alice',
+      instanceUrl: 'https://chat.example.com',
+      exportedAt: new Date().toISOString(),
+      rootPrivateKey: new Uint8Array([1, 2, 3]),
+      rootPublicKey: new Uint8Array([4, 5, 6]),
+      archive: null,
+      historySnapshot: null,
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: null,
+    });
+
+    renderLinkDevice('/link-device?mode=new');
+
+    // The whole link flow completes quickly when there is no archive
+    // to download, so we wait for the assertion target directly
+    // rather than the QR (which may unmount immediately on success).
+    await waitFor(() => {
+      expect(completeDeviceLink).toHaveBeenCalledTimes(1);
+    });
+    expect(completeDeviceLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rootPrivateKey: expect.any(Uint8Array),
+        rootPublicKey: expect.any(Uint8Array),
+        instanceUrl: 'https://chat.example.com',
+      }),
+      'https://chat.example.com',
+    );
+  });
+
+  it('uses the selected instance, not bundle.instanceUrl, for archive import and cleanup', async () => {
+    const completeDeviceLink = vi.fn().mockResolvedValue(undefined);
+    authState.current = {
+      ...authState.current,
+      completeDeviceLink,
+    };
+    authInstanceSelectionState.current = 'https://selected.example.com';
+    mockCreateDeviceIdentity.mockResolvedValue({
+      publicKeyBase64: 'device-public-key',
+    });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-archive-trust-instance',
+      secret: 'secret-1',
+      code: 'ARCHINST',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+    mockConsumeDeviceLinkResult.mockResolvedValue({
+      relayCiphertext: 'ciphertext',
+      relayIv: 'relay-iv',
+      relayPublicKey: 'relay-public-key',
+      deviceId: 'device-2',
+      instanceUrl: 'https://selected.example.com',
+    });
+    mockDecodeTransferBundle.mockResolvedValue({
+      version: 3,
+      userId: 'user-1',
+      username: 'alice',
+      displayName: 'Alice',
+      instanceUrl: 'https://bundle.example.com',
+      exportedAt: new Date().toISOString(),
+      rootPrivateKey: new Uint8Array([1, 2, 3]),
+      rootPublicKey: new Uint8Array([4, 5, 6]),
+      archive: {
+        id: 'arch-selected-instance',
+        downloadToken: 'dtok-selected-instance',
+        totalChunks: 1,
+        totalBytes: 16,
+        chunkSize: 4 * 1024 * 1024,
+        manifestHash: 'bWFuaWZlc3Q=',
+        archiveSha256: 'YXJjaGl2ZQ==',
+        format: 'chunk-atomic-v1',
+        chunkPlaintextHashes: ['Y2h1bmstaGFzaA=='],
+        ephPub: 'ZXBocHViYnl0ZXM=',
+        nonceBase: 'bm9uY2ViYXNl',
+        transcriptBlobOmitted: false,
+      },
+      historySnapshot: null,
+      guildMetadataKeySnapshot: null,
+      transcriptBlob: null,
+    });
+
+    renderLinkDevice('/link-device?mode=new');
+
+    await waitFor(() => {
+      expect(mockDownloadArchiveSession).toHaveBeenCalled();
+    });
+    expect(mockDownloadArchiveSession.mock.calls[0][0]).toMatchObject({
+      baseUrl: 'https://selected.example.com',
+    });
+    expect(mockDeleteArchive).toHaveBeenCalledWith(
+      'arch-selected-instance',
+      { downloadToken: 'dtok-selected-instance' },
+      'https://selected.example.com',
+    );
+    expect(completeDeviceLink).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceUrl: 'https://bundle.example.com' }),
+      'https://selected.example.com',
+    );
+  });
+
   it('shows friendly error when ApproveLinkView resolveRequest fails with expired/claimed message', async () => {
     const user = userEvent.setup();
     authState.current = {
