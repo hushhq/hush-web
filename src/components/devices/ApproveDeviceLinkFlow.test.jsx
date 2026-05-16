@@ -61,6 +61,17 @@ vi.mock('../../lib/deviceLinking', () => ({
   encodeTransferBundle: vi.fn(),
   encryptRelayPayload: vi.fn(),
   base64ToBytes: () => new Uint8Array(),
+  // Real impl: see src/lib/deviceLinking.js. Mocked inline so we
+  // don't pull in the whole module's crypto deps for the rendered
+  // component but still get fail-closed behavior on mismatch.
+  claimMatchesPayloadKeys: (payload, claim) => {
+    if (!payload || !claim) return false;
+    if (payload.devicePublicKey
+      && payload.devicePublicKey !== claim.devicePublicKey) return false;
+    if (payload.sessionPublicKey
+      && payload.sessionPublicKey !== claim.sessionPublicKey) return false;
+    return true;
+  },
 }));
 
 vi.mock('../../lib/mlsStore', () => ({
@@ -243,5 +254,134 @@ describe('ApproveDeviceLinkFlow (embedded mode)', () => {
     );
 
     expect(onVaultUnlockNeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the claim when QR-committed device + session keys match the resolved claim', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk-good',
+      devicePublicKey: 'dk-good',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{
+          requestId: 'req',
+          secret: 'sec',
+          devicePublicKey: 'dk-good',
+          sessionPublicKey: 'sk-good',
+        }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/new phone/i);
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the claim and does not show approval UI when committed devicePublicKey differs', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk-good',
+      // Server-substituted device key.
+      devicePublicKey: 'dk-evil',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{
+          requestId: 'req',
+          secret: 'sec',
+          devicePublicKey: 'dk-good',
+          sessionPublicKey: 'sk-good',
+        }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/device link verification failed/i);
+    // No claim label rendered.
+    expect(screen.queryByText(/new phone/i)).toBeNull();
+    // No verify call kicked off.
+    expect(verifyDeviceLinkRequest).not.toHaveBeenCalled();
+  });
+
+  it('rejects the claim when committed sessionPublicKey differs', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      // Server-substituted session key.
+      sessionPublicKey: 'sk-evil',
+      devicePublicKey: 'dk-good',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{
+          requestId: 'req',
+          secret: 'sec',
+          devicePublicKey: 'dk-good',
+          sessionPublicKey: 'sk-good',
+        }}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/device link verification failed/i);
+    expect(screen.queryByText(/new phone/i)).toBeNull();
+    expect(verifyDeviceLinkRequest).not.toHaveBeenCalled();
+  });
+
+  it('fallback-code flow (no committed keys) still resolves and shows the claim', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk-any',
+      devicePublicKey: 'dk-any',
+      label: 'Phone via code',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: '',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={null}
+        homeInstanceUrl="https://home.example.com"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    const u = userEvent.setup();
+    await u.type(screen.getByPlaceholderText(/abcd1234/i), 'ABCDEFGH');
+    await u.click(screen.getByRole('button', { name: /resolve code/i }));
+
+    await screen.findByText(/phone via code/i);
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledWith(
+      'tok',
+      { code: 'ABCDEFGH' },
+      'https://home.example.com',
+    );
   });
 });

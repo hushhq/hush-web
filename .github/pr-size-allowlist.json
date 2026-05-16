@@ -17,7 +17,8 @@
     "src/components/chat/attachment-tile.tsx": 307,
     "src/components/chat/chat-event.tsx": 506,
     "src/components/chat/chat-toolbar.tsx": 365,
-    "src/components/devices/ApproveDeviceLinkFlow.jsx": 814,
+    "src/components/devices/ApproveDeviceLinkFlow.jsx": 838,
+    "src/components/devices/ApproveDeviceLinkFlow.test.jsx": 387,
     "src/components/members-sidebar.tsx": 416,
     "src/components/novel-composer.tsx": 537,
     "src/components/server-rail.tsx": 455,
@@ -47,7 +48,7 @@
     "src/lib/api.js": 2011,
     "src/lib/api.test.js": 739,
     "src/lib/authInstanceStore.js": 318,
-    "src/lib/deviceLinking.js": 366,
+    "src/lib/deviceLinking.js": 441,
     "src/lib/hushCrypto.js": 313,
     "src/lib/identityVault.js": 570,
     "src/lib/linkArchive.js": 310,
@@ -74,7 +75,7 @@
     "src/lib/ws.test.js": 648,
     "src/pages/Invite.jsx": 456,
     "src/pages/Invite.test.jsx": 496,
-    "src/pages/LinkDevice.jsx": 499,
-    "src/pages/LinkDevice.test.jsx": 1940
+    "src/pages/LinkDevice.jsx": 506,
+    "src/pages/LinkDevice.test.jsx": 1949
   }
 }

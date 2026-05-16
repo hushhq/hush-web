@@ -116,6 +116,13 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
             requestId: response.requestId,
             secret: response.secret,
             expiresAt: response.expiresAt,
+            // Commit to the new device's key material in the QR
+            // payload so the approving device can verify, after
+            // resolving the claim, that the server-returned keys
+            // match what this device originally published.
+            // CORE-INVARIANTS - Auth/Vault/Device Identity.
+            devicePublicKey: deviceIdentity.publicKeyBase64,
+            sessionPublicKey: session.publicKeyBase64,
           }), {
             width: 240,
             margin: 2,

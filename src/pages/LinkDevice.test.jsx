@@ -298,6 +298,15 @@ describe('LinkDevice', () => {
       }),
       'https://chat.example.com',
     );
+    expect(mockBuildLinkApprovalUrl).toHaveBeenCalledWith(
+      window.location.origin,
+      expect.objectContaining({
+        requestId: 'req-1',
+        secret: 'secret-1',
+        devicePublicKey: 'device-public-key',
+        sessionPublicKey: 'session-public-key',
+      }),
+    );
     await waitFor(() => {
       expect(mockConsumeDeviceLinkResult).toHaveBeenCalledWith({
         requestId: 'req-1',
