@@ -282,34 +282,34 @@ export class TransparencyVerifier {
    * HARD FAIL: if entries exist but any proof fails to validate,
    * returns { ok: false, error }. The caller MUST block the app UI.
    *
-   * SOFT PASS: if no entries exist, returns { ok: true, warning }.
-   * Missing entries can happen legitimately (non-fatal append failure
-   * during registration). Not evidence of tampering.
+   * HARD FAIL: if no entries exist, returns { ok: false, error }.
+   * An own-key empty log is an integrity failure, not a soft warning.
+   *
+   * Network/API errors still propagate so callers can distinguish
+   * network uncertainty from verified integrity failure.
    *
    * @param {string} identityPubKeyHex - Hex-encoded 32-byte Ed25519 public key.
    * @param {string} token             - JWT for authenticated API calls.
    * @returns {Promise<{ ok: boolean, error?: string, warning?: string }>}
    */
   async verifyOwnKey(identityPubKeyHex, token) {
-    try {
-      const { verified, entries } = await this.verify(identityPubKeyHex, token);
+    const { verified, entries } = await this.verify(identityPubKeyHex, token);
 
-      if (entries.length === 0) {
-        return { ok: true, warning: 'No transparency log entries found for your key.' };
-      }
-
-      if (!verified) {
-        return {
-          ok: false,
-          error: 'Key mismatch detected. Your account may be compromised.',
-        };
-      }
-
-      return { ok: true };
-    } catch (err) {
-      // Network or API error - propagate so the caller can decide to warn vs block.
-      throw err;
+    if (entries.length === 0) {
+      return {
+        ok: false,
+        error: 'No transparency log entries found for your key.',
+      };
     }
+
+    if (!verified) {
+      return {
+        ok: false,
+        error: 'Key mismatch detected. Your account may be compromised.',
+      };
+    }
+
+    return { ok: true };
   }
 
   /**
