@@ -194,7 +194,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         // historySnapshot / guildMetadataKeySnapshot / transcriptBlob path.
         if (bundle.archive) {
           setStatus('Importing message history…');
-          const importBaseUrl = bundle.instanceUrl || requestState.instanceUrl || window.location.origin;
+          const importBaseUrl = requestState.instanceUrl || bundle.instanceUrl || window.location.origin;
           try {
             const fetched = await downloadArchiveSession({
               archive: bundle.archive,
@@ -238,7 +238,11 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           }
         }
 
-        await completeDeviceLink(bundle);
+        // Pass the originally selected/polled instance URL so
+        // completeDeviceLink can enforce it over the untrusted
+        // `bundle.instanceUrl` field. See useAuth.completeDeviceLink
+        // for the mismatch fail-closed contract.
+        await completeDeviceLink(bundle, requestState.instanceUrl);
         if (bundle.archive?.transcriptBlobOmitted) {
           setStatus('Linked. Local message history was too large to transfer.');
         }

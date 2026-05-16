@@ -33,8 +33,8 @@
     "src/components/voice/voice-prejoin-dialog.tsx": 413,
     "src/hooks/useAttachmentUploader.ts": 367,
     "src/hooks/useAuth.desktopSession.test.jsx": 314,
-    "src/hooks/useAuth.js": 2454,
-    "src/hooks/useAuth.test.jsx": 1887,
+    "src/hooks/useAuth.js": 2489,
+    "src/hooks/useAuth.test.jsx": 1983,
     "src/hooks/useChannelMessages.test.ts": 457,
     "src/hooks/useChannelMessages.ts": 1055,
     "src/hooks/useInstances.js": 968,
@@ -74,7 +74,7 @@
     "src/lib/ws.test.js": 648,
     "src/pages/Invite.jsx": 456,
     "src/pages/Invite.test.jsx": 496,
-    "src/pages/LinkDevice.jsx": 495,
-    "src/pages/LinkDevice.test.jsx": 1797
+    "src/pages/LinkDevice.jsx": 499,
+    "src/pages/LinkDevice.test.jsx": 1940
   }
 }
