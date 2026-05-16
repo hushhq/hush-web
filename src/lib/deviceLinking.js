@@ -195,18 +195,49 @@ export async function verifyCertificate(
 }
 
 /**
- * Encodes a QR payload containing the request handle the existing device needs
- * to claim on the server.
+ * Encode the device-link approval payload carried in the QR / fallback
+ * URL.
  *
- * @param {{ requestId: string, secret: string, expiresAt: string }} payload
+ * The new device commits to its `devicePublicKey` and `sessionPublicKey`
+ * inside the QR payload so the approving device can verify, after
+ * resolving a claim from the server, that the server-returned key
+ * material matches what the new device originally published. Without
+ * this commitment a malicious or compromised server could substitute
+ * the resolved claim's key material and receive sensitive transfer
+ * material. See `claimMatchesPayloadKeys` for the verification.
+ *
+ * CORE-INVARIANTS - Authentication, Vault, and Device Identity:
+ * "no device-link export route that trusts untrusted claim URLs for
+ * bearer-token requests"; the same principle applies to the keys the
+ * approving device encrypts inherited material to.
+ *
+ * The shorthand keys (`r`, `s`, `e`, `d`, `k`) keep the encoded
+ * payload short enough for QR codes.
+ *
+ * @param {{
+ *   requestId: string,
+ *   secret: string,
+ *   expiresAt: string,
+ *   devicePublicKey?: string|null,
+ *   sessionPublicKey?: string|null,
+ * }} payload
  * @returns {string}
  */
-export function encodeQRPayload({ requestId, secret, expiresAt }) {
-  return btoa(JSON.stringify({
+export function encodeQRPayload({
+  requestId,
+  secret,
+  expiresAt,
+  devicePublicKey = null,
+  sessionPublicKey = null,
+}) {
+  const body = {
     r: requestId,
     s: secret,
     e: expiresAt,
-  }));
+  };
+  if (devicePublicKey) body.d = devicePublicKey;
+  if (sessionPublicKey) body.k = sessionPublicKey;
+  return btoa(JSON.stringify(body));
 }
 
 /**
@@ -234,7 +265,7 @@ export function decodeQRPayload(encoded) {
   } catch {
     throw new Error('Invalid QR payload: could not parse JSON after base64 decode.');
   }
-  const { r, s, e } = parsed;
+  const { r, s, e, d, k } = parsed;
   if (!r || !s || !e) {
     throw new Error('Invalid QR payload: missing required fields (r, s, e).');
   }
@@ -242,7 +273,43 @@ export function decodeQRPayload(encoded) {
     requestId: r,
     secret: s,
     expiresAt: e,
+    // Optional commitment fields added by the new device. Legacy
+    // payloads that pre-date the commitment carry no `d` / `k`, in
+    // which case the approving device falls back to the
+    // existing-session-only contract (no claim/payload comparison
+    // possible, but no regression vs the legacy code path).
+    devicePublicKey: typeof d === 'string' && d ? d : null,
+    sessionPublicKey: typeof k === 'string' && k ? k : null,
   };
+}
+
+/**
+ * Pure helper: returns true iff the server-resolved claim's key
+ * material matches the commitment encoded in the decoded QR payload.
+ *
+ * The approving device MUST call this with the decoded payload after
+ * resolving a claim. A legacy payload has neither commitment field
+ * and passes for backward compatibility. A modern payload must carry
+ * both fields, and both must match exactly. A partial commitment is
+ * invalid because it would leave one key under server control.
+ *
+ * Fail-closed example: the approving UI must not predecrypt, export
+ * history, or call approve APIs when this returns `false`.
+ *
+ * @param {{ devicePublicKey?: string|null, sessionPublicKey?: string|null }} payload
+ * @param {{ devicePublicKey?: string|null, sessionPublicKey?: string|null }} claim
+ * @returns {boolean}
+ */
+export function claimMatchesPayloadKeys(payload, claim) {
+  if (!payload || !claim) return false;
+  const hasDevicePublicKey = Boolean(payload.devicePublicKey);
+  const hasSessionPublicKey = Boolean(payload.sessionPublicKey);
+  if (!hasDevicePublicKey && !hasSessionPublicKey) return true;
+  if (!hasDevicePublicKey || !hasSessionPublicKey) return false;
+  return (
+    payload.devicePublicKey === claim.devicePublicKey &&
+    payload.sessionPublicKey === claim.sessionPublicKey
+  );
 }
 
 /**

@@ -45,6 +45,7 @@ import {
 import {
   bytesToBase64,
   certifyDevice,
+  claimMatchesPayloadKeys,
   decodeQRPayload,
   encodeTransferBundle,
   encryptRelayPayload,
@@ -155,7 +156,7 @@ export default function ApproveDeviceLinkFlow({
   }, [claim, hasUnlockedIdentity, homeInstanceUrl]);
 
   const resolveRequest = useCallback(
-    async (body) => {
+    async (body, committedKeys = null) => {
       if (!token) return;
       setError('');
       setStatus('');
@@ -170,6 +171,17 @@ export default function ApproveDeviceLinkFlow({
           body,
           homeInstanceUrl ?? '',
         );
+        // QR-commitment guard: when the QR payload carried committed
+        // device/session public keys, reject the claim if the
+        // server-returned material does not match. Fall-back-code
+        // path passes `committedKeys = null` and behaves unchanged.
+        // No approval UI, no predecrypt, no approve/verify call.
+        if (committedKeys && !claimMatchesPayloadKeys(committedKeys, resolved)) {
+          setError(
+            'Device link verification failed: the link target does not match the original QR code. Generate a new link on the other device.',
+          );
+          return;
+        }
         setClaim(resolved);
       } catch (err) {
         const rawMessage = err.message || '';
@@ -195,10 +207,16 @@ export default function ApproveDeviceLinkFlow({
     ) {
       return;
     }
-    resolveRequest({
-      requestId: initialPayload.requestId,
-      secret: initialPayload.secret,
-    });
+    resolveRequest(
+      {
+        requestId: initialPayload.requestId,
+        secret: initialPayload.secret,
+      },
+      {
+        devicePublicKey: initialPayload.devicePublicKey ?? null,
+        sessionPublicKey: initialPayload.sessionPublicKey ?? null,
+      },
+    );
   }, [hasUnlockedIdentity, initialPayload, resolveRequest]);
 
   const handleResolveCode = useCallback(
@@ -232,7 +250,13 @@ export default function ApproveDeviceLinkFlow({
         setError('Invalid QR code.');
         return;
       }
-      resolveRequest({ requestId: decoded.requestId, secret: decoded.secret });
+      resolveRequest(
+        { requestId: decoded.requestId, secret: decoded.secret },
+        {
+          devicePublicKey: decoded.devicePublicKey ?? null,
+          sessionPublicKey: decoded.sessionPublicKey ?? null,
+        },
+      );
     },
     [resolveRequest],
   );

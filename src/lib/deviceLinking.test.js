@@ -12,6 +12,7 @@ import {
   encryptRelayPayload,
   generateLinkingCode,
   verifyCertificate,
+  claimMatchesPayloadKeys,
 } from './deviceLinking.js';
 
 describe('device certificates', () => {
@@ -42,7 +43,7 @@ describe('device certificates', () => {
 });
 
 describe('QR payload helpers', () => {
-  it('round-trips requestId, secret, and expiresAt', () => {
+  it('round-trips requestId, secret, and expiresAt (legacy payload — committed key fields default to null)', () => {
     const original = {
       requestId: 'request-1',
       secret: 'secret-1',
@@ -52,7 +53,39 @@ describe('QR payload helpers', () => {
     const encoded = encodeQRPayload(original);
     const decoded = decodeQRPayload(encoded);
 
+    // Legacy payload — no committed key material, both fields null.
+    expect(decoded).toEqual({
+      ...original,
+      devicePublicKey: null,
+      sessionPublicKey: null,
+    });
+  });
+
+  it('round-trips devicePublicKey and sessionPublicKey commitments', () => {
+    const original = {
+      requestId: 'request-2',
+      secret: 'secret-2',
+      expiresAt: '2026-05-16T00:00:00Z',
+      devicePublicKey: 'dev-pk-base64',
+      sessionPublicKey: 'session-pk-base64',
+    };
+
+    const encoded = encodeQRPayload(original);
+    const decoded = decodeQRPayload(encoded);
+
     expect(decoded).toEqual(original);
+  });
+
+  it('encodes a small payload when commitment fields are omitted (QR-safe length)', () => {
+    const legacy = encodeQRPayload({
+      requestId: 'r',
+      secret: 's',
+      expiresAt: '2026-01-01T00:00:00Z',
+    });
+    // Empty optional fields must NOT add `d:""` / `k:""` to the JSON.
+    const decoded = atob(legacy);
+    expect(decoded).not.toContain('"d"');
+    expect(decoded).not.toContain('"k"');
   });
 
   it('builds an approval URL on the link-device route', () => {
@@ -155,5 +188,54 @@ describe('linking code generation', () => {
   it('returns an 8-character uppercase alphanumeric string', () => {
     const code = generateLinkingCode();
     expect(code).toMatch(/^[A-Z0-9]{8}$/);
+  });
+});
+
+describe('claimMatchesPayloadKeys', () => {
+  it('returns true when both commitment fields match the claim', () => {
+    const payload = { devicePublicKey: 'd1', sessionPublicKey: 's1' };
+    const claim = { devicePublicKey: 'd1', sessionPublicKey: 's1' };
+    expect(claimMatchesPayloadKeys(payload, claim)).toBe(true);
+  });
+
+  it('returns false when devicePublicKey differs', () => {
+    const payload = { devicePublicKey: 'd1', sessionPublicKey: 's1' };
+    const claim = { devicePublicKey: 'd-evil', sessionPublicKey: 's1' };
+    expect(claimMatchesPayloadKeys(payload, claim)).toBe(false);
+  });
+
+  it('returns false when sessionPublicKey differs', () => {
+    const payload = { devicePublicKey: 'd1', sessionPublicKey: 's1' };
+    const claim = { devicePublicKey: 'd1', sessionPublicKey: 's-evil' };
+    expect(claimMatchesPayloadKeys(payload, claim)).toBe(false);
+  });
+
+  it('returns true when payload commitment fields are absent (legacy/fallback flow)', () => {
+    const payload = { devicePublicKey: null, sessionPublicKey: null };
+    const claim = { devicePublicKey: 'd1', sessionPublicKey: 's1' };
+    expect(claimMatchesPayloadKeys(payload, claim)).toBe(true);
+  });
+
+  it('returns false for partial commitments', () => {
+    // Modern QR payloads must commit both keys. A one-key payload
+    // would leave the other key controlled by the resolved claim.
+    expect(
+      claimMatchesPayloadKeys(
+        { devicePublicKey: 'd1' },
+        { devicePublicKey: 'd1', sessionPublicKey: 'anything' },
+      ),
+    ).toBe(false);
+    expect(
+      claimMatchesPayloadKeys(
+        { sessionPublicKey: 's1' },
+        { devicePublicKey: 'anything', sessionPublicKey: 's1' },
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false when either side is null/undefined', () => {
+    expect(claimMatchesPayloadKeys(null, { devicePublicKey: 'd1' })).toBe(false);
+    expect(claimMatchesPayloadKeys({ devicePublicKey: 'd1' }, null)).toBe(false);
+    expect(claimMatchesPayloadKeys(undefined, undefined)).toBe(false);
   });
 });
