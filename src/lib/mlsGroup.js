@@ -100,14 +100,40 @@ async function mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credByte
 }
 
 /**
- * Returns true when a send failure can be recovered by re-joining the channel.
+ * Returns true when a send failure can be recovered by re-joining the
+ * channel via the existing missing-group desync path.
+ *
+ * SECURITY: `UseAfterEviction` and any "evicted" / "after eviction"
+ * variant must NOT be treated as recoverable. Eviction is a server-
+ * authoritative authorization/state boundary — a removed MLS leaf
+ * silently rejoining via send recovery would re-grant access that
+ * the group has already taken away. Eviction errors must propagate
+ * to the caller so the UI can surface a real failure and the user
+ * must obtain a new invite to rejoin. Legitimate recovery remains
+ * for "Group not found" desyncs.
+ *
+ * CORE-INVARIANTS - MLS, Messages, and Realtime Catch-up +
+ * Authentication, Vault, and Device Identity.
  *
  * @param {unknown} err
  * @returns {boolean}
  */
 function canRecoverMessageSend(err) {
   const message = String(err?.message ?? err);
-  return message.includes('UseAfterEviction') || message.includes('Group not found');
+  const lowerMessage = message.toLowerCase();
+  // Fail closed on every eviction-shaped error. Checked BEFORE the
+  // recoverable match so an upstream wrap like
+  // `GroupStateError(UseAfterEviction): Group not found` cannot
+  // sneak through the recovery branch.
+  if (
+    message.includes('UseAfterEviction')
+    || lowerMessage.includes('aftereviction')
+    || lowerMessage.includes('after eviction')
+    || lowerMessage.includes('evicted')
+  ) {
+    return false;
+  }
+  return message.includes('Group not found');
 }
 
 /**
