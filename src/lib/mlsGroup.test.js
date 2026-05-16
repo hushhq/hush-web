@@ -461,13 +461,13 @@ describe('encryptMessage', () => {
     expect(r1.localId).not.toBe(r2.localId);
   });
 
-  it('rejoins and retries once when createMessage fails after local eviction', async () => {
+  it('rejoins and retries once when createMessage fails with a "Group not found" desync', async () => {
     deps.mlsStore.getGroupEpoch
       .mockResolvedValueOnce(0)
       .mockResolvedValueOnce(0)
       .mockResolvedValueOnce(null);
     deps.hushCrypto.createMessage
-      .mockRejectedValueOnce(new Error('GroupStateError(UseAfterEviction)'))
+      .mockRejectedValueOnce(new Error('Group not found'))
       .mockResolvedValueOnce({ messageBytes: new Uint8Array([90, 91, 92]) });
 
     const result = await encryptMessage(deps, 'ch-5', 'hello again');
@@ -482,6 +482,85 @@ describe('encryptMessage', () => {
     );
     expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(2);
     expect(Array.from(result.messageBytes)).toEqual([90, 91, 92]);
+  });
+
+  it('does NOT recover from GroupStateError(UseAfterEviction) — eviction must propagate', async () => {
+    // SECURITY: an evicted MLS leaf must not silently rejoin via send
+    // recovery. The error must propagate; the rejoin/retry side
+    // effects must not run.
+    deps.hushCrypto.createMessage.mockRejectedValueOnce(
+      new Error('GroupStateError(UseAfterEviction)'),
+    );
+
+    await expect(encryptMessage(deps, 'ch-5', 'hello again')).rejects.toThrow(
+      /UseAfterEviction/,
+    );
+
+    expect(deps.mlsStore.deleteGroupEpoch).not.toHaveBeenCalled();
+    expect(deps.api.getMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.api.putMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT recover from eviction-shaped variants ("after eviction" / "evicted" / "AfterEviction")', async () => {
+    deps.hushCrypto.createMessage.mockRejectedValueOnce(
+      new Error('GroupStateError(UseAfterEviction): leaf removed, evicted'),
+    );
+    await expect(encryptMessage(deps, 'ch-5', 'x')).rejects.toThrow(/evicted/);
+    expect(deps.mlsStore.deleteGroupEpoch).not.toHaveBeenCalled();
+    expect(deps.api.getMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.api.putMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(1);
+
+    deps.hushCrypto.createMessage.mockClear();
+    deps.mlsStore.deleteGroupEpoch.mockClear();
+    deps.api.getMLSGroupInfo.mockClear();
+    deps.api.putMLSGroupInfo.mockClear();
+
+    deps.hushCrypto.createMessage.mockRejectedValueOnce(
+      new Error('member after eviction'),
+    );
+    await expect(encryptMessage(deps, 'ch-5', 'y')).rejects.toThrow(
+      /after eviction/,
+    );
+    expect(deps.mlsStore.deleteGroupEpoch).not.toHaveBeenCalled();
+    expect(deps.api.getMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.api.putMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(1);
+
+    deps.hushCrypto.createMessage.mockClear();
+    deps.mlsStore.deleteGroupEpoch.mockClear();
+    deps.api.getMLSGroupInfo.mockClear();
+    deps.api.putMLSGroupInfo.mockClear();
+
+    deps.hushCrypto.createMessage.mockRejectedValueOnce(
+      new Error('GroupStateError(MemberAfterEviction)'),
+    );
+    await expect(encryptMessage(deps, 'ch-5', 'z')).rejects.toThrow(
+      /AfterEviction/,
+    );
+    expect(deps.mlsStore.deleteGroupEpoch).not.toHaveBeenCalled();
+    expect(deps.api.getMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.api.putMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT recover when a wrapped error mentions both UseAfterEviction and Group not found', async () => {
+    // Belt-and-suspenders: an upstream wrap that bundles both
+    // strings must still fail closed because of the eviction
+    // marker.
+    deps.hushCrypto.createMessage.mockRejectedValueOnce(
+      new Error('GroupStateError(UseAfterEviction): Group not found'),
+    );
+
+    await expect(encryptMessage(deps, 'ch-5', 'hello again')).rejects.toThrow(
+      /UseAfterEviction/,
+    );
+
+    expect(deps.mlsStore.deleteGroupEpoch).not.toHaveBeenCalled();
+    expect(deps.api.getMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.api.putMLSGroupInfo).not.toHaveBeenCalled();
+    expect(deps.hushCrypto.createMessage).toHaveBeenCalledTimes(1);
   });
 });
 
