@@ -10,6 +10,10 @@ import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
 import { getDeviceId } from './useAuth';
+import {
+  parseVoiceParticipantMlsIdentity,
+  isElectedVoiceMlsRemover,
+} from '../lib/voiceParticipantMetadata';
 import { NOISE_GATE_WORKLET_URL, getMicFilterSettings } from '../lib/micProcessing';
 import { CaptureOrchestrator } from '../audio/capture/CaptureOrchestrator';
 import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
@@ -408,9 +412,12 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           queueMicrotask(syncParticipantsFromRoom);
         });
 
-        // ParticipantDisconnected: update list and clean tracks/screens.
-        // Frame key rotates automatically via epoch advancement on leave
-        // (triggered by the mls.commit from remaining participants).
+        // ParticipantDisconnected: update list and clean tracks/screens,
+        // then rotate the voice MLS group so the departed device's
+        // leaf is evicted and a fresh frame key is derived. Removal
+        // is the security-critical step — without it the departed
+        // device's leaf would linger in the MLS group and still
+        // share the voice frame key after it disconnected.
         room.on(RoomEvent.ParticipantDisconnected, (participant) => {
           if (isStale()) return;
           console.log(`[livekit] Participant disconnected: ${participant.identity}`);
@@ -431,6 +438,119 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             }
           }
           scheduleRemoteTracksUpdate();
+
+          // Evict the departed device's MLS leaf. Resolve identity
+          // STRICTLY from the LiveKit-token metadata (which the
+          // server stamps with `userId:deviceId`). LiveKit
+          // `participant.identity` is intentionally only the user
+          // id — using it as the MLS removal target either misses
+          // the leaf or evicts the wrong device's leaf, so never
+          // fall back to it.
+          const mlsIdentity = parseVoiceParticipantMlsIdentity(participant);
+          if (!mlsIdentity) {
+            console.warn(
+              '[livekit] Participant disconnected without valid MLS metadata; skipping voice MLS eviction',
+              { liveKitIdentity: participant.identity },
+            );
+            return;
+          }
+          const selfIdentity = currentUserId ? `${currentUserId}:${getDeviceId()}` : null;
+          if (selfIdentity && mlsIdentity === selfIdentity) {
+            // Local-session self-disconnect: the local teardown
+            // path destroys our own group state; no remote
+            // eviction to issue.
+            return;
+          }
+          const channelId = channelIdRef.current;
+          if (!channelId) return;
+
+          // Single-remover election: with 3+ remaining clients, two
+          // or more would otherwise issue concurrent removal commits
+          // for the same departed leaf from the same epoch. The
+          // election is a pure function of the candidate set (local
+          // identity + parsed remote metadata), so every remaining
+          // client picks the same remover without coordination. The
+          // unelected clients still observe the resulting `mls.commit`
+          // through the normal voice MLS stream.
+          if (!selfIdentity) {
+            console.warn(
+              '[livekit] Voice MLS eviction skipped: no local MLS identity available',
+              { mlsIdentity },
+            );
+            return;
+          }
+          const room = roomRef.current;
+          if (!room || typeof room.remoteParticipants?.values !== 'function') {
+            console.warn(
+              '[livekit] Voice MLS eviction skipped: remaining participant set unavailable',
+              { mlsIdentity },
+            );
+            return;
+          }
+          const remoteParticipants = room.remoteParticipants.values();
+          const elected = isElectedVoiceMlsRemover(
+            selfIdentity,
+            mlsIdentity,
+            remoteParticipants,
+          );
+          if (!elected) {
+            console.debug(
+              '[livekit] Voice MLS eviction skipped: another remaining client is elected remover',
+              { departed: mlsIdentity, local: selfIdentity },
+            );
+            return;
+          }
+
+          // Defer to a microtask so we do not block LiveKit's
+          // event loop while rotating MLS state.
+          queueMicrotask(async () => {
+            if (isStale()) return;
+            try {
+              const db = await getStore();
+              const credential = await mlsStoreLib.getCredential(db);
+              const tok = getToken?.();
+              if (!tok) {
+                console.error(
+                  '[livekit] Voice MLS eviction skipped: no auth token available',
+                  { mlsIdentity },
+                );
+                return;
+              }
+              const mlsDeps = {
+                db,
+                token: tok,
+                credential,
+                mlsStore: mlsStoreLib,
+                hushCrypto: hushCryptoLib,
+                api: voiceMlsApi,
+              };
+              await mlsGroupLib.removeMemberFromVoiceGroup(mlsDeps, channelId, mlsIdentity);
+              const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(
+                mlsDeps,
+                channelId,
+              );
+              if (e2eeKeyProviderRef.current) {
+                await e2eeKeyProviderRef.current.setKey(
+                  new Uint8Array(frameKeyBytes),
+                  epoch % 256,
+                );
+              }
+              setVoiceEpoch(epoch);
+              voiceEpochRef.current = epoch;
+              console.log(
+                `[livekit] Evicted ${mlsIdentity} from voice MLS group (epoch ${epoch})`,
+              );
+            } catch (err) {
+              // Failing eviction must NOT disable E2EE or downgrade
+              // to unencrypted audio — the existing frame key stays
+              // in use until the next successful rotation. Surface
+              // the failure loudly so it shows up in diagnostics.
+              console.error(
+                '[livekit] Voice MLS eviction failed; keeping prior frame key',
+                { mlsIdentity, err: err instanceof Error ? err.message : err },
+              );
+            }
+          });
         });
 
         const trackRefs = {
