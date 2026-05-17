@@ -6,6 +6,7 @@ import {
   destroyVoiceGroup,
   performVoiceSelfUpdate,
   processVoiceCommit,
+  removeMemberFromVoiceGroup,
   voiceChannelIdToBytes,
 } from './mlsGroup';
 
@@ -49,6 +50,11 @@ function makeHushCrypto() {
     processMessage: vi.fn().mockResolvedValue({
       type: 'commit',
       epoch: 3,
+    }),
+    removeMembers: vi.fn().mockResolvedValue({
+      commitBytes: new Uint8Array([16, 17, 18]),
+      groupInfoBytes: new Uint8Array([19, 20, 21]),
+      epoch: 4,
     }),
     exportVoiceFrameKey: vi.fn().mockResolvedValue({
       frameKeyBytes: new Uint8Array(32).fill(0xab),
@@ -250,5 +256,67 @@ describe('mlsGroup voice lifecycle', () => {
     expect(deps.mlsStore.flushStorageCache).toHaveBeenCalledWith(deps.db);
     expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 3);
     expect(result).toEqual({ type: 'commit', epoch: 3 });
+  });
+
+  // -------------------------------------------------------------------------
+  // removeMemberFromVoiceGroup
+  // -------------------------------------------------------------------------
+
+  describe('removeMemberFromVoiceGroup', () => {
+    it('removes a leaf by `userId:deviceId` and posts the commit via the injected voice API', async () => {
+      await removeMemberFromVoiceGroup(deps, 'ch-1', 'u-leaver:d-leaver');
+
+      // Crypto is invoked against the voice group id, NOT the bare
+      // channel id, so the text-channel group state is never
+      // touched by a voice eviction.
+      expect(deps.hushCrypto.removeMembers).toHaveBeenCalledTimes(1);
+      const args = deps.hushCrypto.removeMembers.mock.calls[0];
+      expect(args[0]).toEqual(voiceChannelIdToBytes('ch-1'));
+      expect(args[1]).toBe(deps.credential.signingPrivateKey);
+      expect(args[2]).toBe(deps.credential.signingPublicKey);
+      expect(args[3]).toBe(deps.credential.credentialBytes);
+      // memberIdentitiesJson is the device-scoped identity, not a
+      // bare user id. This is the load-bearing assertion that
+      // closes PR #40's incorrect `participant.identity` removal
+      // target.
+      expect(args[4]).toBe(JSON.stringify(['u-leaver:d-leaver']));
+
+      // Commit must reach the server through the deps-injected
+      // (instance-scoped) voice API, never a raw apiLib call.
+      expect(deps.api.postMLSVoiceCommit).toHaveBeenCalledTimes(1);
+      const [token, channelId, commitB64, epoch, groupInfoB64] =
+        deps.api.postMLSVoiceCommit.mock.calls[0];
+      expect(token).toBe('test-token');
+      expect(channelId).toBe('ch-1');
+      expect(typeof commitB64).toBe('string');
+      expect(typeof groupInfoB64).toBe('string');
+      expect(epoch).toBe(4);
+
+      // Persist under the voice-scoped epoch key so text-channel
+      // epoch storage is unaffected.
+      expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 4);
+    });
+
+    it('throws before invoking crypto when memberIdentity is a bare user id (no colon)', async () => {
+      await expect(
+        removeMemberFromVoiceGroup(deps, 'ch-1', 'u-leaver-only'),
+      ).rejects.toThrow(/userId:deviceId/);
+      expect(deps.hushCrypto.removeMembers).not.toHaveBeenCalled();
+      expect(deps.api.postMLSVoiceCommit).not.toHaveBeenCalled();
+    });
+
+    it('throws before invoking crypto when memberIdentity is missing the deviceId half', async () => {
+      await expect(
+        removeMemberFromVoiceGroup(deps, 'ch-1', 'u-leaver:'),
+      ).rejects.toThrow(/userId:deviceId/);
+      expect(deps.hushCrypto.removeMembers).not.toHaveBeenCalled();
+    });
+
+    it('throws when memberIdentity is empty', async () => {
+      await expect(
+        removeMemberFromVoiceGroup(deps, 'ch-1', ''),
+      ).rejects.toThrow(/memberIdentity required/);
+      expect(deps.hushCrypto.removeMembers).not.toHaveBeenCalled();
+    });
   });
 });

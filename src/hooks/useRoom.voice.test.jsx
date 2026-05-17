@@ -29,6 +29,7 @@ const {
   mockProcessVoiceCommit,
   mockPerformVoiceSelfUpdate,
   mockDestroyVoiceGroup,
+  mockRemoveMemberFromVoiceGroup,
   mockGetCredential,
   mockGetMLSVoiceGroupInfo,
   mockSetKey,
@@ -88,6 +89,7 @@ const {
     mockProcessVoiceCommit: vi.fn().mockResolvedValue({ type: 'commit', epoch: 2 }),
     mockPerformVoiceSelfUpdate: vi.fn().mockResolvedValue({ epoch: 3 }),
     mockDestroyVoiceGroup: vi.fn().mockResolvedValue(undefined),
+    mockRemoveMemberFromVoiceGroup: vi.fn().mockResolvedValue(undefined),
     mockGetCredential: vi.fn().mockResolvedValue({
       signingPrivateKey: new Uint8Array([1]),
       signingPublicKey: new Uint8Array([2]),
@@ -119,6 +121,7 @@ vi.mock('../lib/mlsGroup', () => ({
   processVoiceCommit: mockProcessVoiceCommit,
   performVoiceSelfUpdate: mockPerformVoiceSelfUpdate,
   destroyVoiceGroup: mockDestroyVoiceGroup,
+  removeMemberFromVoiceGroup: mockRemoveMemberFromVoiceGroup,
   voiceChannelIdToBytes: (id) => new TextEncoder().encode(`voice:${id}`),
 }));
 
@@ -691,6 +694,277 @@ describe('useRoom MLS voice E2EE', () => {
     expect(result.current.isReady).toBe(false);
     expect(result.current.isE2EEEnabled).toBe(false);
     expect(result.current.error).toMatch(/encrypted voice/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ParticipantDisconnected → voice MLS eviction
+// ---------------------------------------------------------------------------
+
+/**
+ * Wait for queued microtasks + a few macrotask turns. The
+ * ParticipantDisconnected handler defers the MLS rotation to
+ * `queueMicrotask`, which schedules `await getStore()` and several
+ * follow-up awaits before reaching `removeMemberFromVoiceGroup` and
+ * `setKey`. A single `setTimeout(0)` is not enough to let all of
+ * them resolve, so flush deliberately.
+ */
+async function flushMicrotasks(turns = 5) {
+  for (let i = 0; i < turns; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    await Promise.resolve();
+  }
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+function makeRemoteParticipant({ userId, deviceId, identityOverride }) {
+  return {
+    identity: identityOverride ?? userId,
+    metadata: JSON.stringify({
+      userId,
+      deviceId,
+      mlsIdentity: `${userId}:${deviceId}`,
+    }),
+  };
+}
+
+describe('useRoom voice MLS eviction on participant disconnect', () => {
+  let wsClient;
+  let getStore;
+  let getToken;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedRooms.length = 0;
+
+    wsClient = makeWsClient();
+    getStore = makeGetStore();
+    getToken = makeGetToken();
+    stubLivekitFetch();
+
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+    mockCreateVoiceGroup.mockResolvedValue({ epoch: 0 });
+    mockJoinVoiceGroup.mockResolvedValue({ epoch: 1 });
+    mockExportVoiceFrameKey.mockResolvedValue({
+      frameKeyBytes: new Uint8Array(32).fill(0xab),
+      epoch: 1,
+    });
+    mockRemoveMemberFromVoiceGroup.mockResolvedValue(undefined);
+    mockGetCredential.mockResolvedValue({
+      signingPrivateKey: new Uint8Array([1]),
+      signingPublicKey: new Uint8Array([2]),
+      credentialBytes: new Uint8Array([3]),
+    });
+    mockSetKey.mockResolvedValue(undefined);
+  });
+
+  it('rotates voice MLS when a remote participant with valid metadata disconnects', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+    expect(room).toBeDefined();
+
+    // exportVoiceFrameKey was called once for initial connect; the
+    // post-rotation call needs to return a fresh key+epoch so we can
+    // assert it propagated to setKey.
+    mockExportVoiceFrameKey.mockResolvedValueOnce({
+      frameKeyBytes: new Uint8Array(32).fill(0xcd),
+      epoch: 7,
+    });
+
+    room.emit('participantDisconnected', makeRemoteParticipant({
+      userId: 'u-leaver',
+      deviceId: 'd-leaver',
+    }));
+    await flushMicrotasks();
+
+    expect(mockRemoveMemberFromVoiceGroup).toHaveBeenCalledTimes(1);
+    const [, channelArg, identityArg] = mockRemoveMemberFromVoiceGroup.mock.calls[0];
+    expect(channelArg).toBe(CHANNEL_ID);
+    expect(identityArg).toBe('u-leaver:d-leaver');
+
+    // After the rotation, the listener must re-derive and apply a
+    // fresh frame key so the departed device cannot continue
+    // decrypting voice frames with the old key.
+    const lastSetKey = mockSetKey.mock.calls[mockSetKey.mock.calls.length - 1];
+    expect(lastSetKey[0]).toBeInstanceOf(Uint8Array);
+    expect(lastSetKey[0][0]).toBe(0xcd);
+    expect(lastSetKey[1]).toBe(7 % 256);
+  });
+
+  it('skips MLS eviction (and does NOT remove a bare user id) when metadata is missing or malformed', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    // No metadata at all (legacy LiveKit token / pre-fix server).
+    room.emit('participantDisconnected', { identity: 'u-leaver' });
+    // Garbage JSON.
+    room.emit('participantDisconnected', { identity: 'u-leaver', metadata: '{not-json' });
+    // Mismatched mlsIdentity.
+    room.emit('participantDisconnected', {
+      identity: 'u-leaver',
+      metadata: JSON.stringify({
+        userId: 'u-leaver',
+        deviceId: 'd-leaver',
+        mlsIdentity: 'u-leaver:d-OTHER',
+      }),
+    });
+    await flushMicrotasks();
+
+    // The load-bearing assertion: we MUST NOT have called
+    // removeMemberFromVoiceGroup with the bare LiveKit identity
+    // (which was the PR #40 bug).
+    expect(mockRemoveMemberFromVoiceGroup).not.toHaveBeenCalled();
+  });
+
+  it('skips MLS eviction when the disconnected participant is this device', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    // The mocked `getDeviceId()` returns 'device-1' (see top-of-file
+    // useAuth mock), and currentUserId is 'u1'. The self identity is
+    // therefore 'u1:device-1'.
+    room.emit('participantDisconnected', makeRemoteParticipant({
+      userId: 'u1',
+      deviceId: 'device-1',
+    }));
+    await flushMicrotasks();
+
+    expect(mockRemoveMemberFromVoiceGroup).not.toHaveBeenCalled();
+  });
+
+  it('processes eviction for the same user on a different device', async () => {
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    room.emit('participantDisconnected', makeRemoteParticipant({
+      userId: 'u1',
+      deviceId: 'd-other',
+    }));
+    await flushMicrotasks();
+
+    expect(mockRemoveMemberFromVoiceGroup).toHaveBeenCalledTimes(1);
+    expect(mockRemoveMemberFromVoiceGroup.mock.calls[0][2]).toBe('u1:d-other');
+  });
+
+  it('with another remaining participant elected (lexicographic smallest), local skips the removal', async () => {
+    // 3-participant room: local 'u1:device-1', remote elector
+    // 'u-aaa:d-1' (smaller than local), departed 'u-leaver:d-leaver'.
+    // 'u-aaa:d-1' wins the election so local must NOT call
+    // removeMemberFromVoiceGroup — that would race the elector.
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    // Seed remoteParticipants with a smaller-identity peer so the
+    // election sees a real candidate set.
+    const otherElector = makeRemoteParticipant({ userId: 'u-aaa', deviceId: 'd-1' });
+    room.remoteParticipants.set('u-aaa', otherElector);
+
+    room.emit('participantDisconnected', makeRemoteParticipant({
+      userId: 'u-leaver',
+      deviceId: 'd-leaver',
+    }));
+    await flushMicrotasks();
+
+    expect(mockRemoveMemberFromVoiceGroup).not.toHaveBeenCalled();
+  });
+
+  it('with local elected as smallest remaining identity, removal runs exactly once', async () => {
+    // 3-participant room. Pick identities so local sorts strictly
+    // first: local 'u-aaa:device-1', remote 'u-zzz:d-1' (larger),
+    // departed 'u-leaver:d-leaver'. Election picks local; removal
+    // must run exactly once.
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u-aaa', getStore, voiceKeyRotationHours: 2 }),
+    );
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    const otherLoser = makeRemoteParticipant({ userId: 'u-zzz', deviceId: 'd-1' });
+    room.remoteParticipants.set('u-zzz', otherLoser);
+
+    room.emit('participantDisconnected', makeRemoteParticipant({
+      userId: 'u-leaver',
+      deviceId: 'd-leaver',
+    }));
+    await flushMicrotasks();
+
+    expect(mockRemoveMemberFromVoiceGroup).toHaveBeenCalledTimes(1);
+    expect(mockRemoveMemberFromVoiceGroup.mock.calls[0][2]).toBe('u-leaver:d-leaver');
+  });
+
+  it('uses the deps-injected scoped voice MLS API (selected instance base URL)', async () => {
+    const voiceBaseUrl = 'https://chat.example.com';
+    const { result } = renderHook(() =>
+      useRoom({
+        wsClient,
+        getToken,
+        currentUserId: 'u1',
+        getStore,
+        voiceKeyRotationHours: 2,
+        baseUrl: voiceBaseUrl,
+      }),
+    );
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    const room = capturedRooms[capturedRooms.length - 1];
+
+    room.emit('participantDisconnected', makeRemoteParticipant({
+      userId: 'u-leaver',
+      deviceId: 'd-leaver',
+    }));
+    await flushMicrotasks();
+
+    // The deps passed into removeMemberFromVoiceGroup must carry the
+    // instance-scoped voice MLS API created from `voiceBaseUrl`.
+    // Force a postMLSVoiceCommit through that api so the per-instance
+    // base URL leaks all the way down to the API mock and proves the
+    // scoping is preserved end to end.
+    expect(mockRemoveMemberFromVoiceGroup).toHaveBeenCalledTimes(1);
+    const depsArg = mockRemoveMemberFromVoiceGroup.mock.calls[0][0];
+    await depsArg.api.postMLSVoiceCommit(
+      'test-token',
+      CHANNEL_ID,
+      'commit-b64',
+      9,
+      'group-info-b64',
+    );
+    expect(mockPostMLSVoiceCommit).toHaveBeenCalledWith(
+      'test-token',
+      CHANNEL_ID,
+      'commit-b64',
+      9,
+      'group-info-b64',
+      voiceBaseUrl,
+    );
   });
 });
 

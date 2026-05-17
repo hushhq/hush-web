@@ -889,6 +889,71 @@ export async function performVoiceSelfUpdate(deps, channelId) {
 }
 
 /**
+ * Remove a member from the voice MLS group and post the resulting
+ * commit to the owning instance.
+ *
+ * Mirrors {@link removeMemberFromChannel} but uses
+ * {@link voiceChannelIdToBytes} for the group id, the
+ * deps-injected voice MLS API (`postMLSVoiceCommit`), and the
+ * `voice:${channelId}` epoch key so it does not collide with the
+ * text-channel epoch stored under the bare channel id.
+ *
+ * `memberIdentity` MUST be the device-scoped credential identity
+ * (`userId:deviceId`) — the same shape that
+ * `uploadKeyPackages.js` registers for each device. Passing a
+ * bare user id either misses the leaf entirely or removes the
+ * wrong device's leaf, both of which break the voice E2EE
+ * guarantee. This function validates the shape before invoking
+ * crypto so a malformed input fails closed, not silently.
+ *
+ * @param {object} deps - Must provide `db`, `token`, `credential`,
+ *   `mlsStore`, `hushCrypto`, and `api` (scoped to the owning
+ *   instance — never bare `apiLib`).
+ * @param {string} channelId
+ * @param {string} memberIdentity - `userId:deviceId`.
+ * @returns {Promise<void>}
+ */
+export async function removeMemberFromVoiceGroup(deps, channelId, memberIdentity) {
+  if (typeof memberIdentity !== 'string' || memberIdentity.length === 0) {
+    throw new Error('removeMemberFromVoiceGroup: memberIdentity required');
+  }
+  // Device-scoped identity sanity check: the separator must be
+  // present and both halves non-empty. Bare user ids and bare
+  // device ids both fail this guard, which closes the PR #40
+  // bare-`participant.identity` regression at the entry point.
+  const colon = memberIdentity.indexOf(':');
+  if (colon <= 0 || colon === memberIdentity.length - 1) {
+    throw new Error(
+      `removeMemberFromVoiceGroup: memberIdentity must be \`userId:deviceId\`, got ${memberIdentity}`,
+    );
+  }
+
+  const { db, token, mlsStore, hushCrypto, api } = deps;
+  const { sigPriv, sigPub, credBytes } = getCredFields(deps);
+  const groupIdBytes = voiceChannelIdToBytes(channelId);
+  const memberIdentitiesJson = JSON.stringify([memberIdentity]);
+
+  await mlsStore.preloadGroupState(db);
+  const result = await hushCrypto.removeMembers(
+    groupIdBytes,
+    sigPriv,
+    sigPub,
+    credBytes,
+    memberIdentitiesJson,
+  );
+  await mlsStore.flushStorageCache(db);
+
+  await api.postMLSVoiceCommit(
+    token,
+    channelId,
+    toBase64(result.commitBytes),
+    result.epoch,
+    toBase64(result.groupInfoBytes),
+  );
+  await mlsStore.setGroupEpoch(db, `voice:${channelId}`, result.epoch);
+}
+
+/**
  * Destroy local voice MLS group state when leaving a voice channel.
  * Does NOT call a server delete - the server handles cleanup via the LiveKit
  * webhook when the last participant leaves (voice_group_destroyed WS event).
