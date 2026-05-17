@@ -31,6 +31,15 @@ interface MlsAddRequestFrame {
   action?: string
   proposal_bytes?: string
   requester_id?: string
+  /**
+   * Device id of the requester. Required for `action === "remove"`
+   * because MLS leaf identities are `userId:deviceId` (see
+   * `uploadKeyPackages.js`). Without it we cannot target the exact
+   * departed leaf and must fall back to a catch-up — passing the
+   * bare user id would either miss the leaf entirely or, worse,
+   * remove the wrong one.
+   */
+  requester_device_id?: string
 }
 
 function base64ToUint8Array(b64: string): Uint8Array {
@@ -169,38 +178,84 @@ export function useTextChannelMLSCommitListener({
       if (!data?.channel_id || !data.requester_id) return
       if (data.action !== "remove") return
       const userId = userIdRef.current
-      if (userId && data.requester_id === userId) return
+      const requesterDeviceId = data.requester_device_id?.trim() || ""
+      // Device-scoped self-skip: only suppress the local commit when
+      // BOTH the user AND the device match. The same user on another
+      // device must still process the removal — that device's MLS
+      // leaf needs to be evicted from this device's group state too.
+      if (
+        userId &&
+        data.requester_id === userId &&
+        requesterDeviceId === getDeviceId()
+      ) {
+        return
+      }
 
       const channelId = data.channel_id
       const requesterId = data.requester_id
+
       try {
         const deps = await buildDeps(channelId)
         if (!deps) return
+
+        // Server-stamped device id absent (legacy server, or
+        // unauthenticated WS client without a device id). MLS leaves
+        // are identified by `userId:deviceId`, so removing on a bare
+        // user id would either miss the leaf or remove the wrong
+        // one. Catch up instead so any commit a peer eventually
+        // makes will reach this device through the normal commit
+        // stream.
+        if (!requesterDeviceId) {
+          console.warn(
+            "[mls] add_request remove: legacy frame missing requester_device_id; falling back to catchupCommits",
+            { channelId, requesterId },
+          )
+          await withChannelMLSMutex(textChannelKey(channelId), async () => {
+            try {
+              await mlsGroup.catchupCommits(deps, channelId)
+            } catch (catchupErr) {
+              console.warn("[mls] add_request remove: catchupCommits failed", {
+                channelId,
+                requesterId,
+                err:
+                  catchupErr instanceof Error
+                    ? catchupErr.message
+                    : catchupErr,
+              })
+            }
+          })
+          return
+        }
+
+        const memberIdentity = `${requesterId}:${requesterDeviceId}`
         await withChannelMLSMutex(textChannelKey(channelId), async () => {
           try {
             await mlsGroup.removeMemberFromChannel(
               deps,
               channelId,
-              requesterId,
+              memberIdentity,
             )
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             // Benign races: another online member committed the
-            // removal first, or the local group state already reflects
-            // the removal because a prior `mls.commit` arrived first.
-            if (
-              /already removed|unknown member|not.*member/i.test(message)
-            ) {
+            // removal first, or the local group state already
+            // reflects the removal because a prior `mls.commit`
+            // arrived first. `unknown member` is deliberately NOT
+            // benign — it usually signals the exact identity
+            // mismatch this fix was created to surface (e.g. server
+            // dropped device id, or wrong scope passed in), and
+            // silencing it would let the leaf linger in the group.
+            if (/already removed|not.*member/i.test(message)) {
               console.info("[mls] add_request remove: idempotent skip", {
                 channelId,
-                requesterId,
+                memberIdentity,
                 message,
               })
               return
             }
             console.warn("[mls] removeMemberFromChannel failed", {
               channelId,
-              requesterId,
+              memberIdentity,
               message,
             })
           }

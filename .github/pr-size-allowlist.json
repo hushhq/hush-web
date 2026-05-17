@@ -44,7 +44,7 @@
     "src/hooks/useMicMonitor.js": 326,
     "src/hooks/useRoom.js": 1069,
     "src/hooks/useRoom.voice.test.jsx": 1018,
-    "src/hooks/useTextChannelMLSCommitListener.test.tsx": 352,
+    "src/hooks/useTextChannelMLSCommitListener.test.tsx": 505,
     "src/lib/api.js": 2075,
     "src/lib/api.test.js": 840,
     "src/lib/authInstanceStore.js": 318,
