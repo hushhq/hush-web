@@ -250,7 +250,11 @@ describe("useTextChannelMLSCommitListener", () => {
     })
   })
 
-  it("commits a remove on mls.add_request action=remove from a peer", async () => {
+  it("commits a remove on mls.add_request action=remove with device-scoped identity", async () => {
+    // MLS credentials are device-scoped (`userId:deviceId`). The
+    // listener must pass that exact identity into
+    // `removeMemberFromChannel`; passing a bare user id would either
+    // miss the leaf or remove the wrong device's leaf.
     const ws = makeWs()
     renderHook(() =>
       useTextChannelMLSCommitListener({
@@ -267,16 +271,22 @@ describe("useTextChannelMLSCommitListener", () => {
       channel_id: "ch-1",
       action: "remove",
       requester_id: "user-leaver",
+      requester_device_id: "device-leaver",
     })
 
     await waitFor(() => {
       expect(removeMemberFromChannel).toHaveBeenCalledTimes(1)
     })
     expect(removeMemberFromChannel.mock.calls[0][1]).toBe("ch-1")
-    expect(removeMemberFromChannel.mock.calls[0][2]).toBe("user-leaver")
+    expect(removeMemberFromChannel.mock.calls[0][2]).toBe(
+      "user-leaver:device-leaver",
+    )
   })
 
-  it("skips own mls.add_request remove", async () => {
+  it("processes a remove for the same user on a different device", async () => {
+    // Same user, different device must still be removed — the other
+    // device's MLS leaf has to be evicted from this device's group
+    // state too.
     const ws = makeWs()
     renderHook(() =>
       useTextChannelMLSCommitListener({
@@ -293,9 +303,100 @@ describe("useTextChannelMLSCommitListener", () => {
       channel_id: "ch-1",
       action: "remove",
       requester_id: "user-self",
+      requester_device_id: "device-other",
+    })
+
+    await waitFor(() => {
+      expect(removeMemberFromChannel).toHaveBeenCalledTimes(1)
+    })
+    expect(removeMemberFromChannel.mock.calls[0][2]).toBe(
+      "user-self:device-other",
+    )
+  })
+
+  it("skips own mls.add_request remove only when user AND device both match", async () => {
+    const ws = makeWs()
+    renderHook(() =>
+      useTextChannelMLSCommitListener({
+        wsClient: ws as Parameters<
+          typeof useTextChannelMLSCommitListener
+        >[0]["wsClient"],
+        currentUserId: "user-self",
+        getToken: () => "tok",
+      }),
+    )
+
+    ws.emit("mls.add_request", {
+      type: "mls.add_request",
+      channel_id: "ch-1",
+      action: "remove",
+      requester_id: "user-self",
+      requester_device_id: "device-self",
     })
 
     await new Promise((r) => setTimeout(r, 0))
+    expect(removeMemberFromChannel).not.toHaveBeenCalled()
+    expect(catchupCommits).not.toHaveBeenCalled()
+  })
+
+  it("falls back to catchupCommits when requester_device_id is missing", async () => {
+    // Legacy server (or unauthenticated WS client) sends a remove
+    // request without a device id. The listener MUST NOT call
+    // removeMemberFromChannel with a bare user id; it falls back to
+    // catchupCommits and logs a warning instead.
+    const ws = makeWs()
+    renderHook(() =>
+      useTextChannelMLSCommitListener({
+        wsClient: ws as Parameters<
+          typeof useTextChannelMLSCommitListener
+        >[0]["wsClient"],
+        currentUserId: "user-self",
+        getToken: () => "tok",
+        baseUrl: "https://chat.example.com",
+      }),
+    )
+
+    ws.emit("mls.add_request", {
+      type: "mls.add_request",
+      channel_id: "ch-1",
+      action: "remove",
+      requester_id: "user-leaver",
+      // requester_device_id intentionally omitted
+    })
+
+    await waitFor(() => {
+      expect(catchupCommits).toHaveBeenCalledTimes(1)
+    })
+    expect(removeMemberFromChannel).not.toHaveBeenCalled()
+    expect(catchupCommits).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: "https://chat.example.com" }),
+      "ch-1",
+    )
+  })
+
+  it("falls back to catchupCommits when requester_device_id is empty string", async () => {
+    const ws = makeWs()
+    renderHook(() =>
+      useTextChannelMLSCommitListener({
+        wsClient: ws as Parameters<
+          typeof useTextChannelMLSCommitListener
+        >[0]["wsClient"],
+        currentUserId: "user-self",
+        getToken: () => "tok",
+      }),
+    )
+
+    ws.emit("mls.add_request", {
+      type: "mls.add_request",
+      channel_id: "ch-1",
+      action: "remove",
+      requester_id: "user-leaver",
+      requester_device_id: "",
+    })
+
+    await waitFor(() => {
+      expect(catchupCommits).toHaveBeenCalledTimes(1)
+    })
     expect(removeMemberFromChannel).not.toHaveBeenCalled()
   })
 
@@ -319,12 +420,63 @@ describe("useTextChannelMLSCommitListener", () => {
       channel_id: "ch-1",
       action: "remove",
       requester_id: "user-leaver",
+      requester_device_id: "device-leaver",
     })
 
     await waitFor(() => {
       expect(removeMemberFromChannel).toHaveBeenCalledTimes(1)
     })
     // Listener swallows the benign race; no rethrow.
+  })
+
+  it("does NOT swallow 'unknown member' as benign — that masks identity mismatch", async () => {
+    // `unknown member` is the exact failure mode this fix surfaces:
+    // it means the identity passed in does not exist as an MLS leaf
+    // in the group. Silencing it would let the departed device's
+    // leaf linger and defeat the point of the fix. The listener
+    // must log it as a failure, not skip it idempotently.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
+    removeMemberFromChannel.mockRejectedValueOnce(
+      new Error("unknown member in group"),
+    )
+    const ws = makeWs()
+    renderHook(() =>
+      useTextChannelMLSCommitListener({
+        wsClient: ws as Parameters<
+          typeof useTextChannelMLSCommitListener
+        >[0]["wsClient"],
+        currentUserId: "user-self",
+        getToken: () => "tok",
+      }),
+    )
+
+    ws.emit("mls.add_request", {
+      type: "mls.add_request",
+      channel_id: "ch-1",
+      action: "remove",
+      requester_id: "user-leaver",
+      requester_device_id: "device-leaver",
+    })
+
+    await waitFor(() => {
+      expect(removeMemberFromChannel).toHaveBeenCalledTimes(1)
+    })
+    // Surfaced as a warning, not silenced as idempotent skip.
+    const sawFailureWarn = warnSpy.mock.calls.some(
+      (call) =>
+        typeof call[0] === "string" &&
+        call[0].includes("removeMemberFromChannel failed"),
+    )
+    const sawIdempotentInfo = infoSpy.mock.calls.some(
+      (call) =>
+        typeof call[0] === "string" &&
+        call[0].includes("idempotent skip"),
+    )
+    expect(sawFailureWarn).toBe(true)
+    expect(sawIdempotentInfo).toBe(false)
+    warnSpy.mockRestore()
+    infoSpy.mockRestore()
   })
 
   it("ignores mls.add_request with action other than remove", async () => {
@@ -344,6 +496,7 @@ describe("useTextChannelMLSCommitListener", () => {
       channel_id: "ch-1",
       action: "add",
       requester_id: "user-other",
+      requester_device_id: "device-other",
     })
 
     await new Promise((r) => setTimeout(r, 0))
