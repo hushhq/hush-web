@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { useGuildChannelIds } from "@/hooks/useGuildChannelIds"
 import { useTextChannelMLSSubscriptions } from "@/hooks/useTextChannelMLSSubscriptions"
 import { useServerModerationEvents } from "@/adapters/useServerModerationEvents"
+import { useServerJoinEvents } from "@/adapters/useServerJoinEvents"
 
 interface WsClientLike {
   on: (event: string, handler: (msg: unknown) => void) => void
@@ -94,6 +95,12 @@ export function PerServerListeners({
       toast.error(message)
       onSelfRemoved({ instanceUrl, serverId, event, reason })
     },
+  })
+
+  useServerJoinEvents({
+    wsClient: wsClient as Parameters<typeof useServerJoinEvents>[0]["wsClient"],
+    serverId,
+    refetchMembers,
   })
 
   return null

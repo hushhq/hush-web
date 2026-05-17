@@ -29,12 +29,12 @@ interface SystemChannelViewProps {
    *  system events as the backend broadcasts them, so a long-lived
    *  log surface stays current without manual refresh. */
   wsClient?: WsClientLike | null
-  /** Resolves a user id to its `@username` for display. The system
+  /** Resolves a user id to its render-ready actor label. The system
    *  message rows fall back to a shortened id when this returns
    *  null. Pass the same members snapshot the surrounding chrome
    *  uses so actor / target read the same identity in the log and
    *  in the members sidebar. */
-  resolveActor?: (id: string) => string | null
+  resolveActorLabel?: (id: string) => string | null
 }
 
 /**
@@ -64,7 +64,7 @@ export function SystemChannelView({
   token,
   baseUrl,
   wsClient,
-  resolveActor,
+  resolveActorLabel,
 }: SystemChannelViewProps) {
   const { events, loading, error } = useSystemEvents({
     serverId,
@@ -99,7 +99,7 @@ export function SystemChannelView({
             <SystemEventRow
               key={event.id}
               event={event}
-              resolveActor={resolveActor}
+              resolveActorLabel={resolveActorLabel}
             />
           ))}
         </div>
@@ -120,10 +120,10 @@ function SystemSkeleton() {
 
 function SystemEventRow({
   event,
-  resolveActor,
+  resolveActorLabel,
 }: {
   event: SystemEvent
-  resolveActor?: (id: string) => string | null
+  resolveActorLabel?: (id: string) => string | null
 }) {
   const ts = formatTimestamp(event.createdAt)
   return (
@@ -133,11 +133,11 @@ function SystemEventRow({
         <span className="text-xs text-muted-foreground tabular-nums">{ts}</span>
       </div>
       <div className="text-xs text-muted-foreground">
-        Actor: <ActorTag id={event.actorId} resolveActor={resolveActor} />
+        Actor: <ActorTag id={event.actorId} resolveActorLabel={resolveActorLabel} />
         {event.targetId ? (
           <>
             {" · Target: "}
-            <ActorTag id={event.targetId} resolveActor={resolveActor} />
+            <ActorTag id={event.targetId} resolveActorLabel={resolveActorLabel} />
           </>
         ) : null}
       </div>
@@ -150,16 +150,22 @@ function SystemEventRow({
 
 function ActorTag({
   id,
-  resolveActor,
+  resolveActorLabel,
 }: {
   id: string
-  resolveActor?: (id: string) => string | null
+  resolveActorLabel?: (id: string) => string | null
 }) {
-  const username = resolveActor?.(id) ?? null
-  if (username) {
-    return <span className="font-medium text-foreground">@{username}</span>
+  const label = trimOrNull(resolveActorLabel?.(id))
+  if (label) {
+    return <span className="font-medium text-foreground">{label}</span>
   }
   return <span className="font-mono">{shortId(id)}</span>
+}
+
+function trimOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
 }
 
 function humanizeEventType(t: string): string {

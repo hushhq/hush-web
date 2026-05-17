@@ -52,6 +52,42 @@ const fallback = (
   }} />
 );
 
+const PENDING_INVITE_KEY = 'hush_pending_invite';
+
+function getQueuedInvitePath() {
+  if (typeof window === 'undefined') return null;
+  let raw = null;
+  try {
+    raw = window.sessionStorage.getItem(PENDING_INVITE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  let parsed;
+  try {
+    parsed = new URL(raw, window.location.origin);
+  } catch {
+    try {
+      window.sessionStorage.removeItem(PENDING_INVITE_KEY);
+    } catch {
+      // noop
+    }
+    return null;
+  }
+
+  const path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  const isInvitePath = /^\/(?:invite|join)\//.test(parsed.pathname);
+  const isSameOrigin = parsed.origin === window.location.origin;
+  try {
+    window.sessionStorage.removeItem(PENDING_INVITE_KEY);
+  } catch {
+    // noop
+  }
+
+  return isSameOrigin && isInvitePath ? path : null;
+}
+
 // ── PostLoginRedirect ─────────────────────────────────────────────────────────
 
 /**
@@ -83,6 +119,12 @@ function PostLoginRedirect() {
     // Handle invite join param - redirect immediately, don't wait for guilds.
     if (joinParam) {
       navigate(`/invite/${encodeURIComponent(joinParam)}`, { replace: true });
+      return;
+    }
+
+    const queuedInvitePath = getQueuedInvitePath();
+    if (queuedInvitePath) {
+      navigate(queuedInvitePath, { replace: true });
       return;
     }
 

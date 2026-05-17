@@ -1,5 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
+import { LogInIcon, ServerIcon } from 'lucide-react';
+
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
+
 import { getInviteInfo, claimInvite } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useInstanceContext } from '../contexts/InstanceContext';
@@ -17,6 +32,65 @@ import { buildGuildRouteRef } from '../lib/slugify';
 
 const POST_CLAIM_SETUP_ERROR =
   'Membership is active, but local setup failed on this device. Retry to finish opening the server.';
+
+function InvitePage({ children }) {
+  return (
+    <main className="flex min-h-svh w-full items-center justify-center bg-background px-4 py-8 text-foreground">
+      {children}
+    </main>
+  );
+}
+
+function ReturnHomeButton() {
+  return (
+    <Button asChild variant="outline">
+      <a href="/">Return to home</a>
+    </Button>
+  );
+}
+
+function InviteCard({
+  title = "You're invited to join",
+  guildName,
+  description,
+  memberCount,
+  error,
+  children,
+}) {
+  return (
+    <Card className="w-full max-w-md">
+      <CardHeader className="gap-3 text-center">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <ServerIcon />
+        </div>
+        <div className="flex flex-col gap-1">
+          <CardDescription>{title}</CardDescription>
+          {guildName ? (
+            <CardTitle className="break-words text-xl">{guildName}</CardTitle>
+          ) : null}
+          {description ? (
+            <CardDescription>{description}</CardDescription>
+          ) : null}
+        </div>
+        {memberCount != null ? (
+          <div>
+            <Badge variant="secondary">
+              {memberCount} member{memberCount !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        ) : null}
+      </CardHeader>
+      {error ? (
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </CardContent>
+      ) : null}
+      {children ? <CardFooter className="flex gap-2">{children}</CardFooter> : null}
+    </Card>
+  );
+}
 
 function inviteErrorMessage(err) {
   const msg = err?.message || '';
@@ -331,22 +405,24 @@ export default function Invite() {
 
   if (loading) {
     return (
-      <div className="invite-page">
-        <div className="glass invite-card">
-          <p style={{ color: 'var(--hush-text-muted)', fontSize: '0.9rem' }}>Loading invite…</p>
-        </div>
-      </div>
+      <InvitePage>
+        <Card className="w-full max-w-md">
+          <CardContent className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+            <Spinner />
+            <span>Loading invite...</span>
+          </CardContent>
+        </Card>
+      </InvitePage>
     );
   }
 
   if (error && !invite) {
     return (
-      <div className="invite-page">
-        <div className="glass invite-card">
-          <p className="invite-error">{error}</p>
-          <a href="/" className="invite-link">Return to home</a>
-        </div>
-      </div>
+      <InvitePage>
+        <InviteCard title="Invite unavailable" error={error}>
+          <ReturnHomeButton />
+        </InviteCard>
+      </InvitePage>
     );
   }
 
@@ -359,43 +435,31 @@ export default function Invite() {
     const isConnecting = booting || joining;
 
     return (
-      <div className="invite-page">
-        <div className="glass invite-card">
-          <p className="invite-title">You're invited to join</p>
-          <p className="invite-guild-name">{guildName}</p>
-          <p className="invite-instance-host">hosted on {instanceParam}</p>
-          {memberCount != null && (
-            <p className="invite-member-count">{memberCount} member{memberCount !== 1 ? 's' : ''}</p>
-          )}
-          {error && <p className="invite-error">{error}</p>}
+      <InvitePage>
+        <InviteCard
+          guildName={guildName}
+          description={`Hosted on ${instanceParam}`}
+          memberCount={memberCount}
+          error={error}
+        >
           {!hasSession || needsUnlock ? (
-            <div className="invite-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleUnauthenticated}
-                style={{ padding: '12px' }}
-              >
-                Log in to join
-              </button>
-              <a href="/" className="invite-link">Return to home</a>
-            </div>
+            <Button className="flex-1" onClick={handleUnauthenticated}>
+              <LogInIcon data-icon="inline-start" />
+              Log in to join
+            </Button>
           ) : (
-            <div className="invite-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={claimRecovery ? retryClaimRecovery : handleCrossInstanceJoin}
-                disabled={isConnecting}
-                style={{ padding: '12px' }}
-              >
-                {booting ? 'Connecting to instance…' : joining ? 'Joining…' : claimRecovery ? 'Retry setup' : 'Join'}
-              </button>
-              <a href="/" className="invite-link">Return to home</a>
-            </div>
+            <Button
+              className="flex-1"
+              onClick={claimRecovery ? retryClaimRecovery : handleCrossInstanceJoin}
+              disabled={isConnecting}
+            >
+              {isConnecting ? <Spinner data-icon="inline-start" /> : null}
+              {booting ? 'Connecting to instance...' : joining ? 'Joining...' : claimRecovery ? 'Retry setup' : 'Join'}
+            </Button>
           )}
-        </div>
-      </div>
+          <ReturnHomeButton />
+        </InviteCard>
+      </InvitePage>
     );
   }
 
@@ -403,54 +467,43 @@ export default function Invite() {
 
   if (hasSession && !needsUnlock) {
     return (
-      <div className="invite-page">
-        <div className="glass invite-card">
-          <p className="invite-title">You're invited to join</p>
-          <p className="invite-guild-name">{guildName}</p>
-          {error && <p className="invite-error">{error}</p>}
-          {!error && (
-            <p style={{ color: 'var(--hush-text-muted)', fontSize: '0.9rem' }}>Joining…</p>
-          )}
-          {error && (
-            <div className="invite-actions">
-              {claimRecovery && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
+      <InvitePage>
+        <InviteCard guildName={guildName} error={error}>
+          {error ? (
+            <>
+              {claimRecovery ? (
+                <Button
+                  className="flex-1"
                   onClick={retryClaimRecovery}
                   disabled={joining}
-                  style={{ padding: '12px' }}
                 >
-                  {joining ? 'Retrying…' : 'Retry setup'}
-                </button>
-              )}
-              <a href="/" className="invite-link">Return to home</a>
+                  {joining ? <Spinner data-icon="inline-start" /> : null}
+                  {joining ? 'Retrying...' : 'Retry setup'}
+                </Button>
+              ) : null}
+              <ReturnHomeButton />
+            </>
+          ) : (
+            <div className="flex w-full items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Spinner />
+              <span>Joining...</span>
             </div>
           )}
-        </div>
-      </div>
+        </InviteCard>
+      </InvitePage>
     );
   }
 
   // Unauthenticated same-instance: redirect to home with invite queued.
   return (
-    <div className="invite-page">
-      <div className="glass invite-card">
-        <p className="invite-title">You're invited to join</p>
-        <p className="invite-guild-name">{guildName}</p>
-        {error && <p className="invite-error">{error}</p>}
-        <div className="invite-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleUnauthenticated}
-            style={{ padding: '12px' }}
-          >
-            Log in to join
-          </button>
-          <a href="/" className="invite-link">Return to home</a>
-        </div>
-      </div>
-    </div>
+    <InvitePage>
+      <InviteCard guildName={guildName} error={error}>
+        <Button className="flex-1" onClick={handleUnauthenticated}>
+          <LogInIcon data-icon="inline-start" />
+          Log in to join
+        </Button>
+        <ReturnHomeButton />
+      </InviteCard>
+    </InvitePage>
   );
 }

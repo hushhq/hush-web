@@ -53,7 +53,7 @@ const RECOVERY_PLACEHOLDER =
 interface ServerMember {
   id: string
   userId?: string
-  displayName?: string
+  displayName?: string | null
 }
 
 interface RealChatProps {

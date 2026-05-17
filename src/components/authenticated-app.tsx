@@ -100,6 +100,7 @@ import {
   getUserDisplayName,
   sanitizeDisplayName,
 } from "@/lib/userLabel"
+import { resolveActorLabel } from "@/lib/systemActorLabel"
 import { PerInstanceListeners } from "@/components/realtime/PerInstanceListeners"
 import { PerServerListeners } from "@/components/realtime/PerServerListeners"
 import {
@@ -1461,9 +1462,7 @@ export function AuthenticatedApp() {
               token={token}
               baseUrl={baseUrl}
               wsClient={wsClient as Parameters<typeof SystemChannelView>[0]["wsClient"]}
-              resolveActor={(id) =>
-                members.find((m) => m.id === id)?.name ?? null
-              }
+              resolveActorLabel={(id) => resolveActorLabel(members, id)}
             />
           }
         />

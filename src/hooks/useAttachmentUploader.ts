@@ -18,6 +18,7 @@ import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   isAttachmentContentTypeAllowed,
 } from "@/lib/attachmentLimits"
+import { resolveAttachmentBlobUrl } from "@/lib/attachmentTransport"
 import type { AttachmentRef } from "@/lib/messageEnvelope"
 
 export type UploadStatus =
@@ -164,7 +165,7 @@ export function useAttachmentUploader(
       } catch (err) {
         updateEntry(entry.localId, {
           status: "failed",
-          errorMessage: errorMessage(err) || "presign failed",
+          errorMessage: prefixError("presign failed", err),
         })
         return
       }
@@ -174,8 +175,12 @@ export function useAttachmentUploader(
       updateEntry(entry.localId, { status: "uploading", progress: 0 })
 
       try {
-        await uploadToPresigned(presigned, encrypted.ciphertext, controller, (p) =>
-          updateEntry(entry.localId, { progress: p })
+        await uploadToPresigned(
+          presigned,
+          encrypted.ciphertext,
+          { baseUrl, token },
+          controller,
+          (p) => updateEntry(entry.localId, { progress: p })
         )
       } catch (err) {
         if (controller.cancelled) {
@@ -184,7 +189,7 @@ export function useAttachmentUploader(
         }
         updateEntry(entry.localId, {
           status: "failed",
-          errorMessage: errorMessage(err) || "upload failed",
+          errorMessage: prefixError("upload failed", err),
         })
         return
       } finally {
@@ -322,6 +327,11 @@ function errorMessage(err: unknown): string {
   return ""
 }
 
+function prefixError(prefix: string, err: unknown): string {
+  const msg = errorMessage(err)
+  return msg ? `${prefix}: ${msg}` : prefix
+}
+
 interface PresignedResponse {
   id: string
   uploadUrl: string
@@ -330,16 +340,34 @@ interface PresignedResponse {
   expiresAt: string
 }
 
-function uploadToPresigned(
+interface UploadContext {
+  baseUrl: string
+  token: string
+}
+
+export function uploadToPresigned(
   presigned: PresignedResponse,
   ciphertext: ArrayBuffer,
+  ctx: UploadContext,
   controller: InflightController,
   onProgress: (fraction: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     controller.xhr = xhr
-    xhr.open(presigned.method || "PUT", presigned.uploadUrl, true)
+    const resolved = resolveAttachmentBlobUrl(presigned.uploadUrl, ctx.baseUrl)
+    if (!resolved) {
+      reject(new Error(`invalid upload URL: ${presigned.uploadUrl}`))
+      return
+    }
+    xhr.open(presigned.method || "PUT", resolved.url, true)
+    if (resolved.isInApiFallback && ctx.token) {
+      try {
+        xhr.setRequestHeader("Authorization", `Bearer ${ctx.token}`)
+      } catch {
+        // Surfaced as a network/upload error below.
+      }
+    }
     if (presigned.headers) {
       for (const [k, v] of Object.entries(presigned.headers)) {
         try {
@@ -357,11 +385,18 @@ function uploadToPresigned(
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve()
       } else {
-        reject(new Error(`upload failed: ${xhr.status}`))
+        const body = xhr.responseText
+        const detail = body ? `: ${truncate(body, 200)}` : ""
+        reject(new Error(`HTTP ${xhr.status}${detail}`))
       }
     }
     xhr.onerror = () => reject(new Error("network error"))
     xhr.onabort = () => reject(new Error("aborted"))
     xhr.send(ciphertext)
   })
+}
+
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value
+  return `${value.slice(0, max)}...`
 }

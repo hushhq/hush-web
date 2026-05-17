@@ -185,7 +185,7 @@ import {
   readVoiceDevicePrefs,
   saveVoiceDevicePrefs,
 } from "@/lib/voiceDevicePrefs"
-import { VoiceChannelView } from "./voice-channel-view"
+import { VoiceChannelView, pickVoiceDisplayName } from "./voice-channel-view"
 
 const CHANNEL = { id: "ch-1", name: "general", type: "voice" as const }
 const WS_CLIENT = {
@@ -196,6 +196,22 @@ const NEXT_WS_CLIENT = {
   send: vi.fn(),
   isConnected: () => true,
 }
+
+describe("pickVoiceDisplayName", () => {
+  it("falls back past blank display names before using Anonymous", () => {
+    expect(pickVoiceDisplayName({
+      displayName: "  ",
+      display_name: "",
+      username: "alice",
+    })).toBe("alice")
+    expect(pickVoiceDisplayName({
+      displayName: "",
+      display_name: "Alice A.",
+      username: "alice",
+    })).toBe("Alice A.")
+    expect(pickVoiceDisplayName(null)).toBe("Anonymous")
+  })
+})
 
 function setRoomReady(ready: boolean) {
   roomMock.api.isReady = ready

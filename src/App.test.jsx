@@ -351,6 +351,24 @@ describe('App - blocked-tab overlay', () => {
     expect(await screen.findByText('LinkDevice')).toBeInTheDocument();
   });
 
+  it('resumes a queued invite after login', async () => {
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({ bootState: 'ready', user: null, mergedGuilds: [], guildsLoaded: true });
+    sessionStorage.setItem(
+      'hush_pending_invite',
+      `${window.location.origin}/invite/abc123#name=Secret%20Guild`,
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Invite')).toBeInTheDocument();
+    expect(sessionStorage.getItem('hush_pending_invite')).toBeNull();
+  });
+
   it('ignores invalid returnTo values and falls back to the normal post-login route', async () => {
     useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
     useBootController.mockReturnValue({ bootState: 'ready', user: null, mergedGuilds: [], guildsLoaded: true });

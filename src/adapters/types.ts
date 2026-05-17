@@ -52,10 +52,16 @@ export type MemberRole = "owner" | "admin" | "moderator" | "member" | "bot"
 
 export interface ServerMember {
   id: string
+  /** Best display label: display name, then @handle, then "user". */
   name: string
   initials: string
   presence?: MemberPresence
   role: MemberRole
+  username: string | null
+  displayName: string | null
+  createdAt: string | null
+  joinedAt: string | null
+  homeInstance: string | null
 }
 
 export interface Server {
