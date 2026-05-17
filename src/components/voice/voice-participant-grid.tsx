@@ -6,6 +6,13 @@ import { Track } from "livekit-client"
 import { cn } from "@/lib/utils"
 import { VoiceParticipantTile } from "./voice-participant-tile"
 import { VoiceLonelyTile } from "./voice-lonely-tile"
+import {
+  computeRows,
+  orderTracksForStackedLayout,
+  pickExpandedSize,
+  pickTileSize,
+  type TileSize,
+} from "./voice-participant-layout"
 
 interface VoiceParticipantGridProps {
   className?: string
@@ -23,88 +30,6 @@ interface VoiceParticipantGridProps {
   /** Setter the parent owns so this state can survive React re-renders
    *  triggered by track-list churn. */
   onExpandChange?: (key: string | null) => void
-}
-
-const TILE_GAP_PX = 8
-const TILE_ASPECT = 16 / 9
-
-/**
- * Returns row buckets for `count` tiles. The last incomplete row is
- * always centred via flex `justify-center` at render time; the layout
- * itself is row-major, picking modest column counts so individual
- * tiles stay close to a 16:9 webcam shape.
- *
- *   1   → [[0]]
- *   2   → [[0, 1]]                          (side by side)
- *   3   → [[0, 1], [2]]                     (third tile centred under)
- *   4   → [[0, 1], [2, 3]]
- *   5   → [[0, 1, 2], [3, 4]]               (last row centred)
- *   6   → [[0, 1, 2], [3, 4, 5]]
- *   7   → [[0, 1, 2], [3, 4, 5], [6]]
- *   8   → [[0, 1, 2, 3], [4, 5, 6, 7]]
- *   9   → [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
- *  10+  → 4-col grid (excess: last row centred)
- */
-function computeRows(count: number): number[][] {
-  if (count <= 1) return [[0]]
-  if (count === 2) return [[0, 1]]
-  if (count === 3) return [[0, 1], [2]]
-  if (count === 4) return [[0, 1], [2, 3]]
-  if (count === 5) return [[0, 1, 2], [3, 4]]
-  if (count === 6) return [[0, 1, 2], [3, 4, 5]]
-  if (count === 7) return [[0, 1, 2], [3, 4, 5], [6]]
-  if (count === 8) return [[0, 1, 2, 3], [4, 5, 6, 7]]
-  if (count === 9) return [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
-  const rows: number[][] = []
-  for (let i = 0; i < count; i += 4) {
-    rows.push(
-      Array.from({ length: Math.min(4, count - i) }, (_, j) => i + j)
-    )
-  }
-  return rows
-}
-
-interface TileSize {
-  width: number
-  height: number
-}
-
-/**
- * Picks the largest tile size such that:
- *   - Every tile keeps a 16:9 aspect ratio.
- *   - The widest row fits within the container width (with gaps).
- *   - All rows fit within the container height (with gaps).
- *
- * The grid is then a stack of flex rows, each `justify-center`'d, so
- * partial rows naturally centre — solving the "third participant
- * stuck on the left" layout bug without a custom column-spanning grid.
- */
-function pickTileSize(
-  box: TileSize,
-  rows: number[][]
-): TileSize {
-  if (box.width <= 0 || box.height <= 0) return { width: 0, height: 0 }
-  const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 1)
-  const rowCount = rows.length
-  const widthBoundW =
-    (box.width - (maxCols - 1) * TILE_GAP_PX) / maxCols
-  const heightBoundH =
-    (box.height - (rowCount - 1) * TILE_GAP_PX) / rowCount
-  const heightBoundW = heightBoundH * TILE_ASPECT
-  const tileW = Math.max(0, Math.min(widthBoundW, heightBoundW))
-  return { width: tileW, height: tileW / TILE_ASPECT }
-}
-
-/**
- * Picks a single-tile size constrained to 16:9 inside the container
- * (used in the expanded-tile view).
- */
-function pickExpandedSize(box: TileSize): TileSize {
-  if (box.width <= 0 || box.height <= 0) return { width: 0, height: 0 }
-  const widthBoundW = box.width
-  const heightBoundW = box.height * TILE_ASPECT
-  const w = Math.max(0, Math.min(widthBoundW, heightBoundW))
-  return { width: w, height: w / TILE_ASPECT }
 }
 
 function tileKey(participantIdentity: string, source: Track.Source): string {
@@ -132,7 +57,7 @@ export function VoiceParticipantGrid({
   expandedKey = null,
   onExpandChange,
 }: VoiceParticipantGridProps) {
-  const tracks = useTracks(
+  const rawTracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
@@ -140,7 +65,16 @@ export function VoiceParticipantGrid({
     { onlySubscribed: false }
   )
 
-  const isLonely = tracks.length <= 1
+  const isLonely = rawTracks.length <= 1
+  // Re-order tracks for the stacked two-tile layouts so the first
+  // joiner is at index 0 (visually on top). orderTracksForStackedLayout
+  // is a no-op for any other count, so 3+ participant layouts keep
+  // their row-major order — shuffling tiles between rows on every
+  // join/leave would defeat the existing centred-last-row layout.
+  const tracks = React.useMemo(
+    () => orderTracksForStackedLayout(rawTracks),
+    [rawTracks]
+  )
   const rows = React.useMemo(() => {
     const visibleCount = isLonely ? 2 : tracks.length
     return computeRows(visibleCount)
