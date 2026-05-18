@@ -22,6 +22,7 @@ const COUNTER_SHOW_THRESHOLD = 0.8;
 const CHANNEL_MESSAGES_PAGE_LIMIT = 50;
 import * as api from '../lib/api';
 import { useMLS } from '../hooks/useMLS';
+import { formatUserLabel } from '../lib/userLabel';
 import {
   encodeEnvelopeV1,
   decodeEnvelopeV1FromString,
@@ -205,7 +206,12 @@ export default function Chat({
     const map = new Map();
     for (const m of members) {
       const uid = m.userId ?? m.id;
-      if (uid && m.displayName) map.set(uid, m.displayName);
+      const label = formatUserLabel({
+        displayName: m.displayName,
+        username: m.username,
+        fallback: '',
+      });
+      if (uid && label) map.set(uid, label);
     }
     return map;
   }, [members]);

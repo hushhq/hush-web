@@ -338,7 +338,7 @@ function ProfileCard({
   member: ServerMember
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }) {
-  const handle = member.username ? `@${member.username.replace(/^@+/, "")}` : null
+  const username = member.username?.replace(/^@+/, "") || null
   const memberSince = formatMemberSince(member.joinedAt ?? member.createdAt)
   return (
     <div className="flex flex-col">
@@ -349,8 +349,8 @@ function ProfileCard({
         </span>
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-semibold">{member.name}</span>
-          {handle && handle !== member.name ? (
-            <span className="text-xs text-muted-foreground">{handle}</span>
+          {username && username !== member.name ? (
+            <span className="text-xs text-muted-foreground">{username}</span>
           ) : null}
           <span className="text-xs text-muted-foreground">
             {ROLE_BADGE_LABEL[member.role]}

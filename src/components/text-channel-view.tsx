@@ -99,7 +99,7 @@ export function TextChannelView({
     const hh = now.getHours().toString().padStart(2, "0")
     const mm = now.getMinutes().toString().padStart(2, "0")
     const body = replyTo
-      ? `> **@${replyTo.author}** — ${truncate(replyTo.body, 120)}\n\n${text}`
+      ? `> **${replyTo.author}** — ${truncate(replyTo.body, 120)}\n\n${text}`
       : text
     setLocalMessages((prev) => [
       ...prev,
@@ -197,7 +197,7 @@ function ReplyPreview({
   return (
     <div className="mx-2 mb-1 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-1.5 text-xs">
       <span className="text-muted-foreground">Replying to</span>
-      <span className="font-medium">@{reply.author}</span>
+      <span className="font-medium">{reply.author}</span>
       <span className="truncate text-muted-foreground">
         {truncate(reply.body, 80)}
       </span>

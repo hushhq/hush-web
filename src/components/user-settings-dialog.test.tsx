@@ -74,10 +74,10 @@ describe("UserSettingsDialog", () => {
     )
 
     expect(screen.getByText("Yarin")).toBeInTheDocument()
-    expect(screen.getByText("@yarin")).toBeInTheDocument()
+    expect(screen.getByText("yarin")).toBeInTheDocument()
   })
 
-  it("does not use username as the display name fallback", () => {
+  it("does not use username as the account display-name field fallback", () => {
     render(
       <UserSettingsDialog
         open
@@ -87,11 +87,10 @@ describe("UserSettingsDialog", () => {
     )
 
     expect(screen.getByText("—")).toBeInTheDocument()
-    expect(screen.getByText("@yarin")).toBeInTheDocument()
-    expect(screen.queryByText("yarin")).not.toBeInTheDocument()
+    expect(screen.getByText("yarin")).toBeInTheDocument()
   })
 
-  it("treats legacy @username display names as missing", () => {
+  it("normalizes legacy @username display names", () => {
     render(
       <UserSettingsDialog
         open
@@ -100,8 +99,7 @@ describe("UserSettingsDialog", () => {
       />
     )
 
-    expect(screen.getByText("—")).toBeInTheDocument()
-    expect(screen.getByText("@yarin")).toBeInTheDocument()
+    expect(screen.getAllByText("yarin")).toHaveLength(2)
   })
 
   it("removes AI assistant and disables unwired settings sections", async () => {

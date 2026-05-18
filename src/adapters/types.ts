@@ -52,7 +52,7 @@ export type MemberRole = "owner" | "admin" | "moderator" | "member" | "bot"
 
 export interface ServerMember {
   id: string
-  /** Best display label: display name, then @handle, then "user". */
+  /** Best display label: display name, then username, then "user". */
   name: string
   initials: string
   presence?: MemberPresence
@@ -134,7 +134,7 @@ export function memberRoleFromRaw(raw: {
 
 /** Two-letter initials from a display/user name. Empty string returns "?". */
 export function deriveInitials(name: string): string {
-  const trimmed = (name ?? "").trim()
+  const trimmed = (name ?? "").trim().replace(/^@+/, "")
   if (!trimmed) return "?"
   const parts = trimmed.split(/\s+/).slice(0, 2)
   return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?"

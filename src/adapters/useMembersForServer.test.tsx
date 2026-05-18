@@ -108,6 +108,27 @@ describe("useMembersForServer", () => {
     expect(result.current.members[0].initials).toBe("YC")
   })
 
+  it("uses undecorated username as the visible label when displayName is absent", async () => {
+    getGuildMembers.mockResolvedValue([
+      { id: "u1", username: "@mike", displayName: "", permissionLevel: 0 },
+    ])
+
+    const { result } = renderHook(() =>
+      useMembersForServer({
+        serverId: "g1",
+        token: "tok",
+        baseUrl: "https://a.example.com",
+        currentUserId: "u1",
+      })
+    )
+
+    await waitFor(() => {
+      expect(result.current.members).toHaveLength(1)
+    })
+    expect(result.current.members[0].name).toBe("mike")
+    expect(result.current.members[0].initials).toBe("M")
+  })
+
   // Presence readiness contract — without this gate, the initial
   // empty `onlineUserIds` set would render every member offline
   // until the first `presence.update` frame arrived.

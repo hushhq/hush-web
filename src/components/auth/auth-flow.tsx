@@ -713,13 +713,13 @@ function UsernameStep({
   } else if (available === true) {
     feedback = (
       <span className="text-xs text-success font-medium">
-        @{trimmed} is available
+        {trimmed} is available
       </span>
     )
   } else if (available === false) {
     feedback = (
       <span className="text-xs text-destructive font-medium">
-        @{trimmed} is already taken
+        {trimmed} is already taken
       </span>
     )
   } else {

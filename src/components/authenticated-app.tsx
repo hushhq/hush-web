@@ -96,7 +96,7 @@ import type {
 import { useVoiceChannelPresence } from "@/hooks/useVoiceChannelPresence"
 import { useOnlinePresence } from "@/hooks/useOnlinePresence"
 import {
-  formatHandle,
+  formatUserLabel,
   getUserDisplayName,
   sanitizeDisplayName,
 } from "@/lib/userLabel"
@@ -892,12 +892,11 @@ export function AuthenticatedApp() {
       dmGuilds
         .filter((g) => g.channelId)
         .map((g) => {
-          // displayName as-is; on fallback the username keeps the
-          // "@" prefix so the row reads as a handle, not a name.
-          const name = g.otherUser?.displayName?.trim()
-            || (g.otherUser?.username
-              ? `@${g.otherUser.username.replace(/^@+/, "")}`
-              : "user")
+          const name = formatUserLabel({
+            displayName: g.otherUser?.displayName,
+            username: g.otherUser?.username,
+            fallback: "user",
+          })
           const peerId = g.otherUser?.id
           // Presence stays optimistic ("online") until the first
           // `presence.update` frame so the DM list does not flicker
@@ -925,8 +924,11 @@ export function AuthenticatedApp() {
         return
       }
       const host = new URL(dm.instanceUrl).host
-      const name =
-        dm.otherUser?.displayName ?? dm.otherUser?.username ?? "user"
+      const name = formatUserLabel({
+        displayName: dm.otherUser?.displayName,
+        username: dm.otherUser?.username,
+        fallback: "user",
+      })
       const ref = buildGuildRouteRef(name, dm.id)
       navigate(`/${host}/${ref}/${channelId}`)
     },
@@ -1361,14 +1363,14 @@ export function AuthenticatedApp() {
     : undefined
 
   // Sidebar user prop (prototype shape). `name` is the display
-  // name only; `email` is the @-handle row (no email backend yet).
+  // name only; `email` is the username row (no email backend yet).
   const sidebarUser = React.useMemo(() => {
-    const handle = formatHandle(user?.username)
     const display = sanitizeDisplayName(getUserDisplayName(user), user?.username)
+    const username = formatUserLabel({ username: user?.username, fallback: "" })
     return {
       name: display || "You",
-      email: handle,
-      initials: deriveInitials(display || user?.username || "you"),
+      email: username,
+      initials: deriveInitials(display || username || "you"),
     }
   }, [user?.displayName, user?.display_name, user?.username])
 

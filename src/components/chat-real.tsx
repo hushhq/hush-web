@@ -40,6 +40,7 @@ import { Separator } from "@/components/ui/separator"
 import { MessageContent } from "@/components/message-content"
 import { MessageComposer } from "@/components/message-composer"
 import { cn } from "@/lib/utils"
+import { formatUserLabel } from "@/lib/userLabel"
 import { useChannelMessages, type ChatMessage } from "@/hooks/useChannelMessages"
 import {
   useAttachmentUploader,
@@ -53,6 +54,7 @@ const RECOVERY_PLACEHOLDER =
 interface ServerMember {
   id: string
   userId?: string
+  username?: string | null
   displayName?: string | null
 }
 
@@ -93,7 +95,12 @@ export function RealChat({
     const map = new Map<string, string>()
     for (const m of members) {
       const uid = m.userId ?? m.id
-      if (uid && m.displayName) map.set(uid, m.displayName)
+      const label = formatUserLabel({
+        displayName: m.displayName,
+        username: m.username,
+        fallback: "",
+      })
+      if (uid && label) map.set(uid, label)
     }
     return map
   }, [members])

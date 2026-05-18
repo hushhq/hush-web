@@ -25,7 +25,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { loadPinAttempts } from "@/hooks/useAuth"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
-  formatHandle,
+  formatUserLabel,
   getUserDisplayName,
   sanitizeDisplayName,
 } from "@/lib/userLabel"
@@ -78,11 +78,9 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
   const countdownRef = React.useRef<number | null>(null)
 
   const display = sanitizeDisplayName(getUserDisplayName(user), user?.username)
-  const handle = formatHandle(user?.username)
-  // displayName as-is, otherwise fallback to "@username" so the
-  // greeting still reads as a handle rather than a free-form name.
-  const username = display || handle || "your account"
-  const initial = ((display || user?.username || "?").charAt(0) ?? "?").toUpperCase()
+  const username = formatUserLabel({ username: user?.username, fallback: "" })
+  const label = display || username || "your account"
+  const initial = ((display || username || "?").charAt(0) ?? "?").toUpperCase()
 
   React.useEffect(
     () => () => {
@@ -192,7 +190,7 @@ export function PinUnlockPanel({ onSwitchAccount }: PinUnlockPanelProps) {
               >
                 {initial}
               </div>
-              <span className="text-base font-semibold">{username}</span>
+              <span className="text-base font-semibold">{label}</span>
             </div>
 
             {errorMessage ? (

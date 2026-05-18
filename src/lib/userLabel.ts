@@ -5,13 +5,12 @@
  *
  * - `displayName`: the human-friendly label the user picks. Shown
  *   without any prefix.
- * - `username`: the @-handle. Always shown with a leading "@" so it
- *   reads as a handle, never as a free-form name.
+ * - `username`: the stable account handle. Stored and passed around
+ *   without decoration.
  *
  * Components that need to render a single label per user typically
- * fall back from displayName → username when displayName is missing.
- * In that fallback the visible string still represents the username,
- * so it MUST keep the "@" prefix.
+ * fall back from displayName → username when displayName is missing,
+ * but they still render a human label, not a prefixed handle.
  */
 
 /**
@@ -19,40 +18,36 @@
  * `username` is falsy / blank so callers can render a fallback.
  */
 export function formatHandle(username: string | null | undefined): string {
-  if (!username) return ""
-  const trimmed = username.trim()
+  const trimmed = formatUsername(username)
   if (!trimmed) return ""
-  return `@${trimmed.replace(/^@+/, "")}`
+  return `@${trimmed}`
 }
 
 /**
- * Returns a display name only when it is distinct from the user's handle.
+ * Normalizes a username for display and comparison. Usernames are data,
+ * not preformatted handles, so any legacy leading "@" is stripped at
+ * the boundary.
+ */
+export function formatUsername(username: string | null | undefined): string {
+  if (!username) return ""
+  return username.trim().replace(/^@+/, "")
+}
+
+/**
+ * Returns a normalized display name.
  *
- * Older clients could persist the username/handle into `display_name` when the
- * optional display-name field was left blank. Treat that legacy value as
- * missing so two-line account surfaces do not render "@alice" twice.
+ * Older clients could persist handle-shaped values such as "@alice" into
+ * `display_name`. Strip the presentation marker, but keep the label: if
+ * a user intentionally leaves display name equal to username, that is still
+ * the primary name the app should show.
  */
 export function sanitizeDisplayName(
   displayName: string | null | undefined,
-  username?: string | null
+  _username?: string | null
 ): string {
   const display = displayName?.trim() ?? ""
   if (!display) return ""
-
-  const strippedDisplay = display.replace(/^@+/, "")
-  const strippedUsername = username?.trim().replace(/^@+/, "") ?? ""
-  const isHandleShaped = display.startsWith("@")
-  const isExactUsername = strippedUsername && strippedDisplay === strippedUsername
-  const isHandleForUsername =
-    isHandleShaped &&
-    strippedUsername &&
-    strippedDisplay.toLowerCase() === strippedUsername.toLowerCase()
-
-  if (isExactUsername || isHandleForUsername) {
-    return ""
-  }
-
-  return display
+  return display.replace(/^@+/, "")
 }
 
 /**
@@ -77,7 +72,7 @@ export function getUserDisplayName(
 /**
  * Returns the best human label for a user:
  *   - `displayName` if non-blank (rendered as-is)
- *   - else "@username" if `username` is non-blank
+ *   - else `username` if non-blank (without "@")
  *   - else `fallback` (defaults to "user")
  */
 export function formatUserLabel(
@@ -89,7 +84,7 @@ export function formatUserLabel(
 ): string {
   const display = sanitizeDisplayName(args.displayName, args.username)
   if (display) return display
-  const handle = formatHandle(args.username)
-  if (handle) return handle
+  const username = formatUsername(args.username)
+  if (username) return username
   return args.fallback ?? "user"
 }
