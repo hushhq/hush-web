@@ -18,6 +18,7 @@ import {
   within,
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 beforeAll(() => {
   if (!window.matchMedia) {
@@ -104,6 +105,19 @@ vi.mock("@/components/devices/ApproveDeviceLinkFlow.jsx", () => ({
 
 import { DevicesPanel } from "./devices-panel"
 
+function renderPanel(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      {ui}
+    </QueryClientProvider>
+  )
+}
+
 describe("DevicesPanel", () => {
   beforeEach(() => {
     // Default: explicit homeInstanceUrl resolves to a namespaced token
@@ -128,7 +142,7 @@ describe("DevicesPanel", () => {
   it("renders the legacy description copy verbatim", () => {
     listDeviceKeys.mockResolvedValueOnce([])
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     expect(
       screen.getByText(/On the new device, open/i)
@@ -141,7 +155,7 @@ describe("DevicesPanel", () => {
   it("shows an empty state when the API returns no devices", async () => {
     listDeviceKeys.mockResolvedValueOnce([])
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     await waitFor(() =>
       expect(screen.getByText(/no devices registered/i)).toBeInTheDocument()
@@ -166,7 +180,7 @@ describe("DevicesPanel", () => {
       },
     ])
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     await waitFor(() =>
       expect(screen.getByText(/this device/i)).toBeInTheDocument()
@@ -186,7 +200,7 @@ describe("DevicesPanel", () => {
       },
     ])
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     await waitFor(() =>
       expect(
@@ -202,7 +216,7 @@ describe("DevicesPanel", () => {
   it("CTA opens the embedded approve flow inside the panel", async () => {
     listDeviceKeys.mockResolvedValueOnce([])
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     const u = userEvent.setup()
     await u.click(
@@ -229,7 +243,7 @@ describe("DevicesPanel", () => {
         },
       ])
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     const u = userEvent.setup()
     await u.click(
@@ -251,7 +265,7 @@ describe("DevicesPanel", () => {
     listDeviceKeys.mockResolvedValueOnce([])
     const onRequestClose = vi.fn()
 
-    render(<DevicesPanel onRequestClose={onRequestClose} />)
+    renderPanel(<DevicesPanel onRequestClose={onRequestClose} />)
 
     const u = userEvent.setup()
     await u.click(
@@ -276,7 +290,7 @@ describe("DevicesPanel", () => {
     listDeviceKeys.mockResolvedValueOnce([])
     revokeDeviceKey.mockResolvedValue(undefined)
 
-    render(
+    renderPanel(
       <DevicesPanel
         homeInstanceUrl="https://i.example.com"
         homeLogPublicKey="abcd"
@@ -324,7 +338,7 @@ describe("DevicesPanel", () => {
     listDeviceKeys.mockResolvedValueOnce([])
     revokeDeviceKey.mockResolvedValue(undefined)
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     const u = userEvent.setup()
     await u.click(await screen.findByRole("button", { name: /^revoke$/i }))
@@ -348,7 +362,7 @@ describe("DevicesPanel", () => {
   it("clears the loading state when token is unavailable", async () => {
     authState.token = null
 
-    render(<DevicesPanel />)
+    renderPanel(<DevicesPanel />)
 
     await waitFor(() =>
       expect(
@@ -368,7 +382,7 @@ describe("DevicesPanel", () => {
     )
     listDeviceKeys.mockResolvedValueOnce([])
 
-    render(<DevicesPanel homeInstanceUrl="https://home.example.com" />)
+    renderPanel(<DevicesPanel homeInstanceUrl="https://home.example.com" />)
 
     await waitFor(() =>
       expect(listDeviceKeys).toHaveBeenCalledWith(
@@ -386,7 +400,7 @@ describe("DevicesPanel", () => {
     authState.token = "active-tok"
     getInstanceToken.mockImplementation(() => null)
 
-    render(<DevicesPanel homeInstanceUrl="https://home.example.com" />)
+    renderPanel(<DevicesPanel homeInstanceUrl="https://home.example.com" />)
 
     await waitFor(() =>
       expect(

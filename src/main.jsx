@@ -1,8 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from './components/ui/tooltip.tsx';
 import App from './App';
+import { queryClient } from './lib/queryClient.ts';
 import { registerPWA } from './lib/pwaUpdate';
 import '@fontsource-variable/geist';
 import './styles/global.css';
@@ -37,7 +39,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       }}
     >
       <TooltipProvider>
-        <App />
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
       </TooltipProvider>
     </BrowserRouter>
   </React.StrictMode>

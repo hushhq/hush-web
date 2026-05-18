@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeftIcon, MonitorSmartphoneIcon } from "lucide-react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button.tsx"
 import { Separator } from "@/components/ui/separator.tsx"
@@ -38,6 +39,13 @@ interface DeviceRow {
   lastSeen?: string | null
 }
 
+function deviceKeysQueryKey(
+  homeInstanceUrl: string | null | undefined,
+  userId?: string | null
+) {
+  return ["auth", "devices", homeInstanceUrl ?? "local", userId ?? "anonymous"] as const
+}
+
 interface DevicesPanelProps {
   /**
    * URL of the auth (home) instance — the one that issued the token and
@@ -68,14 +76,14 @@ export function DevicesPanel({
 }: DevicesPanelProps) {
   const [view, setView] = React.useState<"list" | "approve">("list")
   const navigate = useNavigate()
-  const { token, identityKeyRef, setTransparencyError } = useAuth() as {
+  const queryClient = useQueryClient()
+  const { token, user, identityKeyRef, setTransparencyError } = useAuth() as {
     token: string | null
+    user?: { id?: string } | null
     identityKeyRef: React.MutableRefObject<{ publicKey: Uint8Array } | null>
     setTransparencyError?: (err: unknown) => void
   }
 
-  const [devices, setDevices] = React.useState<DeviceRow[]>([])
-  const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [confirmRevoke, setConfirmRevoke] = React.useState<{
     deviceId: string
@@ -84,33 +92,37 @@ export function DevicesPanel({
   const [revoking, setRevoking] = React.useState(false)
 
   const currentDeviceId = React.useMemo(() => getDeviceId(), [])
-
-  const fetchDevices = React.useCallback(async () => {
-    const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
-    if (!homeInstanceToken) {
-      setLoading(false)
-      if (homeInstanceUrl) {
-        setError("Sign in to the home instance to manage devices.")
+  const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
+  const devicesQuery = useQuery<DeviceRow[], Error>({
+    queryKey: deviceKeysQueryKey(homeInstanceUrl, user?.id),
+    enabled: Boolean(homeInstanceToken),
+    queryFn: async () => {
+      if (!homeInstanceToken) {
+        throw new Error("Sign in to the home instance to manage devices.")
       }
-      return
-    }
-    try {
-      setError(null)
       const data = (await listDeviceKeys(
         homeInstanceToken,
         homeInstanceUrl ?? ""
-      )) as unknown as DeviceRow[]
-      setDevices(Array.isArray(data) ? data : [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load devices")
-    } finally {
-      setLoading(false)
-    }
-  }, [token, homeInstanceUrl])
+      )) as unknown
+      return Array.isArray(data) ? (data as DeviceRow[]) : []
+    },
+  })
 
-  React.useEffect(() => {
-    fetchDevices()
-  }, [fetchDevices])
+  const refreshDevices = React.useCallback(async () => {
+    setError(null)
+    if (!homeInstanceToken) return
+    await queryClient.invalidateQueries({
+      queryKey: deviceKeysQueryKey(homeInstanceUrl, user?.id),
+    })
+  }, [homeInstanceToken, homeInstanceUrl, queryClient, user?.id])
+
+  const devices = devicesQuery.data ?? []
+  const queryError =
+    !homeInstanceToken && homeInstanceUrl
+      ? "Sign in to the home instance to manage devices."
+      : devicesQuery.error?.message ?? null
+  const displayError = error ?? queryError
+  const loading = devicesQuery.isLoading && Boolean(homeInstanceToken)
 
   const verifyTransparencyAfterOp = React.useCallback(
     async (opName: string) => {
@@ -164,7 +176,7 @@ export function DevicesPanel({
       )
       await verifyTransparencyAfterOp("device_revoke")
       setConfirmRevoke(null)
-      await fetchDevices()
+      await refreshDevices()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to revoke device")
     } finally {
@@ -173,7 +185,7 @@ export function DevicesPanel({
   }, [
     confirmRevoke,
     token,
-    fetchDevices,
+    refreshDevices,
     verifyTransparencyAfterOp,
     homeInstanceUrl,
   ])
@@ -187,7 +199,7 @@ export function DevicesPanel({
             size="sm"
             onClick={() => {
               setView("list")
-              fetchDevices()
+              void refreshDevices()
             }}
           >
             <ArrowLeftIcon />
@@ -200,12 +212,13 @@ export function DevicesPanel({
           homeInstanceUrl={homeInstanceUrl ?? null}
           onCancel={() => {
             setView("list")
-            fetchDevices()
+            void refreshDevices()
           }}
           onSuccess={() => {
             // Stay on the approve view so the success toast is visible;
             // the user can use Back to return to the list, which
             // refetches.
+            void refreshDevices()
           }}
           onVaultUnlockNeeded={() => {
             onRequestClose?.()
@@ -230,9 +243,9 @@ export function DevicesPanel({
 
       <Separator />
 
-      {error ? (
+      {displayError ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
+          {displayError}
         </div>
       ) : null}
 
