@@ -7,6 +7,11 @@ import * as mlsStore from './mlsStore';
 import { getActiveAuthInstanceUrlSync, getSelectedAuthInstanceUrlSync } from './authInstanceStore';
 import * as hushCrypto from './hushCrypto';
 import { getReadableDeviceLabel } from './deviceLabel';
+import {
+  parseAuthResponse,
+  parseDeviceKeys,
+  parseDeviceLinkRequestResponse,
+} from './apiSchemas';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
 import { detectSessionInvalidation } from './sessionInvalidationDetector';
 import { CURRENT_MLS_CIPHERSUITE, assertHandshakeMLSCiphersuiteMatches } from './mlsCiphersuite';
@@ -586,7 +591,7 @@ export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, d
     err.status = res.status;
     throw err;
   }
-  return data;
+  return parseAuthResponse(data, 'verifyChallenge');
 }
 
 /**
@@ -737,7 +742,7 @@ export async function registerWithPublicKey(
     err.status = res.status;
     throw err;
   }
-  return data;
+  return parseAuthResponse(data, 'registerWithPublicKey');
 }
 
 /**
@@ -750,7 +755,7 @@ export async function listDeviceKeys(token, baseUrl = '') {
   const res = await fetchWithAuth(token, '/api/auth/devices', {}, baseUrl);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `listDeviceKeys ${res.status}`);
-  return data;
+  return parseDeviceKeys(data);
 }
 
 /**
@@ -886,7 +891,7 @@ export async function createDeviceLinkRequest(body, baseUrl = '') {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `createDeviceLinkRequest ${res.status}`);
-  return data;
+  return parseDeviceLinkRequestResponse(data);
 }
 
 /**

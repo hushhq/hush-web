@@ -9,6 +9,7 @@ import {
   fetchWithAuth,
   getChannelMessages,
   leaveGuild,
+  listDeviceKeys,
   getHandshake,
   normalizeAudience,
   registerWithPublicKey,
@@ -717,6 +718,52 @@ describe('auth instance routing', () => {
     expect(body.label).toBe('Chrome on macOS');
     expect(body.audience).toBeUndefined();
     expect(body.challengeVersion).toBeUndefined();
+  });
+
+  it('verifyChallenge rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: '', user: {} }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyChallenge('pk', 'deadbeef', 'sigb64', 'dev-1', 'https://chat.example.com'),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+});
+
+describe('runtime response schemas', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('listDeviceKeys rejects non-array success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ devices: [] }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('createDeviceLinkRequest rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ requestId: 'req-1' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      createDeviceLinkRequest({
+        devicePublicKey: 'pub',
+        sessionPublicKey: 'session',
+        deviceId: 'device-1',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
   });
 });
 
