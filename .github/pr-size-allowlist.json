@@ -20,7 +20,7 @@
     "src/components/chat/chat-toolbar.tsx": 365,
     "src/components/devices/ApproveDeviceLinkFlow.jsx": 851,
     "src/components/devices/ApproveDeviceLinkFlow.test.jsx": 542,
-    "src/components/members-sidebar.tsx": 436,
+    "src/components/members-sidebar.tsx": 437,
     "src/components/novel-composer.tsx": 537,
     "src/components/server-rail.tsx": 455,
     "src/components/settings/devices-panel.test.tsx": 398,

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/alert-dialog.tsx"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { formatUsername } from "@/lib/userLabel"
 import { cn } from "@/lib/utils"
 
 export type MemberPresence = "online" | "idle" | "dnd" | "offline"
@@ -338,7 +339,7 @@ function ProfileCard({
   member: ServerMember
   onDirectMessage?: (member: ServerMember) => void | Promise<void>
 }) {
-  const username = member.username?.replace(/^@+/, "") || null
+  const username = formatUsername(member.username) || null
   const memberSince = formatMemberSince(member.joinedAt ?? member.createdAt)
   return (
     <div className="flex flex-col">
@@ -349,7 +350,7 @@ function ProfileCard({
         </span>
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-semibold">{member.name}</span>
-          {username && username !== member.name ? (
+          {username ? (
             <span className="text-xs text-muted-foreground">{username}</span>
           ) : null}
           <span className="text-xs text-muted-foreground">

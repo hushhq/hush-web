@@ -77,6 +77,27 @@ describe("MembersSidebar", () => {
     expect(screen.getByText("Owner")).toBeInTheDocument()
   })
 
+  it("shows the username metadata even when it equals the display label", async () => {
+    setup({
+      members: [
+        {
+          id: "mike-id",
+          name: "mike",
+          initials: "M",
+          presence: "online",
+          role: "member",
+          username: "@mike",
+          displayName: "mike",
+        },
+      ],
+    })
+
+    const u = userEvent.setup()
+    await u.click(screen.getByText("mike"))
+
+    expect(screen.getAllByText("mike")).toHaveLength(3)
+  })
+
   it("hides kick item when actor cannot moderate", async () => {
     const onKickMember = vi.fn()
     setup({ currentUserRole: "member", onKickMember })
