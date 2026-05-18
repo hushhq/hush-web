@@ -661,6 +661,12 @@ describe('auth instance routing', () => {
   });
 
   it('verifyChallenge honors an explicit baseUrl and sends the v2 audience + challengeVersion', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    });
+
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ token: 'jwt', user: { id: 'u1' } }),
@@ -685,12 +691,19 @@ describe('auth instance routing', () => {
       nonce: 'deadbeef',
       signature: 'sigb64',
       deviceId: 'dev-1',
+      label: 'Chrome on macOS',
       audience: 'https://chat.example.com',
       challengeVersion: 2,
     });
   });
 
   it('verifyChallenge omits v2 fields when no audience is provided (legacy path)', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+    });
+
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ token: 'jwt', user: { id: 'u1' } }),
@@ -701,6 +714,7 @@ describe('auth instance routing', () => {
 
     const [, opts] = mockFetch.mock.calls[0];
     const body = JSON.parse(opts.body);
+    expect(body.label).toBe('Chrome on macOS');
     expect(body.audience).toBeUndefined();
     expect(body.challengeVersion).toBeUndefined();
   });

@@ -559,7 +559,13 @@ export async function requestChallenge(publicKeyBase64, baseUrl = '') {
 export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, deviceId, baseUrl = '', audience = '') {
   const authBaseUrl = resolveAuthBaseUrl(baseUrl);
   const targetUrl = `${authBaseUrl}/api/auth/verify`;
-  const body = { publicKey: publicKeyBase64, nonce, signature: signatureBase64, deviceId };
+  const body = {
+    publicKey: publicKeyBase64,
+    nonce,
+    signature: signatureBase64,
+    deviceId,
+    label: getReadableDeviceLabel(),
+  };
   if (audience) {
     body.audience = audience;
     body.challengeVersion = 2;

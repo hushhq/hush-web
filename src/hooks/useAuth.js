@@ -671,6 +671,55 @@ function readPersistedAuthInvalidation() {
   }
 }
 
+function deleteIndexedDbDatabase(databaseName) {
+  if (!databaseName || typeof indexedDB === 'undefined') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const request = indexedDB.deleteDatabase(databaseName);
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+    request.onblocked = () => resolve();
+  });
+}
+
+async function deleteRevokedDeviceDatabases(userId, deviceId) {
+  if (!userId) return;
+
+  const targets = new Set([
+    `hush-vault-${userId}`,
+    `hush-vault-session-${userId}`,
+    `hush-transcript-${userId}`,
+    'hush-link-archive-exports',
+  ]);
+
+  if (deviceId) {
+    targets.add(`hush-mls-${userId}-${deviceId}`);
+    targets.add(`hush-mls-history-${userId}-${deviceId}`);
+    targets.add(`hush-guild-metadata-${userId}-${deviceId}`);
+  }
+
+  if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
+    try {
+      const databases = await indexedDB.databases();
+      for (const db of databases) {
+        const name = db?.name;
+        if (!name) continue;
+        const belongsToUser = name.includes(userId);
+        const belongsToDevice = deviceId ? name.includes(deviceId) : false;
+        if (name.startsWith('hush-') && (belongsToUser || belongsToDevice)) {
+          targets.add(name);
+        }
+      }
+    } catch {
+      // Database enumeration is optional. Known deterministic names above
+      // still cover the critical auth/vault/MLS stores.
+    }
+  }
+
+  await Promise.allSettled([...targets].map(deleteIndexedDbDatabase));
+}
+
 // ── Main hook ────────────────────────────────────────────────────────────────
 
 /**
@@ -1001,7 +1050,57 @@ export function useAuth() {
     }
   }, [clearInactivityDeadline, clearInactivityTimer]);
 
+  const destroyRevokedDeviceLocalState = useCallback((reason = 'device_revoked') => {
+    const userId =
+      currentUserIdRef.current
+      ?? localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`)
+      ?? findVaultMarkerUserId();
+    const deviceId = localStorage.getItem(DEVICE_ID_KEY);
+    const nextInvalidation = createAuthInvalidation(reason);
+
+    localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
+    setAuthInvalidation(nextInvalidation);
+
+    identityKeyRef.current = null;
+    clearVaultTimeoutEffects();
+    clearTranscriptCache();
+    clearSession();
+
+    if (userId) {
+      clearPersistedInactivityDeadline(userId);
+      clearVaultSessionKey(userId).catch(() => {});
+      clearVaultSessionStore(userId).catch(() => {});
+      deleteVaultDatabase(userId).catch(() => {});
+      deleteTranscriptDatabase(userId).catch(() => {});
+      deleteRevokedDeviceDatabases(userId, deviceId).catch((err) => {
+        console.warn('[useAuth] revoked-device local database cleanup failed:', err);
+      });
+
+      localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
+      localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
+      localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
+      localStorage.removeItem(`hush_vault_config_${userId}`);
+    }
+
+    localStorage.removeItem(DEVICE_ID_KEY);
+    localStorage.removeItem(LEGACY_VAULT_TIMEOUT_KEY);
+    setToken(null);
+    setUser(null);
+    setHasLocalVault(false);
+    setVaultState('none');
+    setNeedsPinSetupState(false);
+    setIsGuest(false);
+    setGuestExpiresAt(null);
+    setError(null);
+    clearPinSetup();
+  }, [clearPinSetup, clearVaultTimeoutEffects]);
+
   const markServerSessionInvalidated = useCallback((reason = 'server_session_invalid') => {
+    if (reason === 'device_revoked') {
+      destroyRevokedDeviceLocalState(reason);
+      return;
+    }
+
     const nextInvalidation = createAuthInvalidation(reason);
     localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
     setAuthInvalidation(nextInvalidation);
@@ -1016,7 +1115,7 @@ export function useAuth() {
     setHasLocalVault(Boolean(findVaultMarkerUserId()));
     setVaultState(findVaultMarkerUserId() ? 'locked' : 'none');
     clearPinSetup();
-  }, [clearPinSetup, clearVaultTimeoutEffects]);
+  }, [clearPinSetup, clearVaultTimeoutEffects, destroyRevokedDeviceLocalState]);
 
   /**
    * Returns the effective per-user vault config. If the old global timeout key
@@ -1150,6 +1249,7 @@ export function useAuth() {
     } else {
       sessionStorage.setItem(JWT_KEY, jwt);
     }
+    currentUserIdRef.current = user.id;
     setToken(jwt);
     setUser(user);
   }, [clearGuestTimers, clearAuthInvalidation]);
@@ -1185,6 +1285,7 @@ export function useAuth() {
         displayName: 'Guest',
         role: 'guest',
       };
+      currentUserIdRef.current = guestUser.id;
       setUser(guestUser);
       setIsGuest(true);
       clearPinSetup();
@@ -2469,12 +2570,15 @@ export function useAuth() {
           setHasLocalVault(false);
           clearPinSetup();
         }
+        if (event.data?.type === 'hush_device_revoked') {
+          destroyRevokedDeviceLocalState('device_revoked');
+        }
       };
     } catch {
       // BroadcastChannel unavailable.
     }
     return () => { try { bc?.close(); } catch { /* noop */ } };
-  }, [clearPinSetup, clearVaultTimeoutEffects]);
+  }, [clearPinSetup, clearVaultTimeoutEffects, destroyRevokedDeviceLocalState]);
 
   // ── Forced logout on device revocation ───────────────────────────────────
   // The server returns 401 "device revoked" on any authenticated HTTP call
@@ -2491,6 +2595,15 @@ export function useAuth() {
       const reason = event?.detail?.reason || 'server_session_invalid';
       console.warn('[useAuth] forced logout due to server invalidation signal', { reason });
       markServerSessionInvalidated(reason);
+      if (reason === 'device_revoked') {
+        try {
+          const bc = new BroadcastChannel('hush_auth');
+          bc.postMessage({ type: 'hush_device_revoked' });
+          bc.close();
+        } catch {
+          // BroadcastChannel unavailable.
+        }
+      }
     }
     if (typeof window === 'undefined') return undefined;
     window.addEventListener('hush_auth_invalid', handleAuthInvalid);
