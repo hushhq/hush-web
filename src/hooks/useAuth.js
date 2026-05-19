@@ -66,9 +66,12 @@ import { resolveReauthInstanceUrl } from '../lib/reauthInstance';
 import {
   AUTH_INVALIDATION_REASONS,
   LOCAL_AUTH_RESET_REASONS,
+  planAuthenticatedSessionFetchFailure,
+  planAuthenticatedVaultBoot,
   planInvalidatedSession,
   planLocalAuthReset,
   planLocalVaultLock,
+  planNoTokenLocalVaultBoot,
   planNoTokenStartup,
   planPinFailure,
   planVaultUnlockAttempt,
@@ -1109,6 +1112,11 @@ export function useAuth() {
       setLoading(transition.nextLoading);
     }
   }, [clearGuestTimers, clearVaultTimeoutEffects]);
+
+  const applyBootVaultPlan = useCallback((transition) => {
+    setHasLocalVault(transition.nextHasLocalVault);
+    setVaultState(transition.nextVaultState);
+  }, []);
 
   const destroyRevokedDeviceLocalState = useCallback((reason = AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) => {
     const userId =
@@ -2340,8 +2348,10 @@ export function useAuth() {
         localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, vaultUserId);
 
         if (authInvalidation) {
-          setHasLocalVault(true);
-          setVaultState('locked');
+          applyBootVaultPlan(planNoTokenLocalVaultBoot({
+            hasAuthInvalidation: true,
+            vaultExists: true,
+          }));
           setLoading(false);
           return undefined;
         }
@@ -2367,19 +2377,19 @@ export function useAuth() {
                 if (idbCheckCancelled) return;
               }
               if (!unlocked) {
-                setHasLocalVault(true);
-                setVaultState('locked');
+                applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultExists: true }));
               }
             } else {
               // Vault marker set during registration but PIN never set - clear stale marker.
-              localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${vaultUserId}`);
-              setHasLocalVault(false);
-              setVaultState('none');
+              const bootPlan = planNoTokenLocalVaultBoot({ vaultExists: false });
+              if (bootPlan.shouldClearVaultMarker) {
+                localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${vaultUserId}`);
+              }
+              applyBootVaultPlan(bootPlan);
             }
           } catch {
             if (!idbCheckCancelled) {
-              setHasLocalVault(true);
-              setVaultState('locked'); // Fallback: assume vault exists.
+              applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultCheckFailed: true }));
             }
           }
           if (!idbCheckCancelled) setLoading(false);
@@ -2413,8 +2423,10 @@ export function useAuth() {
             if (idbCancelled) return;
             if (result.exists) {
               if (authInvalidation) {
-                setHasLocalVault(true);
-                setVaultState('locked');
+                applyBootVaultPlan(planNoTokenLocalVaultBoot({
+                  hasAuthInvalidation: true,
+                  vaultExists: true,
+                }));
                 setLoading(false);
                 return;
               }
@@ -2430,8 +2442,7 @@ export function useAuth() {
                 if (idbCancelled) return;
               }
               if (!unlocked) {
-                setHasLocalVault(true);
-                setVaultState('locked');
+                applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultExists: true }));
               }
               setLoading(false);
               return;
@@ -2448,8 +2459,7 @@ export function useAuth() {
           }
           // No vault at all - show login/register.
           setLoading(false);
-          setHasLocalVault(false);
-          setVaultState('none');
+          applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultExists: false }));
         }
       })();
       // eslint-disable-next-line no-return-assign
@@ -2530,33 +2540,44 @@ export function useAuth() {
                   }
                   if (!unlocked) {
                     clearPinSetup();
-                    setVaultState('locked');
+                    applyBootVaultPlan(planAuthenticatedVaultBoot({
+                      hasVaultEvidence: true,
+                      hasEncryptedVaultBlob: true,
+                    }));
                   }
                 } else {
                   // Stale marker - PIN was never set. Clear it.
-                  localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
-                  setHasLocalVault(false);
-                  setVaultState('unlocked');
+                  const bootPlan = planAuthenticatedVaultBoot({
+                    hasVaultEvidence: true,
+                    hasEncryptedVaultBlob: false,
+                  });
+                  if (bootPlan.shouldClearVaultMarker) {
+                    localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
+                  }
+                  applyBootVaultPlan(bootPlan);
                 }
               } catch {
                 if (!cancelled) {
-                  setHasLocalVault(true);
+                  const bootPlan = planAuthenticatedVaultBoot({
+                    hasVaultEvidence: true,
+                    vaultCheckFailed: true,
+                  });
+                  applyBootVaultPlan(bootPlan);
                   clearPinSetup();
-                  setVaultState('locked');
                 }
               }
             }
           } else {
             // Authenticated via JWT but no vault set up yet (PIN never configured).
-            setHasLocalVault(false);
-            setVaultState('unlocked');
+            applyBootVaultPlan(planAuthenticatedVaultBoot({ hasVaultEvidence: false }));
           }
         }
       } catch {
         // Network error - keep token, keep as locked if vault exists.
         setToken(stored);
-        setHasLocalVault(Boolean(findVaultMarkerUserId()));
-        setVaultState('locked');
+        applyBootVaultPlan(planAuthenticatedSessionFetchFailure({
+          hasVaultMarker: Boolean(findVaultMarkerUserId()),
+        }));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -2564,7 +2585,13 @@ export function useAuth() {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authInvalidation, clearPinSetup, destroyRevokedDeviceLocalState, markServerSessionInvalidated]);
+  }, [
+    applyBootVaultPlan,
+    authInvalidation,
+    clearPinSetup,
+    destroyRevokedDeviceLocalState,
+    markServerSessionInvalidated,
+  ]);
 
   // ── Request persistent storage ───────────────────────────────────────────
   // Opt out of best-effort eviction on iOS. Without this, non-Safari browsers

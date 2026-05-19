@@ -6,8 +6,11 @@ import {
   VAULT_STATES,
   normalizeAuthInvalidationReason,
   planInvalidatedSession,
+  planAuthenticatedSessionFetchFailure,
+  planAuthenticatedVaultBoot,
   planLocalAuthReset,
   planLocalVaultLock,
+  planNoTokenLocalVaultBoot,
   planNoTokenStartup,
   planPinFailure,
   planVaultUnlockAttempt,
@@ -51,6 +54,97 @@ describe('authLifecycle', () => {
     expect(plan.shouldDestroyLocalDeviceState).toBe(false);
     expect(plan.shouldContinueVaultDiscovery).toBe(true);
     expect(plan.nextVaultState).toBeNull();
+  });
+
+  it('plans locked recovery when no-token boot finds a vault', () => {
+    expect(planNoTokenLocalVaultBoot({ vaultExists: true })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      shouldClearVaultMarker: false,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    });
+  });
+
+  it('plans locked recovery when no-token vault check fails', () => {
+    expect(planNoTokenLocalVaultBoot({ vaultCheckFailed: true })).toMatchObject({
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    });
+  });
+
+  it('plans locked recovery when no-token boot has an auth invalidation marker', () => {
+    expect(planNoTokenLocalVaultBoot({ hasAuthInvalidation: true })).toMatchObject({
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    });
+  });
+
+  it('plans stale marker cleanup when no-token boot finds no vault', () => {
+    expect(planNoTokenLocalVaultBoot({ vaultExists: false })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.CLEAR_STALE_LOCAL_VAULT_MARKER,
+      shouldClearVaultMarker: true,
+      nextVaultState: VAULT_STATES.NONE,
+      nextHasLocalVault: false,
+    });
+  });
+
+  it('plans authenticated boot without vault evidence as unlocked without local vault', () => {
+    expect(planAuthenticatedVaultBoot({ hasVaultEvidence: false })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_UNLOCKED_SESSION,
+      shouldClearVaultMarker: false,
+      nextVaultState: VAULT_STATES.UNLOCKED,
+      nextHasLocalVault: false,
+    });
+  });
+
+  it('plans authenticated boot with an encrypted vault blob as locked', () => {
+    expect(planAuthenticatedVaultBoot({
+      hasVaultEvidence: true,
+      hasEncryptedVaultBlob: true,
+    })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      shouldClearVaultMarker: false,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    });
+  });
+
+  it('plans authenticated boot with a stale vault marker as unlocked', () => {
+    expect(planAuthenticatedVaultBoot({
+      hasVaultEvidence: true,
+      hasEncryptedVaultBlob: false,
+    })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.CLEAR_STALE_LOCAL_VAULT_MARKER,
+      shouldClearVaultMarker: true,
+      nextVaultState: VAULT_STATES.UNLOCKED,
+      nextHasLocalVault: false,
+    });
+  });
+
+  it('plans authenticated boot vault-check failure as locked', () => {
+    expect(planAuthenticatedVaultBoot({
+      hasVaultEvidence: true,
+      vaultCheckFailed: true,
+    })).toMatchObject({
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    });
+  });
+
+  it('keeps authenticated session locked after /me fetch failure', () => {
+    expect(planAuthenticatedSessionFetchFailure({ hasVaultMarker: true })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.KEEP_AUTHENTICATED_SESSION_LOCKED,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    });
+    expect(planAuthenticatedSessionFetchFailure({ hasVaultMarker: false })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.KEEP_AUTHENTICATED_SESSION_LOCKED,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: false,
+    });
   });
 
   it('keeps a recoverable local vault locked after generic session invalidation', () => {

@@ -5,12 +5,16 @@ export const AUTH_INVALIDATION_REASONS = Object.freeze({
 
 export const AUTH_LIFECYCLE_ACTIONS = Object.freeze({
   BLOCK_REVOKED_DEVICE_UNLOCK: 'block_revoked_device_unlock',
+  CLEAR_STALE_LOCAL_VAULT_MARKER: 'clear_stale_local_vault_marker',
   DESTROY_REVOKED_DEVICE_STATE: 'destroy_revoked_device_state',
   DISCOVER_LOCAL_VAULT: 'discover_local_vault',
   INVALIDATE_SERVER_SESSION: 'invalidate_server_session',
+  KEEP_AUTHENTICATED_SESSION_LOCKED: 'keep_authenticated_session_locked',
   LOCK_LOCAL_VAULT: 'lock_local_vault',
   REJECT_WRONG_PIN: 'reject_wrong_pin',
   RESET_LOCAL_AUTH_STATE: 'reset_local_auth_state',
+  RESTORE_LOCKED_LOCAL_VAULT: 'restore_locked_local_vault',
+  RESTORE_UNLOCKED_SESSION: 'restore_unlocked_session',
   UNLOCK_LOCAL_VAULT: 'unlock_local_vault',
   WIPE_LOCAL_VAULT_AFTER_PIN_FAILURES: 'wipe_local_vault_after_pin_failures',
 });
@@ -26,6 +30,7 @@ const LOCAL_AUTH_RESET_REASON_SET = new Set(Object.values(LOCAL_AUTH_RESET_REASO
 export const VAULT_STATES = Object.freeze({
   NONE: 'none',
   LOCKED: 'locked',
+  UNLOCKED: 'unlocked',
 });
 
 /**
@@ -70,6 +75,114 @@ export function planNoTokenStartup(authInvalidation) {
     shouldContinueVaultDiscovery: true,
     nextVaultState: null,
     nextHasLocalVault: null,
+  };
+}
+
+/**
+ * Plans a no-token boot after local vault presence has been checked.
+ *
+ * This covers both localStorage marker checks and IndexedDB recovery checks.
+ * The caller still owns marker writes/deletes because the exact key is a
+ * storage concern, but the visible auth state is decided here.
+ *
+ * @param {{
+ *   hasAuthInvalidation?: boolean,
+ *   vaultExists?: boolean,
+ *   vaultCheckFailed?: boolean,
+ * }} input
+ * @returns {{
+ *   action: string,
+ *   shouldClearVaultMarker: boolean,
+ *   nextVaultState: string,
+ *   nextHasLocalVault: boolean,
+ * }}
+ */
+export function planNoTokenLocalVaultBoot({
+  hasAuthInvalidation = false,
+  vaultExists = false,
+  vaultCheckFailed = false,
+} = {}) {
+  if (hasAuthInvalidation || vaultExists || vaultCheckFailed) {
+    return {
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      shouldClearVaultMarker: false,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    };
+  }
+
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.CLEAR_STALE_LOCAL_VAULT_MARKER,
+    shouldClearVaultMarker: true,
+    nextVaultState: VAULT_STATES.NONE,
+    nextHasLocalVault: false,
+  };
+}
+
+/**
+ * Plans an authenticated boot after vault marker/IDB evidence is known.
+ *
+ * @param {{
+ *   hasVaultEvidence?: boolean,
+ *   hasEncryptedVaultBlob?: boolean,
+ *   vaultCheckFailed?: boolean,
+ * }} input
+ * @returns {{
+ *   action: string,
+ *   shouldClearVaultMarker: boolean,
+ *   nextVaultState: string,
+ *   nextHasLocalVault: boolean,
+ * }}
+ */
+export function planAuthenticatedVaultBoot({
+  hasVaultEvidence = false,
+  hasEncryptedVaultBlob = false,
+  vaultCheckFailed = false,
+} = {}) {
+  if (!hasVaultEvidence) {
+    return {
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_UNLOCKED_SESSION,
+      shouldClearVaultMarker: false,
+      nextVaultState: VAULT_STATES.UNLOCKED,
+      nextHasLocalVault: false,
+    };
+  }
+
+  if (hasEncryptedVaultBlob || vaultCheckFailed) {
+    return {
+      action: AUTH_LIFECYCLE_ACTIONS.RESTORE_LOCKED_LOCAL_VAULT,
+      shouldClearVaultMarker: false,
+      nextVaultState: VAULT_STATES.LOCKED,
+      nextHasLocalVault: true,
+    };
+  }
+
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.CLEAR_STALE_LOCAL_VAULT_MARKER,
+    shouldClearVaultMarker: true,
+    nextVaultState: VAULT_STATES.UNLOCKED,
+    nextHasLocalVault: false,
+  };
+}
+
+/**
+ * Plans authenticated startup when `/api/auth/me` cannot be reached.
+ *
+ * Existing behavior keeps the JWT and lands on a locked state while the network
+ * is unavailable. The local vault flag still reflects marker presence.
+ *
+ * @param {{ hasVaultMarker?: boolean }} input
+ * @returns {{
+ *   action: string,
+ *   nextVaultState: string,
+ *   nextHasLocalVault: boolean,
+ * }}
+ */
+export function planAuthenticatedSessionFetchFailure({ hasVaultMarker = false } = {}) {
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.KEEP_AUTHENTICATED_SESSION_LOCKED,
+    nextVaultState: VAULT_STATES.LOCKED,
+    nextHasLocalVault: Boolean(hasVaultMarker),
   };
 }
 
