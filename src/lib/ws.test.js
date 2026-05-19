@@ -589,6 +589,53 @@ describe('createWsClient - device revoke close handling', () => {
     delete global.WebSocket;
   });
 
+  it('emits a redacted ws auth-invalid-close diagnostic on 1008/device revoked close', () => {
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+
+    const listener = vi.fn();
+    globalThis.addEventListener('hush:diagnostic', listener);
+
+    try {
+      client.connect();
+      MockWs.captured.onclose({ code: 1008, reason: 'device revoked' });
+
+      const diag = listener.mock.calls
+        .map((c) => c[0].detail)
+        .find((d) => d.event === 'auth-invalid-close');
+      expect(diag).toBeTruthy();
+      expect(diag).toMatchObject({
+        category: 'ws',
+        event: 'auth-invalid-close',
+        severity: 'warn',
+        details: {
+          code: 1008,
+          reason: 'device revoked',
+          authReason: 'device_revoked',
+        },
+      });
+      // No raw frame payload, token, or socket internals in the diagnostic.
+      expect(diag.details).not.toHaveProperty('token');
+      expect(diag.details).not.toHaveProperty('payload');
+      expect(diag.details).not.toHaveProperty('body');
+    } finally {
+      globalThis.removeEventListener('hush:diagnostic', listener);
+    }
+  });
+
+  it('still reconnects on a non-revoke close after a revoke close on a sibling client', () => {
+    // Sanity: the new diagnostic must not change the reconnect gating.
+    // A fresh client with a 1006 close still schedules a reconnect.
+    vi.useFakeTimers();
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    client.connect();
+    MockWs.captured.onclose({ code: 1006, reason: '' });
+    vi.advanceTimersByTime(60_000);
+    expect(MockWs.mock.calls.length).toBeGreaterThan(1);
+    vi.useRealTimers();
+  });
+
   it('emits auth_invalid + window event and does NOT reconnect on 1008/device revoked close', () => {
     const getToken = vi.fn(() => 'tok');
     const client = createWsClient({ url: 'ws://localhost/ws', getToken });

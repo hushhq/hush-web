@@ -249,6 +249,16 @@ export function createWsClient(opts) {
       // and the user is forced out of the UI.
       if (code === 1008 && /device revoked/i.test(reason)) {
         intentionalClose = true;
+        recordClientDiagnostic({
+          category: 'ws',
+          event: 'auth-invalid-close',
+          severity: 'warn',
+          details: {
+            code,
+            reason,
+            authReason: 'device_revoked',
+          },
+        });
         emit('auth_invalid', { reason: 'device_revoked' });
         if (typeof window !== 'undefined') {
           try {

@@ -1,5 +1,15 @@
 import { z } from "zod"
 
+import { recordClientDiagnostic } from "./clientDiagnostics"
+
+function formatSchemaIssues(zodError) {
+  if (!zodError || !Array.isArray(zodError.issues)) return []
+  return zodError.issues.map((issue) => ({
+    path: Array.isArray(issue?.path) ? issue.path.join(".") : "",
+    code: typeof issue?.code === "string" ? issue.code : "",
+  }))
+}
+
 const AuthUserSchema = z.object({
   id: z.string(),
 }).passthrough()
@@ -74,6 +84,16 @@ const DeviceLinkResultSchema = z.union([
 function parsePayload(schema, data, operation) {
   const parsed = schema.safeParse(data)
   if (parsed.success) return parsed.data
+
+  recordClientDiagnostic({
+    category: "api",
+    event: "invalid-response-schema",
+    severity: "error",
+    details: {
+      operation,
+      issues: formatSchemaIssues(parsed.error),
+    },
+  })
 
   const err = new Error(`${operation} returned an invalid response`)
   err.code = "invalid_response"

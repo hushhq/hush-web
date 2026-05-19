@@ -1067,6 +1067,96 @@ describe('runtime response schemas', () => {
     ).rejects.toMatchObject({ code: 'invalid_response' });
   });
 
+  it('schema-failure rejections emit a redacted invalid-response-schema diagnostic', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          requestId: 'req-1',
+          // missing required `secret`, `code`, `expiresAt`. Server contract
+          // requires all three. Diagnostic must capture the field paths
+          // without echoing the raw payload.
+        }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const listener = vi.fn();
+    globalThis.addEventListener('hush:diagnostic', listener);
+
+    try {
+      await expect(
+        createDeviceLinkRequest({
+          devicePublicKey: 'pub',
+          sessionPublicKey: 'session',
+          deviceId: 'device-1',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+
+      expect(listener).toHaveBeenCalled();
+      const detail = listener.mock.calls[0][0].detail;
+      expect(detail).toMatchObject({
+        category: 'api',
+        event: 'invalid-response-schema',
+        severity: 'error',
+        details: {
+          operation: 'createDeviceLinkRequest',
+        },
+      });
+      expect(Array.isArray(detail.details.issues)).toBe(true);
+      expect(detail.details.issues.length).toBeGreaterThan(0);
+      detail.details.issues.forEach((issue) => {
+        expect(typeof issue.path).toBe('string');
+        expect(typeof issue.code).toBe('string');
+      });
+      // No raw payload in the diagnostic.
+      expect(detail.details).not.toHaveProperty('payload');
+      expect(detail.details).not.toHaveProperty('data');
+      expect(detail.details).not.toHaveProperty('body');
+    } finally {
+      globalThis.removeEventListener('hush:diagnostic', listener);
+    }
+  });
+
+  it('schema-failure diagnostic does not echo the raw response payload', async () => {
+    // Sensitive content reaches the parser via the body bytes, not via
+    // issue paths/codes. The diagnostic must surface only field paths
+    // and Zod codes — never the raw payload, the original body string,
+    // or sibling fields the server happened to send.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            relayCiphertext: 'CIPHER-LEAK-CHECK',
+            relayPublicKey: 'PUBKEY-LEAK-CHECK',
+            // missing relayIv + deviceId so schema fails on ready branch
+          }),
+      }),
+    );
+
+    const listener = vi.fn();
+    globalThis.addEventListener('hush:diagnostic', listener);
+
+    try {
+      await expect(
+        consumeDeviceLinkResult({ requestId: 'r', secret: 's' }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+
+      const diag = listener.mock.calls
+        .map((c) => c[0].detail)
+        .find((d) => d.event === 'invalid-response-schema');
+      expect(diag).toBeTruthy();
+
+      const serialized = JSON.stringify(diag);
+      expect(serialized).not.toContain('CIPHER-LEAK-CHECK');
+      expect(serialized).not.toContain('PUBKEY-LEAK-CHECK');
+    } finally {
+      globalThis.removeEventListener('hush:diagnostic', listener);
+    }
+  });
+
   it('createDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response('<!DOCTYPE html><title>not found</title>', {
