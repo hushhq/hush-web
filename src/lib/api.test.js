@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   checkUsernameAvailable,
+  consumeDeviceLinkResult,
   createDeviceLinkRequest,
   fetchWithAuth,
   getChannelMessages,
@@ -763,6 +764,40 @@ describe('runtime response schemas', () => {
         sessionPublicKey: 'session',
         deviceId: 'device-1',
       }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('createDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      createDeviceLinkRequest({
+        devicePublicKey: 'pub',
+        sessionPublicKey: 'session',
+        deviceId: 'device-1',
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'createDeviceLinkRequest',
+    });
+  });
+
+  it('consumeDeviceLinkResult rejects malformed ready responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ relayCiphertext: 'cipher' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      consumeDeviceLinkResult({ requestId: 'req-1', secret: 'sec-1' }),
     ).rejects.toMatchObject({ code: 'invalid_response' });
   });
 });

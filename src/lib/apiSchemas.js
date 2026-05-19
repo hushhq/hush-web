@@ -24,6 +24,34 @@ const DeviceLinkRequestResponseSchema = z.object({
   expiresAt: z.string(),
 }).passthrough()
 
+const DeviceLinkResolvedClaimSchema = z.object({
+  claimToken: z.string().min(1),
+  requestId: z.string().min(1),
+  deviceId: z.string().min(1),
+  devicePublicKey: z.string().min(1),
+  sessionPublicKey: z.string().min(1),
+  label: z.string().nullish(),
+  instanceUrl: z.string().nullish(),
+  expiresAt: z.string().min(1),
+}).passthrough()
+
+const DeviceLinkPendingResultSchema = z.object({
+  status: z.literal("pending"),
+}).passthrough()
+
+const DeviceLinkReadyResultSchema = z.object({
+  relayCiphertext: z.string().min(1),
+  relayIv: z.string().min(1),
+  relayPublicKey: z.string().min(1),
+  deviceId: z.string().min(1),
+  instanceUrl: z.string().nullish(),
+}).passthrough()
+
+const DeviceLinkResultSchema = z.union([
+  DeviceLinkPendingResultSchema,
+  DeviceLinkReadyResultSchema,
+])
+
 function parsePayload(schema, data, operation) {
   const parsed = schema.safeParse(data)
   if (parsed.success) return parsed.data
@@ -48,4 +76,16 @@ export function parseDeviceLinkRequestResponse(data) {
     data,
     "createDeviceLinkRequest"
   )
+}
+
+export function parseDeviceLinkResolvedClaim(data) {
+  return parsePayload(
+    DeviceLinkResolvedClaimSchema,
+    data,
+    "resolveDeviceLinkRequest"
+  )
+}
+
+export function parseDeviceLinkResult(data) {
+  return parsePayload(DeviceLinkResultSchema, data, "consumeDeviceLinkResult")
 }

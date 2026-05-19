@@ -64,6 +64,11 @@ import {
 } from '../lib/vaultInactivityDeadline';
 import { resolveReauthInstanceUrl } from '../lib/reauthInstance';
 import {
+  AUTH_INVALIDATION_REASONS,
+  planInvalidatedSession,
+  planNoTokenStartup,
+} from '../lib/authLifecycle';
+import {
   openHistoryStore,
   importHistorySnapshot,
 } from '../lib/mlsStore';
@@ -1050,16 +1055,19 @@ export function useAuth() {
     }
   }, [clearInactivityDeadline, clearInactivityTimer]);
 
-  const destroyRevokedDeviceLocalState = useCallback((reason = 'device_revoked') => {
+  const destroyRevokedDeviceLocalState = useCallback((reason = AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) => {
     const userId =
       currentUserIdRef.current
       ?? localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`)
       ?? findVaultMarkerUserId();
     const deviceId = localStorage.getItem(DEVICE_ID_KEY);
-    const nextInvalidation = createAuthInvalidation(reason);
 
-    localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
-    setAuthInvalidation(nextInvalidation);
+    const existingInvalidation = readPersistedAuthInvalidation();
+    if (existingInvalidation?.reason !== reason) {
+      const nextInvalidation = createAuthInvalidation(reason);
+      localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
+      setAuthInvalidation(nextInvalidation);
+    }
 
     identityKeyRef.current = null;
     clearVaultTimeoutEffects();
@@ -1095,13 +1103,16 @@ export function useAuth() {
     clearPinSetup();
   }, [clearPinSetup, clearVaultTimeoutEffects]);
 
-  const markServerSessionInvalidated = useCallback((reason = 'server_session_invalid') => {
-    if (reason === 'device_revoked') {
-      destroyRevokedDeviceLocalState(reason);
+  const markServerSessionInvalidated = useCallback((reason = AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID) => {
+    const hasRecoverableVault = Boolean(findVaultMarkerUserId());
+    const transition = planInvalidatedSession(reason, { hasRecoverableVault });
+
+    if (transition.shouldDestroyLocalDeviceState) {
+      destroyRevokedDeviceLocalState(transition.reason);
       return;
     }
 
-    const nextInvalidation = createAuthInvalidation(reason);
+    const nextInvalidation = createAuthInvalidation(transition.reason);
     localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
     setAuthInvalidation(nextInvalidation);
 
@@ -1112,8 +1123,8 @@ export function useAuth() {
     clearSession();
     setToken(null);
     setUser(null);
-    setHasLocalVault(Boolean(findVaultMarkerUserId()));
-    setVaultState(findVaultMarkerUserId() ? 'locked' : 'none');
+    setHasLocalVault(transition.nextHasLocalVault);
+    setVaultState(transition.nextVaultState);
     clearPinSetup();
   }, [clearPinSetup, clearVaultTimeoutEffects, destroyRevokedDeviceLocalState]);
 
@@ -1824,7 +1835,7 @@ export function useAuth() {
         return authResult;
       } catch (err) {
         if (isServerSessionInvalidationError(err)) {
-          markServerSessionInvalidated('server_session_invalid');
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
           const invalidatedError = new Error('server session no longer recognizes this local vault');
           invalidatedError.code = 'SERVER_SESSION_INVALIDATED';
           invalidatedError.cause = err;
@@ -2238,6 +2249,15 @@ export function useAuth() {
     if (!stored) {
       clearPinSetup();
 
+      const startupPlan = planNoTokenStartup(authInvalidation);
+      if (startupPlan.shouldDestroyLocalDeviceState) {
+        destroyRevokedDeviceLocalState(AUTH_INVALIDATION_REASONS.DEVICE_REVOKED);
+        setHasLocalVault(startupPlan.nextHasLocalVault);
+        setVaultState(startupPlan.nextVaultState);
+        setLoading(false);
+        return undefined;
+      }
+
       // No JWT - but vault may still exist (tab closed, sessionStorage wiped).
       // Check localStorage for vault marker. If found, show PIN unlock;
       // after unlock, challenge-response auth gets a fresh JWT.
@@ -2370,7 +2390,7 @@ export function useAuth() {
         if (cancelled) return;
 
         if (res.status === 401) {
-          markServerSessionInvalidated('server_session_invalid');
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
           return;
         }
 
@@ -2470,7 +2490,7 @@ export function useAuth() {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authInvalidation, clearPinSetup, markServerSessionInvalidated]);
+  }, [authInvalidation, clearPinSetup, destroyRevokedDeviceLocalState, markServerSessionInvalidated]);
 
   // ── Request persistent storage ───────────────────────────────────────────
   // Opt out of best-effort eviction on iOS. Without this, non-Safari browsers
@@ -2526,7 +2546,7 @@ export function useAuth() {
       try {
         const res = await fetchWithAuth(stored, '/api/auth/me');
         if (res.status === 401) {
-          markServerSessionInvalidated('server_session_invalid');
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
           window.location.href = '/';
         }
       } catch {
@@ -2571,7 +2591,7 @@ export function useAuth() {
           clearPinSetup();
         }
         if (event.data?.type === 'hush_device_revoked') {
-          destroyRevokedDeviceLocalState('device_revoked');
+          destroyRevokedDeviceLocalState(AUTH_INVALIDATION_REASONS.DEVICE_REVOKED);
         }
       };
     } catch {
@@ -2584,18 +2604,15 @@ export function useAuth() {
   // The server returns 401 "device revoked" on any authenticated HTTP call
   // and closes any active WS with policy-violation 1008 + "device revoked".
   // Both surfaces dispatch a window 'hush_auth_invalid' event (api.js +
-  // ws.js). React to it by tearing the *session* down so the UI is forced
-  // out of the authenticated view — but preserve the local encrypted
-  // vault marker on disk. The browser is still a known profile; what's
-  // gone is the trusted server session + the in-memory derived key.
-  // Surface the right post-revocation UX (locked-vault sign-in) instead
-  // of pretending the browser is brand-new.
+  // ws.js). React to it by tearing down the trusted session. Generic
+  // server invalidation preserves a local vault for recovery; device_revoked
+  // is destructive and must not leave a PIN-resumable identity behind.
   useEffect(() => {
     function handleAuthInvalid(event) {
-      const reason = event?.detail?.reason || 'server_session_invalid';
+      const reason = event?.detail?.reason || AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID;
       console.warn('[useAuth] forced logout due to server invalidation signal', { reason });
       markServerSessionInvalidated(reason);
-      if (reason === 'device_revoked') {
+      if (reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) {
         try {
           const bc = new BroadcastChannel('hush_auth');
           bc.postMessage({ type: 'hush_device_revoked' });

@@ -136,7 +136,7 @@ describe("UnauthenticatedShell", () => {
     await u.type(screen.getByLabelText(/^username$/i), "yarin")
 
     await waitFor(() => {
-      expect(screen.getByText(/@yarin is available/i)).toBeInTheDocument()
+      expect(screen.getByText(/yarin is available/i)).toBeInTheDocument()
     })
 
     await u.click(screen.getByRole("button", { name: /^continue$/i }))

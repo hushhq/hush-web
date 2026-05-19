@@ -10,8 +10,11 @@ import { getReadableDeviceLabel } from './deviceLabel';
 import {
   parseAuthResponse,
   parseDeviceKeys,
+  parseDeviceLinkResolvedClaim,
   parseDeviceLinkRequestResponse,
+  parseDeviceLinkResult,
 } from './apiSchemas';
+import { readJsonResponse, readJsonResponseOrNull } from './apiJson';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
 import { detectSessionInvalidation } from './sessionInvalidationDetector';
 import { CURRENT_MLS_CIPHERSUITE, assertHandshakeMLSCiphersuiteMatches } from './mlsCiphersuite';
@@ -889,7 +892,9 @@ export async function createDeviceLinkRequest(body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('create device link request', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'createDeviceLinkRequest')
+    : await readJsonResponseOrNull(res, 'createDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `createDeviceLinkRequest ${res.status}`);
   return parseDeviceLinkRequestResponse(data);
 }
@@ -914,9 +919,11 @@ export async function resolveDeviceLinkRequest(token, body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('resolve device link request', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'resolveDeviceLinkRequest')
+    : await readJsonResponseOrNull(res, 'resolveDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `resolveDeviceLinkRequest ${res.status}`);
-  return data;
+  return parseDeviceLinkResolvedClaim(data);
 }
 
 /**
@@ -942,7 +949,7 @@ export async function verifyDeviceLinkRequest(token, body, baseUrl = '') {
   if (res.status === 413) {
     throw new Error('Device link payload is too large for the server to accept.');
   }
-  const data = await res.json().catch(() => ({}));
+  const data = await readJsonResponseOrNull(res, 'verifyDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `verifyDeviceLinkRequest ${res.status}`);
 }
 
@@ -969,12 +976,12 @@ export async function consumeDeviceLinkResult(body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('consume device link result', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
   if (res.status === 202) {
     return { status: 'pending' };
   }
+  const data = await readJsonResponse(res, 'consumeDeviceLinkResult');
   if (!res.ok) throw new Error(data.error || `consumeDeviceLinkResult ${res.status}`);
-  return data;
+  return parseDeviceLinkResult(data);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

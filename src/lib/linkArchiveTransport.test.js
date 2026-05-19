@@ -15,12 +15,13 @@ import {
 import { bytesToBase64 } from './deviceLinking';
 import { sha256 } from './linkArchive';
 
-function fakeResponse({ status = 200, json = null, body = null, headers = {} } = {}) {
+function fakeResponse({ status = 200, json = null, body = null, headers = {}, text = "" } = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: new Headers(headers),
     json: async () => json ?? {},
+    text: async () => text,
     arrayBuffer: async () => (body ? body.buffer.slice(0) : new ArrayBuffer(0)),
   };
 }
@@ -73,6 +74,24 @@ describe('linkArchiveTransport — initArchive', () => {
       manifestHash: new Uint8Array(32),
       archiveSha256: new Uint8Array(32),
     }, '')).rejects.toBeInstanceOf(LinkArchiveError);
+  });
+
+  it('rejects HTML success responses before callers consume archive metadata', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      text: '<!DOCTYPE html><title>wrong route</title>',
+    }));
+    await expect(initArchive('jwt', {
+      totalChunks: 1,
+      totalBytes: 1,
+      chunkSize: 1,
+      manifestHash: new Uint8Array(32),
+      archiveSha256: new Uint8Array(32),
+    }, 'https://api.example.com')).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'initArchive',
+    });
   });
 });
 
@@ -172,6 +191,16 @@ describe('linkArchiveTransport — fetchManifest + downloadChunk', () => {
     }));
     const m = await fetchManifest('a', 'd', '');
     expect(m.totalChunks).toBe(2);
+  });
+
+  it('rejects malformed manifest success responses', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({
+      status: 200,
+      json: { totalChunks: 2 },
+    }));
+    await expect(fetchManifest('a', 'd', '')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
   });
 
   it('downloads chunk bytes', async () => {
