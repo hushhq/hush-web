@@ -15,6 +15,15 @@ describe('authLifecycle', () => {
     );
   });
 
+  it('normalizes empty invalidation reasons to recoverable server invalidation', () => {
+    expect(normalizeAuthInvalidationReason(null)).toBe(
+      AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID,
+    );
+    expect(normalizeAuthInvalidationReason('')).toBe(
+      AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID,
+    );
+  });
+
   it('plans destructive boot when a revoked-device tombstone exists', () => {
     const plan = planNoTokenStartup({
       reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,

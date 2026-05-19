@@ -31,7 +31,7 @@ const ArchiveManifestSchema = z.object({
   archiveSha256: z.string().min(1),
   chunkHashes: z.array(z.string().min(1)),
   expiresAt: z.string().min(1),
-}).passthrough()
+}).strict()
 
 function parsePayload(schema, data, operation) {
   const parsed = schema.safeParse(data)

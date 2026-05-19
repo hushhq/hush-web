@@ -4,6 +4,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   initArchive,
+  requestUploadWindow,
+  requestDownloadWindow,
   uploadChunk,
   finalizeArchive,
   fetchManifest,
@@ -15,13 +17,14 @@ import {
 import { bytesToBase64 } from './deviceLinking';
 import { sha256 } from './linkArchive';
 
-function fakeResponse({ status = 200, json = null, body = null, headers = {}, text = "" } = {}) {
+function fakeResponse({ status = 200, json = null, body = null, headers = {}, text = undefined } = {}) {
+  const responseText = text ?? (json == null ? '' : JSON.stringify(json));
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: new Headers(headers),
     json: async () => json ?? {},
-    text: async () => text,
+    text: async () => responseText,
     arrayBuffer: async () => (body ? body.buffer.slice(0) : new ArrayBuffer(0)),
   };
 }
@@ -140,6 +143,47 @@ describe('linkArchiveTransport — uploadChunk', () => {
   });
 });
 
+describe('linkArchiveTransport — transfer windows', () => {
+  let fetchSpy;
+  beforeEach(() => {
+    fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('requestUploadWindow rejects HTML success responses at the API boundary', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      text: '<!DOCTYPE html><title>wrong route</title>',
+    }));
+
+    await expect(
+      requestUploadWindow('arch-1', 'upload-token', 0, 4, 'jwt', 'https://api.example.com'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'requestUploadWindow',
+    });
+  });
+
+  it('requestDownloadWindow rejects HTML success responses at the API boundary', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      text: '<!DOCTYPE html><title>wrong route</title>',
+    }));
+
+    await expect(
+      requestDownloadWindow('arch-1', 'download-token', 0, 4, 'https://api.example.com'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'requestDownloadWindow',
+    });
+  });
+});
+
 describe('linkArchiveTransport — finalize', () => {
   let fetchSpy;
   beforeEach(() => {
@@ -163,6 +207,17 @@ describe('linkArchiveTransport — finalize', () => {
     fetchSpy.mockResolvedValueOnce(fakeResponse({ status: 409, json: { error: 'archive incomplete', missing: [2, 5] } }));
     const r = await finalizeArchive('a', 'u', 'jwt', '');
     expect(r).toEqual({ status: 'missing', missing: [2, 5] });
+  });
+
+  it('rejects malformed missing-list responses on 409', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({
+      status: 409,
+      json: { error: 'archive incomplete', missing: ['2'] },
+    }));
+
+    await expect(finalizeArchive('a', 'u', 'jwt', '')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
   });
 });
 
@@ -198,6 +253,26 @@ describe('linkArchiveTransport — fetchManifest + downloadChunk', () => {
       status: 200,
       json: { totalChunks: 2 },
     }));
+    await expect(fetchManifest('a', 'd', '')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('rejects unexpected fields in manifest success responses', async () => {
+    fetchSpy.mockResolvedValueOnce(fakeResponse({
+      status: 200,
+      json: {
+        totalChunks: 2,
+        chunkSize: 1024,
+        totalBytes: 2048,
+        manifestHash: 'aGVsbG8=',
+        archiveSha256: 'd29ybGQ=',
+        chunkHashes: ['x', 'y'],
+        expiresAt: '2026-04-26T00:00:00Z',
+        extra: 'unexpected',
+      },
+    }));
+
     await expect(fetchManifest('a', 'd', '')).rejects.toMatchObject({
       code: 'invalid_response',
     });

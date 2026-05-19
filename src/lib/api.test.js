@@ -15,12 +15,14 @@ import {
   normalizeAudience,
   registerWithPublicKey,
   requestChallenge,
+  resolveDeviceLinkRequest,
   resolveAuthAudience,
   uploadMLSCredential,
   uploadMLSKeyPackages,
   getKeyPackageCount,
   uploadKeyPackagesAfterAuth,
   verifyChallenge,
+  verifyDeviceLinkRequest,
 } from './api';
 
 // ── leaveGuild ────────────────────────────────────────────────────────────────
@@ -788,12 +790,121 @@ describe('runtime response schemas', () => {
     });
   });
 
+  it('resolveDeviceLinkRequest accepts the server claim contract', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        claimToken: 'claim-1',
+        requestId: 'req-1',
+        deviceId: 'device-1',
+        devicePublicKey: 'device-pub',
+        sessionPublicKey: 'session-pub',
+        label: 'Chrome on macOS',
+        instanceUrl: 'https://app.example.com',
+        expiresAt: '2026-05-19T12:00:00Z',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await resolveDeviceLinkRequest('jwt', { code: 'ABCD1234' });
+
+    expect(result).toMatchObject({
+      claimToken: 'claim-1',
+      requestId: 'req-1',
+      deviceId: 'device-1',
+      devicePublicKey: 'device-pub',
+      sessionPublicKey: 'session-pub',
+      expiresAt: '2026-05-19T12:00:00Z',
+    });
+  });
+
+  it('resolveDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      resolveDeviceLinkRequest('jwt', { code: 'ABCD1234' }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'resolveDeviceLinkRequest',
+    });
+  });
+
+  it('verifyDeviceLinkRequest accepts the server 201 empty success contract', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('', { status: 201 }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyDeviceLinkRequest('jwt', {
+        claimToken: 'claim-1',
+        certificate: 'cert',
+        signingDeviceId: 'device-old',
+        relayCiphertext: 'cipher',
+        relayIv: 'iv',
+        relayPublicKey: 'relay-pub',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('verifyDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 201,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyDeviceLinkRequest('jwt', {
+        claimToken: 'claim-1',
+        certificate: 'cert',
+        signingDeviceId: 'device-old',
+        relayCiphertext: 'cipher',
+        relayIv: 'iv',
+        relayPublicKey: 'relay-pub',
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'verifyDeviceLinkRequest',
+    });
+  });
+
   it('consumeDeviceLinkResult rejects malformed ready responses', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: () => Promise.resolve({ relayCiphertext: 'cipher' }),
     });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      consumeDeviceLinkResult({ requestId: 'req-1', secret: 'sec-1' }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('consumeDeviceLinkResult rejects unexpected fields in ready responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        relayCiphertext: 'cipher',
+        relayIv: 'iv',
+        relayPublicKey: 'relay-pub',
+        deviceId: 'device-1',
+        extra: 'unexpected',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
     vi.stubGlobal('fetch', mockFetch);
 
     await expect(

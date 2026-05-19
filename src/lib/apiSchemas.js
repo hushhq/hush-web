@@ -45,7 +45,7 @@ const DeviceLinkReadyResultSchema = z.object({
   relayPublicKey: z.string().min(1),
   deviceId: z.string().min(1),
   instanceUrl: z.string().nullish(),
-}).passthrough()
+}).strict()
 
 const DeviceLinkResultSchema = z.union([
   DeviceLinkPendingResultSchema,

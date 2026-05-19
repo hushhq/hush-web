@@ -2054,6 +2054,30 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
   });
 
+  it('does not rewrite an existing revoked-device invalidation tombstone on boot', async () => {
+    localStorage.setItem(
+      'hush_auth_invalidation',
+      JSON.stringify({ reason: 'device_revoked', at: '2026-05-19T00:00:00Z' }),
+    );
+    localStorage.setItem('hush_vault_user__last_user', 'user-1');
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    setItemSpy.mockClear();
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(setItemSpy).not.toHaveBeenCalledWith(
+        'hush_auth_invalidation',
+        expect.any(String),
+      );
+      expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+      expect(result.current.vaultState).toBe('none');
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
+
   it('destroys local vault state when the server reports this device was revoked', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));

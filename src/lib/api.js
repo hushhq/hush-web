@@ -949,7 +949,9 @@ export async function verifyDeviceLinkRequest(token, body, baseUrl = '') {
   if (res.status === 413) {
     throw new Error('Device link payload is too large for the server to accept.');
   }
-  const data = await readJsonResponseOrNull(res, 'verifyDeviceLinkRequest') ?? {};
+  const data = res.ok
+    ? await readJsonResponse(res, 'verifyDeviceLinkRequest', { allowEmpty: true }) ?? {}
+    : await readJsonResponseOrNull(res, 'verifyDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `verifyDeviceLinkRequest ${res.status}`);
 }
 
