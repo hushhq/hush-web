@@ -2356,6 +2356,56 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     expectAuthOwnedQueryDataCleared();
   });
 
+  it('does not downgrade a device_revoked tombstone to server_session_invalid on a later 401', async () => {
+    // Reproduces the user-reported bug: device 1 revokes device 2.
+    // Device 2's first 401 dispatches `hush_auth_invalid` with reason
+    // `device_revoked`, which destroys the local vault and writes the
+    // tombstone. A subsequent 401 from an in-flight call (e.g. the
+    // post-PIN-unlock challenge-response catch path) used to call
+    // `markServerSessionInvalidated('server_session_invalid')` and
+    // overwrite the tombstone, leaving stale "recoverable session" state
+    // that would let the user return to the PIN screen.
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    // First signal: device is revoked. Destructive cleanup runs.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'device_revoked' },
+      }));
+    });
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    expect(localStorage.getItem('hush_auth_invalidation')).toContain(
+      'device_revoked',
+    );
+
+    // Second signal: a later in-flight 401 surfaces a generic
+    // `server_session_invalid`. The earlier `device_revoked` marker
+    // must remain authoritative — revocation is a sticky boundary.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'server_session_invalid' },
+      }));
+    });
+
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    expect(localStorage.getItem('hush_auth_invalidation')).toContain(
+      'device_revoked',
+    );
+    expect(localStorage.getItem('hush_auth_invalidation')).not.toContain(
+      '"server_session_invalid"',
+    );
+    expect(result.current.vaultState).toBe('none');
+    expect(result.current.hasVault).toBe(false);
+  });
+
   it('preserves the local vault marker for a generic invalid server session', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));

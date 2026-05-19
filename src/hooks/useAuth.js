@@ -1157,8 +1157,18 @@ export function useAuth() {
   }, [applyLocalAuthResetPlan]);
 
   const markServerSessionInvalidated = useCallback((reason = AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID) => {
+    // Sticky revocation: once a `device_revoked` tombstone is written, no
+    // subsequent server-session-invalid signal can downgrade it. The
+    // revocation is a device trust boundary; a later 401 from the same
+    // server about the now-revoked device must not weaken the marker into
+    // a recoverable-session tombstone that leaves the local vault around.
+    const persisted = readPersistedAuthInvalidation();
+    const effectiveReason =
+      persisted?.reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED
+        ? AUTH_INVALIDATION_REASONS.DEVICE_REVOKED
+        : reason;
     const hasRecoverableVault = Boolean(findVaultMarkerUserId());
-    const transition = planInvalidatedSession(reason, { hasRecoverableVault });
+    const transition = planInvalidatedSession(effectiveReason, { hasRecoverableVault });
 
     if (transition.shouldDestroyLocalDeviceState) {
       destroyRevokedDeviceLocalState(transition.reason);
