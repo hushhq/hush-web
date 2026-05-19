@@ -142,7 +142,7 @@ export function ServerRail({
   }, [servers.length])
 
   return (
-    <aside data-slot="server-rail" className="fixed inset-y-0 left-0 z-30 hidden w-(--rail-width) flex-col items-center bg-sidebar py-3 pl-2 md:flex">
+    <aside data-slot="server-rail" className="fixed inset-y-0 left-0 z-30 hidden w-(--rail-width) flex-col items-center bg-transparent py-3 pl-2 md:flex">
       <div className="flex flex-col items-center gap-2 pb-2">
         <RailIcon
           label="Home"
@@ -186,7 +186,7 @@ export function ServerRail({
           )}
           style={{
             backgroundImage:
-              "linear-gradient(to bottom, var(--sidebar), transparent)",
+              "linear-gradient(to bottom, var(--desktop-chrome-bg), transparent)",
           }}
         />
         <div
@@ -197,7 +197,7 @@ export function ServerRail({
           )}
           style={{
             backgroundImage:
-              "linear-gradient(to top, var(--sidebar), transparent)",
+              "linear-gradient(to top, var(--desktop-chrome-bg), transparent)",
           }}
         />
       </div>
@@ -262,7 +262,7 @@ function RailServer({
               size="icon"
               onClick={() => onClick(target)}
               className={cn(
-                "group relative !size-11 rounded-2xl bg-sidebar-accent p-0 text-sm font-semibold text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
+                "group relative !size-11 rounded-2xl bg-sidebar-accent/85 p-0 text-sm font-semibold text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground",
                 active && "rounded-xl bg-primary text-primary-foreground"
               )}
               aria-label={server.name}
@@ -431,7 +431,7 @@ function RailIcon({
           onClick={onClick}
           disabled={disabled}
           className={cn(
-            "!size-11 rounded-2xl bg-sidebar-accent p-0 text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground [&_svg:not([class*='size-'])]:size-5",
+            "!size-11 rounded-2xl bg-sidebar-accent/85 p-0 text-sidebar-accent-foreground hover:rounded-xl hover:bg-primary hover:text-primary-foreground [&_svg:not([class*='size-'])]:size-5",
             active && "rounded-xl bg-primary text-primary-foreground",
             muted &&
               "bg-transparent text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",

@@ -119,7 +119,7 @@ html[data-desktop] [data-slot="channel-sidebar"] {
    Linux has no native material and keeps the solid sidebar background. */
 html[data-desktop="darwin"],
 html[data-desktop="win32"] {
-    --desktop-chrome-bg: color-mix(in oklch, var(--sidebar) 68%, transparent);
+    --desktop-chrome-bg: color-mix(in oklch, var(--sidebar) 65%, transparent);
 }
 
 html[data-desktop="darwin"],
@@ -131,7 +131,7 @@ html[data-desktop="win32"] body {
 
 html[data-desktop="darwin"] [data-desktop-chrome="authenticated-shell"],
 html[data-desktop="win32"] [data-desktop-chrome="authenticated-shell"] {
-    background-color: var(--desktop-chrome-bg);
+    background-color: var(--desktop-chrome-bg) !important;
 }
 
 html[data-desktop="darwin"] [data-slot="server-rail"],
@@ -141,7 +141,7 @@ html[data-desktop="win32"] [data-slot="server-rail"] {
 
 html[data-desktop="darwin"] [data-slot="channel-card"],
 html[data-desktop="win32"] [data-slot="channel-card"] {
-    background-color: var(--desktop-chrome-bg);
+    background-color: var(--desktop-chrome-bg) !important;
 }
 
 .hush-desktop-topbar {
