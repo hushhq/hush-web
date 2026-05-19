@@ -2,6 +2,7 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { listDeviceKeys, revokeDeviceKey } from "@/lib/api"
+import { queryClient } from "@/lib/queryClient"
 
 export interface DeviceRow {
   id: string
@@ -26,6 +27,21 @@ export function deviceKeysQueryKey(
   userId?: string | null
 ) {
   return ["auth", "devices", homeInstanceUrl ?? "local", userId ?? "anonymous"] as const
+}
+
+/**
+ * Invalidate every cached device-key query across instances and identities.
+ *
+ * Use from non-React auth-lifecycle code that mutates `/api/auth/devices`
+ * outside the component-bound hooks (e.g. recovery's bulk revoke). React
+ * components should keep using `useDeviceKeys().refreshDevices` or
+ * `useRevokeDeviceKey().mutateAsync`, both of which target the specific key.
+ *
+ * Matches by prefix `["auth", "devices"]` so per-(instance,user) variants
+ * are all marked stale even when the caller does not know which key applies.
+ */
+export function invalidateDeviceKeysQueries() {
+  return queryClient.invalidateQueries({ queryKey: ["auth", "devices"] })
 }
 
 function normalizeDeviceRows(data: unknown): DeviceRow[] {

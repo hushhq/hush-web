@@ -2205,6 +2205,28 @@ describe('useAuth - performRecovery', () => {
     expect(localStorage.getItem('hush_post_recovery_wizard')).toBe('1');
   });
 
+  it('marks cached device-key queries stale after revokeOtherDevices=true', async () => {
+    vi.mocked(apiMod.listDeviceKeys).mockResolvedValueOnce([
+      { id: 'k-1', deviceId: 'device-current', certifiedAt: '2026-01-01T00:00:00Z' },
+      { id: 'k-2', deviceId: 'device-other', certifiedAt: '2026-01-01T00:00:00Z' },
+    ]);
+    const deviceKey = ['auth', 'devices', 'https://i.example.com', 'user-1'];
+    queryClient.setQueryData(deviceKey, [
+      { id: 'k-1', deviceId: 'device-current', certifiedAt: '2026-01-01T00:00:00Z' },
+      { id: 'k-2', deviceId: 'device-other', certifiedAt: '2026-01-01T00:00:00Z' },
+    ]);
+    expect(queryClient.getQueryState(deviceKey)?.isInvalidated).toBe(false);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performRecovery('word '.repeat(12).trim(), true);
+    });
+
+    expect(queryClient.getQueryState(deviceKey)?.isInvalidated).toBe(true);
+  });
+
   it('does NOT set hush_post_recovery_wizard flag when recovery fails', async () => {
     vi.mocked(apiMod.verifyChallenge).mockRejectedValueOnce(new Error('unauthorized'));
 

@@ -107,6 +107,7 @@ import {
   normalizeInstanceUrl,
 } from '../lib/authInstanceStore';
 import { queryClient } from '../lib/queryClient';
+import { invalidateDeviceKeysQueries } from './useDeviceKeys';
 // Used to repair missing or malformed public-key vault markers after storage
 // eviction. The encrypted vault stores the private seed; the public key is
 // recoverable from that seed and should never be represented as null.
@@ -1531,6 +1532,10 @@ export function useAuth() {
             .filter(d => d.deviceId !== deviceId)
             .map(d => revokeDeviceKey(jwt, d.deviceId)),
         );
+        // Mark cached device-key queries stale so any settings panel mounted
+        // after recovery re-fetches the post-revoke list instead of reading
+        // pre-revoke entries from cache.
+        await invalidateDeviceKeysQueries();
       }
       requirePinSetup();
       localStorage.setItem(HOME_INSTANCE_KEY, baseUrl || window.location.origin);

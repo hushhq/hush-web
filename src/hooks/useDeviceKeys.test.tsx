@@ -9,8 +9,10 @@ vi.mock("@/lib/api", () => ({
 }))
 
 import { listDeviceKeys, revokeDeviceKey } from "@/lib/api"
+import { queryClient } from "@/lib/queryClient"
 import {
   deviceKeysQueryKey,
+  invalidateDeviceKeysQueries,
   useDeviceKeys,
   useRevokeDeviceKey,
 } from "./useDeviceKeys"
@@ -122,6 +124,35 @@ describe("useDeviceKeys", () => {
 
     expect(invalidateSpy).not.toHaveBeenCalled()
     expect(listDeviceKeysMock).not.toHaveBeenCalled()
+  })
+
+  it("invalidateDeviceKeysQueries marks every device-key variant stale by prefix", async () => {
+    const userOneKey = deviceKeysQueryKey("https://home.example.com", "user-1")
+    const userTwoKey = deviceKeysQueryKey("https://home.example.com", "user-2")
+    const anonymousKey = deviceKeysQueryKey(null, null)
+    const unrelatedKey = ["servers", "https://home.example.com", "srv-1"] as const
+
+    queryClient.setQueryData(userOneKey, [{ id: "device-1" }])
+    queryClient.setQueryData(userTwoKey, [{ id: "device-2" }])
+    queryClient.setQueryData(anonymousKey, [{ id: "device-3" }])
+    queryClient.setQueryData(unrelatedKey, [{ id: "server-row" }])
+
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries")
+
+    await invalidateDeviceKeysQueries()
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["auth", "devices"],
+    })
+
+    expect(queryClient.getQueryState(userOneKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(userTwoKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(anonymousKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(unrelatedKey)?.isInvalidated).toBe(false)
+
+    queryClient.removeQueries({ queryKey: ["auth", "devices"] })
+    queryClient.removeQueries({ queryKey: ["servers"] })
+    invalidateSpy.mockRestore()
   })
 
   it("successful revoke invalidates the matching query without awaiting refetch", async () => {
