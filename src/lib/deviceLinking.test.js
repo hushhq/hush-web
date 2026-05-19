@@ -15,6 +15,31 @@ import {
   claimMatchesPayloadKeys,
 } from './deviceLinking.js';
 
+function bytesToTestBase64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function buildRawTransferBundle(identity, overrides = {}) {
+  return new TextEncoder().encode(JSON.stringify({
+    v: 3,
+    userId: 'user-1',
+    rootPrivateKey: bytesToTestBase64(identity.privateKey),
+    rootPublicKey: bytesToTestBase64(identity.publicKey),
+    archive: null,
+    ...overrides,
+  }));
+}
+
+function collectDiagnostics() {
+  const events = [];
+  const handler = (event) => events.push(event.detail);
+  globalThis.addEventListener('hush:diagnostic', handler);
+  return {
+    events,
+    stop: () => globalThis.removeEventListener('hush:diagnostic', handler),
+  };
+}
+
 describe('device certificates', () => {
   it('creates and verifies a valid certificate', async () => {
     const existing = await createDeviceIdentity();
@@ -61,13 +86,15 @@ describe('QR payload helpers', () => {
     });
   });
 
-  it('round-trips devicePublicKey and sessionPublicKey commitments', () => {
+  it('round-trips devicePublicKey and sessionPublicKey commitments', async () => {
+    const deviceIdentity = await createDeviceIdentity();
+    const session = await createSessionKeyPair();
     const original = {
       requestId: 'request-2',
       secret: 'secret-2',
       expiresAt: '2026-05-16T00:00:00Z',
-      devicePublicKey: 'dev-pk-base64',
-      sessionPublicKey: 'session-pk-base64',
+      devicePublicKey: deviceIdentity.publicKeyBase64,
+      sessionPublicKey: session.publicKeyBase64,
     };
 
     const encoded = encodeQRPayload(original);
@@ -118,6 +145,11 @@ describe('QR payload helpers', () => {
     }));
 
     expect(() => decodeQRPayload(encoded)).toThrow(/invalid shape/i);
+    try {
+      decodeQRPayload(encoded);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'invalid_device_link_payload' });
+    }
   });
 
   it('rejects QR payloads with unexpected fields', () => {
@@ -129,6 +161,32 @@ describe('QR payload helpers', () => {
     }));
 
     expect(() => decodeQRPayload(encoded)).toThrow(/invalid shape/i);
+  });
+
+  it('rejects QR payload key commitments with invalid key sizes', () => {
+    const encoded = btoa(JSON.stringify({
+      r: 'request-1',
+      s: 'secret-1',
+      e: '2026-05-19T00:00:00Z',
+      d: btoa('short'),
+      k: btoa('also-short'),
+    }));
+
+    expect(() => decodeQRPayload(encoded)).toThrow(/devicePublicKey has/i);
+  });
+
+  it('emits a structured diagnostic for invalid QR payloads', () => {
+    const diagnostics = collectDiagnostics();
+    try {
+      expect(() => decodeQRPayload('')).toThrow();
+      expect(diagnostics.events).toContainEqual(expect.objectContaining({
+        category: 'device-link',
+        event: 'invalid-qr',
+        severity: 'error',
+      }));
+    } finally {
+      diagnostics.stop();
+    }
   });
 });
 
@@ -207,13 +265,9 @@ describe('transfer bundle serialisation', () => {
 
   it('rejects transfer bundles whose root key fields have the wrong length', async () => {
     const identity = await createDeviceIdentity();
-    const badBytes = new TextEncoder().encode(JSON.stringify({
-      v: 3,
-      userId: 'user-1',
+    const badBytes = buildRawTransferBundle(identity, {
       rootPrivateKey: btoa('short'),
-      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
-      archive: null,
-    }));
+    });
 
     await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
       code: 'invalid_device_link_payload',
@@ -221,26 +275,33 @@ describe('transfer bundle serialisation', () => {
     });
   });
 
-  it('rejects transfer bundles with malformed archive descriptors', async () => {
+  it.each([
+    ['id', ''],
+    ['downloadToken', ''],
+    ['totalChunks', 0],
+    ['totalBytes', -1],
+    ['chunkSize', 0],
+    ['manifestHash', ''],
+    ['archiveSha256', ''],
+    ['ephPub', ''],
+    ['nonceBase', ''],
+    ['transcriptBlobOmitted', 'false'],
+  ])('rejects transfer bundles with malformed archive descriptor field %s', async (field, value) => {
     const identity = await createDeviceIdentity();
-    const badBytes = new TextEncoder().encode(JSON.stringify({
-      v: 3,
-      userId: 'user-1',
-      rootPrivateKey: btoa(String.fromCharCode(...identity.privateKey)),
-      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
-      archive: {
-        id: 'arch-1',
-        downloadToken: 'dtok',
-        totalChunks: 0,
-        totalBytes: 8200,
-        chunkSize: 4096,
-        manifestHash: 'bWFuaWZlc3RoYXNo',
-        archiveSha256: 'YXJjaGl2ZXNoYTI1Ng==',
-        ephPub: 'ZXBocHViYnl0ZXM=',
-        nonceBase: 'bm9uY2ViYXNl',
-        transcriptBlobOmitted: false,
-      },
-    }));
+    const archive = {
+      id: 'arch-1',
+      downloadToken: 'dtok',
+      totalChunks: 2,
+      totalBytes: 8200,
+      chunkSize: 4096,
+      manifestHash: 'bWFuaWZlc3RoYXNo',
+      archiveSha256: 'YXJjaGl2ZXNoYTI1Ng==',
+      ephPub: 'ZXBocHViYnl0ZXM=',
+      nonceBase: 'bm9uY2ViYXNl',
+      transcriptBlobOmitted: false,
+      [field]: value,
+    };
+    const badBytes = buildRawTransferBundle(identity, { archive });
 
     await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
       code: 'invalid_device_link_payload',
@@ -250,14 +311,21 @@ describe('transfer bundle serialisation', () => {
 
   it('rejects transfer bundles with unexpected top-level fields', async () => {
     const identity = await createDeviceIdentity();
-    const badBytes = new TextEncoder().encode(JSON.stringify({
-      v: 3,
-      userId: 'user-1',
-      rootPrivateKey: btoa(String.fromCharCode(...identity.privateKey)),
-      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
-      archive: null,
+    const badBytes = buildRawTransferBundle(identity, {
       unexpected: 'field',
-    }));
+    });
+
+    await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
+      code: 'invalid_device_link_payload',
+      message: expect.stringContaining('invalid shape'),
+    });
+  });
+
+  it('rejects legacy inline snapshots that are not objects', async () => {
+    const identity = await createDeviceIdentity();
+    const badBytes = buildRawTransferBundle(identity, {
+      historySnapshot: 42,
+    });
 
     await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
       code: 'invalid_device_link_payload',
@@ -272,6 +340,22 @@ describe('transfer bundle serialisation', () => {
       code: 'invalid_device_link_payload',
       message: expect.stringContaining('invalid JSON'),
     });
+  });
+
+  it('emits a structured diagnostic for invalid transfer bundles', async () => {
+    const diagnostics = collectDiagnostics();
+    try {
+      await expect(
+        decodeTransferBundle(new TextEncoder().encode('<!DOCTYPE html>')),
+      ).rejects.toMatchObject({ code: 'invalid_device_link_payload' });
+      expect(diagnostics.events).toContainEqual(expect.objectContaining({
+        category: 'device-link',
+        event: 'invalid-bundle',
+        severity: 'error',
+      }));
+    } finally {
+      diagnostics.stop();
+    }
   });
 });
 
