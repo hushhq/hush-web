@@ -5,8 +5,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   checkUsernameAvailable,
+  certifyNewDevice,
   consumeDeviceLinkResult,
   createDeviceLinkRequest,
+  federatedVerify,
   fetchWithAuth,
   getChannelMessages,
   leaveGuild,
@@ -15,6 +17,7 @@ import {
   normalizeAudience,
   registerWithPublicKey,
   requestChallenge,
+  requestGuestSession,
   resolveDeviceLinkRequest,
   resolveAuthAudience,
   revokeDeviceKey,
@@ -740,6 +743,138 @@ describe('auth instance routing', () => {
 describe('runtime response schemas', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('checkUsernameAvailable rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      checkUsernameAvailable('alice', 'https://chat.example.com'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'checkUsernameAvailable',
+    });
+  });
+
+  it('requestChallenge rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ nonce: '' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestChallenge('public-key')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('requestChallenge rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestChallenge('public-key')).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'requestChallenge',
+    });
+  });
+
+  it('verifyChallenge rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyChallenge('pk', 'deadbeef', 'sigb64', 'dev-1', 'https://chat.example.com'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'verifyChallenge',
+    });
+  });
+
+  it('registerWithPublicKey rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      registerWithPublicKey('alice', 'Alice', 'pub-key', 'device-1'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'registerWithPublicKey',
+    });
+  });
+
+  it('requestGuestSession rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: 'guest-jwt' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestGuestSession()).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('federatedVerify rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: 'jwt', federatedIdentity: null }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      federatedVerify('pk', 'nonce', 'sig', 'https://home.example.com', 'alice', 'Alice'),
+    ).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('certifyNewDevice preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'certificate rejected' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      certifyNewDevice('jwt', 'new-pub', 'cert', 'device-new', 'device-old'),
+    ).rejects.toThrow('certificate rejected');
+  });
+
+  it('certifyNewDevice keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 502,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      certifyNewDevice('jwt', 'new-pub', 'cert', 'device-new', 'device-old'),
+    ).rejects.toThrow('certifyNewDevice 502');
   });
 
   it('listDeviceKeys rejects non-array success responses', async () => {

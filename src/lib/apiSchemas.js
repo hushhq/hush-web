@@ -9,6 +9,25 @@ const AuthResponseSchema = z.object({
   user: AuthUserSchema,
 }).passthrough()
 
+const AuthChallengeResponseSchema = z.object({
+  nonce: z.string().min(1),
+}).passthrough()
+
+const FederatedAuthResponseSchema = z.object({
+  token: z.string().min(1),
+  federatedIdentity: z.object({}).passthrough(),
+}).passthrough()
+
+const GuestSessionResponseSchema = z.object({
+  token: z.string().min(1),
+  guestId: z.string().min(1),
+  expiresAt: z.string().min(1),
+}).passthrough()
+
+const UsernameAvailabilityResponseSchema = z.object({
+  available: z.boolean(),
+}).passthrough()
+
 const DeviceKeySchema = z.object({
   id: z.string(),
   deviceId: z.string(),
@@ -64,6 +83,26 @@ function parsePayload(schema, data, operation) {
 
 export function parseAuthResponse(data, operation = "auth") {
   return parsePayload(AuthResponseSchema, data, operation)
+}
+
+export function parseAuthChallengeResponse(data) {
+  return parsePayload(AuthChallengeResponseSchema, data, "requestChallenge")
+}
+
+export function parseFederatedAuthResponse(data) {
+  return parsePayload(FederatedAuthResponseSchema, data, "federatedVerify")
+}
+
+export function parseGuestSessionResponse(data) {
+  return parsePayload(GuestSessionResponseSchema, data, "requestGuestSession")
+}
+
+export function parseUsernameAvailabilityResponse(data) {
+  return parsePayload(
+    UsernameAvailabilityResponseSchema,
+    data,
+    "checkUsernameAvailable"
+  )
 }
 
 export function parseDeviceKeys(data) {

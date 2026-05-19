@@ -8,11 +8,15 @@ import { getActiveAuthInstanceUrlSync, getSelectedAuthInstanceUrlSync } from './
 import * as hushCrypto from './hushCrypto';
 import { getReadableDeviceLabel } from './deviceLabel';
 import {
+  parseAuthChallengeResponse,
   parseAuthResponse,
   parseDeviceKeys,
   parseDeviceLinkResolvedClaim,
   parseDeviceLinkRequestResponse,
   parseDeviceLinkResult,
+  parseFederatedAuthResponse,
+  parseGuestSessionResponse,
+  parseUsernameAvailabilityResponse,
 } from './apiSchemas';
 import { readJsonResponse, readJsonResponseOrNull } from './apiJson';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
@@ -542,13 +546,15 @@ export async function requestChallenge(publicKeyBase64, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('request challenge', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'requestChallenge')
+    : await readJsonResponseOrNull(res, 'requestChallenge');
   if (!res.ok) {
-    const err = new Error(data.error || `requestChallenge ${res.status}`);
+    const err = new Error(getApiErrorMessage(data, `requestChallenge ${res.status}`));
     err.status = res.status;
     throw err;
   }
-  return data;
+  return parseAuthChallengeResponse(data);
 }
 
 /**
@@ -595,9 +601,11 @@ export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, d
   } catch (err) {
     throw createNetworkError('verify challenge', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'verifyChallenge')
+    : await readJsonResponseOrNull(res, 'verifyChallenge');
   if (!res.ok) {
-    const err = new Error(data.error || `verifyChallenge ${res.status}`);
+    const err = new Error(getApiErrorMessage(data, `verifyChallenge ${res.status}`));
     err.status = res.status;
     throw err;
   }
@@ -646,13 +654,15 @@ export async function federatedVerify(
   } catch (err) {
     throw createNetworkError('federated-verify', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'federatedVerify')
+    : await readJsonResponseOrNull(res, 'federatedVerify');
   if (!res.ok) {
-    const err = new Error(data.error || `federatedVerify ${res.status}`);
+    const err = new Error(getApiErrorMessage(data, `federatedVerify ${res.status}`));
     err.status = res.status;
     throw err;
   }
-  return data;
+  return parseFederatedAuthResponse(data);
 }
 
 /**
@@ -671,9 +681,13 @@ export async function requestGuestSession(baseUrl = '') {
   } catch (err) {
     throw createNetworkError('request guest session', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `requestGuestSession ${res.status}`);
-  return data;
+  const data = res.ok
+    ? await readJsonResponse(res, 'requestGuestSession')
+    : await readJsonResponseOrNull(res, 'requestGuestSession');
+  if (!res.ok) {
+    throw new Error(getApiErrorMessage(data, `requestGuestSession ${res.status}`));
+  }
+  return parseGuestSessionResponse(data);
 }
 
 /**
@@ -695,8 +709,8 @@ export async function checkUsernameAvailable(username, baseUrl = '', signal) {
     cleanup();
   }
   if (!res.ok) return false;
-  const data = await res.json();
-  return data.available === true;
+  const data = await readJsonResponse(res, 'checkUsernameAvailable');
+  return parseUsernameAvailabilityResponse(data).available;
 }
 
 /**
@@ -746,9 +760,11 @@ export async function registerWithPublicKey(
   } catch (err) {
     throw createNetworkError('register', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'registerWithPublicKey')
+    : await readJsonResponseOrNull(res, 'registerWithPublicKey');
   if (!res.ok) {
-    const err = new Error(data.error || `registerWithPublicKey ${res.status}`);
+    const err = new Error(getApiErrorMessage(data, `registerWithPublicKey ${res.status}`));
     err.status = res.status;
     throw err;
   }
@@ -867,8 +883,8 @@ export async function certifyNewDevice(
     body: JSON.stringify(body),
   }, baseUrl);
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `certifyNewDevice ${res.status}`);
+    const data = await readJsonResponseOrNull(res, 'certifyNewDevice');
+    throw new Error(getApiErrorMessage(data, `certifyNewDevice ${res.status}`));
   }
 }
 
