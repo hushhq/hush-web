@@ -1098,6 +1098,12 @@ describe('useAuth - PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
     expect(result.current.vaultState).toBe('none');
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
+    // PIN brute-force wipe must also remove the persisted vault
+    // marker so a subsequent boot does not believe a vault still
+    // exists and offer a PIN screen we can no longer satisfy.
+    expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
+    expect(result.current.hasVault).toBe(false);
   }, 15_000);
 });
 
@@ -1159,6 +1165,49 @@ describe('useAuth - performLogout', () => {
       expect(result.current.token).toBeNull();
       expect(result.current.user).toBeNull();
       expectAuthOwnedQueryDataCleared();
+    } finally {
+      globalThis.BroadcastChannel = originalBroadcastChannel;
+      MockBroadcastChannel.instances = [];
+    }
+  });
+
+  it('does not delete persisted vault material when another tab broadcasts logout', async () => {
+    // Broadcast logout is a local session reset, not a vault wipe.
+    // The signed-out tab discards in-memory + auth-owned query state,
+    // but the local vault marker and IndexedDB rows must survive so
+    // the next PIN unlock can still rehydrate the user.
+    const originalBroadcastChannel = globalThis.BroadcastChannel;
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.performChallengeResponse(
+          new Uint8Array(32).fill(1),
+          new Uint8Array(32).fill(2),
+        );
+      });
+      await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+      expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+
+      vi.mocked(vaultMod.deleteVaultDatabase).mockClear();
+      vi.mocked(transcriptVaultMod.deleteTranscriptDatabase).mockClear();
+
+      await act(async () => {
+        const sender = new BroadcastChannel('hush_auth');
+        sender.postMessage({ type: 'hush_logout' });
+        sender.close();
+      });
+
+      expect(result.current.token).toBeNull();
+      expect(result.current.user).toBeNull();
+      // Vault material survives the broadcast — only auth state was reset.
+      expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+      expect(vaultMod.deleteVaultDatabase).not.toHaveBeenCalled();
+      expect(transcriptVaultMod.deleteTranscriptDatabase).not.toHaveBeenCalled();
     } finally {
       globalThis.BroadcastChannel = originalBroadcastChannel;
       MockBroadcastChannel.instances = [];
