@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DIAGNOSTIC_EVENT_NAME } from './clientDiagnostics';
 import { createWsClient } from './ws';
 
 // ── Shared mock factory ───────────────────────────────────────────────────────
@@ -100,6 +101,58 @@ describe('createWsClient - initial connection', () => {
       ws.onmessage({ data: JSON.stringify({ type: 'message.new', id: 'm1', channel_id: 'ch1' }) });
       expect(onMessageNew).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'message.new', id: 'm1', channel_id: 'ch1' }),
+      );
+      resolve();
+    }, 10);
+  }));
+
+  it('drops malformed known frames and records a diagnostic', () => new Promise((resolve) => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    const getToken = vi.fn(() => 't');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const onMessageNew = vi.fn();
+    const onDiagnostic = vi.fn();
+    globalThis.addEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+    client.on('message.new', onMessageNew);
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onmessage({ data: JSON.stringify({ type: 'message.new', channel_id: 'ch1' }) });
+      expect(onMessageNew).not.toHaveBeenCalled();
+      expect(onDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({
+            category: 'ws',
+            event: 'invalid-frame',
+            severity: 'warn',
+            details: expect.objectContaining({
+              type: 'message.new',
+              reason: 'schema',
+            }),
+          }),
+        }),
+      );
+      globalThis.removeEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+      resolve();
+    }, 10);
+  }));
+
+  it('passes through unknown typed frames for forward compatibility', () => new Promise((resolve) => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    const getToken = vi.fn(() => 't');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const onFutureEvent = vi.fn();
+    client.on('future.event', onFutureEvent);
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onmessage({ data: JSON.stringify({ type: 'future.event', value: 1 }) });
+      expect(onFutureEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'future.event', value: 1 }),
       );
       resolve();
     }, 10);
