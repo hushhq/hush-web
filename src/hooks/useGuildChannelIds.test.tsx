@@ -1,14 +1,32 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { renderHook, waitFor, act } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 
 vi.mock("@/lib/api", () => ({
   getGuildChannels: vi.fn(),
 }))
 
 import { getGuildChannels as _getGuildChannels } from "@/lib/api"
-import { useGuildChannelIds } from "./useGuildChannelIds"
+import {
+  guildChannelIdsQueryKey,
+  useGuildChannelIds,
+} from "./useGuildChannelIds"
 
 const getGuildChannels = vi.mocked(_getGuildChannels as () => Promise<unknown>)
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
+}
 
 describe("useGuildChannelIds", () => {
   afterEach(() => {
@@ -23,12 +41,14 @@ describe("useGuildChannelIds", () => {
       { id: "ch-3", type: "text" },
     ])
 
-    const { result } = renderHook(() =>
-      useGuildChannelIds({
-        serverId: "srv-1",
-        token: "tok",
-        baseUrl: "https://i.example.com",
-      }),
+    const { result } = renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+        }),
+      { wrapper: createWrapper() },
     )
 
     await waitFor(() => expect(result.current.loaded).toBe(true))
@@ -45,12 +65,14 @@ describe("useGuildChannelIds", () => {
       .mockRejectedValueOnce(new Error("network blip"))
       .mockResolvedValueOnce([{ id: "ch-1", type: "text" }])
 
-    const { result } = renderHook(() =>
-      useGuildChannelIds({
-        serverId: "srv-1",
-        token: "tok",
-        baseUrl: "https://i.example.com",
-      }),
+    const { result } = renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+        }),
+      { wrapper: createWrapper() },
     )
 
     // First attempt has failed; loaded is still false.
@@ -73,12 +95,14 @@ describe("useGuildChannelIds", () => {
     vi.useFakeTimers()
     getGuildChannels.mockRejectedValue(new Error("persistent"))
 
-    renderHook(() =>
-      useGuildChannelIds({
-        serverId: "srv-1",
-        token: "tok",
-        baseUrl: "https://i.example.com",
-      }),
+    renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+        }),
+      { wrapper: createWrapper() },
     )
 
     // Schedule has 6 slots — initial call + 6 retries = 7 attempts.
@@ -108,6 +132,7 @@ describe("useGuildChannelIds", () => {
           token: "tok" as string | null,
           baseUrl: "https://i.example.com",
         } satisfies Args,
+        wrapper: createWrapper(),
       },
     )
 
@@ -120,5 +145,19 @@ describe("useGuildChannelIds", () => {
     } satisfies Args)
     expect(result.current.textChannelIds).toEqual([])
     expect(result.current.loaded).toBe(false)
+  })
+
+  it("exposes a stable query key for text channel id cache invalidation", () => {
+    expect(
+      guildChannelIdsQueryKey({
+        serverId: "srv-1",
+        baseUrl: "https://i.example.com",
+      })
+    ).toEqual([
+      "servers",
+      "https://i.example.com",
+      "srv-1",
+      "text-channel-ids",
+    ])
   })
 })

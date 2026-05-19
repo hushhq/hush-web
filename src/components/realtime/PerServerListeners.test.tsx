@@ -7,6 +7,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 
 vi.mock("@/lib/api", () => ({
   getGuildChannels: vi.fn().mockResolvedValue([
@@ -56,6 +58,19 @@ function makeWs(): FakeWs {
   }
 }
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
+}
+
 describe("PerServerListeners", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -78,6 +93,7 @@ describe("PerServerListeners", () => {
         refetchMembers={vi.fn()}
         onSelfRemoved={vi.fn()}
       />,
+      { wrapper: createWrapper() },
     )
 
     await waitFor(() => {
@@ -103,6 +119,7 @@ describe("PerServerListeners", () => {
         refetchMembers={vi.fn()}
         onSelfRemoved={onSelfRemoved}
       />,
+      { wrapper: createWrapper() },
     )
 
     // Wait for the moderation hook to bind its listener.
@@ -139,6 +156,7 @@ describe("PerServerListeners", () => {
         refetchMembers={refetch}
         onSelfRemoved={onSelfRemoved}
       />,
+      { wrapper: createWrapper() },
     )
 
     await waitFor(() => expect(ws.on).toHaveBeenCalledWith("member_kicked", expect.any(Function)))
