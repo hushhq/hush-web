@@ -1,7 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeftIcon, MonitorSmartphoneIcon } from "lucide-react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button.tsx"
 import { Separator } from "@/components/ui/separator.tsx"
@@ -16,9 +15,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useAuth } from "@/contexts/AuthContext"
-import { listDeviceKeys, revokeDeviceKey } from "@/lib/api"
 import { getReadableDeviceLabel } from "@/lib/deviceLabel"
 import { getDeviceId, getInstanceToken } from "@/hooks/useAuth"
+import {
+  type DeviceRow,
+  useDeviceKeys,
+  useRevokeDeviceKey,
+} from "@/hooks/useDeviceKeys"
+import { TransparencyVerifier } from "@/lib/transparencyVerifier"
+import { bytesToHex } from "@/lib/identityVault"
+import ApproveDeviceLinkFlow from "@/components/devices/ApproveDeviceLinkFlow.jsx"
 
 function resolveHomeInstanceToken(
   homeInstanceUrl: string | null | undefined,
@@ -27,28 +33,10 @@ function resolveHomeInstanceToken(
   if (homeInstanceUrl) return getInstanceToken(homeInstanceUrl)
   return fallbackToken
 }
-import { TransparencyVerifier } from "@/lib/transparencyVerifier"
-import { bytesToHex } from "@/lib/identityVault"
-import ApproveDeviceLinkFlow from "@/components/devices/ApproveDeviceLinkFlow.jsx"
-
-interface DeviceRow {
-  id: string
-  deviceId: string
-  label?: string | null
-  certifiedAt: string
-  lastSeen?: string | null
-}
-
-function deviceKeysQueryKey(
-  homeInstanceUrl: string | null | undefined,
-  userId?: string | null
-) {
-  return ["auth", "devices", homeInstanceUrl ?? "local", userId ?? "anonymous"] as const
-}
 
 interface DevicesPanelProps {
   /**
-   * URL of the auth (home) instance — the one that issued the token and
+   * URL of the auth (home) instance, the one that issued the token and
    * stores the user's device list. NOT the currently-selected server's
    * instance, which may be a federated peer.
    */
@@ -76,7 +64,6 @@ export function DevicesPanel({
 }: DevicesPanelProps) {
   const [view, setView] = React.useState<"list" | "approve">("list")
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { token, user, identityKeyRef, setTransparencyError } = useAuth() as {
     token: string | null
     user?: { id?: string } | null
@@ -89,40 +76,36 @@ export function DevicesPanel({
     deviceId: string
     label: string
   } | null>(null)
-  const [revoking, setRevoking] = React.useState(false)
 
   const currentDeviceId = React.useMemo(() => getDeviceId(), [])
   const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
-  const devicesQuery = useQuery<DeviceRow[], Error>({
-    queryKey: deviceKeysQueryKey(homeInstanceUrl, user?.id),
-    enabled: Boolean(homeInstanceToken),
-    queryFn: async () => {
-      if (!homeInstanceToken) {
-        throw new Error("Sign in to the home instance to manage devices.")
-      }
-      const data = (await listDeviceKeys(
-        homeInstanceToken,
-        homeInstanceUrl ?? ""
-      )) as unknown
-      return Array.isArray(data) ? (data as DeviceRow[]) : []
-    },
+  const {
+    devices,
+    error: devicesError,
+    isLoading: loading,
+    refreshDevices: refreshDeviceQuery,
+  } = useDeviceKeys({
+    homeInstanceToken,
+    homeInstanceUrl,
+    userId: user?.id,
+  })
+  const revokeDeviceMutation = useRevokeDeviceKey({
+    homeInstanceToken,
+    homeInstanceUrl,
+    userId: user?.id,
   })
 
   const refreshDevices = React.useCallback(async () => {
     setError(null)
-    if (!homeInstanceToken) return
-    await queryClient.invalidateQueries({
-      queryKey: deviceKeysQueryKey(homeInstanceUrl, user?.id),
-    })
-  }, [homeInstanceToken, homeInstanceUrl, queryClient, user?.id])
+    await refreshDeviceQuery()
+  }, [refreshDeviceQuery])
 
-  const devices = devicesQuery.data ?? []
   const queryError =
     !homeInstanceToken && homeInstanceUrl
       ? "Sign in to the home instance to manage devices."
-      : devicesQuery.error?.message ?? null
+      : devicesError?.message ?? null
   const displayError = error ?? queryError
-  const loading = devicesQuery.isLoading && Boolean(homeInstanceToken)
+  const revoking = revokeDeviceMutation.isPending
 
   const verifyTransparencyAfterOp = React.useCallback(
     async (opName: string) => {
@@ -131,7 +114,7 @@ export function DevicesPanel({
         // already landed on the server; periodic verify will catch any
         // log inconsistency on the next pass.
         console.warn(
-          `[transparency] post-${opName} verify skipped — home instance state unavailable`
+          `[transparency] post-${opName} verify skipped: home instance state unavailable`
         )
         return
       }
@@ -167,25 +150,18 @@ export function DevicesPanel({
       setError("Sign in to the home instance to revoke devices.")
       return
     }
-    setRevoking(true)
+    setError(null)
     try {
-      await revokeDeviceKey(
-        homeInstanceToken,
-        confirmRevoke.deviceId,
-        homeInstanceUrl ?? ""
-      )
+      await revokeDeviceMutation.mutateAsync({ deviceId: confirmRevoke.deviceId })
       await verifyTransparencyAfterOp("device_revoke")
       setConfirmRevoke(null)
-      await refreshDevices()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to revoke device")
-    } finally {
-      setRevoking(false)
     }
   }, [
     confirmRevoke,
     token,
-    refreshDevices,
+    revokeDeviceMutation,
     verifyTransparencyAfterOp,
     homeInstanceUrl,
   ])
@@ -288,7 +264,7 @@ export function DevicesPanel({
                       <div>{formatRelativeTime(device.lastSeen)}</div>
                       {staleness === "critical" ? (
                         <div className="mt-0.5 text-xs text-destructive">
-                          Inactive 90+ days — consider revoking
+                          Inactive 90+ days, consider revoking
                         </div>
                       ) : staleness === "warning" ? (
                         <div className="mt-0.5 text-xs text-amber-500">
@@ -298,8 +274,8 @@ export function DevicesPanel({
                     </td>
                     <td className="px-3 py-2 align-top text-muted-foreground">
                       {device.certifiedAt
-                        ? new Date(device.certifiedAt).toLocaleDateString()
-                        : "—"}
+                        ? formatDate(device.certifiedAt)
+                        : "Unknown"}
                     </td>
                     <td className="px-3 py-2 align-top text-right">
                       {!isCurrent ? (
@@ -376,6 +352,10 @@ function formatRelativeTime(dateStr?: string | null): string {
   if (hours < 24) return `${hours}h ago`
   const days = Math.floor(hours / 24)
   if (days < 30) return `${days}d ago`
+  return new Date(dateStr).toLocaleDateString()
+}
+
+function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
