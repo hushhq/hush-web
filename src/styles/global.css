@@ -129,6 +129,11 @@ html[data-desktop="win32"] body {
     background-color: transparent;
 }
 
+html[data-desktop="darwin"] [data-desktop-chrome="authenticated-shell"],
+html[data-desktop="win32"] [data-desktop-chrome="authenticated-shell"] {
+    background-color: var(--desktop-chrome-bg);
+}
+
 html[data-desktop="darwin"] [data-slot="server-rail"],
 html[data-desktop="win32"] [data-slot="server-rail"] {
     background-color: var(--desktop-chrome-bg) !important;

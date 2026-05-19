@@ -1546,7 +1546,10 @@ export function AuthenticatedApp() {
         onCreateServer={openCreateServerDialog}
         onDiscoverServers={() => navigate("/explore")}
       />
-      <SidebarProvider className="h-svh min-h-0! overflow-hidden bg-sidebar md:pl-(--rail-width)">
+      <SidebarProvider
+        data-desktop-chrome="authenticated-shell"
+        className="h-svh min-h-0! overflow-hidden bg-sidebar md:pl-(--rail-width)"
+      >
         {isMobile
           ? activeServer
             ? <ChannelSidebar
