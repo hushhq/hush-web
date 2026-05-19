@@ -300,7 +300,7 @@ describe('LinkDevice', () => {
       'https://chat.example.com',
     );
     expect(mockBuildLinkApprovalUrl).toHaveBeenCalledWith(
-      window.location.origin,
+      'https://chat.example.com',
       expect.objectContaining({
         requestId: 'req-1',
         secret: 'secret-1',
@@ -423,6 +423,39 @@ describe('LinkDevice', () => {
     expect(footer).not.toBeNull();
     expect(footer.querySelector('.ld-back-link')).not.toBeNull();
     expect(footer.contains(screen.getByRole('button', { name: /regenerate/i }))).toBe(true);
+  });
+
+  it('anchors new-device requests and QR links to the hosted instance when selection is app origin', async () => {
+    authInstanceSelectionState.current = 'app://localhost';
+    mockCreateDeviceIdentity.mockResolvedValue({ publicKeyBase64: 'device-public-key' });
+    mockCreateSessionKeyPair.mockResolvedValue({
+      privateKey: { type: 'private-key' },
+      publicKeyBase64: 'session-public-key',
+    });
+    mockCreateDeviceLinkRequest.mockResolvedValue({
+      requestId: 'req-desktop-origin',
+      secret: 'secret-1',
+      code: 'HUSH2026',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    mockBuildLinkApprovalUrl.mockReturnValue('https://app.gethush.live/link-device?payload=abc');
+    mockQrToDataUrl.mockResolvedValue('data:image/png;base64,qr-code');
+
+    renderLinkDevice('/link-device?mode=new');
+
+    await screen.findByText('HUSH2026');
+    expect(mockCreateDeviceLinkRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceUrl: 'https://app.gethush.live',
+      }),
+      'https://app.gethush.live',
+    );
+    expect(mockBuildLinkApprovalUrl).toHaveBeenCalledWith(
+      'https://app.gethush.live',
+      expect.objectContaining({
+        requestId: 'req-desktop-origin',
+      }),
+    );
   });
 
   it('keeps the layout intact across a regenerate transition (active → loading → active)', async () => {

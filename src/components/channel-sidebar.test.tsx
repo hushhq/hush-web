@@ -50,7 +50,7 @@ const BASE_PROPS = {
   apps: [],
   activeChannelId: "ch-1",
   onSelectChannel: vi.fn(),
-  user: { name: "Y", email: "y@example.com", initials: "Y" },
+  user: { name: "Y", username: "yarin", initials: "Y" },
   railEntries: [{ id: "home", name: "Home", initials: "HO" }],
   activeRailId: "srv-1",
   onSelectRail: vi.fn(),

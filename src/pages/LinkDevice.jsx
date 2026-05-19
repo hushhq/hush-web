@@ -4,7 +4,11 @@ import QRCode from 'qrcode';
 import { ArrowLeftIcon, CopyIcon, CheckIcon } from '@radix-ui/react-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { InstanceSelector } from '../components/auth/instance-selector';
-import { getInstanceDisplayName } from '../lib/authInstanceStore';
+import {
+  getInstanceDisplayName,
+  HOSTED_AUTH_INSTANCE_URL,
+  normalizeInstanceUrl,
+} from '../lib/authInstanceStore';
 import { BODY_SCROLL_MODE, useBodyScrollMode } from '../hooks/useBodyScrollMode';
 import { getDeviceId } from '../hooks/useAuth';
 import { useAuthInstanceSelection } from '../hooks/useAuthInstanceSelection.js';
@@ -60,6 +64,10 @@ function formatCountdown(expiresAt, now = Date.now()) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function resolveDeviceLinkInstanceUrl(instanceUrl) {
+  return normalizeInstanceUrl(instanceUrl) || HOSTED_AUTH_INSTANCE_URL;
+}
+
 function buildUnlockResumePath(location) {
   const current = `${location.pathname}${location.search}`;
   return `/?returnTo=${encodeURIComponent(current)}`;
@@ -101,7 +109,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
       setRequestState(null);
 
       try {
-        const instanceUrl = selectedInstanceUrl;
+        const instanceUrl = resolveDeviceLinkInstanceUrl(selectedInstanceUrl);
         const deviceIdentity = await createDeviceIdentity();
         const session = await createSessionKeyPair();
         const response = await createDeviceLinkRequest({
@@ -112,7 +120,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         }, instanceUrl);
         let qrDataUrl = '';
         try {
-          qrDataUrl = await QRCode.toDataURL(buildLinkApprovalUrl(window.location.origin, {
+          qrDataUrl = await QRCode.toDataURL(buildLinkApprovalUrl(instanceUrl, {
             requestId: response.requestId,
             secret: response.secret,
             expiresAt: response.expiresAt,
@@ -368,13 +376,14 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
         <span className="h-px flex-1 bg-border" aria-hidden="true" />
       </div>
 
-      <div className="ld-code-block flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+      <div className="ld-code-block grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+        <span aria-hidden="true" />
         <code
-          className="ld-code-value flex-1 truncate text-center font-mono text-xl font-normal tracking-[0.14em]"
+          className="ld-code-value min-w-0 truncate text-center font-mono text-xl font-normal tracking-[0.14em]"
           data-state={hasCode ? 'ready' : 'placeholder'}
           aria-label="Device link code"
         >
-          {hasCode ? requestState.code : '——————'}
+          {hasCode ? requestState.code : '••••••'}
         </code>
         <ShadcnButton
           type="button"
@@ -384,7 +393,7 @@ function NewDeviceLinkView({ onLinked, selectedInstanceUrl, knownInstances, onSe
           aria-label="Copy device link code"
           data-state={codeCopied ? 'copied' : 'idle'}
           disabled={!hasCode}
-          className="ld-code-copy shrink-0"
+          className="ld-code-copy justify-self-end"
         >
           {codeCopied ? (
             <CheckIcon aria-hidden="true" />

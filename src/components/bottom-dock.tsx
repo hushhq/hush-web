@@ -1,9 +1,9 @@
 import { Card } from "@/components/ui/card"
-import { UserMenu } from "@/components/user-menu"
+import { UserMenu, type UserMenuUser } from "@/components/user-menu"
 import { VoicePip } from "@/components/voice-pip"
 
 interface BottomDockProps {
-  user: { name: string; email: string; initials: string }
+  user: UserMenuUser
   onOpenUserSettings?: () => void
   onSignOut?: () => void | Promise<void>
   voice?: {

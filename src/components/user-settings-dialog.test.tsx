@@ -87,7 +87,7 @@ describe("UserSettingsDialog", () => {
       />
     )
 
-    expect(screen.getByText("—")).toBeInTheDocument()
+    expect(screen.getByText("Not set")).toBeInTheDocument()
     expect(screen.getByText("yarin")).toBeInTheDocument()
   })
 

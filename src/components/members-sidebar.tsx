@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/alert-dialog.tsx"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { UsernameHandle } from "@/components/identity/username-handle"
 import { formatUsername } from "@/lib/userLabel"
 import { cn } from "@/lib/utils"
 
@@ -351,7 +352,10 @@ function ProfileCard({
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-semibold">{member.name}</span>
           {username ? (
-            <span className="text-xs text-muted-foreground">{username}</span>
+            <UsernameHandle
+              username={username}
+              className="text-xs text-muted-foreground"
+            />
           ) : null}
           <span className="text-xs text-muted-foreground">
             {ROLE_BADGE_LABEL[member.role]}
@@ -415,7 +419,7 @@ function MembersList({
           <div className="flex items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {ROLE_ICON[group.role]}
             <span>
-              {ROLE_LABEL[group.role]} — {group.items.length}
+              {ROLE_LABEL[group.role]} · {group.items.length}
             </span>
           </div>
           <ul className="flex flex-col">

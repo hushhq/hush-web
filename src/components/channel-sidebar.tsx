@@ -67,6 +67,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button.tsx"
 import { HushLogo } from "@/components/brand/HushLogo"
 import { BottomDock } from "@/components/bottom-dock"
+import type { UserMenuUser } from "@/components/user-menu"
 import {
   Sheet,
   SheetContent,
@@ -200,7 +201,7 @@ interface ChannelSidebarProps {
   onSelectChannel: (id: string) => void
   onCategoriesChange?: (next: ChannelCategory[]) => void
   onChannelsChange?: (next: Channel[]) => void
-  user: { name: string; email: string; initials: string }
+  user: UserMenuUser
   railEntries: RailEntry[]
   activeRailId: string
   onSelectRail: (id: string) => void

@@ -244,7 +244,7 @@ describe('ApproveDeviceLinkFlow (embedded mode)', () => {
     );
   });
 
-  it('falls back to "" when no homeInstanceUrl is provided (page mode)', async () => {
+  it('falls back to the current HTTP origin when no homeInstanceUrl is provided', async () => {
     resolveDeviceLinkRequest.mockResolvedValueOnce({
       claimToken: 'ct',
       sessionPublicKey: 'sk',
@@ -268,7 +268,37 @@ describe('ApproveDeviceLinkFlow (embedded mode)', () => {
     expect(resolveDeviceLinkRequest).toHaveBeenCalledWith(
       'tok',
       { requestId: 'req', secret: 'sec' },
-      '',
+      'http://localhost:3000',
+    );
+  });
+
+  it('normalizes desktop app origins to the hosted instance', async () => {
+    resolveDeviceLinkRequest.mockResolvedValueOnce({
+      claimToken: 'ct',
+      sessionPublicKey: 'sk',
+      devicePublicKey: 'dk',
+      label: 'New phone',
+      deviceId: 'dev-new',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      instanceUrl: 'app://localhost',
+    });
+
+    render(
+      <ApproveDeviceLinkFlow
+        mode="embedded"
+        initialPayload={{ requestId: 'req', secret: 'sec' }}
+        homeInstanceUrl="app://localhost"
+        onCancel={vi.fn()}
+        onVaultUnlockNeeded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/new phone/i);
+    expect(screen.getByText('https://app.gethush.live')).toBeInTheDocument();
+    expect(resolveDeviceLinkRequest).toHaveBeenCalledWith(
+      'tok',
+      { requestId: 'req', secret: 'sec' },
+      'https://app.gethush.live',
     );
   });
 
