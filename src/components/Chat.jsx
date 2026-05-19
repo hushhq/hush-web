@@ -83,7 +83,9 @@ function consumePendingSend(channelId, senderId, serverTimestamp) {
 function unwrapPlaintext(raw, allowLegacyFallback) {
   const result = decodeEnvelopeV1FromString(raw);
   if (result.ok) return { text: result.envelope.text, decoded: true };
-  if (allowLegacyFallback) return { text: raw, decoded: true };
+  if (allowLegacyFallback && result.reason === 'non-json') {
+    return { text: raw, decoded: true };
+  }
   return { text: null, decoded: false };
 }
 

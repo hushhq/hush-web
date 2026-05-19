@@ -24,6 +24,13 @@ import { cn } from "@/lib/utils"
 import type { AttachmentRef } from "@/lib/messageEnvelope"
 
 const ATTACHMENT_GONE_MESSAGE = "This attachment is no longer available."
+const PREVIEWABLE_IMAGE_MIME_TYPES = new Set([
+  "image/gif",
+  "image/heic",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+])
 
 interface AttachmentTileProps {
   ref: AttachmentRef
@@ -60,9 +67,10 @@ export function AttachmentTile({
     return () => io.disconnect()
   }, [])
 
-  const isImage = ref.mimeType.startsWith("image/")
-  const isVideo = ref.mimeType === "video/mp4" || ref.mimeType === "video/webm"
-  const isAudio = ref.mimeType.startsWith("audio/")
+  const mimeType = ref.mimeType.trim().toLowerCase()
+  const isImage = PREVIEWABLE_IMAGE_MIME_TYPES.has(mimeType)
+  const isVideo = mimeType === "video/mp4" || mimeType === "video/webm"
+  const isAudio = mimeType.startsWith("audio/")
   const isPreviewable = isImage || isVideo || isAudio
 
   const { state, objectUrl, errorMessage, retry } = useAttachmentDownloader({

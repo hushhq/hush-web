@@ -77,6 +77,53 @@ describe('Chat realtime cross-device behavior', () => {
     expect(mockDecryptFromChannel).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('hello from device A')).toBeInTheDocument();
   });
+
+  it('does not render malformed v1 envelopes as raw JSON', async () => {
+    const malformedEnvelope = JSON.stringify({
+      v: 1,
+      text: '',
+      attachments: [
+        {
+          id: 'att-svg',
+          name: 'logo.svg',
+          size: 346,
+          mimeType: 'image/svg+xml',
+          key: 'AAA=',
+          iv: 'BBB=',
+        },
+      ],
+    });
+    mockDecryptFromChannel.mockResolvedValueOnce(malformedEnvelope);
+    const wsClient = makeWsClient();
+
+    render(
+      <Chat
+        channelId="ch-1"
+        serverId="srv-1"
+        currentUserId="user-1"
+        getToken={() => 'token'}
+        getStore={() => Promise.resolve(null)}
+        wsClient={wsClient}
+        members={[]}
+      />,
+    );
+
+    await act(async () => {
+      wsClient.emit('message.new', {
+        id: 'msg-svg',
+        channel_id: 'ch-1',
+        sender_id: 'user-other',
+        sender_device_id: 'device-other',
+        ciphertext: 'YWJj',
+        timestamp: '2026-04-01T23:16:31.998122Z',
+      });
+    });
+
+    expect(
+      await screen.findByText('Message encrypted - decryption key no longer available'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(malformedEnvelope)).not.toBeInTheDocument();
+  });
 });
 
 describe('Chat mark_read realtime behavior', () => {

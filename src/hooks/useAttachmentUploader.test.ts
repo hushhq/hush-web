@@ -199,4 +199,27 @@ describe("useAttachmentUploader", () => {
     })
     expect(mockPresignAttachment).not.toHaveBeenCalled()
   })
+
+  it("rejects SVG before encrypting or presigning", async () => {
+    const { result } = renderHook(() =>
+      useAttachmentUploader({
+        serverId: "srv-1",
+        channelId: "ch-1",
+        getToken: () => "token",
+      })
+    )
+
+    await act(async () => {
+      result.current.add([makeFile("logo.svg", 64, "image/svg+xml")])
+    })
+
+    await waitFor(() => {
+      expect(result.current.uploads[0]?.status).toBe("failed")
+    })
+    expect(result.current.uploads[0]?.errorMessage).toBe(
+      "content type not allowed"
+    )
+    expect(mockPresignAttachment).not.toHaveBeenCalled()
+    expect(MockUploadXHR.instances).toHaveLength(0)
+  })
 })

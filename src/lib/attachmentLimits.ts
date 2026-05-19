@@ -41,6 +41,15 @@ export const ALLOWED_ATTACHMENT_CONTENT_TYPES: ReadonlyArray<string> = [
 ]
 
 /**
+ * Native file-picker accept list derived from the same MIME allowlist
+ * used by upload and decode validation. Keep this exact list in sync
+ * with `ALLOWED_ATTACHMENT_CONTENT_TYPES`; do not collapse images to
+ * `image/*`, because that admits SVG.
+ */
+export const ATTACHMENT_FILE_INPUT_ACCEPT =
+  ALLOWED_ATTACHMENT_CONTENT_TYPES.join(",")
+
+/**
  * Returns true when the candidate type matches one of the allowlist
  * entries. Empty / whitespace-only strings are rejected.
  */

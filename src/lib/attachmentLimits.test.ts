@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { isAttachmentContentTypeAllowed } from "./attachmentLimits"
+import {
+  ATTACHMENT_FILE_INPUT_ACCEPT,
+  isAttachmentContentTypeAllowed,
+} from "./attachmentLimits"
 
 describe("attachmentLimits", () => {
   it("allows exact passive attachment content types", () => {
@@ -17,5 +20,10 @@ describe("attachmentLimits", () => {
     expect(isAttachmentContentTypeAllowed("text/html")).toBe(false)
     expect(isAttachmentContentTypeAllowed("image/avif")).toBe(false)
     expect(isAttachmentContentTypeAllowed("audio/x-matroska")).toBe(false)
+  })
+
+  it("does not expose wildcard image accepts to the native file picker", () => {
+    expect(ATTACHMENT_FILE_INPUT_ACCEPT).not.toContain("image/*")
+    expect(ATTACHMENT_FILE_INPUT_ACCEPT).not.toContain("image/svg+xml")
   })
 })

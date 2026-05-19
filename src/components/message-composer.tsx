@@ -14,6 +14,7 @@ import {
   type NovelComposerHandle,
 } from "@/components/novel-composer"
 import type { SlashAnchorRect } from "@/components/custom-slash-commands"
+import { ATTACHMENT_FILE_INPUT_ACCEPT } from "@/lib/attachmentLimits"
 import type { GifRef } from "@/lib/messageEnvelope"
 
 interface MessageComposerProps {
@@ -78,7 +79,10 @@ export function MessageComposer({
         </ChatToolbarAddon>
       ) : null}
       <ChatToolbarAddon align="inline-start">
-        <ChatToolbarAttachmentButton onFilesSelected={onFilesSelected} />
+        <ChatToolbarAttachmentButton
+          accept={ATTACHMENT_FILE_INPUT_ACCEPT}
+          onFilesSelected={onFilesSelected}
+        />
       </ChatToolbarAddon>
       <div className="order-2 flex min-w-0 flex-1 items-center self-center">
         <NovelComposer
