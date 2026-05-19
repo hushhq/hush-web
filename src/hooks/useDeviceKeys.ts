@@ -58,6 +58,8 @@ export function useDeviceKeys({
   })
 
   const refreshDevices = React.useCallback(async () => {
+    // Disabled queries have no authenticated server state to refresh.
+    // Resolve as a no-op so UI callers can await this unconditionally.
     if (!homeInstanceToken) return
     await queryClient.invalidateQueries({ queryKey })
   }, [homeInstanceToken, queryClient, queryKey])
@@ -89,8 +91,8 @@ export function useRevokeDeviceKey({
       }
       await revokeDeviceKey(homeInstanceToken, deviceId, homeInstanceUrl ?? "")
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey })
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey })
     },
   })
 }

@@ -325,6 +325,46 @@ describe("DevicesPanel", () => {
     )
   })
 
+  it("does not block transparency verify on the post-revoke device refresh", async () => {
+    listDeviceKeys
+      .mockResolvedValueOnce([
+        {
+          id: "row-1",
+          deviceId: "device-other",
+          label: "iPhone",
+          certifiedAt: "2026-02-01T00:00:00Z",
+          lastSeen: new Date().toISOString(),
+        },
+      ])
+      .mockImplementationOnce(() => new Promise(() => {}))
+    revokeDeviceKey.mockResolvedValue(undefined)
+
+    renderPanel(
+      <DevicesPanel
+        homeInstanceUrl="https://i.example.com"
+        homeLogPublicKey="abcd"
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(await screen.findByRole("button", { name: /^revoke$/i }))
+
+    const dialog = await screen.findByRole("alertdialog")
+    await u.click(
+      within(dialog).getByRole("button", { name: /revoke device/i })
+    )
+
+    await waitFor(() =>
+      expect(revokeDeviceKey).toHaveBeenCalledWith(
+        "tok",
+        "device-other",
+        "https://i.example.com"
+      )
+    )
+    await waitFor(() => expect(verifyOwnKey).toHaveBeenCalledTimes(1))
+    expect(listDeviceKeys).toHaveBeenCalledTimes(2)
+  })
+
   it("skips transparency verify silently when no home log key is provided", async () => {
     listDeviceKeys.mockResolvedValueOnce([
       {
