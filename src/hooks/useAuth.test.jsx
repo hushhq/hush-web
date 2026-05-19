@@ -811,6 +811,27 @@ describe('useAuth - unlockVault', () => {
     expect(result.current.vaultState).toBe('unlocked');
   });
 
+  it('blocks PIN unlock and destroys local state when a revoked-device tombstone exists', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    localStorage.setItem(
+      'hush_auth_invalidation',
+      JSON.stringify({ reason: 'device_revoked', at: '2026-05-19T00:00:00Z' }),
+    );
+
+    await expect(result.current.unlockVault('correct')).rejects.toMatchObject({
+      code: 'DEVICE_REVOKED',
+    });
+
+    await waitFor(() => expect(result.current.vaultState).toBe('none'));
+    expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
+    expect(result.current.hasVault).toBe(false);
+    expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
+    expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
+  });
+
   it('migrates a legacy vault blob after a successful PIN unlock', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));

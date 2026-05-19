@@ -67,6 +67,7 @@ import {
   AUTH_INVALIDATION_REASONS,
   planInvalidatedSession,
   planNoTokenStartup,
+  planVaultUnlockAttempt,
 } from '../lib/authLifecycle';
 import {
   openHistoryStore,
@@ -1746,6 +1747,16 @@ export function useAuth() {
    * @param {string} pin
    */
   const unlockVault = useCallback(async (pin) => {
+    const unlockPlan = planVaultUnlockAttempt(
+      readPersistedAuthInvalidation() ?? authInvalidation,
+    );
+    if (unlockPlan.shouldDestroyLocalDeviceState) {
+      destroyRevokedDeviceLocalState(unlockPlan.reason);
+      const revokedError = new Error('device was revoked');
+      revokedError.code = 'DEVICE_REVOKED';
+      throw revokedError;
+    }
+
     const userId = user?.id ?? localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
     if (!userId) throw new Error('no active vault user');
 
@@ -1877,7 +1888,15 @@ export function useAuth() {
       void writeVaultSessionForUnlock(userId, privateKey, publicKey);
     }
     return undefined;
-  }, [user, applyVaultTimeout, clearPinSetup, markServerSessionInvalidated, performChallengeResponse]);
+  }, [
+    user,
+    applyVaultTimeout,
+    authInvalidation,
+    clearPinSetup,
+    destroyRevokedDeviceLocalState,
+    markServerSessionInvalidated,
+    performChallengeResponse,
+  ]);
 
   /**
    * Locks the vault by clearing the in-memory private key.

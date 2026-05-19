@@ -6,6 +6,7 @@ import {
   normalizeAuthInvalidationReason,
   planInvalidatedSession,
   planNoTokenStartup,
+  planVaultUnlockAttempt,
 } from './authLifecycle';
 
 describe('authLifecycle', () => {
@@ -77,6 +78,26 @@ describe('authLifecycle', () => {
       shouldPersistInvalidation: true,
       nextVaultState: VAULT_STATES.NONE,
       nextHasLocalVault: false,
+    });
+  });
+
+  it('blocks PIN unlock when a revoked-device tombstone exists', () => {
+    expect(planVaultUnlockAttempt({
+      reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+    })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.BLOCK_REVOKED_DEVICE_UNLOCK,
+      shouldDestroyLocalDeviceState: true,
+      reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+    });
+  });
+
+  it('allows PIN unlock when no revoked-device tombstone exists', () => {
+    expect(planVaultUnlockAttempt({
+      reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID,
+    })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.UNLOCK_LOCAL_VAULT,
+      shouldDestroyLocalDeviceState: false,
+      reason: null,
     });
   });
 });

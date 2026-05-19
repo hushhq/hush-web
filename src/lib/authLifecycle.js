@@ -4,9 +4,11 @@ export const AUTH_INVALIDATION_REASONS = Object.freeze({
 });
 
 export const AUTH_LIFECYCLE_ACTIONS = Object.freeze({
+  BLOCK_REVOKED_DEVICE_UNLOCK: 'block_revoked_device_unlock',
   DESTROY_REVOKED_DEVICE_STATE: 'destroy_revoked_device_state',
   DISCOVER_LOCAL_VAULT: 'discover_local_vault',
   INVALIDATE_SERVER_SESSION: 'invalidate_server_session',
+  UNLOCK_LOCAL_VAULT: 'unlock_local_vault',
 });
 
 export const VAULT_STATES = Object.freeze({
@@ -94,5 +96,36 @@ export function planInvalidatedSession(reason, { hasRecoverableVault }) {
     shouldPersistInvalidation: true,
     nextVaultState: hasRecoverableVault ? VAULT_STATES.LOCKED : VAULT_STATES.NONE,
     nextHasLocalVault: Boolean(hasRecoverableVault),
+  };
+}
+
+/**
+ * Plans a user-initiated local vault unlock attempt.
+ *
+ * A revoked-device tombstone is a hard local boundary. Unlocking the vault
+ * from that state would let a revoked browser mint a new session from stale
+ * IndexedDB data, so the caller must destroy local device state before any PIN
+ * verification or challenge-response runs.
+ *
+ * @param {{ reason?: string }|null|undefined} authInvalidation
+ * @returns {{
+ *   action: string,
+ *   shouldDestroyLocalDeviceState: boolean,
+ *   reason: string|null,
+ * }}
+ */
+export function planVaultUnlockAttempt(authInvalidation) {
+  if (authInvalidation?.reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) {
+    return {
+      action: AUTH_LIFECYCLE_ACTIONS.BLOCK_REVOKED_DEVICE_UNLOCK,
+      shouldDestroyLocalDeviceState: true,
+      reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+    };
+  }
+
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.UNLOCK_LOCAL_VAULT,
+    shouldDestroyLocalDeviceState: false,
+    reason: null,
   };
 }
