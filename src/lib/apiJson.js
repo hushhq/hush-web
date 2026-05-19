@@ -1,3 +1,5 @@
+import { recordClientDiagnostic } from './clientDiagnostics';
+
 export class ApiJsonError extends Error {
   constructor(message, { operation, status = 0, contentType = "", bodyPreview = "" } = {}) {
     super(message)
@@ -38,12 +40,33 @@ function parseJsonText(text) {
   return JSON.parse(text)
 }
 
+function recordApiJsonDiagnostic(event, res, operation, contentType, bodyPreview) {
+  recordClientDiagnostic({
+    category: "api",
+    event,
+    severity: "error",
+    details: {
+      operation,
+      status: res?.status ?? 0,
+      contentType,
+      bodyPreview,
+    },
+  })
+}
+
 export async function readJsonResponse(res, operation, { allowEmpty = false } = {}) {
   const contentType = getContentType(res)
   let text = ""
   try {
     text = await readResponseText(res)
   } catch (err) {
+    recordApiJsonDiagnostic(
+      "response-body-unreadable",
+      res,
+      operation,
+      contentType,
+      ""
+    )
     const next = new ApiJsonError(`${operation} response body could not be read`, {
       operation,
       status: res?.status ?? 0,
@@ -55,9 +78,17 @@ export async function readJsonResponse(res, operation, { allowEmpty = false } = 
 
   if (contentType && !contentType.toLowerCase().includes("json")) {
     if (allowEmpty && !text.trim()) return null
+    const bodyPreview = previewBody(text)
+    recordApiJsonDiagnostic(
+      "non-json-response",
+      res,
+      operation,
+      contentType,
+      bodyPreview
+    )
     throw new ApiJsonError(
       `${operation} returned ${contentType || "a non-JSON response"} instead of JSON`,
-      { operation, status: res?.status ?? 0, contentType, bodyPreview: previewBody(text) },
+      { operation, status: res?.status ?? 0, contentType, bodyPreview },
     )
   }
 
@@ -69,11 +100,19 @@ export async function readJsonResponse(res, operation, { allowEmpty = false } = 
     }
     return data
   } catch (err) {
+    const bodyPreview = previewBody(text)
+    recordApiJsonDiagnostic(
+      "invalid-json-response",
+      res,
+      operation,
+      contentType,
+      bodyPreview
+    )
     const next = new ApiJsonError(`${operation} returned invalid JSON`, {
       operation,
       status: res?.status ?? 0,
       contentType,
-      bodyPreview: previewBody(text),
+      bodyPreview,
     })
     next.cause = err
     throw next
