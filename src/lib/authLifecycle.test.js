@@ -5,7 +5,10 @@ import {
   VAULT_STATES,
   normalizeAuthInvalidationReason,
   planInvalidatedSession,
+  planLocalAuthReset,
+  planLocalVaultLock,
   planNoTokenStartup,
+  planPinFailure,
   planVaultUnlockAttempt,
 } from './authLifecycle';
 
@@ -122,6 +125,61 @@ describe('authLifecycle', () => {
       action: AUTH_LIFECYCLE_ACTIONS.UNLOCK_LOCAL_VAULT,
       shouldDestroyLocalDeviceState: false,
       reason: null,
+    });
+  });
+
+  it('plans a local vault lock without destructive local state changes', () => {
+    expect(planLocalVaultLock()).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.LOCK_LOCAL_VAULT,
+      shouldClearIdentity: true,
+      shouldClearSessionKeys: true,
+      shouldClearTranscriptCache: true,
+      nextVaultState: VAULT_STATES.LOCKED,
+    });
+  });
+
+  it('plans wrong-PIN rejection before the failure threshold', () => {
+    expect(planPinFailure({ chargedCount: 3, maxFailures: 10 })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.REJECT_WRONG_PIN,
+      shouldWipeLocalVault: false,
+      shouldClearSession: false,
+      nextVaultState: null,
+      nextHasLocalVault: null,
+      remainingAttempts: 7,
+      errorCode: 'WRONG_PIN',
+    });
+  });
+
+  it('plans local vault wipe at the PIN failure threshold', () => {
+    expect(planPinFailure({ chargedCount: 10, maxFailures: 10 })).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.WIPE_LOCAL_VAULT_AFTER_PIN_FAILURES,
+      shouldWipeLocalVault: true,
+      shouldClearSession: true,
+      nextVaultState: VAULT_STATES.NONE,
+      nextHasLocalVault: false,
+      remainingAttempts: 0,
+      errorCode: 'VAULT_WIPED',
+    });
+  });
+
+  it('rejects invalid PIN failure counters', () => {
+    expect(() => planPinFailure({ chargedCount: -1, maxFailures: 10 })).toThrow(TypeError);
+    expect(() => planPinFailure({ chargedCount: 1, maxFailures: 0 })).toThrow(TypeError);
+  });
+
+  it('plans a full local auth reset', () => {
+    expect(planLocalAuthReset('logout')).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.RESET_LOCAL_AUTH_STATE,
+      reason: 'logout',
+      shouldClearIdentity: true,
+      nextToken: null,
+      nextUser: null,
+      nextVaultState: VAULT_STATES.NONE,
+      nextHasLocalVault: false,
+      nextNeedsPinSetup: false,
+      nextIsGuest: false,
+      nextGuestExpiresAt: null,
+      nextError: null,
     });
   });
 });

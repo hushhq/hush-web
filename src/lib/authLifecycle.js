@@ -8,7 +8,11 @@ export const AUTH_LIFECYCLE_ACTIONS = Object.freeze({
   DESTROY_REVOKED_DEVICE_STATE: 'destroy_revoked_device_state',
   DISCOVER_LOCAL_VAULT: 'discover_local_vault',
   INVALIDATE_SERVER_SESSION: 'invalidate_server_session',
+  LOCK_LOCAL_VAULT: 'lock_local_vault',
+  REJECT_WRONG_PIN: 'reject_wrong_pin',
+  RESET_LOCAL_AUTH_STATE: 'reset_local_auth_state',
   UNLOCK_LOCAL_VAULT: 'unlock_local_vault',
+  WIPE_LOCAL_VAULT_AFTER_PIN_FAILURES: 'wipe_local_vault_after_pin_failures',
 });
 
 export const VAULT_STATES = Object.freeze({
@@ -135,5 +139,110 @@ export function planVaultUnlockAttempt(...authInvalidations) {
     action: AUTH_LIFECYCLE_ACTIONS.UNLOCK_LOCAL_VAULT,
     shouldDestroyLocalDeviceState: false,
     reason: null,
+  };
+}
+
+/**
+ * Plans a non-destructive local vault lock.
+ *
+ * The caller owns the storage side effects because browser and desktop session
+ * stores differ, but the lifecycle result must be identical for timeout and
+ * manual locks: private material leaves memory and the UI returns to PIN entry.
+ *
+ * @returns {{
+ *   action: string,
+ *   shouldClearIdentity: boolean,
+ *   shouldClearSessionKeys: boolean,
+ *   shouldClearTranscriptCache: boolean,
+ *   nextVaultState: string,
+ * }}
+ */
+export function planLocalVaultLock() {
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.LOCK_LOCAL_VAULT,
+    shouldClearIdentity: true,
+    shouldClearSessionKeys: true,
+    shouldClearTranscriptCache: true,
+    nextVaultState: VAULT_STATES.LOCKED,
+  };
+}
+
+/**
+ * Plans the outcome of a failed PIN decrypt attempt.
+ *
+ * @param {{ chargedCount: number, maxFailures: number }} input
+ * @returns {{
+ *   action: string,
+ *   shouldWipeLocalVault: boolean,
+ *   shouldClearSession: boolean,
+ *   nextVaultState: string|null,
+ *   nextHasLocalVault: boolean|null,
+ *   remainingAttempts: number,
+ *   errorCode: string,
+ * }}
+ */
+export function planPinFailure({ chargedCount, maxFailures }) {
+  if (!Number.isInteger(chargedCount) || chargedCount < 0) {
+    throw new TypeError('chargedCount must be a non-negative integer');
+  }
+  if (!Number.isInteger(maxFailures) || maxFailures <= 0) {
+    throw new TypeError('maxFailures must be a positive integer');
+  }
+
+  const remainingAttempts = Math.max(maxFailures - chargedCount, 0);
+  if (remainingAttempts === 0) {
+    return {
+      action: AUTH_LIFECYCLE_ACTIONS.WIPE_LOCAL_VAULT_AFTER_PIN_FAILURES,
+      shouldWipeLocalVault: true,
+      shouldClearSession: true,
+      nextVaultState: VAULT_STATES.NONE,
+      nextHasLocalVault: false,
+      remainingAttempts,
+      errorCode: 'VAULT_WIPED',
+    };
+  }
+
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.REJECT_WRONG_PIN,
+    shouldWipeLocalVault: false,
+    shouldClearSession: false,
+    nextVaultState: null,
+    nextHasLocalVault: null,
+    remainingAttempts,
+    errorCode: 'WRONG_PIN',
+  };
+}
+
+/**
+ * Plans the in-memory state reset after local auth is no longer trusted.
+ *
+ * @param {string} reason
+ * @returns {{
+ *   action: string,
+ *   reason: string,
+ *   shouldClearIdentity: boolean,
+ *   nextToken: null,
+ *   nextUser: null,
+ *   nextVaultState: string,
+ *   nextHasLocalVault: boolean,
+ *   nextNeedsPinSetup: boolean,
+ *   nextIsGuest: boolean,
+ *   nextGuestExpiresAt: null,
+ *   nextError: null,
+ * }}
+ */
+export function planLocalAuthReset(reason = 'logout') {
+  return {
+    action: AUTH_LIFECYCLE_ACTIONS.RESET_LOCAL_AUTH_STATE,
+    reason,
+    shouldClearIdentity: true,
+    nextToken: null,
+    nextUser: null,
+    nextVaultState: VAULT_STATES.NONE,
+    nextHasLocalVault: false,
+    nextNeedsPinSetup: false,
+    nextIsGuest: false,
+    nextGuestExpiresAt: null,
+    nextError: null,
   };
 }
