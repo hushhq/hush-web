@@ -17,6 +17,7 @@ import {
   requestChallenge,
   resolveDeviceLinkRequest,
   resolveAuthAudience,
+  revokeDeviceKey,
   uploadMLSCredential,
   uploadMLSKeyPackages,
   getKeyPackageCount,
@@ -751,6 +752,61 @@ describe('runtime response schemas', () => {
     await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
       code: 'invalid_response',
     });
+  });
+
+  it('listDeviceKeys rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'listDeviceKeys',
+    });
+  });
+
+  it('listDeviceKeys keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 502,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toThrow('listDeviceKeys 502');
+  });
+
+  it('revokeDeviceKey preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'device already revoked' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toThrow(
+      'device already revoked',
+    );
+  });
+
+  it('revokeDeviceKey keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 503,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toThrow(
+      'revokeDeviceKey 503',
+    );
   });
 
   it('createDeviceLinkRequest rejects malformed success responses', async () => {

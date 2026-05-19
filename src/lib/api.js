@@ -121,6 +121,13 @@ function createNetworkError(operation, targetUrl, err) {
   return nextError;
 }
 
+function getApiErrorMessage(data, fallback) {
+  if (data && typeof data.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+  return fallback;
+}
+
 function createFetchSignal(timeoutMs, callerSignal) {
   if (typeof AbortController === 'undefined') {
     return {
@@ -756,18 +763,15 @@ export async function registerWithPublicKey(
  */
 export async function listDeviceKeys(token, baseUrl = '') {
   const res = await fetchWithAuth(token, '/api/auth/devices', {}, baseUrl);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `listDeviceKeys ${res.status}`);
+  const data = res.ok
+    ? await readJsonResponse(res, 'listDeviceKeys')
+    : await readJsonResponseOrNull(res, 'listDeviceKeys');
+  if (!res.ok) {
+    throw new Error(getApiErrorMessage(data, `listDeviceKeys ${res.status}`));
+  }
   return parseDeviceKeys(data);
 }
 
-/**
- * Revoke a registered device key. The device can no longer authenticate.
- *
- * @param {string} token - JWT
- * @param {string} deviceId - Device ID to revoke.
- * @returns {Promise<void>}
- */
 /**
  * Revoke a registered device key. The device can no longer authenticate.
  *
@@ -793,8 +797,8 @@ export async function revokeDeviceKey(token, deviceId, baseUrl = '', transparenc
   }
   const res = await fetchWithAuth(token, `/api/auth/devices/${encodeURIComponent(deviceId)}`, opts, baseUrl);
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `revokeDeviceKey ${res.status}`);
+    const data = await readJsonResponseOrNull(res, 'revokeDeviceKey');
+    throw new Error(getApiErrorMessage(data, `revokeDeviceKey ${res.status}`));
   }
 }
 
