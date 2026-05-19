@@ -108,6 +108,28 @@ describe('QR payload helpers', () => {
   it('throws for an empty QR payload string', () => {
     expect(() => decodeQRPayload('')).toThrow();
   });
+
+  it('rejects QR payloads with partial key commitments', () => {
+    const encoded = btoa(JSON.stringify({
+      r: 'request-1',
+      s: 'secret-1',
+      e: '2026-05-19T00:00:00Z',
+      d: 'device-pub',
+    }));
+
+    expect(() => decodeQRPayload(encoded)).toThrow(/invalid shape/i);
+  });
+
+  it('rejects QR payloads with unexpected fields', () => {
+    const encoded = btoa(JSON.stringify({
+      r: 'request-1',
+      s: 'secret-1',
+      e: '2026-05-19T00:00:00Z',
+      x: 'unexpected',
+    }));
+
+    expect(() => decodeQRPayload(encoded)).toThrow(/invalid shape/i);
+  });
 });
 
 describe('blind relay encryption', () => {
@@ -181,6 +203,75 @@ describe('transfer bundle serialisation', () => {
     const decoded = await decodeTransferBundle(legacyBytes);
     expect(decoded.userId).toBe('user-legacy');
     expect(decoded.rootPrivateKey).toEqual(identity.privateKey);
+  });
+
+  it('rejects transfer bundles whose root key fields have the wrong length', async () => {
+    const identity = await createDeviceIdentity();
+    const badBytes = new TextEncoder().encode(JSON.stringify({
+      v: 3,
+      userId: 'user-1',
+      rootPrivateKey: btoa('short'),
+      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
+      archive: null,
+    }));
+
+    await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
+      code: 'invalid_device_link_payload',
+      message: expect.stringContaining('rootPrivateKey has'),
+    });
+  });
+
+  it('rejects transfer bundles with malformed archive descriptors', async () => {
+    const identity = await createDeviceIdentity();
+    const badBytes = new TextEncoder().encode(JSON.stringify({
+      v: 3,
+      userId: 'user-1',
+      rootPrivateKey: btoa(String.fromCharCode(...identity.privateKey)),
+      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
+      archive: {
+        id: 'arch-1',
+        downloadToken: 'dtok',
+        totalChunks: 0,
+        totalBytes: 8200,
+        chunkSize: 4096,
+        manifestHash: 'bWFuaWZlc3RoYXNo',
+        archiveSha256: 'YXJjaGl2ZXNoYTI1Ng==',
+        ephPub: 'ZXBocHViYnl0ZXM=',
+        nonceBase: 'bm9uY2ViYXNl',
+        transcriptBlobOmitted: false,
+      },
+    }));
+
+    await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
+      code: 'invalid_device_link_payload',
+      message: expect.stringContaining('invalid shape'),
+    });
+  });
+
+  it('rejects transfer bundles with unexpected top-level fields', async () => {
+    const identity = await createDeviceIdentity();
+    const badBytes = new TextEncoder().encode(JSON.stringify({
+      v: 3,
+      userId: 'user-1',
+      rootPrivateKey: btoa(String.fromCharCode(...identity.privateKey)),
+      rootPublicKey: btoa(String.fromCharCode(...identity.publicKey)),
+      archive: null,
+      unexpected: 'field',
+    }));
+
+    await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
+      code: 'invalid_device_link_payload',
+      message: expect.stringContaining('invalid shape'),
+    });
+  });
+
+  it('rejects non-JSON transfer bundle bytes with a boundary error', async () => {
+    const badBytes = new TextEncoder().encode('<!DOCTYPE html>');
+
+    await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
+      code: 'invalid_device_link_payload',
+      message: expect.stringContaining('invalid JSON'),
+    });
   });
 });
 
