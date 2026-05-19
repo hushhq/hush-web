@@ -2227,6 +2227,39 @@ describe('useAuth - performRecovery', () => {
     expect(queryClient.getQueryState(deviceKey)?.isInvalidated).toBe(true);
   });
 
+  it('scopes recovery bulk revoke to the recovery baseUrl', async () => {
+    const recoveryBaseUrl = 'https://chat.example.com';
+    // Pin the local device id so the filter that excludes the current
+    // device leaves exactly the foreign row in the revoke set.
+    localStorage.setItem('hush_device_id', 'device-current');
+    vi.mocked(apiMod.listDeviceKeys).mockClear();
+    vi.mocked(apiMod.revokeDeviceKey).mockClear();
+    vi.mocked(apiMod.listDeviceKeys).mockResolvedValueOnce([
+      { id: 'k-1', deviceId: 'device-current', certifiedAt: '2026-01-01T00:00:00Z' },
+      { id: 'k-2', deviceId: 'device-other', certifiedAt: '2026-01-01T00:00:00Z' },
+    ]);
+    vi.mocked(apiMod.revokeDeviceKey).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performRecovery(
+        'word '.repeat(12).trim(),
+        true,
+        recoveryBaseUrl,
+      );
+    });
+
+    const listCall = vi.mocked(apiMod.listDeviceKeys).mock.calls.at(-1);
+    expect(listCall?.[1]).toBe(recoveryBaseUrl);
+
+    const revokeCalls = vi.mocked(apiMod.revokeDeviceKey).mock.calls;
+    expect(revokeCalls).toHaveLength(1);
+    expect(revokeCalls[0][1]).toBe('device-other');
+    expect(revokeCalls[0][2]).toBe(recoveryBaseUrl);
+  });
+
   it('does NOT set hush_post_recovery_wizard flag when recovery fails', async () => {
     vi.mocked(apiMod.verifyChallenge).mockRejectedValueOnce(new Error('unauthorized'));
 

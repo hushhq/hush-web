@@ -1526,11 +1526,16 @@ export function useAuth() {
         const jwt = getLocalToken();
         const deviceId = getDeviceId();
         const { listDeviceKeys, revokeDeviceKey } = await import('../lib/api');
-        const devices = await listDeviceKeys(jwt);
+        // Scope the device-list read and bulk revoke to the recovery
+        // instance. Without baseUrl, the API helpers fall back to the
+        // current origin which may not be the home instance the token
+        // was minted against — the cache invalidation below would then
+        // mark the wrong origin's cache stale.
+        const devices = await listDeviceKeys(jwt, baseUrl);
         await Promise.allSettled(
           devices
             .filter(d => d.deviceId !== deviceId)
-            .map(d => revokeDeviceKey(jwt, d.deviceId)),
+            .map(d => revokeDeviceKey(jwt, d.deviceId, baseUrl)),
         );
         // Mark cached device-key queries stale so any settings panel mounted
         // after recovery re-fetches the post-revoke list instead of reading
