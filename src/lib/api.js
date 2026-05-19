@@ -132,6 +132,12 @@ function getApiErrorMessage(data, fallback) {
   return fallback;
 }
 
+function createApiHttpError(data, fallback, status) {
+  const err = new Error(getApiErrorMessage(data, fallback));
+  err.status = status;
+  return err;
+}
+
 function createFetchSignal(timeoutMs, callerSignal) {
   if (typeof AbortController === 'undefined') {
     return {
@@ -550,9 +556,7 @@ export async function requestChallenge(publicKeyBase64, baseUrl = '') {
     ? await readJsonResponse(res, 'requestChallenge')
     : await readJsonResponseOrNull(res, 'requestChallenge');
   if (!res.ok) {
-    const err = new Error(getApiErrorMessage(data, `requestChallenge ${res.status}`));
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `requestChallenge ${res.status}`, res.status);
   }
   return parseAuthChallengeResponse(data);
 }
@@ -605,9 +609,7 @@ export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, d
     ? await readJsonResponse(res, 'verifyChallenge')
     : await readJsonResponseOrNull(res, 'verifyChallenge');
   if (!res.ok) {
-    const err = new Error(getApiErrorMessage(data, `verifyChallenge ${res.status}`));
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `verifyChallenge ${res.status}`, res.status);
   }
   return parseAuthResponse(data, 'verifyChallenge');
 }
@@ -658,9 +660,7 @@ export async function federatedVerify(
     ? await readJsonResponse(res, 'federatedVerify')
     : await readJsonResponseOrNull(res, 'federatedVerify');
   if (!res.ok) {
-    const err = new Error(getApiErrorMessage(data, `federatedVerify ${res.status}`));
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `federatedVerify ${res.status}`, res.status);
   }
   return parseFederatedAuthResponse(data);
 }
@@ -685,7 +685,7 @@ export async function requestGuestSession(baseUrl = '') {
     ? await readJsonResponse(res, 'requestGuestSession')
     : await readJsonResponseOrNull(res, 'requestGuestSession');
   if (!res.ok) {
-    throw new Error(getApiErrorMessage(data, `requestGuestSession ${res.status}`));
+    throw createApiHttpError(data, `requestGuestSession ${res.status}`, res.status);
   }
   return parseGuestSessionResponse(data);
 }
@@ -764,9 +764,7 @@ export async function registerWithPublicKey(
     ? await readJsonResponse(res, 'registerWithPublicKey')
     : await readJsonResponseOrNull(res, 'registerWithPublicKey');
   if (!res.ok) {
-    const err = new Error(getApiErrorMessage(data, `registerWithPublicKey ${res.status}`));
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `registerWithPublicKey ${res.status}`, res.status);
   }
   return parseAuthResponse(data, 'registerWithPublicKey');
 }
@@ -783,7 +781,7 @@ export async function listDeviceKeys(token, baseUrl = '') {
     ? await readJsonResponse(res, 'listDeviceKeys')
     : await readJsonResponseOrNull(res, 'listDeviceKeys');
   if (!res.ok) {
-    throw new Error(getApiErrorMessage(data, `listDeviceKeys ${res.status}`));
+    throw createApiHttpError(data, `listDeviceKeys ${res.status}`, res.status);
   }
   return parseDeviceKeys(data);
 }
@@ -814,7 +812,7 @@ export async function revokeDeviceKey(token, deviceId, baseUrl = '', transparenc
   const res = await fetchWithAuth(token, `/api/auth/devices/${encodeURIComponent(deviceId)}`, opts, baseUrl);
   if (!res.ok) {
     const data = await readJsonResponseOrNull(res, 'revokeDeviceKey');
-    throw new Error(getApiErrorMessage(data, `revokeDeviceKey ${res.status}`));
+    throw createApiHttpError(data, `revokeDeviceKey ${res.status}`, res.status);
   }
 }
 
@@ -884,7 +882,7 @@ export async function certifyNewDevice(
   }, baseUrl);
   if (!res.ok) {
     const data = await readJsonResponseOrNull(res, 'certifyNewDevice');
-    throw new Error(getApiErrorMessage(data, `certifyNewDevice ${res.status}`));
+    throw createApiHttpError(data, `certifyNewDevice ${res.status}`, res.status);
   }
 }
 

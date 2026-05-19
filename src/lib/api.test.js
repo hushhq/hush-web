@@ -835,6 +835,21 @@ describe('runtime response schemas', () => {
     });
   });
 
+  it('requestGuestSession attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'guest disabled' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestGuestSession()).rejects.toMatchObject({
+      message: 'guest disabled',
+      status: 403,
+    });
+  });
+
   it('federatedVerify rejects malformed success responses', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -860,7 +875,10 @@ describe('runtime response schemas', () => {
 
     await expect(
       certifyNewDevice('jwt', 'new-pub', 'cert', 'device-new', 'device-old'),
-    ).rejects.toThrow('certificate rejected');
+    ).rejects.toMatchObject({
+      message: 'certificate rejected',
+      status: 400,
+    });
   });
 
   it('certifyNewDevice keeps HTTP status as source of truth for HTML error responses', async () => {
@@ -874,7 +892,10 @@ describe('runtime response schemas', () => {
 
     await expect(
       certifyNewDevice('jwt', 'new-pub', 'cert', 'device-new', 'device-old'),
-    ).rejects.toThrow('certifyNewDevice 502');
+    ).rejects.toMatchObject({
+      message: 'certifyNewDevice 502',
+      status: 502,
+    });
   });
 
   it('listDeviceKeys rejects non-array success responses', async () => {
@@ -913,7 +934,10 @@ describe('runtime response schemas', () => {
     );
     vi.stubGlobal('fetch', mockFetch);
 
-    await expect(listDeviceKeys('jwt')).rejects.toThrow('listDeviceKeys 502');
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      message: 'listDeviceKeys 502',
+      status: 502,
+    });
   });
 
   it('revokeDeviceKey preserves structured error messages', async () => {
@@ -925,9 +949,10 @@ describe('runtime response schemas', () => {
     );
     vi.stubGlobal('fetch', mockFetch);
 
-    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toThrow(
-      'device already revoked',
-    );
+    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toMatchObject({
+      message: 'device already revoked',
+      status: 409,
+    });
   });
 
   it('revokeDeviceKey keeps HTTP status as source of truth for HTML error responses', async () => {
@@ -939,9 +964,10 @@ describe('runtime response schemas', () => {
     );
     vi.stubGlobal('fetch', mockFetch);
 
-    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toThrow(
-      'revokeDeviceKey 503',
-    );
+    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toMatchObject({
+      message: 'revokeDeviceKey 503',
+      status: 503,
+    });
   });
 
   it('createDeviceLinkRequest rejects malformed success responses', async () => {
