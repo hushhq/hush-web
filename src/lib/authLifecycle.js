@@ -15,6 +15,14 @@ export const AUTH_LIFECYCLE_ACTIONS = Object.freeze({
   WIPE_LOCAL_VAULT_AFTER_PIN_FAILURES: 'wipe_local_vault_after_pin_failures',
 });
 
+export const LOCAL_AUTH_RESET_REASONS = Object.freeze({
+  BROADCAST_LOGOUT: 'broadcast_logout',
+  DEVICE_REVOKED: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+  LOGOUT: 'logout',
+});
+
+const LOCAL_AUTH_RESET_REASON_SET = new Set(Object.values(LOCAL_AUTH_RESET_REASONS));
+
 export const VAULT_STATES = Object.freeze({
   NONE: 'none',
   LOCKED: 'locked',
@@ -179,6 +187,7 @@ export function planLocalVaultLock() {
  *   nextHasLocalVault: boolean|null,
  *   remainingAttempts: number,
  *   errorCode: string,
+ *   errorMessage: string,
  * }}
  */
 export function planPinFailure({ chargedCount, maxFailures }) {
@@ -199,6 +208,7 @@ export function planPinFailure({ chargedCount, maxFailures }) {
       nextHasLocalVault: false,
       remainingAttempts,
       errorCode: 'VAULT_WIPED',
+      errorMessage: 'vault wiped after too many failed PIN attempts',
     };
   }
 
@@ -210,6 +220,7 @@ export function planPinFailure({ chargedCount, maxFailures }) {
     nextHasLocalVault: null,
     remainingAttempts,
     errorCode: 'WRONG_PIN',
+    errorMessage: `incorrect PIN (${remainingAttempts} attempts remaining)`,
   };
 }
 
@@ -229,9 +240,20 @@ export function planPinFailure({ chargedCount, maxFailures }) {
  *   nextIsGuest: boolean,
  *   nextGuestExpiresAt: null,
  *   nextError: null,
+ *   nextLoading: boolean|null,
+ *   shouldClearAuthQueries: boolean,
+ *   shouldClearGuestTimers: boolean,
+ *   shouldClearPinSetupStorage: boolean,
+ *   shouldClearSession: boolean,
+ *   shouldClearTranscriptCache: boolean,
+ *   shouldClearVaultTimeoutEffects: boolean,
  * }}
  */
-export function planLocalAuthReset(reason = 'logout') {
+export function planLocalAuthReset(reason = LOCAL_AUTH_RESET_REASONS.LOGOUT) {
+  if (!LOCAL_AUTH_RESET_REASON_SET.has(reason)) {
+    throw new TypeError(`unknown local auth reset reason: ${reason}`);
+  }
+
   return {
     action: AUTH_LIFECYCLE_ACTIONS.RESET_LOCAL_AUTH_STATE,
     reason,
@@ -244,5 +266,12 @@ export function planLocalAuthReset(reason = 'logout') {
     nextIsGuest: false,
     nextGuestExpiresAt: null,
     nextError: null,
+    nextLoading: reason === LOCAL_AUTH_RESET_REASONS.LOGOUT ? false : null,
+    shouldClearAuthQueries: true,
+    shouldClearGuestTimers: true,
+    shouldClearPinSetupStorage: true,
+    shouldClearSession: reason !== LOCAL_AUTH_RESET_REASONS.LOGOUT,
+    shouldClearTranscriptCache: reason !== LOCAL_AUTH_RESET_REASONS.BROADCAST_LOGOUT,
+    shouldClearVaultTimeoutEffects: true,
   };
 }

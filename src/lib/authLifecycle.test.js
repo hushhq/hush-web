@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTH_INVALIDATION_REASONS,
   AUTH_LIFECYCLE_ACTIONS,
+  LOCAL_AUTH_RESET_REASONS,
   VAULT_STATES,
   normalizeAuthInvalidationReason,
   planInvalidatedSession,
@@ -147,6 +148,7 @@ describe('authLifecycle', () => {
       nextHasLocalVault: null,
       remainingAttempts: 7,
       errorCode: 'WRONG_PIN',
+      errorMessage: 'incorrect PIN (7 attempts remaining)',
     });
   });
 
@@ -159,6 +161,7 @@ describe('authLifecycle', () => {
       nextHasLocalVault: false,
       remainingAttempts: 0,
       errorCode: 'VAULT_WIPED',
+      errorMessage: 'vault wiped after too many failed PIN attempts',
     });
   });
 
@@ -168,9 +171,9 @@ describe('authLifecycle', () => {
   });
 
   it('plans a full local auth reset', () => {
-    expect(planLocalAuthReset('logout')).toEqual({
+    expect(planLocalAuthReset(LOCAL_AUTH_RESET_REASONS.LOGOUT)).toEqual({
       action: AUTH_LIFECYCLE_ACTIONS.RESET_LOCAL_AUTH_STATE,
-      reason: 'logout',
+      reason: LOCAL_AUTH_RESET_REASONS.LOGOUT,
       shouldClearIdentity: true,
       nextToken: null,
       nextUser: null,
@@ -180,6 +183,41 @@ describe('authLifecycle', () => {
       nextIsGuest: false,
       nextGuestExpiresAt: null,
       nextError: null,
+      nextLoading: false,
+      shouldClearAuthQueries: true,
+      shouldClearGuestTimers: true,
+      shouldClearPinSetupStorage: true,
+      shouldClearSession: false,
+      shouldClearTranscriptCache: true,
+      shouldClearVaultTimeoutEffects: true,
     });
+  });
+
+  it('plans broadcast logout without destructive local transcript cleanup', () => {
+    expect(planLocalAuthReset(LOCAL_AUTH_RESET_REASONS.BROADCAST_LOGOUT)).toMatchObject({
+      reason: LOCAL_AUTH_RESET_REASONS.BROADCAST_LOGOUT,
+      nextLoading: null,
+      shouldClearAuthQueries: true,
+      shouldClearGuestTimers: true,
+      shouldClearSession: true,
+      shouldClearTranscriptCache: false,
+      shouldClearVaultTimeoutEffects: true,
+    });
+  });
+
+  it('plans revoked-device reset with destructive local cleanup', () => {
+    expect(planLocalAuthReset(LOCAL_AUTH_RESET_REASONS.DEVICE_REVOKED)).toMatchObject({
+      reason: LOCAL_AUTH_RESET_REASONS.DEVICE_REVOKED,
+      nextLoading: null,
+      shouldClearAuthQueries: true,
+      shouldClearGuestTimers: true,
+      shouldClearSession: true,
+      shouldClearTranscriptCache: true,
+      shouldClearVaultTimeoutEffects: true,
+    });
+  });
+
+  it('rejects unknown local auth reset reasons', () => {
+    expect(() => planLocalAuthReset('logoff')).toThrow(TypeError);
   });
 });

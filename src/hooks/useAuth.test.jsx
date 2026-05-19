@@ -198,6 +198,19 @@ function expectVaultUnlockBoundaryUntouched() {
   expect(apiMod.verifyChallenge).not.toHaveBeenCalled();
 }
 
+function expectLocalAuthResetState(authState) {
+  expect(authState.token).toBeNull();
+  expect(authState.user).toBeNull();
+  expect(authState.isAuthenticated).toBe(false);
+  expect(authState.vaultState).toBe('none');
+  expect(authState.hasVault).toBe(false);
+  expect(authState.needsPinSetup).toBe(false);
+  expect(authState.isGuest).toBe(false);
+  expect(authState.guestExpiresAt).toBeNull();
+  expect(authState.error).toBeNull();
+  expect(authState.loading).toBe(false);
+}
+
 class MockBroadcastChannel {
   static instances = [];
 
@@ -1112,10 +1125,7 @@ describe('useAuth - performLogout', () => {
       await result.current.performLogout();
     });
 
-    expect(result.current.isAuthenticated).toBe(false);
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.token).toBeNull();
-    expect(result.current.user).toBeNull();
+    expectLocalAuthResetState(result.current);
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
     expect(localStorage.getItem('test_key')).toBeNull();
     expect(sessionStorage.getItem('test_key')).toBeNull();
@@ -1148,6 +1158,58 @@ describe('useAuth - performLogout', () => {
 
       expect(result.current.token).toBeNull();
       expect(result.current.user).toBeNull();
+      expectAuthOwnedQueryDataCleared();
+    } finally {
+      globalThis.BroadcastChannel = originalBroadcastChannel;
+      MockBroadcastChannel.instances = [];
+    }
+  });
+
+  it('fully resets guest and stale error state when another tab broadcasts logout', async () => {
+    const originalBroadcastChannel = globalThis.BroadcastChannel;
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      const expiresAtMs = Date.now() + 60 * 60 * 1000;
+      const guestToken = buildFakeJwt({
+        sub: 'guest_abc123',
+        sid: 'sess-guest-1',
+        is_guest: true,
+        exp: Math.floor(expiresAtMs / 1000),
+      });
+      vi.mocked(apiMod.requestGuestSession).mockResolvedValue({
+        token: guestToken,
+        guestId: 'guest_abc123',
+        expiresAt: new Date(expiresAtMs).toISOString(),
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.performGuestAuth();
+      });
+      expect(result.current.isGuest).toBe(true);
+      expect(result.current.guestExpiresAt).not.toBeNull();
+      expect(sessionStorage.getItem(JWT_KEY)).toBe(guestToken);
+
+      vi.mocked(apiMod.requestGuestSession).mockRejectedValueOnce(new Error('guest retry failed'));
+      await act(async () => {
+        try { await result.current.performGuestAuth(); } catch { /* expected */ }
+      });
+      expect(result.current.error).toBeInstanceOf(Error);
+
+      seedAuthOwnedQueryData();
+
+      await act(async () => {
+        const sender = new BroadcastChannel('hush_auth');
+        sender.postMessage({ type: 'hush_logout' });
+        sender.close();
+      });
+
+      expectLocalAuthResetState(result.current);
+      expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
       expectAuthOwnedQueryDataCleared();
     } finally {
       globalThis.BroadcastChannel = originalBroadcastChannel;
@@ -2229,15 +2291,11 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     });
 
     // Server session is gone:
-    expect(result.current.token).toBeNull();
-    expect(result.current.user).toBeNull();
-    expect(result.current.isAuthenticated).toBe(false);
+    expectLocalAuthResetState(result.current);
     // Device revoke is intentionally destructive. Keeping the marker
     // would let this browser return to the PIN screen and mint a new
     // session from a revoked local vault.
     expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.hasVault).toBe(false);
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
     expectAuthOwnedQueryDataCleared();
@@ -2281,9 +2339,6 @@ describe('useAuth - forced logout on revoked-device signal', () => {
       }));
     });
 
-    expect(result.current.token).toBeNull();
-    expect(result.current.user).toBeNull();
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.hasVault).toBe(false);
+    expectLocalAuthResetState(result.current);
   });
 });
