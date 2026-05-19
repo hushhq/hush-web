@@ -789,6 +789,21 @@ describe('runtime response schemas', () => {
     });
   });
 
+  it('requestChallenge attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'challenge disabled' }), {
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestChallenge('public-key')).rejects.toMatchObject({
+      message: 'challenge disabled',
+      status: 429,
+    });
+  });
+
   it('verifyChallenge rejects HTML success responses at the API boundary', async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response('<!DOCTYPE html><title>not found</title>', {
@@ -806,6 +821,23 @@ describe('runtime response schemas', () => {
     });
   });
 
+  it('verifyChallenge attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'challenge expired' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyChallenge('pk', 'deadbeef', 'sigb64', 'dev-1', 'https://chat.example.com'),
+    ).rejects.toMatchObject({
+      message: 'challenge expired',
+      status: 401,
+    });
+  });
+
   it('registerWithPublicKey rejects HTML success responses at the API boundary', async () => {
     const mockFetch = vi.fn().mockResolvedValue(
       new Response('<!DOCTYPE html><title>not found</title>', {
@@ -820,6 +852,23 @@ describe('runtime response schemas', () => {
     ).rejects.toMatchObject({
       code: 'invalid_json_response',
       operation: 'registerWithPublicKey',
+    });
+  });
+
+  it('registerWithPublicKey attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'username taken' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      registerWithPublicKey('alice', 'Alice', 'pub-key', 'device-1'),
+    ).rejects.toMatchObject({
+      message: 'username taken',
+      status: 409,
     });
   });
 
@@ -861,6 +910,23 @@ describe('runtime response schemas', () => {
       federatedVerify('pk', 'nonce', 'sig', 'https://home.example.com', 'alice', 'Alice'),
     ).rejects.toMatchObject({
       code: 'invalid_response',
+    });
+  });
+
+  it('federatedVerify attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'federation disabled' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      federatedVerify('pk', 'nonce', 'sig', 'https://home.example.com', 'alice', 'Alice'),
+    ).rejects.toMatchObject({
+      message: 'federation disabled',
+      status: 403,
     });
   });
 
@@ -937,6 +1003,21 @@ describe('runtime response schemas', () => {
     await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
       message: 'listDeviceKeys 502',
       status: 502,
+    });
+  });
+
+  it('listDeviceKeys preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'devices forbidden' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      message: 'devices forbidden',
+      status: 403,
     });
   });
 
