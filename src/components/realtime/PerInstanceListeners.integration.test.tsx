@@ -18,6 +18,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 
 vi.mock("@/lib/api", () => ({
   getGuildChannels: vi.fn().mockResolvedValue([
@@ -93,6 +95,19 @@ function makeWs(): FakeWs {
   }
 }
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
+}
+
 describe("PerInstanceListeners + PerServerListeners (inactive-server MLS)", () => {
   beforeEach(() => {
     processCommit.mockReset().mockResolvedValue(undefined)
@@ -131,6 +146,7 @@ describe("PerInstanceListeners + PerServerListeners (inactive-server MLS)", () =
           onSelfRemoved={vi.fn()}
         />
       </>,
+      { wrapper: createWrapper() },
     )
 
     // Step 1+2: background channel ids fetched and refcount-subscribed.

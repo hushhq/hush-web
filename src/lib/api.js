@@ -8,10 +8,17 @@ import { getActiveAuthInstanceUrlSync, getSelectedAuthInstanceUrlSync } from './
 import * as hushCrypto from './hushCrypto';
 import { getReadableDeviceLabel } from './deviceLabel';
 import {
+  parseAuthChallengeResponse,
   parseAuthResponse,
   parseDeviceKeys,
+  parseDeviceLinkResolvedClaim,
   parseDeviceLinkRequestResponse,
+  parseDeviceLinkResult,
+  parseFederatedAuthResponse,
+  parseGuestSessionResponse,
+  parseUsernameAvailabilityResponse,
 } from './apiSchemas';
+import { readJsonResponse, readJsonResponseOrNull } from './apiJson';
 import { uploadKeyPackagesAfterAuth as uploadKeyPackagesAfterAuthImpl } from './uploadKeyPackages';
 import { detectSessionInvalidation } from './sessionInvalidationDetector';
 import { CURRENT_MLS_CIPHERSUITE, assertHandshakeMLSCiphersuiteMatches } from './mlsCiphersuite';
@@ -116,6 +123,19 @@ function createNetworkError(operation, targetUrl, err) {
   }
   console.error(`[api] ${operation} failed`, { url: targetUrl, err });
   return nextError;
+}
+
+function getApiErrorMessage(data, fallback) {
+  if (data && typeof data.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+  return fallback;
+}
+
+function createApiHttpError(data, fallback, status) {
+  const err = new Error(getApiErrorMessage(data, fallback));
+  err.status = status;
+  return err;
 }
 
 function createFetchSignal(timeoutMs, callerSignal) {
@@ -532,13 +552,13 @@ export async function requestChallenge(publicKeyBase64, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('request challenge', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'requestChallenge')
+    : await readJsonResponseOrNull(res, 'requestChallenge');
   if (!res.ok) {
-    const err = new Error(data.error || `requestChallenge ${res.status}`);
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `requestChallenge ${res.status}`, res.status);
   }
-  return data;
+  return parseAuthChallengeResponse(data);
 }
 
 /**
@@ -585,11 +605,11 @@ export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, d
   } catch (err) {
     throw createNetworkError('verify challenge', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'verifyChallenge')
+    : await readJsonResponseOrNull(res, 'verifyChallenge');
   if (!res.ok) {
-    const err = new Error(data.error || `verifyChallenge ${res.status}`);
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `verifyChallenge ${res.status}`, res.status);
   }
   return parseAuthResponse(data, 'verifyChallenge');
 }
@@ -636,13 +656,13 @@ export async function federatedVerify(
   } catch (err) {
     throw createNetworkError('federated-verify', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'federatedVerify')
+    : await readJsonResponseOrNull(res, 'federatedVerify');
   if (!res.ok) {
-    const err = new Error(data.error || `federatedVerify ${res.status}`);
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `federatedVerify ${res.status}`, res.status);
   }
-  return data;
+  return parseFederatedAuthResponse(data);
 }
 
 /**
@@ -661,9 +681,13 @@ export async function requestGuestSession(baseUrl = '') {
   } catch (err) {
     throw createNetworkError('request guest session', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `requestGuestSession ${res.status}`);
-  return data;
+  const data = res.ok
+    ? await readJsonResponse(res, 'requestGuestSession')
+    : await readJsonResponseOrNull(res, 'requestGuestSession');
+  if (!res.ok) {
+    throw createApiHttpError(data, `requestGuestSession ${res.status}`, res.status);
+  }
+  return parseGuestSessionResponse(data);
 }
 
 /**
@@ -685,8 +709,8 @@ export async function checkUsernameAvailable(username, baseUrl = '', signal) {
     cleanup();
   }
   if (!res.ok) return false;
-  const data = await res.json();
-  return data.available === true;
+  const data = await readJsonResponse(res, 'checkUsernameAvailable');
+  return parseUsernameAvailabilityResponse(data).available;
 }
 
 /**
@@ -736,11 +760,11 @@ export async function registerWithPublicKey(
   } catch (err) {
     throw createNetworkError('register', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'registerWithPublicKey')
+    : await readJsonResponseOrNull(res, 'registerWithPublicKey');
   if (!res.ok) {
-    const err = new Error(data.error || `registerWithPublicKey ${res.status}`);
-    err.status = res.status;
-    throw err;
+    throw createApiHttpError(data, `registerWithPublicKey ${res.status}`, res.status);
   }
   return parseAuthResponse(data, 'registerWithPublicKey');
 }
@@ -753,18 +777,15 @@ export async function registerWithPublicKey(
  */
 export async function listDeviceKeys(token, baseUrl = '') {
   const res = await fetchWithAuth(token, '/api/auth/devices', {}, baseUrl);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `listDeviceKeys ${res.status}`);
+  const data = res.ok
+    ? await readJsonResponse(res, 'listDeviceKeys')
+    : await readJsonResponseOrNull(res, 'listDeviceKeys');
+  if (!res.ok) {
+    throw createApiHttpError(data, `listDeviceKeys ${res.status}`, res.status);
+  }
   return parseDeviceKeys(data);
 }
 
-/**
- * Revoke a registered device key. The device can no longer authenticate.
- *
- * @param {string} token - JWT
- * @param {string} deviceId - Device ID to revoke.
- * @returns {Promise<void>}
- */
 /**
  * Revoke a registered device key. The device can no longer authenticate.
  *
@@ -790,8 +811,8 @@ export async function revokeDeviceKey(token, deviceId, baseUrl = '', transparenc
   }
   const res = await fetchWithAuth(token, `/api/auth/devices/${encodeURIComponent(deviceId)}`, opts, baseUrl);
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `revokeDeviceKey ${res.status}`);
+    const data = await readJsonResponseOrNull(res, 'revokeDeviceKey');
+    throw createApiHttpError(data, `revokeDeviceKey ${res.status}`, res.status);
   }
 }
 
@@ -860,8 +881,8 @@ export async function certifyNewDevice(
     body: JSON.stringify(body),
   }, baseUrl);
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `certifyNewDevice ${res.status}`);
+    const data = await readJsonResponseOrNull(res, 'certifyNewDevice');
+    throw createApiHttpError(data, `certifyNewDevice ${res.status}`, res.status);
   }
 }
 
@@ -889,7 +910,9 @@ export async function createDeviceLinkRequest(body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('create device link request', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'createDeviceLinkRequest')
+    : await readJsonResponseOrNull(res, 'createDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `createDeviceLinkRequest ${res.status}`);
   return parseDeviceLinkRequestResponse(data);
 }
@@ -914,9 +937,11 @@ export async function resolveDeviceLinkRequest(token, body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('resolve device link request', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'resolveDeviceLinkRequest')
+    : await readJsonResponseOrNull(res, 'resolveDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `resolveDeviceLinkRequest ${res.status}`);
-  return data;
+  return parseDeviceLinkResolvedClaim(data);
 }
 
 /**
@@ -942,7 +967,9 @@ export async function verifyDeviceLinkRequest(token, body, baseUrl = '') {
   if (res.status === 413) {
     throw new Error('Device link payload is too large for the server to accept.');
   }
-  const data = await res.json().catch(() => ({}));
+  const data = res.ok
+    ? await readJsonResponse(res, 'verifyDeviceLinkRequest', { allowEmpty: true }) ?? {}
+    : await readJsonResponseOrNull(res, 'verifyDeviceLinkRequest') ?? {};
   if (!res.ok) throw new Error(data.error || `verifyDeviceLinkRequest ${res.status}`);
 }
 
@@ -969,12 +996,12 @@ export async function consumeDeviceLinkResult(body, baseUrl = '') {
   } catch (err) {
     throw createNetworkError('consume device link result', targetUrl, err);
   }
-  const data = await res.json().catch(() => ({}));
   if (res.status === 202) {
     return { status: 'pending' };
   }
+  const data = await readJsonResponse(res, 'consumeDeviceLinkResult');
   if (!res.ok) throw new Error(data.error || `consumeDeviceLinkResult ${res.status}`);
-  return data;
+  return parseDeviceLinkResult(data);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -22,12 +22,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getDeviceId, getInstanceToken } from '../../hooks/useAuth';
-
-function resolveHomeInstanceToken(homeInstanceUrl, fallbackToken) {
-  if (homeInstanceUrl) return getInstanceToken(homeInstanceUrl);
-  return fallbackToken;
-}
+import { getDeviceId } from '../../hooks/useAuth';
+import { useHomeInstanceSession } from '../../hooks/useHomeInstanceSession';
 import { Button as ShadcnButton } from '../ui/button.tsx';
 import { Card } from '../ui/card.tsx';
 import { Alert, AlertDescription } from '../ui/alert.tsx';
@@ -120,8 +116,13 @@ export default function ApproveDeviceLinkFlow({
   const [isApproving, setIsApproving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token);
-  const isMissingHomeInstanceToken = !!homeInstanceUrl && !homeInstanceToken;
+  const {
+    token: homeInstanceToken,
+    isMissingExplicitHomeInstanceToken: isMissingHomeInstanceToken,
+  } = useHomeInstanceSession({
+    homeInstanceUrl,
+    fallbackToken: token,
+  });
   const hasUnlockedIdentity = hasSession
     && isVaultUnlocked
     && !!identityKeyRef.current?.privateKey

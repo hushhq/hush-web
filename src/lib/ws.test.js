@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DIAGNOSTIC_EVENT_NAME } from './clientDiagnostics';
 import { createWsClient } from './ws';
 
 // ── Shared mock factory ───────────────────────────────────────────────────────
@@ -100,6 +101,89 @@ describe('createWsClient - initial connection', () => {
       ws.onmessage({ data: JSON.stringify({ type: 'message.new', id: 'm1', channel_id: 'ch1' }) });
       expect(onMessageNew).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'message.new', id: 'm1', channel_id: 'ch1' }),
+      );
+      resolve();
+    }, 10);
+  }));
+
+  it('drops malformed known frames and records a diagnostic', () => new Promise((resolve) => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    const getToken = vi.fn(() => 't');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const onMessageNew = vi.fn();
+    const onDiagnostic = vi.fn();
+    globalThis.addEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+    client.on('message.new', onMessageNew);
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onmessage({ data: JSON.stringify({ type: 'message.new', channel_id: 'ch1' }) });
+      expect(onMessageNew).not.toHaveBeenCalled();
+      expect(onDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({
+            category: 'ws',
+            event: 'invalid-frame',
+            severity: 'warn',
+            details: expect.objectContaining({
+              type: 'message.new',
+              reason: 'schema',
+              preview: expect.stringContaining('message.new'),
+            }),
+          }),
+        }),
+      );
+      globalThis.removeEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+      resolve();
+    }, 10);
+  }));
+
+  it('records a diagnostic for invalid JSON frames', () => new Promise((resolve) => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    const getToken = vi.fn(() => 't');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const onDiagnostic = vi.fn();
+    globalThis.addEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onmessage({ data: 'not-json token=secret-value' });
+      expect(onDiagnostic).toHaveBeenCalledOnce();
+      expect(onDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({
+            category: 'ws',
+            event: 'invalid-json-frame',
+            severity: 'warn',
+            details: expect.objectContaining({
+              preview: 'not-json token=[redacted]',
+            }),
+          }),
+        }),
+      );
+      globalThis.removeEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+      resolve();
+    }, 10);
+  }));
+
+  it('passes through unknown typed frames for forward compatibility', () => new Promise((resolve) => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    const getToken = vi.fn(() => 't');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const onFutureEvent = vi.fn();
+    client.on('future.event', onFutureEvent);
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onmessage({ data: JSON.stringify({ type: 'future.event', value: 1 }) });
+      expect(onFutureEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'future.event', value: 1 }),
       );
       resolve();
     }, 10);
@@ -503,6 +587,53 @@ describe('createWsClient - device revoke close handling', () => {
 
   afterEach(() => {
     delete global.WebSocket;
+  });
+
+  it('emits a redacted ws auth-invalid-close diagnostic on 1008/device revoked close', () => {
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+
+    const listener = vi.fn();
+    globalThis.addEventListener('hush:diagnostic', listener);
+
+    try {
+      client.connect();
+      MockWs.captured.onclose({ code: 1008, reason: 'device revoked' });
+
+      const diag = listener.mock.calls
+        .map((c) => c[0].detail)
+        .find((d) => d.event === 'auth-invalid-close');
+      expect(diag).toBeTruthy();
+      expect(diag).toMatchObject({
+        category: 'ws',
+        event: 'auth-invalid-close',
+        severity: 'warn',
+        details: {
+          code: 1008,
+          reason: 'device revoked',
+          authReason: 'device_revoked',
+        },
+      });
+      // No raw frame payload, token, or socket internals in the diagnostic.
+      expect(diag.details).not.toHaveProperty('token');
+      expect(diag.details).not.toHaveProperty('payload');
+      expect(diag.details).not.toHaveProperty('body');
+    } finally {
+      globalThis.removeEventListener('hush:diagnostic', listener);
+    }
+  });
+
+  it('still reconnects on a non-revoke close after a revoke close on a sibling client', () => {
+    // Sanity: the new diagnostic must not change the reconnect gating.
+    // A fresh client with a 1006 close still schedules a reconnect.
+    vi.useFakeTimers();
+    const getToken = vi.fn(() => 'tok');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    client.connect();
+    MockWs.captured.onclose({ code: 1006, reason: '' });
+    vi.advanceTimersByTime(60_000);
+    expect(MockWs.mock.calls.length).toBeGreaterThan(1);
+    vi.useRealTimers();
   });
 
   it('emits auth_invalid + window event and does NOT reconnect on 1008/device revoked close', () => {

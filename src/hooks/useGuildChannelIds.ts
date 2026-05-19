@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import { getGuildChannels } from "@/lib/api"
 
@@ -11,6 +12,7 @@ interface UseGuildChannelIdsArgs {
   serverId: string | null
   token: string | null
   baseUrl: string
+  currentUserId: string | null
 }
 
 interface UseGuildChannelIdsResult {
@@ -25,13 +27,35 @@ interface UseGuildChannelIdsResult {
 // the next remount or input change re-arms the cycle.
 const BACKOFF_SCHEDULE_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000]
 
+export function guildChannelIdsQueryKey({
+  serverId,
+  baseUrl,
+  currentUserId,
+}: Pick<UseGuildChannelIdsArgs, "serverId" | "baseUrl" | "currentUserId">) {
+  return [
+    "servers",
+    baseUrl || "local",
+    serverId ?? "none",
+    "text-channel-ids",
+    currentUserId ?? "anonymous",
+  ] as const
+}
+
+function extractTextChannelIds(data: unknown): string[] {
+  const payload = data as RawChannel[] | { items?: RawChannel[] }
+  const list = Array.isArray(payload) ? payload : payload.items ?? []
+  return list
+    .filter((channel) => channel.type === "text" && channel.id)
+    .map((channel) => channel.id as string)
+}
+
 /**
  * Lightweight per-guild channel-id resolver. The full
  * `useChannelsForServer` hook fetches + maps + diffs ordering and
  * is overkill when all we need is the id list to drive
  * cross-server MLS subscriptions or self-removal MLS cleanup.
  *
- * Fetches once per `(serverId, token, baseUrl)` triplet via
+ * Fetches once per `(serverId, currentUserId, token, baseUrl)` tuple via
  * `api.getGuildChannels`. A transient fetch failure (network
  * blip, 5xx) is retried with exponential backoff so a background
  * guild's MLS room subscriptions are not silently absent for the
@@ -43,58 +67,24 @@ export function useGuildChannelIds({
   serverId,
   token,
   baseUrl,
+  currentUserId,
 }: UseGuildChannelIdsArgs): UseGuildChannelIdsResult {
-  const [textChannelIds, setTextChannelIds] = React.useState<string[]>([])
-  const [loaded, setLoaded] = React.useState(false)
+  const isQueryEnabled = Boolean(serverId && token)
+  const query = useQuery<string[], Error>({
+    queryKey: guildChannelIdsQueryKey({ serverId, baseUrl, currentUserId }),
+    enabled: isQueryEnabled,
+    queryFn: async () => {
+      if (!serverId || !token) return []
+      return extractTextChannelIds(await getGuildChannels(token, serverId, baseUrl))
+    },
+    retry: BACKOFF_SCHEDULE_MS.length,
+    retryDelay: (failureCount) =>
+      BACKOFF_SCHEDULE_MS[failureCount] ??
+      BACKOFF_SCHEDULE_MS[BACKOFF_SCHEDULE_MS.length - 1],
+  })
 
-  React.useEffect(() => {
-    if (!serverId || !token) {
-      setTextChannelIds([])
-      setLoaded(false)
-      return
-    }
-    let cancelled = false
-    let attempt = 0
-    let timer: ReturnType<typeof setTimeout> | null = null
-    setLoaded(false)
-
-    const run = async () => {
-      try {
-        const data = (await getGuildChannels(token, serverId, baseUrl)) as
-          | RawChannel[]
-          | { items?: RawChannel[] }
-        const list: RawChannel[] = Array.isArray(data) ? data : data.items ?? []
-        if (cancelled) return
-        const ids = list
-          .filter((c) => c.type === "text" && c.id)
-          .map((c) => c.id as string)
-        setTextChannelIds(ids)
-        setLoaded(true)
-      } catch (err) {
-        if (cancelled) return
-        console.warn("[useGuildChannelIds] fetch failed", {
-          serverId,
-          attempt,
-          err: err instanceof Error ? err.message : err,
-        })
-        setTextChannelIds([])
-        setLoaded(false)
-        if (attempt >= BACKOFF_SCHEDULE_MS.length) return
-        const delay = BACKOFF_SCHEDULE_MS[attempt]
-        attempt += 1
-        timer = setTimeout(() => {
-          if (cancelled) return
-          void run()
-        }, delay)
-      }
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-  }, [serverId, token, baseUrl])
-
-  return { textChannelIds, loaded }
+  return {
+    textChannelIds: isQueryEnabled ? query.data ?? [] : [],
+    loaded: isQueryEnabled && query.isSuccess,
+  }
 }

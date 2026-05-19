@@ -20,6 +20,7 @@ import {
   sealIdentityIntoSession,
   markAlive as markVaultSessionAlive,
 } from '../lib/vaultSessionKey';
+import { queryClient } from '../lib/queryClient';
 
 // ── authInstanceStore mock (must be declared before module imports) ─────────────
 let _mockActiveInstanceUrl = '';
@@ -156,6 +157,8 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
+const SERVER_QUERY_KEY = ['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members'];
+const AUTH_QUERY_KEY = ['auth', 'devices', 'https://i.example.com'];
 
 function mockFetchOk(body) {
   return { ok: true, json: () => Promise.resolve(body) };
@@ -171,12 +174,72 @@ function buildFakeJwt(payload) {
   return `${header}.${body}.fake-signature`;
 }
 
+function seedAuthOwnedQueryData() {
+  queryClient.setQueryData(SERVER_QUERY_KEY, [{ id: 'member-1' }]);
+  queryClient.setQueryData(AUTH_QUERY_KEY, [{ id: 'device-1' }]);
+}
+
+function expectAuthOwnedQueryDataCleared() {
+  expect(queryClient.getQueryData(SERVER_QUERY_KEY)).toBeUndefined();
+  expect(queryClient.getQueryData(AUTH_QUERY_KEY)).toBeUndefined();
+}
+
+function clearVaultUnlockBoundaryMocks() {
+  vi.mocked(apiMod.requestChallenge).mockClear();
+  vi.mocked(apiMod.verifyChallenge).mockClear();
+  vi.mocked(vaultMod.openVaultStore).mockClear();
+  vi.mocked(vaultMod.loadEncryptedKey).mockClear();
+}
+
+function expectVaultUnlockBoundaryUntouched() {
+  expect(vaultMod.openVaultStore).not.toHaveBeenCalled();
+  expect(vaultMod.loadEncryptedKey).not.toHaveBeenCalled();
+  expect(apiMod.requestChallenge).not.toHaveBeenCalled();
+  expect(apiMod.verifyChallenge).not.toHaveBeenCalled();
+}
+
+function expectLocalAuthResetState(authState) {
+  expect(authState.token).toBeNull();
+  expect(authState.user).toBeNull();
+  expect(authState.isAuthenticated).toBe(false);
+  expect(authState.vaultState).toBe('none');
+  expect(authState.hasVault).toBe(false);
+  expect(authState.needsPinSetup).toBe(false);
+  expect(authState.isGuest).toBe(false);
+  expect(authState.guestExpiresAt).toBeNull();
+  expect(authState.error).toBeNull();
+  expect(authState.loading).toBe(false);
+}
+
+class MockBroadcastChannel {
+  static instances = [];
+
+  constructor(name) {
+    this.name = name;
+    this.onmessage = null;
+    this.isClosed = false;
+    MockBroadcastChannel.instances.push(this);
+  }
+
+  postMessage(data) {
+    for (const instance of MockBroadcastChannel.instances) {
+      if (instance === this || instance.isClosed || instance.name !== this.name) continue;
+      instance.onmessage?.({ data });
+    }
+  }
+
+  close() {
+    this.isClosed = true;
+  }
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   cleanup();
   sessionStorage.clear();
   localStorage.clear();
+  queryClient.clear();
   _vaultBlobs.clear();
   _pinAttempts.clear();
   _mockActiveInstanceUrl = '';
@@ -217,6 +280,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -774,6 +838,50 @@ describe('useAuth - unlockVault', () => {
     expect(result.current.vaultState).toBe('unlocked');
   });
 
+  it('blocks PIN unlock and destroys local state when a revoked-device tombstone exists', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    localStorage.setItem(
+      'hush_auth_invalidation',
+      JSON.stringify({ reason: 'device_revoked', at: '2026-05-19T00:00:00Z' }),
+    );
+    clearVaultUnlockBoundaryMocks();
+
+    await expect(result.current.unlockVault('correct')).rejects.toMatchObject({
+      code: 'DEVICE_REVOKED',
+    });
+
+    expectVaultUnlockBoundaryUntouched();
+    await waitFor(() => expect(result.current.vaultState).toBe('none'));
+    expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
+    expect(result.current.hasVault).toBe(false);
+    expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
+    expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
+  });
+
+  it('blocks PIN unlock when only in-memory state reports device revocation', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'device_revoked' },
+      }));
+    });
+    localStorage.removeItem('hush_auth_invalidation');
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    clearVaultUnlockBoundaryMocks();
+
+    await expect(result.current.unlockVault('correct')).rejects.toMatchObject({
+      code: 'DEVICE_REVOKED',
+    });
+
+    expectVaultUnlockBoundaryUntouched();
+  });
+
   it('migrates a legacy vault blob after a successful PIN unlock', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -990,6 +1098,12 @@ describe('useAuth - PIN attempt counter wipe after MAX_PIN_FAILURES', () => {
     expect(result.current.vaultState).toBe('none');
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
+    // PIN brute-force wipe must also remove the persisted vault
+    // marker so a subsequent boot does not believe a vault still
+    // exists and offer a PIN screen we can no longer satisfy.
+    expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
+    expect(result.current.hasVault).toBe(false);
   }, 15_000);
 });
 
@@ -1009,6 +1123,7 @@ describe('useAuth - performLogout', () => {
     // Seed some storage to verify wipe.
     localStorage.setItem('test_key', 'test_value');
     sessionStorage.setItem('test_key', 'test_value');
+    seedAuthOwnedQueryData();
 
     vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: true, status: 204 });
 
@@ -1016,13 +1131,139 @@ describe('useAuth - performLogout', () => {
       await result.current.performLogout();
     });
 
-    expect(result.current.isAuthenticated).toBe(false);
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.token).toBeNull();
-    expect(result.current.user).toBeNull();
+    expectLocalAuthResetState(result.current);
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
     expect(localStorage.getItem('test_key')).toBeNull();
     expect(sessionStorage.getItem('test_key')).toBeNull();
+    expectAuthOwnedQueryDataCleared();
+  });
+
+  it('clears auth-owned query data when another tab broadcasts logout', async () => {
+    const originalBroadcastChannel = globalThis.BroadcastChannel;
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.performChallengeResponse(
+          new Uint8Array(32).fill(1),
+          new Uint8Array(32).fill(2),
+        );
+      });
+      await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+      seedAuthOwnedQueryData();
+
+      await act(async () => {
+        const sender = new BroadcastChannel('hush_auth');
+        sender.postMessage({ type: 'hush_logout' });
+        sender.close();
+      });
+
+      expect(result.current.token).toBeNull();
+      expect(result.current.user).toBeNull();
+      expectAuthOwnedQueryDataCleared();
+    } finally {
+      globalThis.BroadcastChannel = originalBroadcastChannel;
+      MockBroadcastChannel.instances = [];
+    }
+  });
+
+  it('does not delete persisted vault material when another tab broadcasts logout', async () => {
+    // Broadcast logout is a local session reset, not a vault wipe.
+    // The signed-out tab discards in-memory + auth-owned query state,
+    // but the local vault marker and IndexedDB rows must survive so
+    // the next PIN unlock can still rehydrate the user.
+    const originalBroadcastChannel = globalThis.BroadcastChannel;
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.performChallengeResponse(
+          new Uint8Array(32).fill(1),
+          new Uint8Array(32).fill(2),
+        );
+      });
+      await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+      expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+
+      vi.mocked(vaultMod.deleteVaultDatabase).mockClear();
+      vi.mocked(transcriptVaultMod.deleteTranscriptDatabase).mockClear();
+
+      await act(async () => {
+        const sender = new BroadcastChannel('hush_auth');
+        sender.postMessage({ type: 'hush_logout' });
+        sender.close();
+      });
+
+      expect(result.current.token).toBeNull();
+      expect(result.current.user).toBeNull();
+      // Vault material survives the broadcast — only auth state was reset.
+      expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+      expect(vaultMod.deleteVaultDatabase).not.toHaveBeenCalled();
+      expect(transcriptVaultMod.deleteTranscriptDatabase).not.toHaveBeenCalled();
+    } finally {
+      globalThis.BroadcastChannel = originalBroadcastChannel;
+      MockBroadcastChannel.instances = [];
+    }
+  });
+
+  it('fully resets guest and stale error state when another tab broadcasts logout', async () => {
+    const originalBroadcastChannel = globalThis.BroadcastChannel;
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      const expiresAtMs = Date.now() + 60 * 60 * 1000;
+      const guestToken = buildFakeJwt({
+        sub: 'guest_abc123',
+        sid: 'sess-guest-1',
+        is_guest: true,
+        exp: Math.floor(expiresAtMs / 1000),
+      });
+      vi.mocked(apiMod.requestGuestSession).mockResolvedValue({
+        token: guestToken,
+        guestId: 'guest_abc123',
+        expiresAt: new Date(expiresAtMs).toISOString(),
+      });
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.performGuestAuth();
+      });
+      expect(result.current.isGuest).toBe(true);
+      expect(result.current.guestExpiresAt).not.toBeNull();
+      expect(sessionStorage.getItem(JWT_KEY)).toBe(guestToken);
+
+      vi.mocked(apiMod.requestGuestSession).mockRejectedValueOnce(new Error('guest retry failed'));
+      await act(async () => {
+        try { await result.current.performGuestAuth(); } catch { /* expected */ }
+      });
+      expect(result.current.error).toBeInstanceOf(Error);
+
+      seedAuthOwnedQueryData();
+
+      await act(async () => {
+        const sender = new BroadcastChannel('hush_auth');
+        sender.postMessage({ type: 'hush_logout' });
+        sender.close();
+      });
+
+      expectLocalAuthResetState(result.current);
+      expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
+      expectAuthOwnedQueryDataCleared();
+    } finally {
+      globalThis.BroadcastChannel = originalBroadcastChannel;
+      MockBroadcastChannel.instances = [];
+    }
   });
 
   it('clears the cross-reload session key store on scorched-earth logout (P21 step 4)', async () => {
@@ -2013,6 +2254,61 @@ describe('useAuth - performRecovery', () => {
     expect(localStorage.getItem('hush_post_recovery_wizard')).toBe('1');
   });
 
+  it('marks cached device-key queries stale after revokeOtherDevices=true', async () => {
+    vi.mocked(apiMod.listDeviceKeys).mockResolvedValueOnce([
+      { id: 'k-1', deviceId: 'device-current', certifiedAt: '2026-01-01T00:00:00Z' },
+      { id: 'k-2', deviceId: 'device-other', certifiedAt: '2026-01-01T00:00:00Z' },
+    ]);
+    const deviceKey = ['auth', 'devices', 'https://i.example.com', 'user-1'];
+    queryClient.setQueryData(deviceKey, [
+      { id: 'k-1', deviceId: 'device-current', certifiedAt: '2026-01-01T00:00:00Z' },
+      { id: 'k-2', deviceId: 'device-other', certifiedAt: '2026-01-01T00:00:00Z' },
+    ]);
+    expect(queryClient.getQueryState(deviceKey)?.isInvalidated).toBe(false);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performRecovery('word '.repeat(12).trim(), true);
+    });
+
+    expect(queryClient.getQueryState(deviceKey)?.isInvalidated).toBe(true);
+  });
+
+  it('scopes recovery bulk revoke to the recovery baseUrl', async () => {
+    const recoveryBaseUrl = 'https://chat.example.com';
+    // Pin the local device id so the filter that excludes the current
+    // device leaves exactly the foreign row in the revoke set.
+    localStorage.setItem('hush_device_id', 'device-current');
+    vi.mocked(apiMod.listDeviceKeys).mockClear();
+    vi.mocked(apiMod.revokeDeviceKey).mockClear();
+    vi.mocked(apiMod.listDeviceKeys).mockResolvedValueOnce([
+      { id: 'k-1', deviceId: 'device-current', certifiedAt: '2026-01-01T00:00:00Z' },
+      { id: 'k-2', deviceId: 'device-other', certifiedAt: '2026-01-01T00:00:00Z' },
+    ]);
+    vi.mocked(apiMod.revokeDeviceKey).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.performRecovery(
+        'word '.repeat(12).trim(),
+        true,
+        recoveryBaseUrl,
+      );
+    });
+
+    const listCall = vi.mocked(apiMod.listDeviceKeys).mock.calls.at(-1);
+    expect(listCall?.[1]).toBe(recoveryBaseUrl);
+
+    const revokeCalls = vi.mocked(apiMod.revokeDeviceKey).mock.calls;
+    expect(revokeCalls).toHaveLength(1);
+    expect(revokeCalls[0][1]).toBe('device-other');
+    expect(revokeCalls[0][2]).toBe(recoveryBaseUrl);
+  });
+
   it('does NOT set hush_post_recovery_wizard flag when recovery fails', async () => {
     vi.mocked(apiMod.verifyChallenge).mockRejectedValueOnce(new Error('unauthorized'));
 
@@ -2032,6 +2328,52 @@ describe('useAuth - performRecovery', () => {
 });
 
 describe('useAuth - forced logout on revoked-device signal', () => {
+  it('does not restore a leftover IndexedDB vault after persisted device revocation', async () => {
+    localStorage.setItem(
+      'hush_auth_invalidation',
+      JSON.stringify({ reason: 'device_revoked', at: '2026-05-19T00:00:00Z' }),
+    );
+    localStorage.setItem('hush_vault_user__last_user', 'user-1');
+    vi.mocked(vaultMod.checkVaultExistsInIDB).mockResolvedValueOnce({
+      exists: true,
+      publicKeyHex: 'aabb',
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    expect(result.current.vaultState).toBe('none');
+    expect(result.current.hasVault).toBe(false);
+    expect(result.current.needsUnlock).toBe(false);
+    expect(localStorage.getItem('hush_vault_user__last_user')).toBeNull();
+    expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
+  });
+
+  it('does not rewrite an existing revoked-device invalidation tombstone on boot', async () => {
+    localStorage.setItem(
+      'hush_auth_invalidation',
+      JSON.stringify({ reason: 'device_revoked', at: '2026-05-19T00:00:00Z' }),
+    );
+    localStorage.setItem('hush_vault_user__last_user', 'user-1');
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    setItemSpy.mockClear();
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(setItemSpy).not.toHaveBeenCalledWith(
+        'hush_auth_invalidation',
+        expect.any(String),
+      );
+      expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+      expect(result.current.vaultState).toBe('none');
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
+
   it('destroys local vault state when the server reports this device was revoked', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -2044,6 +2386,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     // Sanity: performChallengeResponse stored the vault marker.
     expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    seedAuthOwnedQueryData();
 
     await act(async () => {
       window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
@@ -2052,17 +2395,64 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     });
 
     // Server session is gone:
-    expect(result.current.token).toBeNull();
-    expect(result.current.user).toBeNull();
-    expect(result.current.isAuthenticated).toBe(false);
+    expectLocalAuthResetState(result.current);
     // Device revoke is intentionally destructive. Keeping the marker
     // would let this browser return to the PIN screen and mint a new
     // session from a revoked local vault.
     expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.hasVault).toBe(false);
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
+    expectAuthOwnedQueryDataCleared();
+  });
+
+  it('does not downgrade a device_revoked tombstone to server_session_invalid on a later 401', async () => {
+    // Reproduces the user-reported bug: device 1 revokes device 2.
+    // Device 2's first 401 dispatches `hush_auth_invalid` with reason
+    // `device_revoked`, which destroys the local vault and writes the
+    // tombstone. A subsequent 401 from an in-flight call (e.g. the
+    // post-PIN-unlock challenge-response catch path) used to call
+    // `markServerSessionInvalidated('server_session_invalid')` and
+    // overwrite the tombstone, leaving stale "recoverable session" state
+    // that would let the user return to the PIN screen.
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.performChallengeResponse(
+        new Uint8Array(32).fill(1),
+        new Uint8Array(32).fill(2),
+      );
+    });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+    // First signal: device is revoked. Destructive cleanup runs.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'device_revoked' },
+      }));
+    });
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    expect(localStorage.getItem('hush_auth_invalidation')).toContain(
+      'device_revoked',
+    );
+
+    // Second signal: a later in-flight 401 surfaces a generic
+    // `server_session_invalid`. The earlier `device_revoked` marker
+    // must remain authoritative — revocation is a sticky boundary.
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'server_session_invalid' },
+      }));
+    });
+
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    expect(localStorage.getItem('hush_auth_invalidation')).toContain(
+      'device_revoked',
+    );
+    expect(localStorage.getItem('hush_auth_invalidation')).not.toContain(
+      '"server_session_invalid"',
+    );
+    expect(result.current.vaultState).toBe('none');
+    expect(result.current.hasVault).toBe(false);
   });
 
   it('preserves the local vault marker for a generic invalid server session', async () => {
@@ -2076,6 +2466,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    seedAuthOwnedQueryData();
 
     await act(async () => {
       window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
@@ -2089,6 +2480,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     expect(result.current.vaultState).toBe('locked');
     expect(result.current.hasVault).toBe(true);
     expect(vaultMod.deleteVaultDatabase).not.toHaveBeenCalledWith('user-1');
+    expectAuthOwnedQueryDataCleared();
   });
 
   it('lands in vaultState=none when no vault marker is present', async () => {
@@ -2101,9 +2493,6 @@ describe('useAuth - forced logout on revoked-device signal', () => {
       }));
     });
 
-    expect(result.current.token).toBeNull();
-    expect(result.current.user).toBeNull();
-    expect(result.current.vaultState).toBe('none');
-    expect(result.current.hasVault).toBe(false);
+    expectLocalAuthResetState(result.current);
   });
 });

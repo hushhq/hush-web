@@ -370,6 +370,7 @@ export function AuthenticatedApp() {
     serverId: activeServer?.id ?? null,
     token,
     baseUrl,
+    currentUserId,
     wsClient: wsClient as Parameters<typeof useChannelsForServer>[0]["wsClient"],
   })
 

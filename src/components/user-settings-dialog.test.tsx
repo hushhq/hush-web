@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 beforeAll(() => {
   if (!window.matchMedia) {
@@ -200,12 +201,21 @@ describe("UserSettingsDialog", () => {
     })
     mockGetVaultConfig.mockReturnValue({ timeout: 60, pinType: "pin" })
 
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+
     render(
-      <UserSettingsDialog
-        open
-        onOpenChange={() => {}}
-        account={{ displayName: "Yarin", username: "yarin" }}
-      />
+      <QueryClientProvider client={queryClient}>
+        <UserSettingsDialog
+          open
+          onOpenChange={() => {}}
+          account={{ displayName: "Yarin", username: "yarin" }}
+        />
+      </QueryClientProvider>
     )
 
     const u = userEvent.setup()

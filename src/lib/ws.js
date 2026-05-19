@@ -8,6 +8,9 @@
  *   message catch-up and MLS group state recovery -> emit('reconnected', {})
  */
 
+import { recordClientDiagnostic } from './clientDiagnostics.js';
+import { parseWsMessage } from './wsSchemas.js';
+
 const DEFAULT_WS_PATH = '/ws';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
@@ -98,6 +101,23 @@ export function createWsClient(opts) {
     }
   }
 
+  function recordInvalidFrame(event, details) {
+    recordClientDiagnostic({
+      category: 'ws',
+      event,
+      severity: 'warn',
+      details,
+    });
+  }
+
+  function previewPayload(value) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[unserializable]';
+    }
+  }
+
   function scheduleReconnect() {
     if (reconnectTimer) return;
     reconnecting = true;
@@ -179,23 +199,39 @@ export function createWsClient(opts) {
     };
 
     ws.onmessage = (event) => {
+      let data;
       try {
-        const data = JSON.parse(event.data);
-        const type = data.type;
-        if (type === 'pong') {
-          missedPongs = 0;
-          lastPongTime = Date.now();
-          if (pingStart > 0) {
-            lastRtt = Math.round(performance.now() - pingStart);
-            pingStart = 0;
-            emit('rtt', { rtt: lastRtt });
-          }
-          return;
-        }
-        if (type) emit(type, data);
+        data = JSON.parse(event.data);
       } catch (_) {
-        // ignore non-JSON
+        recordInvalidFrame('invalid-json-frame', {
+          preview: String(event.data ?? ''),
+        });
+        return;
       }
+
+      const parsed = parseWsMessage(data);
+      if (!parsed.ok) {
+        recordInvalidFrame('invalid-frame', {
+          type: parsed.type,
+          reason: parsed.reason,
+          issues: parsed.issues,
+          preview: previewPayload(data),
+        });
+        return;
+      }
+
+      const type = parsed.data.type;
+      if (type === 'pong') {
+        missedPongs = 0;
+        lastPongTime = Date.now();
+        if (pingStart > 0) {
+          lastRtt = Math.round(performance.now() - pingStart);
+          pingStart = 0;
+          emit('rtt', { rtt: lastRtt });
+        }
+        return;
+      }
+      emit(type, parsed.data);
     };
 
     ws.onclose = (event) => {
@@ -213,6 +249,16 @@ export function createWsClient(opts) {
       // and the user is forced out of the UI.
       if (code === 1008 && /device revoked/i.test(reason)) {
         intentionalClose = true;
+        recordClientDiagnostic({
+          category: 'ws',
+          event: 'auth-invalid-close',
+          severity: 'warn',
+          details: {
+            code,
+            reason,
+            authReason: 'device_revoked',
+          },
+        });
         emit('auth_invalid', { reason: 'device_revoked' });
         if (typeof window !== 'undefined') {
           try {

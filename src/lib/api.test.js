@@ -5,7 +5,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   checkUsernameAvailable,
+  certifyNewDevice,
+  consumeDeviceLinkResult,
   createDeviceLinkRequest,
+  federatedVerify,
   fetchWithAuth,
   getChannelMessages,
   leaveGuild,
@@ -14,12 +17,16 @@ import {
   normalizeAudience,
   registerWithPublicKey,
   requestChallenge,
+  requestGuestSession,
+  resolveDeviceLinkRequest,
   resolveAuthAudience,
+  revokeDeviceKey,
   uploadMLSCredential,
   uploadMLSKeyPackages,
   getKeyPackageCount,
   uploadKeyPackagesAfterAuth,
   verifyChallenge,
+  verifyDeviceLinkRequest,
 } from './api';
 
 // ── leaveGuild ────────────────────────────────────────────────────────────────
@@ -738,6 +745,225 @@ describe('runtime response schemas', () => {
     vi.restoreAllMocks();
   });
 
+  it('checkUsernameAvailable rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      checkUsernameAvailable('alice', 'https://chat.example.com'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'checkUsernameAvailable',
+    });
+  });
+
+  it('requestChallenge rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ nonce: '' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestChallenge('public-key')).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('requestChallenge rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestChallenge('public-key')).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'requestChallenge',
+    });
+  });
+
+  it('requestChallenge attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'challenge disabled' }), {
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestChallenge('public-key')).rejects.toMatchObject({
+      message: 'challenge disabled',
+      status: 429,
+    });
+  });
+
+  it('verifyChallenge rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyChallenge('pk', 'deadbeef', 'sigb64', 'dev-1', 'https://chat.example.com'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'verifyChallenge',
+    });
+  });
+
+  it('verifyChallenge attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'challenge expired' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyChallenge('pk', 'deadbeef', 'sigb64', 'dev-1', 'https://chat.example.com'),
+    ).rejects.toMatchObject({
+      message: 'challenge expired',
+      status: 401,
+    });
+  });
+
+  it('registerWithPublicKey rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      registerWithPublicKey('alice', 'Alice', 'pub-key', 'device-1'),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'registerWithPublicKey',
+    });
+  });
+
+  it('registerWithPublicKey attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'username taken' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      registerWithPublicKey('alice', 'Alice', 'pub-key', 'device-1'),
+    ).rejects.toMatchObject({
+      message: 'username taken',
+      status: 409,
+    });
+  });
+
+  it('requestGuestSession rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: 'guest-jwt' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestGuestSession()).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('requestGuestSession attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'guest disabled' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(requestGuestSession()).rejects.toMatchObject({
+      message: 'guest disabled',
+      status: 403,
+    });
+  });
+
+  it('federatedVerify rejects malformed success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ token: 'jwt', federatedIdentity: null }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      federatedVerify('pk', 'nonce', 'sig', 'https://home.example.com', 'alice', 'Alice'),
+    ).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('federatedVerify attaches status to HTTP errors', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'federation disabled' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      federatedVerify('pk', 'nonce', 'sig', 'https://home.example.com', 'alice', 'Alice'),
+    ).rejects.toMatchObject({
+      message: 'federation disabled',
+      status: 403,
+    });
+  });
+
+  it('certifyNewDevice preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'certificate rejected' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      certifyNewDevice('jwt', 'new-pub', 'cert', 'device-new', 'device-old'),
+    ).rejects.toMatchObject({
+      message: 'certificate rejected',
+      status: 400,
+    });
+  });
+
+  it('certifyNewDevice keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 502,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      certifyNewDevice('jwt', 'new-pub', 'cert', 'device-new', 'device-old'),
+    ).rejects.toMatchObject({
+      message: 'certifyNewDevice 502',
+      status: 502,
+    });
+  });
+
   it('listDeviceKeys rejects non-array success responses', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -747,6 +973,81 @@ describe('runtime response schemas', () => {
 
     await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
       code: 'invalid_response',
+    });
+  });
+
+  it('listDeviceKeys rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'listDeviceKeys',
+    });
+  });
+
+  it('listDeviceKeys keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 502,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      message: 'listDeviceKeys 502',
+      status: 502,
+    });
+  });
+
+  it('listDeviceKeys preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'devices forbidden' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(listDeviceKeys('jwt')).rejects.toMatchObject({
+      message: 'devices forbidden',
+      status: 403,
+    });
+  });
+
+  it('revokeDeviceKey preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'device already revoked' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toMatchObject({
+      message: 'device already revoked',
+      status: 409,
+    });
+  });
+
+  it('revokeDeviceKey keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 503,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toMatchObject({
+      message: 'revokeDeviceKey 503',
+      status: 503,
     });
   });
 
@@ -763,6 +1064,239 @@ describe('runtime response schemas', () => {
         sessionPublicKey: 'session',
         deviceId: 'device-1',
       }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('schema-failure rejections emit a redacted invalid-response-schema diagnostic', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          requestId: 'req-1',
+          // missing required `secret`, `code`, `expiresAt`. Server contract
+          // requires all three. Diagnostic must capture the field paths
+          // without echoing the raw payload.
+        }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const listener = vi.fn();
+    globalThis.addEventListener('hush:diagnostic', listener);
+
+    try {
+      await expect(
+        createDeviceLinkRequest({
+          devicePublicKey: 'pub',
+          sessionPublicKey: 'session',
+          deviceId: 'device-1',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+
+      expect(listener).toHaveBeenCalled();
+      const detail = listener.mock.calls[0][0].detail;
+      expect(detail).toMatchObject({
+        category: 'api',
+        event: 'invalid-response-schema',
+        severity: 'error',
+        details: {
+          operation: 'createDeviceLinkRequest',
+        },
+      });
+      expect(Array.isArray(detail.details.issues)).toBe(true);
+      expect(detail.details.issues.length).toBeGreaterThan(0);
+      detail.details.issues.forEach((issue) => {
+        expect(typeof issue.path).toBe('string');
+        expect(typeof issue.code).toBe('string');
+      });
+      // No raw payload in the diagnostic.
+      expect(detail.details).not.toHaveProperty('payload');
+      expect(detail.details).not.toHaveProperty('data');
+      expect(detail.details).not.toHaveProperty('body');
+    } finally {
+      globalThis.removeEventListener('hush:diagnostic', listener);
+    }
+  });
+
+  it('schema-failure diagnostic does not echo the raw response payload', async () => {
+    // Sensitive content reaches the parser via the body bytes, not via
+    // issue paths/codes. The diagnostic must surface only field paths
+    // and Zod codes — never the raw payload, the original body string,
+    // or sibling fields the server happened to send.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            relayCiphertext: 'CIPHER-LEAK-CHECK',
+            relayPublicKey: 'PUBKEY-LEAK-CHECK',
+            // missing relayIv + deviceId so schema fails on ready branch
+          }),
+      }),
+    );
+
+    const listener = vi.fn();
+    globalThis.addEventListener('hush:diagnostic', listener);
+
+    try {
+      await expect(
+        consumeDeviceLinkResult({ requestId: 'r', secret: 's' }),
+      ).rejects.toMatchObject({ code: 'invalid_response' });
+
+      const diag = listener.mock.calls
+        .map((c) => c[0].detail)
+        .find((d) => d.event === 'invalid-response-schema');
+      expect(diag).toBeTruthy();
+
+      const serialized = JSON.stringify(diag);
+      expect(serialized).not.toContain('CIPHER-LEAK-CHECK');
+      expect(serialized).not.toContain('PUBKEY-LEAK-CHECK');
+    } finally {
+      globalThis.removeEventListener('hush:diagnostic', listener);
+    }
+  });
+
+  it('createDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      createDeviceLinkRequest({
+        devicePublicKey: 'pub',
+        sessionPublicKey: 'session',
+        deviceId: 'device-1',
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'createDeviceLinkRequest',
+    });
+  });
+
+  it('resolveDeviceLinkRequest accepts the server claim contract', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        claimToken: 'claim-1',
+        requestId: 'req-1',
+        deviceId: 'device-1',
+        devicePublicKey: 'device-pub',
+        sessionPublicKey: 'session-pub',
+        label: 'Chrome on macOS',
+        instanceUrl: 'https://app.example.com',
+        expiresAt: '2026-05-19T12:00:00Z',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await resolveDeviceLinkRequest('jwt', { code: 'ABCD1234' });
+
+    expect(result).toMatchObject({
+      claimToken: 'claim-1',
+      requestId: 'req-1',
+      deviceId: 'device-1',
+      devicePublicKey: 'device-pub',
+      sessionPublicKey: 'session-pub',
+      expiresAt: '2026-05-19T12:00:00Z',
+    });
+  });
+
+  it('resolveDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      resolveDeviceLinkRequest('jwt', { code: 'ABCD1234' }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'resolveDeviceLinkRequest',
+    });
+  });
+
+  it('verifyDeviceLinkRequest accepts the server 201 empty success contract', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('', { status: 201 }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyDeviceLinkRequest('jwt', {
+        claimToken: 'claim-1',
+        certificate: 'cert',
+        signingDeviceId: 'device-old',
+        relayCiphertext: 'cipher',
+        relayIv: 'iv',
+        relayPublicKey: 'relay-pub',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('verifyDeviceLinkRequest rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 201,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      verifyDeviceLinkRequest('jwt', {
+        claimToken: 'claim-1',
+        certificate: 'cert',
+        signingDeviceId: 'device-old',
+        relayCiphertext: 'cipher',
+        relayIv: 'iv',
+        relayPublicKey: 'relay-pub',
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'verifyDeviceLinkRequest',
+    });
+  });
+
+  it('consumeDeviceLinkResult rejects malformed ready responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ relayCiphertext: 'cipher' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      consumeDeviceLinkResult({ requestId: 'req-1', secret: 'sec-1' }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('consumeDeviceLinkResult rejects unexpected fields in ready responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        relayCiphertext: 'cipher',
+        relayIv: 'iv',
+        relayPublicKey: 'relay-pub',
+        deviceId: 'device-1',
+        extra: 'unexpected',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      consumeDeviceLinkResult({ requestId: 'req-1', secret: 'sec-1' }),
     ).rejects.toMatchObject({ code: 'invalid_response' });
   });
 });

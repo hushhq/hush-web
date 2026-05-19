@@ -1,14 +1,32 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { renderHook, waitFor, act } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 
 vi.mock("@/lib/api", () => ({
   getGuildChannels: vi.fn(),
 }))
 
 import { getGuildChannels as _getGuildChannels } from "@/lib/api"
-import { useGuildChannelIds } from "./useGuildChannelIds"
+import {
+  guildChannelIdsQueryKey,
+  useGuildChannelIds,
+} from "./useGuildChannelIds"
 
 const getGuildChannels = vi.mocked(_getGuildChannels as () => Promise<unknown>)
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
+}
 
 describe("useGuildChannelIds", () => {
   afterEach(() => {
@@ -23,12 +41,15 @@ describe("useGuildChannelIds", () => {
       { id: "ch-3", type: "text" },
     ])
 
-    const { result } = renderHook(() =>
-      useGuildChannelIds({
-        serverId: "srv-1",
-        token: "tok",
-        baseUrl: "https://i.example.com",
-      }),
+    const { result } = renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+          currentUserId: "user-1",
+        }),
+      { wrapper: createWrapper() },
     )
 
     await waitFor(() => expect(result.current.loaded).toBe(true))
@@ -45,16 +66,22 @@ describe("useGuildChannelIds", () => {
       .mockRejectedValueOnce(new Error("network blip"))
       .mockResolvedValueOnce([{ id: "ch-1", type: "text" }])
 
-    const { result } = renderHook(() =>
-      useGuildChannelIds({
-        serverId: "srv-1",
-        token: "tok",
-        baseUrl: "https://i.example.com",
-      }),
+    const { result } = renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+          currentUserId: "user-1",
+        }),
+      { wrapper: createWrapper() },
     )
 
     // First attempt has failed; loaded is still false.
-    await vi.waitFor(() => expect(getGuildChannels).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(getGuildChannels).toHaveBeenCalledTimes(1)
     expect(result.current.loaded).toBe(false)
 
     // Advance the first backoff slot (1s) — second attempt fires.
@@ -73,12 +100,15 @@ describe("useGuildChannelIds", () => {
     vi.useFakeTimers()
     getGuildChannels.mockRejectedValue(new Error("persistent"))
 
-    renderHook(() =>
-      useGuildChannelIds({
-        serverId: "srv-1",
-        token: "tok",
-        baseUrl: "https://i.example.com",
-      }),
+    renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+          currentUserId: "user-1",
+        }),
+      { wrapper: createWrapper() },
     )
 
     // Schedule has 6 slots — initial call + 6 retries = 7 attempts.
@@ -96,6 +126,39 @@ describe("useGuildChannelIds", () => {
     expect(getGuildChannels).toHaveBeenCalledTimes(7)
   })
 
+  it("uses the documented retry schedule in order", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    const callTimes: number[] = []
+    getGuildChannels.mockImplementation(async () => {
+      callTimes.push(Date.now())
+      throw new Error("persistent")
+    })
+
+    renderHook(
+      () =>
+        useGuildChannelIds({
+          serverId: "srv-1",
+          token: "tok",
+          baseUrl: "https://i.example.com",
+          currentUserId: "user-1",
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    await vi.waitFor(() => expect(getGuildChannels).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000)
+    })
+
+    expect(getGuildChannels).toHaveBeenCalledTimes(7)
+    const retryDeltas = callTimes.slice(1).map((time, index) => time - callTimes[index])
+    expect(retryDeltas[0]).toBeGreaterThanOrEqual(1_000)
+    expect(retryDeltas[0]).toBeLessThanOrEqual(1_050)
+    expect(retryDeltas.slice(1)).toEqual([2_000, 4_000, 8_000, 16_000, 30_000])
+  })
+
   it("clears state and stops fetching when serverId or token go null", async () => {
     getGuildChannels.mockResolvedValue([{ id: "ch-1", type: "text" }])
 
@@ -107,7 +170,9 @@ describe("useGuildChannelIds", () => {
           serverId: "srv-1" as string | null,
           token: "tok" as string | null,
           baseUrl: "https://i.example.com",
+          currentUserId: "user-1",
         } satisfies Args,
+        wrapper: createWrapper(),
       },
     )
 
@@ -117,8 +182,41 @@ describe("useGuildChannelIds", () => {
       serverId: null,
       token: "tok",
       baseUrl: "https://i.example.com",
+      currentUserId: "user-1",
     } satisfies Args)
     expect(result.current.textChannelIds).toEqual([])
     expect(result.current.loaded).toBe(false)
+  })
+
+  it("exposes a stable query key for text channel id cache invalidation", () => {
+    expect(
+      guildChannelIdsQueryKey({
+        serverId: "srv-1",
+        baseUrl: "https://i.example.com",
+        currentUserId: "user-1",
+      })
+    ).toEqual([
+      "servers",
+      "https://i.example.com",
+      "srv-1",
+      "text-channel-ids",
+      "user-1",
+    ])
+  })
+
+  it("keeps text channel id caches separated by user", () => {
+    expect(
+      guildChannelIdsQueryKey({
+        serverId: "srv-1",
+        baseUrl: "https://i.example.com",
+        currentUserId: "user-1",
+      })
+    ).not.toEqual(
+      guildChannelIdsQueryKey({
+        serverId: "srv-1",
+        baseUrl: "https://i.example.com",
+        currentUserId: "user-2",
+      })
+    )
   })
 })

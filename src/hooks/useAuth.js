@@ -64,6 +64,19 @@ import {
 } from '../lib/vaultInactivityDeadline';
 import { resolveReauthInstanceUrl } from '../lib/reauthInstance';
 import {
+  AUTH_INVALIDATION_REASONS,
+  LOCAL_AUTH_RESET_REASONS,
+  planAuthenticatedSessionFetchFailure,
+  planAuthenticatedVaultBoot,
+  planInvalidatedSession,
+  planLocalAuthReset,
+  planLocalVaultLock,
+  planNoTokenLocalVaultBoot,
+  planNoTokenStartup,
+  planPinFailure,
+  planVaultUnlockAttempt,
+} from '../lib/authLifecycle';
+import {
   openHistoryStore,
   importHistorySnapshot,
 } from '../lib/mlsStore';
@@ -93,6 +106,8 @@ import {
   markAuthInstanceUsed,
   normalizeInstanceUrl,
 } from '../lib/authInstanceStore';
+import { queryClient } from '../lib/queryClient';
+import { invalidateDeviceKeysQueries } from './useDeviceKeys';
 // Used to repair missing or malformed public-key vault markers after storage
 // eviction. The encrypted vault stores the private seed; the public key is
 // recoverable from that seed and should never be represented as null.
@@ -123,11 +138,18 @@ function parseJwtClaims(token) {
 
 /** Guest session warning shown 5 minutes before expiry. */
 const GUEST_EXPIRY_WARNING_MS = 5 * 60 * 1000;
+const AUTH_OWNED_QUERY_ROOTS = [['servers'], ['auth']];
 
 // ── Module-level constants ───────────────────────────────────────────────────
 
 export const JWT_KEY = 'hush_jwt';
 export const HOME_INSTANCE_KEY = 'hush_home_instance';
+
+function clearAuthOwnedQueryCache() {
+  AUTH_OWNED_QUERY_ROOTS.forEach((queryKey) => {
+    queryClient.removeQueries({ queryKey });
+  });
+}
 
 // ── Per-instance JWT storage ─────────────────────────────────────────────────
 
@@ -975,12 +997,19 @@ export function useAuth() {
    * has timed out.
    */
   const lockVaultForTimeout = useCallback(() => {
-    identityKeyRef.current = null;
-    sessionStorage.removeItem(VAULT_DERIVED_KEY);
+    const transition = planLocalVaultLock();
+    if (transition.shouldClearIdentity) {
+      identityKeyRef.current = null;
+    }
+    if (transition.shouldClearSessionKeys) {
+      sessionStorage.removeItem(VAULT_DERIVED_KEY);
+    }
     clearInactivityDeadline();
-    clearTranscriptCache();
+    if (transition.shouldClearTranscriptCache) {
+      clearTranscriptCache();
+    }
     const userId = currentUserIdRef.current;
-    if (userId) {
+    if (userId && transition.shouldClearSessionKeys) {
       clearVaultSessionKey(userId).catch(() => {});
       // P21 step 4 — drop the cross-reload session key store too, so
       // the next reload requires PIN re-entry as the timeout intends.
@@ -988,7 +1017,7 @@ export function useAuth() {
       // record and defeat the inactivity policy.
       clearVaultSessionStore(userId).catch(() => {});
     }
-    setVaultState('locked');
+    setVaultState(transition.nextVaultState);
   }, [clearInactivityDeadline]);
 
   /**
@@ -1050,21 +1079,61 @@ export function useAuth() {
     }
   }, [clearInactivityDeadline, clearInactivityTimer]);
 
-  const destroyRevokedDeviceLocalState = useCallback((reason = 'device_revoked') => {
+  const applyLocalAuthResetPlan = useCallback((transition) => {
+    if (transition.shouldClearIdentity) {
+      identityKeyRef.current = null;
+    }
+    if (transition.shouldClearVaultTimeoutEffects) {
+      clearVaultTimeoutEffects();
+    }
+    if (transition.shouldClearGuestTimers) {
+      clearGuestTimers();
+    }
+    if (transition.shouldClearTranscriptCache) {
+      clearTranscriptCache();
+    }
+    if (transition.shouldClearAuthQueries) {
+      clearAuthOwnedQueryCache();
+    }
+    if (transition.shouldClearSession) {
+      clearSession();
+    }
+    setToken(transition.nextToken);
+    setUser(transition.nextUser);
+    setVaultState(transition.nextVaultState);
+    setHasLocalVault(transition.nextHasLocalVault);
+    setNeedsPinSetupState(transition.nextNeedsPinSetup);
+    setIsGuest(transition.nextIsGuest);
+    setGuestExpiresAt(transition.nextGuestExpiresAt);
+    setError(transition.nextError);
+    if (transition.shouldClearPinSetupStorage) {
+      sessionStorage.removeItem(PIN_SETUP_PENDING_KEY);
+    }
+    if (transition.nextLoading !== null) {
+      setLoading(transition.nextLoading);
+    }
+  }, [clearGuestTimers, clearVaultTimeoutEffects]);
+
+  const applyBootVaultPlan = useCallback((transition) => {
+    setHasLocalVault(transition.nextHasLocalVault);
+    setVaultState(transition.nextVaultState);
+  }, []);
+
+  const destroyRevokedDeviceLocalState = useCallback((reason = AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) => {
     const userId =
       currentUserIdRef.current
       ?? localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`)
       ?? findVaultMarkerUserId();
     const deviceId = localStorage.getItem(DEVICE_ID_KEY);
-    const nextInvalidation = createAuthInvalidation(reason);
 
-    localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
-    setAuthInvalidation(nextInvalidation);
+    const existingInvalidation = readPersistedAuthInvalidation();
+    if (existingInvalidation?.reason !== reason) {
+      const nextInvalidation = createAuthInvalidation(reason);
+      localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
+      setAuthInvalidation(nextInvalidation);
+    }
 
-    identityKeyRef.current = null;
-    clearVaultTimeoutEffects();
-    clearTranscriptCache();
-    clearSession();
+    const resetPlan = planLocalAuthReset(reason);
 
     if (userId) {
       clearPersistedInactivityDeadline(userId);
@@ -1084,24 +1153,29 @@ export function useAuth() {
 
     localStorage.removeItem(DEVICE_ID_KEY);
     localStorage.removeItem(LEGACY_VAULT_TIMEOUT_KEY);
-    setToken(null);
-    setUser(null);
-    setHasLocalVault(false);
-    setVaultState('none');
-    setNeedsPinSetupState(false);
-    setIsGuest(false);
-    setGuestExpiresAt(null);
-    setError(null);
-    clearPinSetup();
-  }, [clearPinSetup, clearVaultTimeoutEffects]);
+    applyLocalAuthResetPlan(resetPlan);
+  }, [applyLocalAuthResetPlan]);
 
-  const markServerSessionInvalidated = useCallback((reason = 'server_session_invalid') => {
-    if (reason === 'device_revoked') {
-      destroyRevokedDeviceLocalState(reason);
+  const markServerSessionInvalidated = useCallback((reason = AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID) => {
+    // Sticky revocation: once a `device_revoked` tombstone is written, no
+    // subsequent server-session-invalid signal can downgrade it. The
+    // revocation is a device trust boundary; a later 401 from the same
+    // server about the now-revoked device must not weaken the marker into
+    // a recoverable-session tombstone that leaves the local vault around.
+    const persisted = readPersistedAuthInvalidation();
+    const effectiveReason =
+      persisted?.reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED
+        ? AUTH_INVALIDATION_REASONS.DEVICE_REVOKED
+        : reason;
+    const hasRecoverableVault = Boolean(findVaultMarkerUserId());
+    const transition = planInvalidatedSession(effectiveReason, { hasRecoverableVault });
+
+    if (transition.shouldDestroyLocalDeviceState) {
+      destroyRevokedDeviceLocalState(transition.reason);
       return;
     }
 
-    const nextInvalidation = createAuthInvalidation(reason);
+    const nextInvalidation = createAuthInvalidation(transition.reason);
     localStorage.setItem(AUTH_INVALIDATION_KEY, JSON.stringify(nextInvalidation));
     setAuthInvalidation(nextInvalidation);
 
@@ -1109,11 +1183,12 @@ export function useAuth() {
     sessionStorage.removeItem(VAULT_DERIVED_KEY);
     clearVaultTimeoutEffects();
     clearTranscriptCache();
+    clearAuthOwnedQueryCache();
     clearSession();
     setToken(null);
     setUser(null);
-    setHasLocalVault(Boolean(findVaultMarkerUserId()));
-    setVaultState(findVaultMarkerUserId() ? 'locked' : 'none');
+    setHasLocalVault(transition.nextHasLocalVault);
+    setVaultState(transition.nextVaultState);
     clearPinSetup();
   }, [clearPinSetup, clearVaultTimeoutEffects, destroyRevokedDeviceLocalState]);
 
@@ -1461,12 +1536,21 @@ export function useAuth() {
         const jwt = getLocalToken();
         const deviceId = getDeviceId();
         const { listDeviceKeys, revokeDeviceKey } = await import('../lib/api');
-        const devices = await listDeviceKeys(jwt);
+        // Scope the device-list read and bulk revoke to the recovery
+        // instance. Without baseUrl, the API helpers fall back to the
+        // current origin which may not be the home instance the token
+        // was minted against — the cache invalidation below would then
+        // mark the wrong origin's cache stale.
+        const devices = await listDeviceKeys(jwt, baseUrl);
         await Promise.allSettled(
           devices
             .filter(d => d.deviceId !== deviceId)
-            .map(d => revokeDeviceKey(jwt, d.deviceId)),
+            .map(d => revokeDeviceKey(jwt, d.deviceId, baseUrl)),
         );
+        // Mark cached device-key queries stale so any settings panel mounted
+        // after recovery re-fetches the post-revoke list instead of reading
+        // pre-revoke entries from cache.
+        await invalidateDeviceKeysQueries();
       }
       requirePinSetup();
       localStorage.setItem(HOME_INSTANCE_KEY, baseUrl || window.location.origin);
@@ -1725,6 +1809,17 @@ export function useAuth() {
    * @param {string} pin
    */
   const unlockVault = useCallback(async (pin) => {
+    const unlockPlan = planVaultUnlockAttempt(
+      readPersistedAuthInvalidation(),
+      authInvalidation,
+    );
+    if (unlockPlan.shouldDestroyLocalDeviceState) {
+      destroyRevokedDeviceLocalState(unlockPlan.reason);
+      const revokedError = new Error('device was revoked');
+      revokedError.code = 'DEVICE_REVOKED';
+      throw revokedError;
+    }
+
     const userId = user?.id ?? localStorage.getItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
     if (!userId) throw new Error('no active vault user');
 
@@ -1770,28 +1865,33 @@ export function useAuth() {
         throw err;
       }
 
-      if (chargedCount >= MAX_PIN_FAILURES) {
+      const failurePlan = planPinFailure({
+        chargedCount,
+        maxFailures: MAX_PIN_FAILURES,
+      });
+
+      if (failurePlan.shouldWipeLocalVault) {
         db?.close?.();
         db = null;
         await deleteVaultDatabase(userId);
-        clearSession();
+        if (failurePlan.shouldClearSession) {
+          clearSession();
+        }
         localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
         localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
         setToken(null);
         setUser(null);
-        setVaultState('none');
-        setHasLocalVault(false);
+        setVaultState(failurePlan.nextVaultState);
+        setHasLocalVault(failurePlan.nextHasLocalVault);
         identityKeyRef.current = null;
 
-        const wipeError = new Error('vault wiped after too many failed PIN attempts');
-        wipeError.code = 'VAULT_WIPED';
+        const wipeError = new Error(failurePlan.errorMessage);
+        wipeError.code = failurePlan.errorCode;
         throw wipeError;
       }
 
-      const wrongPinError = new Error(
-        `incorrect PIN (${MAX_PIN_FAILURES - chargedCount} attempts remaining)`,
-      );
-      wrongPinError.code = 'WRONG_PIN';
+      const wrongPinError = new Error(failurePlan.errorMessage);
+      wrongPinError.code = failurePlan.errorCode;
       wrongPinError.cause = err;
       throw wrongPinError;
     } finally {
@@ -1824,7 +1924,7 @@ export function useAuth() {
         return authResult;
       } catch (err) {
         if (isServerSessionInvalidationError(err)) {
-          markServerSessionInvalidated('server_session_invalid');
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
           const invalidatedError = new Error('server session no longer recognizes this local vault');
           invalidatedError.code = 'SERVER_SESSION_INVALIDATED';
           invalidatedError.cause = err;
@@ -1856,19 +1956,34 @@ export function useAuth() {
       void writeVaultSessionForUnlock(userId, privateKey, publicKey);
     }
     return undefined;
-  }, [user, applyVaultTimeout, clearPinSetup, markServerSessionInvalidated, performChallengeResponse]);
+  }, [
+    user,
+    applyVaultTimeout,
+    authInvalidation,
+    clearPinSetup,
+    destroyRevokedDeviceLocalState,
+    markServerSessionInvalidated,
+    performChallengeResponse,
+  ]);
 
   /**
    * Locks the vault by clearing the in-memory private key.
    * Does NOT delete vault IDB data - use performLogout for full wipe.
    */
   const lockVault = useCallback(() => {
-    identityKeyRef.current = null;
-    sessionStorage.removeItem(VAULT_DERIVED_KEY);
+    const transition = planLocalVaultLock();
+    if (transition.shouldClearIdentity) {
+      identityKeyRef.current = null;
+    }
+    if (transition.shouldClearSessionKeys) {
+      sessionStorage.removeItem(VAULT_DERIVED_KEY);
+    }
     clearVaultTimeoutEffects();
-    clearTranscriptCache();
+    if (transition.shouldClearTranscriptCache) {
+      clearTranscriptCache();
+    }
     const userId = currentUserIdRef.current;
-    if (userId) {
+    if (userId && transition.shouldClearSessionKeys) {
       clearVaultSessionKey(userId).catch(() => {});
       // P21 step 4 — manual lock must invalidate the cross-reload
       // session key store so the next reload prompts for PIN. Without
@@ -1876,7 +1991,7 @@ export function useAuth() {
       // resume — defeating the user's intent.
       clearVaultSessionStore(userId).catch(() => {});
     }
-    setVaultState('locked');
+    setVaultState(transition.nextVaultState);
   }, [clearVaultTimeoutEffects]);
 
   /**
@@ -1979,6 +2094,7 @@ export function useAuth() {
 
     const jwt = getLocalToken();
     const userId = user?.id;
+    const resetPlan = planLocalAuthReset(LOCAL_AUTH_RESET_REASONS.LOGOUT);
 
     // 1. Best-effort server logout.
     if (jwt) {
@@ -2025,7 +2141,15 @@ export function useAuth() {
         deleteTranscriptDatabase(userId).catch(() => undefined),
       );
     }
-    clearTranscriptCache();
+    if (resetPlan.shouldClearTranscriptCache) {
+      clearTranscriptCache();
+    }
+    if (resetPlan.shouldClearAuthQueries) {
+      // Clear server-state caches before slower IDB deletion settles. Any
+      // concurrent auth-owned query remount should see missing auth state and
+      // remain disabled rather than reusing stale data.
+      clearAuthOwnedQueryCache();
+    }
 
     await Promise.allSettled(deleteTargets);
 
@@ -2054,19 +2178,8 @@ export function useAuth() {
     }
 
     // 7. Reset in-memory state.
-    identityKeyRef.current = null;
-    clearVaultTimeoutEffects();
-    clearGuestTimers();
-    setToken(null);
-    setUser(null);
-    setVaultState('none');
-    setHasLocalVault(false);
-    setNeedsPinSetupState(false);
-    setIsGuest(false);
-    setGuestExpiresAt(null);
-    setError(null);
-    setLoading(false);
-  }, [user, clearGuestTimers, clearVaultTimeoutEffects]);
+    applyLocalAuthResetPlan(resetPlan);
+  }, [user, applyLocalAuthResetPlan]);
 
   // ── Keep currentUserIdRef in sync with user state ─────────────────────────
 
@@ -2238,6 +2351,15 @@ export function useAuth() {
     if (!stored) {
       clearPinSetup();
 
+      const startupPlan = planNoTokenStartup(authInvalidation);
+      if (startupPlan.shouldDestroyLocalDeviceState) {
+        destroyRevokedDeviceLocalState(AUTH_INVALIDATION_REASONS.DEVICE_REVOKED);
+        setHasLocalVault(startupPlan.nextHasLocalVault);
+        setVaultState(startupPlan.nextVaultState);
+        setLoading(false);
+        return undefined;
+      }
+
       // No JWT - but vault may still exist (tab closed, sessionStorage wiped).
       // Check localStorage for vault marker. If found, show PIN unlock;
       // after unlock, challenge-response auth gets a fresh JWT.
@@ -2246,8 +2368,10 @@ export function useAuth() {
         localStorage.setItem(`${VAULT_USER_KEY_PREFIX}_last_user`, vaultUserId);
 
         if (authInvalidation) {
-          setHasLocalVault(true);
-          setVaultState('locked');
+          applyBootVaultPlan(planNoTokenLocalVaultBoot({
+            hasAuthInvalidation: true,
+            vaultExists: true,
+          }));
           setLoading(false);
           return undefined;
         }
@@ -2273,19 +2397,19 @@ export function useAuth() {
                 if (idbCheckCancelled) return;
               }
               if (!unlocked) {
-                setHasLocalVault(true);
-                setVaultState('locked');
+                applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultExists: true }));
               }
             } else {
               // Vault marker set during registration but PIN never set - clear stale marker.
-              localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${vaultUserId}`);
-              setHasLocalVault(false);
-              setVaultState('none');
+              const bootPlan = planNoTokenLocalVaultBoot({ vaultExists: false });
+              if (bootPlan.shouldClearVaultMarker) {
+                localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${vaultUserId}`);
+              }
+              applyBootVaultPlan(bootPlan);
             }
           } catch {
             if (!idbCheckCancelled) {
-              setHasLocalVault(true);
-              setVaultState('locked'); // Fallback: assume vault exists.
+              applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultCheckFailed: true }));
             }
           }
           if (!idbCheckCancelled) setLoading(false);
@@ -2319,8 +2443,10 @@ export function useAuth() {
             if (idbCancelled) return;
             if (result.exists) {
               if (authInvalidation) {
-                setHasLocalVault(true);
-                setVaultState('locked');
+                applyBootVaultPlan(planNoTokenLocalVaultBoot({
+                  hasAuthInvalidation: true,
+                  vaultExists: true,
+                }));
                 setLoading(false);
                 return;
               }
@@ -2336,8 +2462,7 @@ export function useAuth() {
                 if (idbCancelled) return;
               }
               if (!unlocked) {
-                setHasLocalVault(true);
-                setVaultState('locked');
+                applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultExists: true }));
               }
               setLoading(false);
               return;
@@ -2354,8 +2479,7 @@ export function useAuth() {
           }
           // No vault at all - show login/register.
           setLoading(false);
-          setHasLocalVault(false);
-          setVaultState('none');
+          applyBootVaultPlan(planNoTokenLocalVaultBoot({ vaultExists: false }));
         }
       })();
       // eslint-disable-next-line no-return-assign
@@ -2370,7 +2494,7 @@ export function useAuth() {
         if (cancelled) return;
 
         if (res.status === 401) {
-          markServerSessionInvalidated('server_session_invalid');
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
           return;
         }
 
@@ -2436,33 +2560,44 @@ export function useAuth() {
                   }
                   if (!unlocked) {
                     clearPinSetup();
-                    setVaultState('locked');
+                    applyBootVaultPlan(planAuthenticatedVaultBoot({
+                      hasVaultEvidence: true,
+                      hasEncryptedVaultBlob: true,
+                    }));
                   }
                 } else {
                   // Stale marker - PIN was never set. Clear it.
-                  localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
-                  setHasLocalVault(false);
-                  setVaultState('unlocked');
+                  const bootPlan = planAuthenticatedVaultBoot({
+                    hasVaultEvidence: true,
+                    hasEncryptedVaultBlob: false,
+                  });
+                  if (bootPlan.shouldClearVaultMarker) {
+                    localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
+                  }
+                  applyBootVaultPlan(bootPlan);
                 }
               } catch {
                 if (!cancelled) {
-                  setHasLocalVault(true);
+                  const bootPlan = planAuthenticatedVaultBoot({
+                    hasVaultEvidence: true,
+                    vaultCheckFailed: true,
+                  });
+                  applyBootVaultPlan(bootPlan);
                   clearPinSetup();
-                  setVaultState('locked');
                 }
               }
             }
           } else {
             // Authenticated via JWT but no vault set up yet (PIN never configured).
-            setHasLocalVault(false);
-            setVaultState('unlocked');
+            applyBootVaultPlan(planAuthenticatedVaultBoot({ hasVaultEvidence: false }));
           }
         }
       } catch {
         // Network error - keep token, keep as locked if vault exists.
         setToken(stored);
-        setHasLocalVault(Boolean(findVaultMarkerUserId()));
-        setVaultState('locked');
+        applyBootVaultPlan(planAuthenticatedSessionFetchFailure({
+          hasVaultMarker: Boolean(findVaultMarkerUserId()),
+        }));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -2470,7 +2605,13 @@ export function useAuth() {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authInvalidation, clearPinSetup, markServerSessionInvalidated]);
+  }, [
+    applyBootVaultPlan,
+    authInvalidation,
+    clearPinSetup,
+    destroyRevokedDeviceLocalState,
+    markServerSessionInvalidated,
+  ]);
 
   // ── Request persistent storage ───────────────────────────────────────────
   // Opt out of best-effort eviction on iOS. Without this, non-Safari browsers
@@ -2526,7 +2667,7 @@ export function useAuth() {
       try {
         const res = await fetchWithAuth(stored, '/api/auth/me');
         if (res.status === 401) {
-          markServerSessionInvalidated('server_session_invalid');
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
           window.location.href = '/';
         }
       } catch {
@@ -2562,40 +2703,32 @@ export function useAuth() {
       bc = new BroadcastChannel('hush_auth');
       bc.onmessage = (event) => {
         if (event.data?.type === 'hush_logout') {
-          identityKeyRef.current = null;
-          clearVaultTimeoutEffects();
-          setToken(null);
-          setUser(null);
-          setVaultState('none');
-          setHasLocalVault(false);
-          clearPinSetup();
+          const resetPlan = planLocalAuthReset(LOCAL_AUTH_RESET_REASONS.BROADCAST_LOGOUT);
+          applyLocalAuthResetPlan(resetPlan);
         }
         if (event.data?.type === 'hush_device_revoked') {
-          destroyRevokedDeviceLocalState('device_revoked');
+          destroyRevokedDeviceLocalState(AUTH_INVALIDATION_REASONS.DEVICE_REVOKED);
         }
       };
     } catch {
       // BroadcastChannel unavailable.
     }
     return () => { try { bc?.close(); } catch { /* noop */ } };
-  }, [clearPinSetup, clearVaultTimeoutEffects, destroyRevokedDeviceLocalState]);
+  }, [applyLocalAuthResetPlan, destroyRevokedDeviceLocalState]);
 
   // ── Forced logout on device revocation ───────────────────────────────────
   // The server returns 401 "device revoked" on any authenticated HTTP call
   // and closes any active WS with policy-violation 1008 + "device revoked".
   // Both surfaces dispatch a window 'hush_auth_invalid' event (api.js +
-  // ws.js). React to it by tearing the *session* down so the UI is forced
-  // out of the authenticated view — but preserve the local encrypted
-  // vault marker on disk. The browser is still a known profile; what's
-  // gone is the trusted server session + the in-memory derived key.
-  // Surface the right post-revocation UX (locked-vault sign-in) instead
-  // of pretending the browser is brand-new.
+  // ws.js). React to it by tearing down the trusted session. Generic
+  // server invalidation preserves a local vault for recovery; device_revoked
+  // is destructive and must not leave a PIN-resumable identity behind.
   useEffect(() => {
     function handleAuthInvalid(event) {
-      const reason = event?.detail?.reason || 'server_session_invalid';
+      const reason = event?.detail?.reason || AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID;
       console.warn('[useAuth] forced logout due to server invalidation signal', { reason });
       markServerSessionInvalidated(reason);
-      if (reason === 'device_revoked') {
+      if (reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) {
         try {
           const bc = new BroadcastChannel('hush_auth');
           bc.postMessage({ type: 'hush_device_revoked' });

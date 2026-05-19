@@ -13,6 +13,13 @@
  */
 import { bytesToBase64 } from './deviceLinking';
 import { sha256 } from './linkArchive';
+import { readJsonResponse, readJsonResponseOrNull } from './apiJson';
+import {
+  parseArchiveFinalizeMissing,
+  parseArchiveInitResponse,
+  parseArchiveManifest,
+  parseArchiveWindowResponse,
+} from './linkArchiveSchemas';
 
 const RETRY_BASE_DELAY_MS = 250;
 const RETRY_MAX_ATTEMPTS = 3;
@@ -32,11 +39,7 @@ function archiveBaseUrl(baseUrl) {
 }
 
 async function readJson(res) {
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
+  return readJsonResponseOrNull(res, 'link archive error');
 }
 
 function shouldRetry(err) {
@@ -103,7 +106,7 @@ export async function initArchive(token, body, baseUrl = '') {
       body: await readJson(res),
     });
   }
-  return res.json();
+  return parseArchiveInitResponse(await readJsonResponse(res, 'initArchive'));
 }
 
 /**
@@ -228,7 +231,10 @@ export async function requestUploadWindow(archiveId, uploadToken, from, to, jwt,
         body: await readJson(res),
       });
     }
-    return res.json();
+    return parseArchiveWindowResponse(
+      await readJsonResponse(res, 'requestUploadWindow'),
+      'requestUploadWindow',
+    );
   });
 }
 
@@ -259,7 +265,10 @@ export async function requestDownloadWindow(archiveId, downloadToken, from, to, 
         body: await readJson(res),
       });
     }
-    return res.json();
+    return parseArchiveWindowResponse(
+      await readJsonResponse(res, 'requestDownloadWindow'),
+      'requestDownloadWindow',
+    );
   });
 }
 
@@ -383,8 +392,9 @@ export async function finalizeArchive(archiveId, uploadToken, jwt, baseUrl = '')
   });
   if (res.status === 200) return { status: 'ok' };
   const body = await readJson(res);
-  if (res.status === 409 && Array.isArray(body?.missing)) {
-    return { status: 'missing', missing: body.missing };
+  if (res.status === 409 && body) {
+    const parsed = parseArchiveFinalizeMissing(body);
+    return { status: 'missing', missing: parsed.missing };
   }
   throw new LinkArchiveError(`finalizeArchive failed (${res.status})`, {
     status: res.status,
@@ -410,7 +420,7 @@ export async function fetchManifest(archiveId, downloadToken, baseUrl = '') {
         body: await readJson(res),
       });
     }
-    return res.json();
+    return parseArchiveManifest(await readJsonResponse(res, 'fetchManifest'));
   });
 }
 

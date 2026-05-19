@@ -4,6 +4,7 @@
  * events later (placeholder "online" for now).
  */
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 import { getGuildMembers } from "@/lib/api"
 import { formatUserLabel } from "@/lib/userLabel"
 
@@ -50,46 +51,57 @@ interface UseMembersResult {
   refetch: () => Promise<void>
 }
 
+export function membersForServerQueryKey({
+  serverId,
+  baseUrl,
+  currentUserId,
+}: Pick<UseMembersArgs, "serverId" | "baseUrl" | "currentUserId">) {
+  return [
+    "servers",
+    baseUrl || "local",
+    serverId ?? "none",
+    "members",
+    currentUserId ?? "anonymous",
+  ] as const
+}
+
 export function useMembersForServer({
   serverId,
   token,
   baseUrl,
-  currentUserId: _currentUserId,
+  currentUserId,
   onlineUserIds,
   hasOnlineSnapshot,
 }: UseMembersArgs): UseMembersResult {
-  const [raw, setRaw] = React.useState<RawMember[]>([])
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<Error | null>(null)
+  const isQueryEnabled = Boolean(serverId && token)
+  const query = useQuery<RawMember[], Error>({
+    queryKey: membersForServerQueryKey({ serverId, baseUrl, currentUserId }),
+    enabled: isQueryEnabled,
+    queryFn: async () => {
+      if (!serverId || !token) return []
+      const data = (await getGuildMembers(token, serverId, baseUrl)) as unknown
+      return Array.isArray(data) ? (data as RawMember[]) : []
+    },
+  })
 
-  const refetch = React.useCallback(async () => {
-    if (!serverId || !token) {
-      setRaw([])
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const data = (await getGuildMembers(token, serverId, baseUrl)) as RawMember[]
-      setRaw(Array.isArray(data) ? data : [])
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)))
-      setRaw([])
-    } finally {
-      setLoading(false)
-    }
-  }, [serverId, token, baseUrl])
-
-  React.useEffect(() => {
-    void refetch()
-  }, [refetch])
+  const raw = query.data ?? []
 
   const members = React.useMemo<ServerMember[]>(
     () => raw.map((m) => mapRawMember(m, onlineUserIds, hasOnlineSnapshot)),
     [raw, onlineUserIds, hasOnlineSnapshot]
   )
 
-  return { members, loading, error, refetch }
+  const refetch = React.useCallback(async () => {
+    if (!serverId || !token) return
+    await query.refetch()
+  }, [query.refetch, serverId, token])
+
+  return {
+    members,
+    loading: query.isFetching && isQueryEnabled,
+    error: query.error ?? null,
+    refetch,
+  }
 }
 
 export function mapRawMember(

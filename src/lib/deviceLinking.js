@@ -8,12 +8,156 @@
  *   - Transfer bundle serialisation helpers
  */
 import * as ed from '@noble/ed25519';
+import { z } from 'zod';
 import { gunzipBytes, gzipBytes, isGzipBytes, supportsGzipCompression } from './compression';
+import { recordClientDiagnostic } from './clientDiagnostics';
 
 const LINKING_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const LINKING_CODE_LENGTH = 8;
 const LINK_QR_ROUTE = '/link-device';
 const LINK_BUNDLE_VERSION = 3;
+const ED25519_PRIVATE_KEY_BYTES = 32;
+const ED25519_PUBLIC_KEY_BYTES = 32;
+const P256_RAW_PUBLIC_KEY_BYTES = 65;
+const LEGACY_INLINE_TRANSCRIPT_BLOB_MAX_BYTES = 32 * 1024 * 1024;
+
+const QRPayloadSchema = z.object({
+  r: z.string().min(1),
+  s: z.string().min(1),
+  e: z.string().min(1),
+  d: z.string().min(1).optional(),
+  k: z.string().min(1).optional(),
+}).strict().refine(
+  (payload) => Boolean(payload.d) === Boolean(payload.k),
+  { message: 'QR payload must include both device and session key commitments or neither.' },
+);
+
+const LinkArchiveDescriptorSchema = z.object({
+  id: z.string().min(1),
+  downloadToken: z.string().min(1),
+  // Archive import checkpoints require a positive total chunk count, and the
+  // archive plaintext builder rejects empty archives before upload.
+  totalChunks: z.number().int().positive(),
+  totalBytes: z.number().int().nonnegative(),
+  chunkSize: z.number().int().positive(),
+  manifestHash: z.string().min(1),
+  archiveSha256: z.string().min(1),
+  ephPub: z.string().min(1),
+  nonceBase: z.string().min(1),
+  transcriptBlobOmitted: z.boolean(),
+}).strict();
+
+const TransferBundleSchema = z.object({
+  v: z.number().int().positive().optional(),
+  userId: z.string().min(1),
+  username: z.string().optional(),
+  displayName: z.string().optional(),
+  instanceUrl: z.string().optional(),
+  exportedAt: z.string().optional(),
+  rootPrivateKey: z.string().min(1),
+  rootPublicKey: z.string().min(1),
+  archive: LinkArchiveDescriptorSchema.nullish(),
+  historySnapshot: z.object({}).passthrough().nullish(),
+  guildMetadataKeySnapshot: z.object({}).passthrough().nullish(),
+  transcriptBlob: z.string().min(1).nullish(),
+}).strict();
+
+function createDeviceLinkPayloadError(
+  message,
+  cause,
+  { event = 'invalid-payload', field = null, issues = null } = {},
+) {
+  const err = new Error(message);
+  err.code = 'invalid_device_link_payload';
+  if (cause) err.cause = cause;
+  recordClientDiagnostic({
+    category: 'device-link',
+    event,
+    severity: 'error',
+    details: {
+      field,
+      message,
+      issues,
+    },
+  });
+  return err;
+}
+
+function summarizeZodIssues(error) {
+  return error?.issues?.slice(0, 8).map((issue) => ({
+    code: issue.code,
+    path: issue.path,
+  })) ?? null;
+}
+
+function parseJsonPayload(text, description, event) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw createDeviceLinkPayloadError(`${description}: invalid JSON.`, err, { event });
+  }
+}
+
+function parseSchemaPayload(schema, value, description, event) {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw createDeviceLinkPayloadError(`${description}: invalid shape.`, parsed.error, {
+    event,
+    issues: summarizeZodIssues(parsed.error),
+  });
+}
+
+function estimateBase64DecodedLength(value) {
+  const compact = String(value).replace(/\s+/g, '');
+  const padding = compact.endsWith('==') ? 2 : compact.endsWith('=') ? 1 : 0;
+  return Math.floor((compact.length * 3) / 4) - padding;
+}
+
+function decodeBase64Field(
+  value,
+  fieldName,
+  {
+    description = 'Invalid transfer bundle',
+    event = 'invalid-bundle',
+    expectedLength = null,
+    maxBytes = null,
+  } = {},
+) {
+  const estimatedLength = estimateBase64DecodedLength(value);
+  if (maxBytes != null && estimatedLength > maxBytes) {
+    throw createDeviceLinkPayloadError(
+      `${description}: ${fieldName} exceeds ${maxBytes} bytes.`,
+      null,
+      { event, field: fieldName },
+    );
+  }
+
+  let bytes;
+  try {
+    bytes = base64ToBytes(value);
+  } catch (err) {
+    throw createDeviceLinkPayloadError(
+      `${description}: ${fieldName} is not valid base64.`,
+      err,
+      { event, field: fieldName },
+    );
+  }
+  if (expectedLength != null && bytes.byteLength !== expectedLength) {
+    throw createDeviceLinkPayloadError(
+      `${description}: ${fieldName} has ${bytes.byteLength} bytes, expected ${expectedLength}.`,
+      null,
+      { event, field: fieldName },
+    );
+  }
+  if (maxBytes != null && bytes.byteLength > maxBytes) {
+    throw createDeviceLinkPayloadError(
+      `${description}: ${fieldName} exceeds ${maxBytes} bytes.`,
+      null,
+      { event, field: fieldName },
+    );
+  }
+  return bytes;
+}
 
 /**
  * Encodes raw bytes as a base64 string.
@@ -251,24 +395,37 @@ export function encodeQRPayload({
  */
 export function decodeQRPayload(encoded) {
   if (!encoded) {
-    throw new Error('Invalid QR payload: input is empty.');
+    throw createDeviceLinkPayloadError('Invalid QR payload: input is empty.', null, {
+      event: 'invalid-qr',
+    });
   }
   let json;
   try {
     json = atob(encoded);
-  } catch {
-    throw new Error('Invalid QR payload: not valid base64.');
+  } catch (err) {
+    throw createDeviceLinkPayloadError('Invalid QR payload: not valid base64.', err, {
+      event: 'invalid-qr',
+    });
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error('Invalid QR payload: could not parse JSON after base64 decode.');
+  const parsed = parseSchemaPayload(
+    QRPayloadSchema,
+    parseJsonPayload(json, 'Invalid QR payload', 'invalid-qr'),
+    'Invalid QR payload',
+    'invalid-qr',
+  );
+  if (parsed.d) {
+    decodeBase64Field(parsed.d, 'devicePublicKey', {
+      description: 'Invalid QR payload',
+      event: 'invalid-qr',
+      expectedLength: ED25519_PUBLIC_KEY_BYTES,
+    });
+    decodeBase64Field(parsed.k, 'sessionPublicKey', {
+      description: 'Invalid QR payload',
+      event: 'invalid-qr',
+      expectedLength: P256_RAW_PUBLIC_KEY_BYTES,
+    });
   }
   const { r, s, e, d, k } = parsed;
-  if (!r || !s || !e) {
-    throw new Error('Invalid QR payload: missing required fields (r, s, e).');
-  }
   return {
     requestId: r,
     secret: s,
@@ -412,7 +569,22 @@ export async function encodeTransferBundle(bundle) {
 export async function decodeTransferBundle(bytes) {
   const decodedBytes = isGzipBytes(bytes) ? await gunzipBytes(bytes) : bytes;
   const text = new TextDecoder().decode(decodedBytes);
-  const parsed = JSON.parse(text);
+  const parsed = parseSchemaPayload(
+    TransferBundleSchema,
+    parseJsonPayload(text, 'Invalid transfer bundle', 'invalid-bundle'),
+    'Invalid transfer bundle',
+    'invalid-bundle',
+  );
+  const rootPrivateKey = decodeBase64Field(
+    parsed.rootPrivateKey,
+    'rootPrivateKey',
+    { expectedLength: ED25519_PRIVATE_KEY_BYTES },
+  );
+  const rootPublicKey = decodeBase64Field(
+    parsed.rootPublicKey,
+    'rootPublicKey',
+    { expectedLength: ED25519_PUBLIC_KEY_BYTES },
+  );
   return {
     version: parsed.v ?? 1,
     userId: parsed.userId,
@@ -420,14 +592,18 @@ export async function decodeTransferBundle(bytes) {
     displayName: parsed.displayName ?? '',
     instanceUrl: parsed.instanceUrl ?? '',
     exportedAt: parsed.exportedAt ?? '',
-    rootPrivateKey: base64ToBytes(parsed.rootPrivateKey),
-    rootPublicKey: base64ToBytes(parsed.rootPublicKey),
+    rootPrivateKey,
+    rootPublicKey,
     // v3: archive descriptor for chunked-transfer plane. v2 and earlier
     // ship history/metadata/transcript inline. The new device's
     // completeDeviceLink prefers `archive` when present.
     archive: parsed.archive ?? null,
     historySnapshot: parsed.historySnapshot ?? null,
     guildMetadataKeySnapshot: parsed.guildMetadataKeySnapshot ?? null,
-    transcriptBlob: parsed.transcriptBlob ? base64ToBytes(parsed.transcriptBlob) : null,
+    transcriptBlob: parsed.transcriptBlob
+      ? decodeBase64Field(parsed.transcriptBlob, 'transcriptBlob', {
+        maxBytes: LEGACY_INLINE_TRANSCRIPT_BLOB_MAX_BYTES,
+      })
+      : null,
   };
 }
