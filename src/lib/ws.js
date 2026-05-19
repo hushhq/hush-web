@@ -110,6 +110,14 @@ export function createWsClient(opts) {
     });
   }
 
+  function previewPayload(value) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[unserializable]';
+    }
+  }
+
   function scheduleReconnect() {
     if (reconnectTimer) return;
     reconnecting = true;
@@ -207,6 +215,7 @@ export function createWsClient(opts) {
           type: parsed.type,
           reason: parsed.reason,
           issues: parsed.issues,
+          preview: previewPayload(data),
         });
         return;
       }

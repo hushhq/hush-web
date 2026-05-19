@@ -130,6 +130,37 @@ describe('createWsClient - initial connection', () => {
             details: expect.objectContaining({
               type: 'message.new',
               reason: 'schema',
+              preview: expect.stringContaining('message.new'),
+            }),
+          }),
+        }),
+      );
+      globalThis.removeEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+      resolve();
+    }, 10);
+  }));
+
+  it('records a diagnostic for invalid JSON frames', () => new Promise((resolve) => {
+    MockWs = makeMockWs({ captureInstance: true, autoOpen: false });
+    global.WebSocket = MockWs;
+
+    const getToken = vi.fn(() => 't');
+    const client = createWsClient({ url: 'ws://localhost/ws', getToken });
+    const onDiagnostic = vi.fn();
+    globalThis.addEventListener(DIAGNOSTIC_EVENT_NAME, onDiagnostic);
+    client.connect();
+    setTimeout(() => {
+      const ws = MockWs.captured;
+      ws.onmessage({ data: 'not-json token=secret-value' });
+      expect(onDiagnostic).toHaveBeenCalledOnce();
+      expect(onDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({
+            category: 'ws',
+            event: 'invalid-json-frame',
+            severity: 'warn',
+            details: expect.objectContaining({
+              preview: 'not-json token=[redacted]',
             }),
           }),
         }),

@@ -10,7 +10,7 @@ const BaseMessageSchema = z.object({
 
 const ServerScopedSchema = z.object({
   type: NonEmptyString,
-  server_id: OptionalString,
+  server_id: NonEmptyString,
 }).passthrough()
 
 const ChannelScopedSchema = z.object({
@@ -42,8 +42,19 @@ const VoiceParticipantSchema = z.object({
 }).passthrough()
 
 const WS_MESSAGE_SCHEMAS = new Map([
-  ["pong", BaseMessageSchema],
-  ["error", BaseMessageSchema],
+  [
+    "pong",
+    z.object({
+      type: z.literal("pong"),
+    }).passthrough(),
+  ],
+  [
+    "error",
+    z.object({
+      type: z.literal("error"),
+      code: OptionalString,
+    }).passthrough(),
+  ],
   [
     "message.new",
     z.object({
@@ -172,9 +183,28 @@ const WS_MESSAGE_SCHEMAS = new Map([
       is_deafened: z.boolean(),
     }),
   ],
-  ["transparency.key_change", BaseMessageSchema],
-  ["instance_banned", BaseMessageSchema],
-  ["key_packages.low", BaseMessageSchema],
+  [
+    "transparency.key_change",
+    z.object({
+      type: z.literal("transparency.key_change"),
+      operation: NonEmptyString,
+      leafIndex: z.number(),
+      treeRoot: NonEmptyString,
+    }).passthrough(),
+  ],
+  [
+    "instance_banned",
+    z.object({
+      type: z.literal("instance_banned"),
+      reason: z.string(),
+    }).passthrough(),
+  ],
+  [
+    "key_packages.low",
+    z.object({
+      type: z.literal("key_packages.low"),
+    }).passthrough(),
+  ],
 ])
 
 function formatIssues(error) {
