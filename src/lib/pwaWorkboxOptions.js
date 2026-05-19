@@ -9,6 +9,8 @@
 //   * SW is conservative: precache the static app shell, nothing else.
 //   * /api/*, /ws, /livekit/*, attachment endpoints, and any presigned /
 //     external storage URL must never be served from the SW cache.
+//   * /admin/* is a separate backend-served dashboard and must never receive
+//     the user app shell as a navigation fallback.
 //   * index.html must always be fetched network-first so a deployed update
 //     becomes visible on the next navigation — users cannot get trapped on a
 //     stale HTML shell.
@@ -33,6 +35,8 @@ export const NEVER_CACHE_URL_PATTERNS = Object.freeze([
   /\/ws(\?|$)/,
   // LiveKit signaling/HTTP endpoints - real-time, never cached.
   /\/livekit\//,
+  // Admin dashboard is served by hush-server, not by the user app bundle.
+  /^\/admin(?:\/|$)/,
   // Attachment presign + download endpoints (server-relative paths).
   /\/api\/.*\/attachments\//,
   /\/api\/attachments\//,
@@ -107,6 +111,7 @@ export const NAVIGATE_FALLBACK_DENYLIST = Object.freeze([
   /^\/api\//,
   /^\/ws(\?|$)/,
   /^\/livekit\//,
+  /^\/admin(?:\/|$)/,
 ]);
 
 /**
@@ -135,6 +140,7 @@ export const RUNTIME_CACHING = Object.freeze([
         /\/api\//,
         /\/ws(\?|$)/,
         /\/livekit\//,
+        /^\/admin(?:\/|$)/,
         /\/api\/.*\/attachments\//,
         /\/api\/attachments\//,
       ];

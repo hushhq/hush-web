@@ -83,7 +83,7 @@ afterEach(() => {
 // ── SW configuration ─────────────────────────────────────────────────────────
 
 describe("PWA Workbox config", () => {
-  it("never runtime-caches /api, /ws, /livekit, or attachment paths", () => {
+  it("never runtime-caches /api, /ws, /livekit, /admin, or attachment paths", () => {
     const samples = [
       "/api/handshake",
       "/api/mls/credentials",
@@ -94,6 +94,8 @@ describe("PWA Workbox config", () => {
       "/ws",
       "/ws?token=xyz",
       "/livekit/room",
+      "/admin/",
+      "/admin/assets/index.js",
     ];
     for (const s of samples) {
       const matches = NEVER_CACHE_URL_PATTERNS.some((re) => re.test(s));
@@ -101,20 +103,21 @@ describe("PWA Workbox config", () => {
     }
   });
 
-  it("excludes /api, /ws, and /livekit from navigateFallback", () => {
-    const samples = ["/api/handshake", "/ws", "/livekit/foo"];
+  it("excludes /api, /ws, /livekit, and /admin from navigateFallback", () => {
+    const samples = ["/api/handshake", "/ws", "/livekit/foo", "/admin/"];
     for (const s of samples) {
       const matches = NAVIGATE_FALLBACK_DENYLIST.some((re) => re.test(s));
       expect(matches).toBe(true);
     }
   });
 
-  it("runtime caching rule rejects API/WS/LiveKit destinations", () => {
+  it("runtime caching rule rejects API/WS/LiveKit/admin destinations", () => {
     const rule = RUNTIME_CACHING[0];
     expect(rule.handler).toBe("NetworkFirst");
     const apiUrl = new URL("https://example.test/api/handshake");
     const wsUrl = new URL("https://example.test/ws");
     const lkUrl = new URL("https://example.test/livekit/room");
+    const adminUrl = new URL("https://example.test/admin/");
     expect(
       rule.urlPattern({ request: { destination: "document" }, url: apiUrl }),
     ).toBe(false);
@@ -123,6 +126,9 @@ describe("PWA Workbox config", () => {
     ).toBe(false);
     expect(
       rule.urlPattern({ request: { destination: "document" }, url: lkUrl }),
+    ).toBe(false);
+    expect(
+      rule.urlPattern({ request: { destination: "document" }, url: adminUrl }),
     ).toBe(false);
   });
 
