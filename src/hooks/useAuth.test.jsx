@@ -184,6 +184,20 @@ function expectAuthOwnedQueryDataCleared() {
   expect(queryClient.getQueryData(AUTH_QUERY_KEY)).toBeUndefined();
 }
 
+function clearVaultUnlockBoundaryMocks() {
+  vi.mocked(apiMod.requestChallenge).mockClear();
+  vi.mocked(apiMod.verifyChallenge).mockClear();
+  vi.mocked(vaultMod.openVaultStore).mockClear();
+  vi.mocked(vaultMod.loadEncryptedKey).mockClear();
+}
+
+function expectVaultUnlockBoundaryUntouched() {
+  expect(vaultMod.openVaultStore).not.toHaveBeenCalled();
+  expect(vaultMod.loadEncryptedKey).not.toHaveBeenCalled();
+  expect(apiMod.requestChallenge).not.toHaveBeenCalled();
+  expect(apiMod.verifyChallenge).not.toHaveBeenCalled();
+}
+
 class MockBroadcastChannel {
   static instances = [];
 
@@ -820,16 +834,39 @@ describe('useAuth - unlockVault', () => {
       'hush_auth_invalidation',
       JSON.stringify({ reason: 'device_revoked', at: '2026-05-19T00:00:00Z' }),
     );
+    clearVaultUnlockBoundaryMocks();
 
     await expect(result.current.unlockVault('correct')).rejects.toMatchObject({
       code: 'DEVICE_REVOKED',
     });
 
+    expectVaultUnlockBoundaryUntouched();
     await waitFor(() => expect(result.current.vaultState).toBe('none'));
     expect(localStorage.getItem('hush_vault_user_user-1')).toBeNull();
     expect(result.current.hasVault).toBe(false);
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
+  });
+
+  it('blocks PIN unlock when only in-memory state reports device revocation', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
+        detail: { reason: 'device_revoked' },
+      }));
+    });
+    localStorage.removeItem('hush_auth_invalidation');
+    expect(result.current.authInvalidation?.reason).toBe('device_revoked');
+    clearVaultUnlockBoundaryMocks();
+
+    await expect(result.current.unlockVault('correct')).rejects.toMatchObject({
+      code: 'DEVICE_REVOKED',
+    });
+
+    expectVaultUnlockBoundaryUntouched();
   });
 
   it('migrates a legacy vault blob after a successful PIN unlock', async () => {

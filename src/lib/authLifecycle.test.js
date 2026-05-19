@@ -91,6 +91,30 @@ describe('authLifecycle', () => {
     });
   });
 
+  it('blocks PIN unlock when any invalidation source reports device revocation', () => {
+    expect(
+      planVaultUnlockAttempt(
+        { reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID },
+        { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+      ),
+    ).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.BLOCK_REVOKED_DEVICE_UNLOCK,
+      shouldDestroyLocalDeviceState: true,
+      reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+    });
+
+    expect(
+      planVaultUnlockAttempt(
+        { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+        { reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID },
+      ),
+    ).toEqual({
+      action: AUTH_LIFECYCLE_ACTIONS.BLOCK_REVOKED_DEVICE_UNLOCK,
+      shouldDestroyLocalDeviceState: true,
+      reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+    });
+  });
+
   it('allows PIN unlock when no revoked-device tombstone exists', () => {
     expect(planVaultUnlockAttempt({
       reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID,

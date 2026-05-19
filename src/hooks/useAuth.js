@@ -1748,7 +1748,8 @@ export function useAuth() {
    */
   const unlockVault = useCallback(async (pin) => {
     const unlockPlan = planVaultUnlockAttempt(
-      readPersistedAuthInvalidation() ?? authInvalidation,
+      readPersistedAuthInvalidation(),
+      authInvalidation,
     );
     if (unlockPlan.shouldDestroyLocalDeviceState) {
       destroyRevokedDeviceLocalState(unlockPlan.reason);

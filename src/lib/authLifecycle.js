@@ -107,15 +107,23 @@ export function planInvalidatedSession(reason, { hasRecoverableVault }) {
  * IndexedDB data, so the caller must destroy local device state before any PIN
  * verification or challenge-response runs.
  *
- * @param {{ reason?: string }|null|undefined} authInvalidation
+ * Any vault-unlock path must call this planner before opening local vault
+ * storage. The planner accepts multiple invalidation sources so a revoked
+ * signal cannot be hidden by a stale recoverable marker from another source.
+ *
+ * @param {...({ reason?: string }|null|undefined)} authInvalidations
  * @returns {{
  *   action: string,
  *   shouldDestroyLocalDeviceState: boolean,
  *   reason: string|null,
  * }}
  */
-export function planVaultUnlockAttempt(authInvalidation) {
-  if (authInvalidation?.reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) {
+export function planVaultUnlockAttempt(...authInvalidations) {
+  const hasRevokedDeviceSignal = authInvalidations.some(
+    (authInvalidation) => authInvalidation?.reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED,
+  );
+
+  if (hasRevokedDeviceSignal) {
     return {
       action: AUTH_LIFECYCLE_ACTIONS.BLOCK_REVOKED_DEVICE_UNLOCK,
       shouldDestroyLocalDeviceState: true,
