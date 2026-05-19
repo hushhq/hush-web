@@ -102,6 +102,7 @@ import {
   resolveAuthAudience,
 } from '../lib/api';
 import {
+  HOSTED_AUTH_INSTANCE_URL,
   getActiveAuthInstanceUrlSync,
   markAuthInstanceUsed,
   normalizeInstanceUrl,
@@ -166,11 +167,28 @@ function clearAuthOwnedQueryCache() {
  * @returns {string|null}
  */
 function jwtKeyForInstance(instanceUrl) {
-  try {
-    return `${JWT_KEY}_${new URL(instanceUrl).host}`;
-  } catch {
+  const normalized = normalizeInstanceUrl(instanceUrl);
+  if (!normalized) return null;
+  return `${JWT_KEY}_${new URL(normalized).host}`;
+}
+
+function readAndMigrateDesktopRendererToken(activeUrl, activeKey) {
+  if (
+    typeof window === 'undefined'
+    || window.hushDesktop?.isDesktop !== true
+    || activeUrl !== HOSTED_AUTH_INSTANCE_URL
+    || !activeKey
+  ) {
     return null;
   }
+
+  const legacyDesktopKey = `${JWT_KEY}_localhost`;
+  const token = sessionStorage.getItem(legacyDesktopKey);
+  if (!token) return null;
+
+  sessionStorage.setItem(activeKey, token);
+  sessionStorage.removeItem(legacyDesktopKey);
+  return token;
 }
 
 /**
@@ -242,6 +260,9 @@ export function getLocalToken() {
   if (activeKey) {
     const namespaced = sessionStorage.getItem(activeKey);
     if (namespaced) return namespaced;
+
+    const migratedDesktopToken = readAndMigrateDesktopRendererToken(activeUrl, activeKey);
+    if (migratedDesktopToken) return migratedDesktopToken;
   }
 
   // Legacy migration: if the old global key exists, move it to the namespaced key.

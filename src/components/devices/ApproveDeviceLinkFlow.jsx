@@ -44,6 +44,10 @@ import {
   verifyDeviceLinkRequest,
 } from '../../lib/api';
 import {
+  HOSTED_AUTH_INSTANCE_URL,
+  normalizeInstanceUrl,
+} from '../../lib/authInstanceStore';
+import {
   bytesToBase64,
   certifyDevice,
   claimMatchesPayloadKeys,
@@ -87,7 +91,17 @@ function formatCountdown(expiresAt, now = Date.now()) {
 }
 
 function resolveTrustedApiBaseUrl(homeInstanceUrl) {
-  return homeInstanceUrl || window.location.origin;
+  const explicit = normalizeInstanceUrl(homeInstanceUrl);
+  if (explicit) return explicit;
+
+  if (homeInstanceUrl) {
+    return HOSTED_AUTH_INSTANCE_URL;
+  }
+
+  const currentOrigin = typeof window !== 'undefined'
+    ? normalizeInstanceUrl(window.location?.origin)
+    : null;
+  return currentOrigin || HOSTED_AUTH_INSTANCE_URL;
 }
 
 export default function ApproveDeviceLinkFlow({
@@ -115,12 +129,13 @@ export default function ApproveDeviceLinkFlow({
   const [isResolving, setIsResolving] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const trustedHomeInstanceUrl = resolveTrustedApiBaseUrl(homeInstanceUrl);
 
   const {
     token: homeInstanceToken,
     isMissingExplicitHomeInstanceToken: isMissingHomeInstanceToken,
   } = useHomeInstanceSession({
-    homeInstanceUrl,
+    homeInstanceUrl: trustedHomeInstanceUrl,
     fallbackToken: token,
   });
   const hasUnlockedIdentity = hasSession
@@ -148,7 +163,7 @@ export default function ApproveDeviceLinkFlow({
       setResumableExport(null);
       return;
     }
-    const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
+    const baseUrlForApi = trustedHomeInstanceUrl;
     let cancelled = false;
     findResumableExport(baseUrlForApi)
       .then((rec) => {
@@ -177,7 +192,7 @@ export default function ApproveDeviceLinkFlow({
         const resolved = await resolveDeviceLinkRequest(
           homeInstanceToken,
           body,
-          homeInstanceUrl ?? '',
+          trustedHomeInstanceUrl,
         );
         // QR-commitment guard: when the QR payload carried committed
         // device/session public keys, reject the claim if the
@@ -204,7 +219,7 @@ export default function ApproveDeviceLinkFlow({
         setIsResolving(false);
       }
     },
-    [homeInstanceToken, homeInstanceUrl],
+    [homeInstanceToken, trustedHomeInstanceUrl],
   );
 
   useEffect(() => {
@@ -299,7 +314,7 @@ export default function ApproveDeviceLinkFlow({
     let metadataDb = null;
     try {
       historyDb = await mlsStore.openStore(user.id, getDeviceId());
-      const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
+      const baseUrlForApi = trustedHomeInstanceUrl;
       try {
         const summary = await preDecryptForLinkExport({
           activeDb: historyDb,
@@ -489,10 +504,10 @@ export default function ApproveDeviceLinkFlow({
     }
   }, [
     claim,
-    homeInstanceUrl,
     homeInstanceToken,
     identityKeyRef,
     onSuccess,
+    trustedHomeInstanceUrl,
     user?.displayName,
     user?.id,
     user?.username,
@@ -513,7 +528,7 @@ export default function ApproveDeviceLinkFlow({
     setStatus('Resuming previous upload…');
     setIsResuming(true);
     try {
-      const baseUrlForApi = resolveTrustedApiBaseUrl(homeInstanceUrl);
+      const baseUrlForApi = trustedHomeInstanceUrl;
       const archiveDescriptor = await resumeUploadArchiveSession({
         token: homeInstanceToken,
         baseUrl: baseUrlForApi,
@@ -585,11 +600,11 @@ export default function ApproveDeviceLinkFlow({
     }
   }, [
     claim,
-    homeInstanceUrl,
     homeInstanceToken,
     identityKeyRef,
     onSuccess,
     resumableExport,
+    trustedHomeInstanceUrl,
     user?.displayName,
     user?.id,
     user?.username,
@@ -764,7 +779,7 @@ export default function ApproveDeviceLinkFlow({
           <div className={'flex justify-between gap-4'}>
             <span className="text-muted-foreground">Instance</span>
             <strong className="truncate">
-              {resolveTrustedApiBaseUrl(homeInstanceUrl)}
+              {trustedHomeInstanceUrl}
             </strong>
           </div>
         </div>

@@ -281,6 +281,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   queryClient.clear();
+  delete window.hushDesktop;
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -2191,6 +2192,27 @@ describe('useAuth - per-instance JWT storage', () => {
     expect(getTokenForInstanceUrl('not-a-url')).toBeNull();
   });
 
+  it('getInstanceToken rejects desktop app origins', () => {
+    sessionStorage.setItem('hush_jwt_localhost', 'desktop-origin-token');
+    expect(getInstanceToken('app://localhost')).toBeNull();
+    expect(getTokenForInstanceUrl('app://localhost')).toBeNull();
+  });
+
+  it('migrates a desktop app-origin token to the hosted instance on local token read', () => {
+    Object.defineProperty(window, 'hushDesktop', {
+      configurable: true,
+      value: { isDesktop: true },
+    });
+    _mockActiveInstanceUrl = 'https://app.gethush.live';
+    sessionStorage.setItem('hush_jwt_localhost', 'desktop-origin-token');
+
+    expect(getLocalToken()).toBe('desktop-origin-token');
+    expect(sessionStorage.getItem('hush_jwt_app.gethush.live')).toBe('desktop-origin-token');
+    expect(sessionStorage.getItem('hush_jwt_localhost')).toBeNull();
+
+    delete window.hushDesktop;
+  });
+
   it('setInstanceToken clears any stale legacy hush_jwt after writing the namespaced key', () => {
     sessionStorage.setItem(JWT_KEY, 'old-legacy');
     setInstanceToken('https://chat.example.com', 'fresh-namespaced');
@@ -2198,10 +2220,11 @@ describe('useAuth - per-instance JWT storage', () => {
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
   });
 
-  it('setInstanceToken is a no-op for a malformed URL (does not corrupt legacy slot)', () => {
+  it('setInstanceToken is a no-op for non-HTTP origins', () => {
     sessionStorage.setItem(JWT_KEY, 'preserved-legacy');
-    setInstanceToken('not-a-url', 'should-not-write');
+    setInstanceToken('app://localhost', 'should-not-write');
     expect(sessionStorage.getItem(JWT_KEY)).toBe('preserved-legacy');
+    expect(sessionStorage.getItem('hush_jwt_localhost')).toBeNull();
   });
 
   it('getLocalToken does NOT migrate legacy to namespaced when no active instance is set', () => {
@@ -2214,8 +2237,8 @@ describe('useAuth - per-instance JWT storage', () => {
     expect(sessionStorage.getItem(JWT_KEY)).toBe('legacy-no-active');
   });
 
-  it('getLocalToken does not read or write a null storage key for malformed active instance URLs', () => {
-    _mockActiveInstanceUrl = 'not-a-url';
+  it('getLocalToken does not read or write a null storage key for non-HTTP active instance URLs', () => {
+    _mockActiveInstanceUrl = 'app://localhost';
     sessionStorage.setItem('null', 'poison');
     sessionStorage.setItem(JWT_KEY, 'legacy-token');
 
