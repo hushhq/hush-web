@@ -71,6 +71,7 @@ export function PerServerListeners({
     serverId,
     token,
     baseUrl: instanceUrl,
+    currentUserId,
   })
 
   useTextChannelMLSSubscriptions(

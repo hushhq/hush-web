@@ -20,6 +20,7 @@ import {
   sealIdentityIntoSession,
   markAlive as markVaultSessionAlive,
 } from '../lib/vaultSessionKey';
+import { queryClient } from '../lib/queryClient';
 
 // ── authInstanceStore mock (must be declared before module imports) ─────────────
 let _mockActiveInstanceUrl = '';
@@ -177,6 +178,7 @@ beforeEach(() => {
   cleanup();
   sessionStorage.clear();
   localStorage.clear();
+  queryClient.clear();
   _vaultBlobs.clear();
   _pinAttempts.clear();
   _mockActiveInstanceUrl = '';
@@ -217,6 +219,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1009,6 +1012,12 @@ describe('useAuth - performLogout', () => {
     // Seed some storage to verify wipe.
     localStorage.setItem('test_key', 'test_value');
     sessionStorage.setItem('test_key', 'test_value');
+    queryClient.setQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members'], [
+      { id: 'member-1' },
+    ]);
+    queryClient.setQueryData(['auth', 'devices', 'https://i.example.com'], [
+      { id: 'device-1' },
+    ]);
 
     vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: true, status: 204 });
 
@@ -1023,6 +1032,12 @@ describe('useAuth - performLogout', () => {
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
     expect(localStorage.getItem('test_key')).toBeNull();
     expect(sessionStorage.getItem('test_key')).toBeNull();
+    expect(
+      queryClient.getQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members']),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(['auth', 'devices', 'https://i.example.com']),
+    ).toBeUndefined();
   });
 
   it('clears the cross-reload session key store on scorched-earth logout (P21 step 4)', async () => {
@@ -2090,6 +2105,12 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     // Sanity: performChallengeResponse stored the vault marker.
     expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    queryClient.setQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members'], [
+      { id: 'member-1' },
+    ]);
+    queryClient.setQueryData(['auth', 'devices', 'https://i.example.com'], [
+      { id: 'device-1' },
+    ]);
 
     await act(async () => {
       window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
@@ -2109,6 +2130,12 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     expect(result.current.hasVault).toBe(false);
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
+    expect(
+      queryClient.getQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members']),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(['auth', 'devices', 'https://i.example.com']),
+    ).toBeUndefined();
   });
 
   it('preserves the local vault marker for a generic invalid server session', async () => {

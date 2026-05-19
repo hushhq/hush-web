@@ -12,6 +12,7 @@ interface UseGuildChannelIdsArgs {
   serverId: string | null
   token: string | null
   baseUrl: string
+  currentUserId: string | null
 }
 
 interface UseGuildChannelIdsResult {
@@ -29,10 +30,12 @@ const BACKOFF_SCHEDULE_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000]
 export function guildChannelIdsQueryKey({
   serverId,
   baseUrl,
-}: Pick<UseGuildChannelIdsArgs, "serverId" | "baseUrl">) {
+  currentUserId,
+}: Pick<UseGuildChannelIdsArgs, "serverId" | "baseUrl" | "currentUserId">) {
   return [
     "servers",
     baseUrl || "local",
+    currentUserId ?? "anonymous",
     serverId ?? "none",
     "text-channel-ids",
   ] as const
@@ -52,7 +55,7 @@ function extractTextChannelIds(data: unknown): string[] {
  * is overkill when all we need is the id list to drive
  * cross-server MLS subscriptions or self-removal MLS cleanup.
  *
- * Fetches once per `(serverId, token, baseUrl)` triplet via
+ * Fetches once per `(serverId, currentUserId, token, baseUrl)` tuple via
  * `api.getGuildChannels`. A transient fetch failure (network
  * blip, 5xx) is retried with exponential backoff so a background
  * guild's MLS room subscriptions are not silently absent for the
@@ -64,10 +67,11 @@ export function useGuildChannelIds({
   serverId,
   token,
   baseUrl,
+  currentUserId,
 }: UseGuildChannelIdsArgs): UseGuildChannelIdsResult {
   const isQueryEnabled = Boolean(serverId && token)
   const query = useQuery<string[], Error>({
-    queryKey: guildChannelIdsQueryKey({ serverId, baseUrl }),
+    queryKey: guildChannelIdsQueryKey({ serverId, baseUrl, currentUserId }),
     enabled: isQueryEnabled,
     queryFn: async () => {
       if (!serverId || !token) return []

@@ -19,6 +19,32 @@ describe("client diagnostics", () => {
     })
   })
 
+  it("redacts sensitive diagnostic field names in objects and body previews", () => {
+    expect(
+      sanitizeDiagnosticDetails({
+        bodyPreview:
+          '{"claimToken":"abc","relayCiphertext":"dead","publicKey":"pk","sessionId":"sid","sessionCounter":123,"safe":"ok"}',
+        nested: {
+          claimToken: "abc",
+          relayCiphertext: "dead",
+          publicKey: "pk",
+          safe: "ok",
+        },
+        query: "sessionId=sid&safe=ok",
+      })
+    ).toEqual({
+      bodyPreview:
+        '{"claimToken":"[redacted]","relayCiphertext":"[redacted]","publicKey":"[redacted]","sessionId":"[redacted]","sessionCounter":[redacted],"safe":"ok"}',
+      nested: {
+        claimToken: "[redacted]",
+        relayCiphertext: "[redacted]",
+        publicKey: "[redacted]",
+        safe: "ok",
+      },
+      query: "sessionId=[redacted]&safe=ok",
+    })
+  })
+
   it("marks circular diagnostic details without throwing", () => {
     const root = { name: "root" }
     root.self = root

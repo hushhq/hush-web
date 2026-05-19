@@ -88,7 +88,7 @@ describe("apiJson", () => {
       details: {
         operation: "verifyDeviceLinkRequest",
         status: 200,
-        bodyPreview: '{"token":"Bearer [redacted]"',
+        bodyPreview: '{"token":"[redacted]"',
       },
     })
   })

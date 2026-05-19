@@ -98,6 +98,7 @@ import {
   markAuthInstanceUsed,
   normalizeInstanceUrl,
 } from '../lib/authInstanceStore';
+import { queryClient } from '../lib/queryClient';
 // Used to repair missing or malformed public-key vault markers after storage
 // eviction. The encrypted vault stores the private seed; the public key is
 // recoverable from that seed and should never be represented as null.
@@ -128,11 +129,18 @@ function parseJwtClaims(token) {
 
 /** Guest session warning shown 5 minutes before expiry. */
 const GUEST_EXPIRY_WARNING_MS = 5 * 60 * 1000;
+const AUTH_OWNED_QUERY_ROOTS = [['servers'], ['auth']];
 
 // ── Module-level constants ───────────────────────────────────────────────────
 
 export const JWT_KEY = 'hush_jwt';
 export const HOME_INSTANCE_KEY = 'hush_home_instance';
+
+function clearAuthOwnedQueryCache() {
+  AUTH_OWNED_QUERY_ROOTS.forEach((queryKey) => {
+    queryClient.removeQueries({ queryKey });
+  });
+}
 
 // ── Per-instance JWT storage ─────────────────────────────────────────────────
 
@@ -1072,6 +1080,7 @@ export function useAuth() {
     identityKeyRef.current = null;
     clearVaultTimeoutEffects();
     clearTranscriptCache();
+    clearAuthOwnedQueryCache();
     clearSession();
 
     if (userId) {
@@ -1120,6 +1129,7 @@ export function useAuth() {
     sessionStorage.removeItem(VAULT_DERIVED_KEY);
     clearVaultTimeoutEffects();
     clearTranscriptCache();
+    clearAuthOwnedQueryCache();
     clearSession();
     setToken(null);
     setUser(null);
@@ -2037,6 +2047,7 @@ export function useAuth() {
       );
     }
     clearTranscriptCache();
+    clearAuthOwnedQueryCache();
 
     await Promise.allSettled(deleteTargets);
 
@@ -2584,6 +2595,7 @@ export function useAuth() {
         if (event.data?.type === 'hush_logout') {
           identityKeyRef.current = null;
           clearVaultTimeoutEffects();
+          clearAuthOwnedQueryCache();
           setToken(null);
           setUser(null);
           setVaultState('none');

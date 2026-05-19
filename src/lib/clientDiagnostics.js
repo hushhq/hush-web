@@ -1,10 +1,24 @@
 const DIAGNOSTIC_EVENT_NAME = "hush:diagnostic"
 const PREVIEW_LIMIT = 160
+const SENSITIVE_FIELD_NAME_PATTERN = /(?:token|secret|cipher\w*|key|session\w*)/i
+const SENSITIVE_JSON_FIELD_PATTERN =
+  /((["']?)[A-Za-z0-9_-]*(?:token|secret|cipher\w*|key|session\w*)[A-Za-z0-9_-]*(\2)\s*:\s*)(["'])(?:\\.|(?!\4).)*\4/gi
+const SENSITIVE_JSON_BARE_FIELD_PATTERN =
+  /((["']?)[A-Za-z0-9_-]*(?:token|secret|cipher\w*|key|session\w*)[A-Za-z0-9_-]*(\2)\s*:\s*)(?!["'])[^,}\]\s]+/gi
+const SENSITIVE_ASSIGNMENT_PATTERN =
+  /(\b[A-Za-z0-9_-]*(?:token|secret|cipher\w*|key|session\w*)[A-Za-z0-9_-]*\s*=\s*)[^\s&;,}]+/gi
 
 function redactString(value) {
   return value
+    .replace(SENSITIVE_JSON_FIELD_PATTERN, "$1$4[redacted]$4")
+    .replace(SENSITIVE_JSON_BARE_FIELD_PATTERN, "$1[redacted]")
+    .replace(SENSITIVE_ASSIGNMENT_PATTERN, "$1[redacted]")
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
     .replace(/\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[jwt]")
+}
+
+function isSensitiveFieldName(key) {
+  return SENSITIVE_FIELD_NAME_PATTERN.test(key)
 }
 
 function sanitizeValue(value, seen = new WeakSet()) {
@@ -19,7 +33,7 @@ function sanitizeValue(value, seen = new WeakSet()) {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,
-        sanitizeValue(entry, seen),
+        isSensitiveFieldName(key) ? "[redacted]" : sanitizeValue(entry, seen),
       ])
     )
   }
