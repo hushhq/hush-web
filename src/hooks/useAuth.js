@@ -2047,6 +2047,9 @@ export function useAuth() {
       );
     }
     clearTranscriptCache();
+    // Clear server-state caches before slower IDB deletion settles. Any
+    // concurrent auth-owned query remount should see missing auth state and
+    // remain disabled rather than reusing stale data.
     clearAuthOwnedQueryCache();
 
     await Promise.allSettled(deleteTargets);

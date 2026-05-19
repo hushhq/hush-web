@@ -17,7 +17,7 @@ interface PerServerListenersProps {
   instanceUrl: string
   wsClient: WsClientLike
   token: string
-  currentUserId: string
+  currentUserId: string | null
   serverId: string
   /** Display name of the server, used in the self-removed toast.
    *  When unknown, the toast falls back to the generic "the

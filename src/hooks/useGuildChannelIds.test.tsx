@@ -198,9 +198,9 @@ describe("useGuildChannelIds", () => {
     ).toEqual([
       "servers",
       "https://i.example.com",
-      "user-1",
       "srv-1",
       "text-channel-ids",
+      "user-1",
     ])
   })
 

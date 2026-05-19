@@ -35,9 +35,9 @@ export function guildChannelIdsQueryKey({
   return [
     "servers",
     baseUrl || "local",
-    currentUserId ?? "anonymous",
     serverId ?? "none",
     "text-channel-ids",
+    currentUserId ?? "anonymous",
   ] as const
 }
 

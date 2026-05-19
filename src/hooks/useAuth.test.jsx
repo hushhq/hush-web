@@ -157,6 +157,8 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
+const SERVER_QUERY_KEY = ['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members'];
+const AUTH_QUERY_KEY = ['auth', 'devices', 'https://i.example.com'];
 
 function mockFetchOk(body) {
   return { ok: true, json: () => Promise.resolve(body) };
@@ -170,6 +172,38 @@ function buildFakeJwt(payload) {
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = btoa(JSON.stringify(payload));
   return `${header}.${body}.fake-signature`;
+}
+
+function seedAuthOwnedQueryData() {
+  queryClient.setQueryData(SERVER_QUERY_KEY, [{ id: 'member-1' }]);
+  queryClient.setQueryData(AUTH_QUERY_KEY, [{ id: 'device-1' }]);
+}
+
+function expectAuthOwnedQueryDataCleared() {
+  expect(queryClient.getQueryData(SERVER_QUERY_KEY)).toBeUndefined();
+  expect(queryClient.getQueryData(AUTH_QUERY_KEY)).toBeUndefined();
+}
+
+class MockBroadcastChannel {
+  static instances = [];
+
+  constructor(name) {
+    this.name = name;
+    this.onmessage = null;
+    this.isClosed = false;
+    MockBroadcastChannel.instances.push(this);
+  }
+
+  postMessage(data) {
+    for (const instance of MockBroadcastChannel.instances) {
+      if (instance === this || instance.isClosed || instance.name !== this.name) continue;
+      instance.onmessage?.({ data });
+    }
+  }
+
+  close() {
+    this.isClosed = true;
+  }
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -1012,12 +1046,7 @@ describe('useAuth - performLogout', () => {
     // Seed some storage to verify wipe.
     localStorage.setItem('test_key', 'test_value');
     sessionStorage.setItem('test_key', 'test_value');
-    queryClient.setQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members'], [
-      { id: 'member-1' },
-    ]);
-    queryClient.setQueryData(['auth', 'devices', 'https://i.example.com'], [
-      { id: 'device-1' },
-    ]);
+    seedAuthOwnedQueryData();
 
     vi.mocked(apiMod.fetchWithAuth).mockResolvedValue({ ok: true, status: 204 });
 
@@ -1032,12 +1061,40 @@ describe('useAuth - performLogout', () => {
     expect(sessionStorage.getItem(JWT_KEY)).toBeNull();
     expect(localStorage.getItem('test_key')).toBeNull();
     expect(sessionStorage.getItem('test_key')).toBeNull();
-    expect(
-      queryClient.getQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members']),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(['auth', 'devices', 'https://i.example.com']),
-    ).toBeUndefined();
+    expectAuthOwnedQueryDataCleared();
+  });
+
+  it('clears auth-owned query data when another tab broadcasts logout', async () => {
+    const originalBroadcastChannel = globalThis.BroadcastChannel;
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.performChallengeResponse(
+          new Uint8Array(32).fill(1),
+          new Uint8Array(32).fill(2),
+        );
+      });
+      await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+      seedAuthOwnedQueryData();
+
+      await act(async () => {
+        const sender = new BroadcastChannel('hush_auth');
+        sender.postMessage({ type: 'hush_logout' });
+        sender.close();
+      });
+
+      expect(result.current.token).toBeNull();
+      expect(result.current.user).toBeNull();
+      expectAuthOwnedQueryDataCleared();
+    } finally {
+      globalThis.BroadcastChannel = originalBroadcastChannel;
+      MockBroadcastChannel.instances = [];
+    }
   });
 
   it('clears the cross-reload session key store on scorched-earth logout (P21 step 4)', async () => {
@@ -2105,12 +2162,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     // Sanity: performChallengeResponse stored the vault marker.
     expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
-    queryClient.setQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members'], [
-      { id: 'member-1' },
-    ]);
-    queryClient.setQueryData(['auth', 'devices', 'https://i.example.com'], [
-      { id: 'device-1' },
-    ]);
+    seedAuthOwnedQueryData();
 
     await act(async () => {
       window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
@@ -2130,12 +2182,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     expect(result.current.hasVault).toBe(false);
     expect(vaultMod.deleteVaultDatabase).toHaveBeenCalledWith('user-1');
     expect(transcriptVaultMod.deleteTranscriptDatabase).toHaveBeenCalledWith('user-1');
-    expect(
-      queryClient.getQueryData(['servers', 'https://i.example.com', 'user-1', 'srv-1', 'members']),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(['auth', 'devices', 'https://i.example.com']),
-    ).toBeUndefined();
+    expectAuthOwnedQueryDataCleared();
   });
 
   it('preserves the local vault marker for a generic invalid server session', async () => {
@@ -2149,6 +2196,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
     expect(localStorage.getItem('hush_vault_user_user-1')).not.toBeNull();
+    seedAuthOwnedQueryData();
 
     await act(async () => {
       window.dispatchEvent(new CustomEvent('hush_auth_invalid', {
@@ -2162,6 +2210,7 @@ describe('useAuth - forced logout on revoked-device signal', () => {
     expect(result.current.vaultState).toBe('locked');
     expect(result.current.hasVault).toBe(true);
     expect(vaultMod.deleteVaultDatabase).not.toHaveBeenCalledWith('user-1');
+    expectAuthOwnedQueryDataCleared();
   });
 
   it('lands in vaultState=none when no vault marker is present', async () => {
