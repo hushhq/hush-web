@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useAuth } from "@/contexts/AuthContext"
 import { getReadableDeviceLabel } from "@/lib/deviceLabel"
-import { getDeviceId, getInstanceToken } from "@/hooks/useAuth"
+import { getDeviceId } from "@/hooks/useAuth"
+import { useHomeInstanceSession } from "@/hooks/useHomeInstanceSession"
 import {
   type DeviceRow,
   useDeviceKeys,
@@ -25,14 +26,6 @@ import {
 import { TransparencyVerifier } from "@/lib/transparencyVerifier"
 import { bytesToHex } from "@/lib/identityVault"
 import ApproveDeviceLinkFlow from "@/components/devices/ApproveDeviceLinkFlow.jsx"
-
-function resolveHomeInstanceToken(
-  homeInstanceUrl: string | null | undefined,
-  fallbackToken: string | null
-): string | null {
-  if (homeInstanceUrl) return getInstanceToken(homeInstanceUrl)
-  return fallbackToken
-}
 
 interface DevicesPanelProps {
   /**
@@ -78,7 +71,13 @@ export function DevicesPanel({
   } | null>(null)
 
   const currentDeviceId = React.useMemo(() => getDeviceId(), [])
-  const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
+  const {
+    token: homeInstanceToken,
+    isMissingExplicitHomeInstanceToken,
+  } = useHomeInstanceSession({
+    homeInstanceUrl,
+    fallbackToken: token,
+  })
   const {
     devices,
     error: devicesError,
@@ -101,7 +100,7 @@ export function DevicesPanel({
   }, [refreshDeviceQuery])
 
   const queryError =
-    !homeInstanceToken && homeInstanceUrl
+    isMissingExplicitHomeInstanceToken
       ? "Sign in to the home instance to manage devices."
       : devicesError?.message ?? null
   const displayError = error ?? queryError
@@ -119,7 +118,6 @@ export function DevicesPanel({
         return
       }
       const pubKey = identityKeyRef.current?.publicKey
-      const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
       if (!pubKey || !homeInstanceToken) return
       try {
         const verifier = new TransparencyVerifier(
@@ -140,12 +138,17 @@ export function DevicesPanel({
         console.warn(`[transparency] post-${opName} verification failed:`, err)
       }
     },
-    [homeInstanceUrl, homeLogPublicKey, identityKeyRef, token, setTransparencyError]
+    [
+      homeInstanceUrl,
+      homeInstanceToken,
+      homeLogPublicKey,
+      identityKeyRef,
+      setTransparencyError,
+    ]
   )
 
   const handleRevoke = React.useCallback(async () => {
     if (!confirmRevoke) return
-    const homeInstanceToken = resolveHomeInstanceToken(homeInstanceUrl, token)
     if (!homeInstanceToken) {
       setError("Sign in to the home instance to revoke devices.")
       return
@@ -160,10 +163,9 @@ export function DevicesPanel({
     }
   }, [
     confirmRevoke,
-    token,
+    homeInstanceToken,
     revokeDeviceMutation,
     verifyTransparencyAfterOp,
-    homeInstanceUrl,
   ])
 
   if (view === "approve") {
