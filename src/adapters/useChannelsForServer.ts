@@ -13,6 +13,7 @@
  * local update; rollback on error.
  */
 import * as React from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { getGuildChannels, moveChannel } from "@/lib/api"
 
 import type {
@@ -49,6 +50,7 @@ interface UseChannelsArgs {
   serverId: string | null
   token: string | null
   baseUrl: string
+  currentUserId?: string | null
   wsClient?: WsClientLike | null
 }
 
@@ -124,6 +126,24 @@ interface UseChannelsResult {
 const CATEGORY = "category"
 const SYSTEM = "system"
 
+export function channelsForServerQueryKey({
+  serverId,
+  baseUrl,
+  currentUserId,
+}: Pick<UseChannelsArgs, "serverId" | "baseUrl" | "currentUserId">) {
+  return [
+    "servers",
+    baseUrl || "local",
+    serverId ?? "none",
+    "channels",
+    currentUserId ?? "anonymous",
+  ] as const
+}
+
+function normalizeRawChannels(data: unknown): RawChannel[] {
+  return Array.isArray(data) ? (data as RawChannel[]) : []
+}
+
 function parseMetadataName(json: string): string | null {
   try {
     const parsed = JSON.parse(json) as { n?: unknown; name?: unknown }
@@ -175,33 +195,37 @@ export function useChannelsForServer({
   serverId,
   token,
   baseUrl,
+  currentUserId,
   wsClient,
 }: UseChannelsArgs): UseChannelsResult {
-  const [raw, setRaw] = React.useState<RawChannel[]>([])
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<Error | null>(null)
+  const queryClient = useQueryClient()
+  const queryKey = React.useMemo(
+    () => channelsForServerQueryKey({ serverId, baseUrl, currentUserId }),
+    [serverId, baseUrl, currentUserId]
+  )
+  const isQueryEnabled = Boolean(serverId && token)
+  const query = useQuery<RawChannel[], Error>({
+    queryKey,
+    enabled: isQueryEnabled,
+    queryFn: async () => {
+      if (!serverId || !token) return []
+      return normalizeRawChannels(await getGuildChannels(token, serverId, baseUrl))
+    },
+  })
 
   const refetch = React.useCallback(async () => {
-    if (!serverId || !token) {
-      setRaw([])
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const data = (await getGuildChannels(token, serverId, baseUrl)) as RawChannel[]
-      setRaw(Array.isArray(data) ? data : [])
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)))
-      setRaw([])
-    } finally {
-      setLoading(false)
-    }
-  }, [serverId, token, baseUrl])
+    if (!serverId || !token) return
+    await query.refetch()
+  }, [query.refetch, serverId, token])
 
-  React.useEffect(() => {
-    void refetch()
-  }, [refetch])
+  const setRaw = React.useCallback(
+    (updater: (prev: RawChannel[]) => RawChannel[]) => {
+      queryClient.setQueryData<RawChannel[]>(queryKey, (prev) =>
+        updater(prev ?? [])
+      )
+    },
+    [queryClient, queryKey]
+  )
 
   // Apply backend-broadcast channel mutations as local state diffs so the
   // mutation handlers (create/delete/move) do not need to trigger a full
@@ -274,7 +298,10 @@ export function useChannelsForServer({
       wsClient.off?.("channel_deleted", onDeleted)
       wsClient.off?.("channel_moved", onMoved)
     }
-  }, [wsClient, serverId])
+  }, [wsClient, serverId, setRaw])
+
+  const raw = query.data ?? []
+  const loading = query.isFetching && isQueryEnabled
 
   const categories = React.useMemo<ChannelCategory[]>(
     () =>
@@ -351,7 +378,7 @@ export function useChannelsForServer({
         }
       })()
     },
-    [serverId, token, baseUrl, refetch]
+    [serverId, token, baseUrl, refetch, setRaw]
   )
 
   const onChannelsChange = React.useCallback(
@@ -395,7 +422,7 @@ export function useChannelsForServer({
         }
       })()
     },
-    [serverId, token, baseUrl, refetch]
+    [serverId, token, baseUrl, refetch, setRaw]
   )
 
   const applyCreated = React.useCallback((channel: RawChannel) => {
@@ -403,7 +430,7 @@ export function useChannelsForServer({
     setRaw((prev) =>
       prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]
     )
-  }, [])
+  }, [setRaw])
 
   const applyDeleted = React.useCallback((channelIds: string[]) => {
     if (!Array.isArray(channelIds) || channelIds.length === 0) return
@@ -412,14 +439,14 @@ export function useChannelsForServer({
       if (!prev.some((c) => ids.has(c.id))) return prev
       return prev.filter((c) => !ids.has(c.id))
     })
-  }, [])
+  }, [setRaw])
 
   return {
     categories,
     channels,
     systemChannels,
     loading,
-    error,
+    error: query.error ?? null,
     refetch,
     onCategoriesChange,
     onChannelsChange,

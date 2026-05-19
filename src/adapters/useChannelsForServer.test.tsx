@@ -5,6 +5,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { act, renderHook, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactNode } from "react"
 
 vi.mock("@/lib/api", () => ({
   getGuildChannels: vi.fn(),
@@ -12,7 +14,10 @@ vi.mock("@/lib/api", () => ({
 }))
 
 import { getGuildChannels as _getGuildChannels, moveChannel as _moveChannel } from "@/lib/api"
-import { useChannelsForServer } from "./useChannelsForServer"
+import {
+  channelsForServerQueryKey,
+  useChannelsForServer,
+} from "./useChannelsForServer"
 
 const getGuildChannels = vi.mocked(_getGuildChannels as () => Promise<unknown>)
 const moveChannel = vi.mocked(_moveChannel as () => Promise<unknown>)
@@ -21,6 +26,26 @@ const ARGS = {
   serverId: "g1",
   token: "tok",
   baseUrl: "https://a.example.com",
+  currentUserId: "u-self",
+}
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
+}
+
+function renderChannelsHook(args: Parameters<typeof useChannelsForServer>[0]) {
+  return renderHook(() => useChannelsForServer(args), {
+    wrapper: createWrapper(),
+  })
 }
 
 describe("useChannelsForServer", () => {
@@ -39,7 +64,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-1", name: "random", type: "text", parentId: "cat-1", position: 1 },
     ])
 
-    const { result } = renderHook(() => useChannelsForServer(ARGS))
+    const { result } = renderChannelsHook(ARGS)
 
     await waitFor(() => {
       expect(result.current.categories).toHaveLength(2)
@@ -62,7 +87,7 @@ describe("useChannelsForServer", () => {
       { id: "sys-log", name: "server-log", type: "system", parentId: null, position: 0 },
     ])
 
-    const { result } = renderHook(() => useChannelsForServer(ARGS))
+    const { result } = renderChannelsHook(ARGS)
 
     await waitFor(() => {
       expect(result.current.systemChannels).toHaveLength(2)
@@ -85,7 +110,7 @@ describe("useChannelsForServer", () => {
       },
     ])
 
-    const { result } = renderHook(() => useChannelsForServer(ARGS))
+    const { result } = renderChannelsHook(ARGS)
 
     await waitFor(() => {
       expect(result.current.systemChannels).toHaveLength(1)
@@ -115,7 +140,7 @@ describe("useChannelsForServer", () => {
       },
     ])
 
-    const { result } = renderHook(() => useChannelsForServer(ARGS))
+    const { result } = renderChannelsHook(ARGS)
 
     await waitFor(() => {
       expect(result.current.channels).toHaveLength(1)
@@ -131,7 +156,7 @@ describe("useChannelsForServer", () => {
     ])
     moveChannel.mockResolvedValue(undefined)
 
-    const { result } = renderHook(() => useChannelsForServer(ARGS))
+    const { result } = renderChannelsHook(ARGS)
 
     await waitFor(() => {
       expect(result.current.channels).toHaveLength(2)
@@ -158,9 +183,7 @@ describe("useChannelsForServer", () => {
   })
 
   it("returns an empty list when serverId is null", async () => {
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, serverId: null })
-    )
+    const { result } = renderChannelsHook({ ...ARGS, serverId: null })
 
     await waitFor(() => {
       expect(result.current.channels).toEqual([])
@@ -168,10 +191,26 @@ describe("useChannelsForServer", () => {
     expect(getGuildChannels).not.toHaveBeenCalled()
   })
 
+  it("exposes a stable query key for channel cache invalidation", () => {
+    expect(
+      channelsForServerQueryKey({
+        serverId: "g1",
+        baseUrl: "https://a.example.com",
+        currentUserId: "u-self",
+      })
+    ).toEqual([
+      "servers",
+      "https://a.example.com",
+      "g1",
+      "channels",
+      "u-self",
+    ])
+  })
+
   it("captures fetch errors", async () => {
     getGuildChannels.mockRejectedValue(new Error("boom"))
 
-    const { result } = renderHook(() => useChannelsForServer(ARGS))
+    const { result } = renderChannelsHook(ARGS)
 
     await waitFor(() => {
       expect(result.current.error).not.toBeNull()
@@ -203,7 +242,7 @@ describe("useChannelsForServer", () => {
         useChannelsForServer({ ...args, wsClient } as Parameters<
           typeof useChannelsForServer
         >[0]),
-      { initialProps: ARGS },
+      { initialProps: ARGS, wrapper: createWrapper() },
     )
 
     await waitFor(() => {
@@ -246,11 +285,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     act(() => {
@@ -275,11 +310,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     act(() => {
@@ -305,11 +336,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     act(() => {
@@ -335,11 +362,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     // Foreign delete that targets the same channel id by accident:
@@ -360,11 +383,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: "cat-a", position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     act(() => {
@@ -385,11 +404,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     act(() => {
@@ -406,10 +421,12 @@ describe("useChannelsForServer", () => {
       })
     })
 
-    expect(result.current.channels.map((c) => c.id)).toEqual([
-      "ch-active",
-      "ch-new",
-    ])
+    await waitFor(() => {
+      expect(result.current.channels.map((c) => c.id)).toEqual([
+        "ch-active",
+        "ch-new",
+      ])
+    })
   })
 
   it("preserves legacy channel_created without server_id (backward compatibility)", async () => {
@@ -417,11 +434,7 @@ describe("useChannelsForServer", () => {
       { id: "ch-active", name: "general", type: "text", parentId: null, position: 0 },
     ])
     const ws = makeWsClient()
-    const { result } = renderHook(() =>
-      useChannelsForServer({ ...ARGS, wsClient: ws } as Parameters<
-        typeof useChannelsForServer
-      >[0])
-    )
+    const { result } = renderChannelsHook({ ...ARGS, wsClient: ws })
     await waitFor(() => expect(result.current.channels).toHaveLength(1))
 
     act(() => {
@@ -438,9 +451,11 @@ describe("useChannelsForServer", () => {
       })
     })
 
-    expect(result.current.channels.map((c) => c.id)).toEqual([
-      "ch-active",
-      "ch-legacy",
-    ])
+    await waitFor(() => {
+      expect(result.current.channels.map((c) => c.id)).toEqual([
+        "ch-active",
+        "ch-legacy",
+      ])
+    })
   })
 })
