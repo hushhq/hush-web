@@ -157,7 +157,7 @@ describe('DesktopTopBar', () => {
     expect(bar.dataset.bgMode).toBe('sidebar');
     // Inline custom property drives the `background-color: var(--desktop-topbar-bg)`
     // declaration in the stylesheet, so theme tokens still resolve at runtime.
-    expect(bar.style.getPropertyValue('--desktop-topbar-bg')).toBe('var(--sidebar)');
+    expect(bar.style.getPropertyValue('--desktop-topbar-bg')).toBe('var(--desktop-chrome-bg)');
   });
 
   it('paints the background tint on auth screens (matches auth-wrapper bg)', () => {

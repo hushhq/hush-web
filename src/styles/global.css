@@ -16,12 +16,18 @@
        with no visible seam. Pair with the desktop override below that
        neutralises the inset's top margin. */
     --desktop-topbar-h: 40px;
-    /* Background color the topbar paints with. Defaults to the sidebar
-       tint so the bar fuses with the rail / channel sidebar on the
+    /* Authenticated chrome (server rail + channel-sidebar inner card +
+       topbar) paints with this token. Browser builds keep the solid
+       sidebar tint. Electron builds with native window material
+       (macOS vibrancy, Win11 mica) override this to a translucent mix
+       so the OS material shows through the same surface. */
+    --desktop-chrome-bg: var(--sidebar);
+    /* Background color the topbar paints with. Defaults to the chrome
+       token so the bar fuses with the rail / channel sidebar on the
        authenticated shell. Auth surfaces set the same property on the
        topbar root to `var(--background)` so the bar fuses with their
        `bg-background` wrapper instead. */
-    --desktop-topbar-bg: var(--sidebar);
+    --desktop-topbar-bg: var(--desktop-chrome-bg);
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -96,6 +102,41 @@ html[data-desktop] [data-slot="server-rail"] {
    unrelated sidebar primitives. */
 html[data-desktop] [data-slot="channel-sidebar"] {
     padding-top: 0 !important;
+}
+
+/* ── Native window material (desktop only) ───────────────────────────────
+   Electron sets `vibrancy: 'sidebar'` on macOS and `backgroundMaterial:
+   'mica'` on Win11 (see `hush-desktop/src/main/window-config.ts`). For
+   the material to be visible the renderer must not paint an opaque
+   color on top of the same area, so for those platforms only:
+     - root background is fully transparent,
+     - the authenticated chrome surfaces (server rail, channel-sidebar
+       inner card, topbar) use a translucent mix of the sidebar tint so
+       the Hush palette still dominates while the OS material bleeds
+       through subtly,
+     - the chat / content panes keep their solid `bg-card` /
+       `bg-background` so message text stays fully opaque.
+   Linux has no native material and keeps the solid sidebar background. */
+html[data-desktop="darwin"],
+html[data-desktop="win32"] {
+    --desktop-chrome-bg: color-mix(in oklch, var(--sidebar) 72%, transparent);
+}
+
+html[data-desktop="darwin"],
+html[data-desktop="darwin"] body,
+html[data-desktop="win32"],
+html[data-desktop="win32"] body {
+    background-color: transparent;
+}
+
+html[data-desktop="darwin"] [data-slot="server-rail"],
+html[data-desktop="win32"] [data-slot="server-rail"] {
+    background-color: var(--desktop-chrome-bg) !important;
+}
+
+html[data-desktop="darwin"] [data-slot="channel-card"],
+html[data-desktop="win32"] [data-slot="channel-card"] {
+    background-color: var(--desktop-chrome-bg);
 }
 
 .hush-desktop-topbar {

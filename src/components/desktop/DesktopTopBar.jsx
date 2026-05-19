@@ -101,12 +101,16 @@ export function DesktopTopBar() {
   // Match the bar's bg to whatever surface it borders so the topbar
   // fuses with the screen instead of reading as a separate stripe:
   //   - Authenticated shell: bordered by the rail + channel sidebar →
-  //     `var(--sidebar)`.
+  //     `var(--desktop-chrome-bg)`, which resolves to the solid sidebar
+  //     tint in the browser and to a translucent mix on Electron
+  //     builds that enable native window material.
   //   - Auth screens (login / link-device / pin-unlock / pin-setup):
   //     bordered by the auth wrapper's `bg-background` → `var(--background)`.
   // Driven through a CSS custom property so the value tracks the active
   // theme tokens automatically.
-  const topbarBgVar = isAuthenticated ? 'var(--sidebar)' : 'var(--background)';
+  const topbarBgVar = isAuthenticated
+    ? 'var(--desktop-chrome-bg)'
+    : 'var(--background)';
 
   return (
     <header
