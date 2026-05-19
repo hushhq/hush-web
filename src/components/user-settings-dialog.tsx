@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ConfirmAction } from "@/components/confirm-action"
+import { UsernameHandle } from "@/components/identity/username-handle"
 import {
   SettingsDialog,
   type SettingsGroup,
@@ -475,14 +476,23 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
   const displayName = sanitizeDisplayName(
     account?.displayName,
     account?.username
-  ) || "—"
-  const username = formatUserLabel({ username: account?.username, fallback: "—" })
+  ) || "Not set"
+  const username = formatUserLabel({ username: account?.username, fallback: "" })
   // TODO(yarin, 2026-05-04): backend lacks email/phone/password endpoints
   // — identity is currently mnemonic-derived. Edit actions deferred until
   // profile-update API lands.
-  const fields: { label: string; value: string }[] = [
+  const fields: { label: string; value: React.ReactNode }[] = [
     { label: "Display name", value: displayName },
-    { label: "Username", value: username },
+    {
+      label: "Username",
+      value: (
+        <UsernameHandle
+          username={username}
+          className="text-sm"
+          fallback={<span>Not set</span>}
+        />
+      ),
+    },
   ]
 
   return (

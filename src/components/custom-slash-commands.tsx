@@ -64,7 +64,7 @@ export function createHushSlashItems(
     {
       title: "GIF",
       description: "Insert a GIF from GIPHY",
-      searchTerms: ["gif", "image", "media", "giphy", "beta"],
+      searchTerms: ["gif", "image", "media", "giphy", "shipping soon"],
       icon: <ImageIcon className="size-4" />,
       command: ({ editor, range }) => {
         const anchor = caretAnchorFromEditor(editor, range.from)
@@ -163,10 +163,11 @@ export function createHushSlashItems(
   // tracking and pointer-down handler disagreed once parens entered
   // the title.
   const BADGES: Record<string, string | undefined> = {
-    GIF: "Beta",
+    GIF: "Shipping soon",
     Poll: "Shipping soon",
   }
   const DISABLED: Record<string, boolean | undefined> = {
+    GIF: true,
     Poll: true,
   }
   return items.map((item, index) => ({

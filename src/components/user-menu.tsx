@@ -35,9 +35,16 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { UsernameHandle } from "@/components/identity/username-handle"
+
+export interface UserMenuUser {
+  name: string
+  username: string
+  initials: string
+}
 
 interface UserMenuProps {
-  user: { name: string; email: string; initials: string }
+  user: UserMenuUser
   onOpenSettings?: () => void
   onSignOut?: () => void | Promise<void>
 }
@@ -62,9 +69,12 @@ export function UserMenu({ user, onOpenSettings, onSignOut }: UserMenuProps) {
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {user.email}
-                </span>
+                {user.username ? (
+                  <UsernameHandle
+                    username={user.username}
+                    className="text-xs text-muted-foreground"
+                  />
+                ) : null}
               </div>
               <ChevronsUpDownIcon className="ml-auto size-4 opacity-70" />
             </SidebarMenuButton>
@@ -76,7 +86,11 @@ export function UserMenu({ user, onOpenSettings, onSignOut }: UserMenuProps) {
             sideOffset={4}
           >
             <DropdownMenuLabel className="text-xs text-muted-foreground">
-              {user.email}
+              {user.username ? (
+                <UsernameHandle username={user.username} />
+              ) : (
+                user.name
+              )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>

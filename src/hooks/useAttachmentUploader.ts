@@ -41,12 +41,26 @@ export interface UploadEntry {
   ref?: AttachmentRef
 }
 
+export type AttachmentUploadRejectionReason =
+  | "too_large"
+  | "unsupported_type"
+  | "too_many"
+  | "presign_failed"
+  | "upload_failed"
+
+export interface AttachmentUploadRejection {
+  file: File
+  reason: AttachmentUploadRejectionReason
+  message: string
+}
+
 export interface UseAttachmentUploaderOptions {
   serverId: string | null
   channelId: string | null
   getToken: () => string | null
   baseUrl?: string
   maxAttachmentBytes?: number
+  onRejected?: (rejection: AttachmentUploadRejection) => void
 }
 
 export interface UseAttachmentUploaderResult {
@@ -82,6 +96,7 @@ export function useAttachmentUploader(
     getToken,
     baseUrl = "",
     maxAttachmentBytes = MAX_ATTACHMENT_BYTES,
+    onRejected,
   } = opts
   const [uploads, setUploads] = React.useState<UploadEntry[]>([])
   // Mirror of `uploads` that updates synchronously alongside every
@@ -146,10 +161,12 @@ export function useAttachmentUploader(
       }
       const ciphertextSize = encrypted.ciphertext.byteLength
       if (ciphertextSize > maxAttachmentBytes) {
+        const message = tooLargeMessage(entry.file.name, maxAttachmentBytes)
         updateEntry(entry.localId, {
           status: "failed",
-          errorMessage: `file exceeds ${maxAttachmentBytes} bytes`,
+          errorMessage: message,
         })
+        onRejected?.({ file: entry.file, reason: "too_large", message })
         return
       }
 
@@ -163,10 +180,12 @@ export function useAttachmentUploader(
           baseUrl
         )
       } catch (err) {
+        const message = prefixError("presign failed", err)
         updateEntry(entry.localId, {
           status: "failed",
-          errorMessage: prefixError("presign failed", err),
+          errorMessage: message,
         })
+        onRejected?.({ file: entry.file, reason: "presign_failed", message })
         return
       }
 
@@ -187,10 +206,12 @@ export function useAttachmentUploader(
           updateEntry(entry.localId, { status: "cancelled" })
           return
         }
+        const message = prefixError("upload failed", err)
         updateEntry(entry.localId, {
           status: "failed",
-          errorMessage: prefixError("upload failed", err),
+          errorMessage: message,
         })
+        onRejected?.({ file: entry.file, reason: "upload_failed", message })
         return
       } finally {
         inflightRef.current.delete(entry.localId)
@@ -211,7 +232,15 @@ export function useAttachmentUploader(
         ref,
       })
     },
-    [serverId, channelId, getToken, baseUrl, maxAttachmentBytes, updateEntry]
+    [
+      serverId,
+      channelId,
+      getToken,
+      baseUrl,
+      maxAttachmentBytes,
+      updateEntry,
+      onRejected,
+    ]
   )
 
   const add = React.useCallback(
@@ -219,28 +248,49 @@ export function useAttachmentUploader(
       if (!files.length) return
       const remainingSlots =
         MAX_ATTACHMENTS_PER_MESSAGE - uploadsRef.current.length
-      if (remainingSlots <= 0) return
+      if (remainingSlots <= 0) {
+        for (const file of files) {
+          onRejected?.({
+            file,
+            reason: "too_many",
+            message: `Cannot attach more than ${MAX_ATTACHMENTS_PER_MESSAGE} files.`,
+          })
+        }
+        return
+      }
       const accepted: UploadEntry[] = []
+      const rejectedOverflow = files.slice(remainingSlots)
+      for (const file of rejectedOverflow) {
+        onRejected?.({
+          file,
+          reason: "too_many",
+          message: `Cannot attach more than ${MAX_ATTACHMENTS_PER_MESSAGE} files.`,
+        })
+      }
       for (const file of files.slice(0, remainingSlots)) {
         const localId = nextLocalId()
         if (file.size > maxAttachmentBytes) {
+          const message = tooLargeMessage(file.name, maxAttachmentBytes)
           accepted.push({
             localId,
             file,
             status: "failed",
             progress: 0,
-            errorMessage: `file exceeds ${maxAttachmentBytes} bytes`,
+            errorMessage: message,
           })
+          onRejected?.({ file, reason: "too_large", message })
           continue
         }
         if (!isAttachmentContentTypeAllowed(file.type || "")) {
+          const message = `${file.name} is not a supported attachment type.`
           accepted.push({
             localId,
             file,
             status: "failed",
             progress: 0,
-            errorMessage: "content type not allowed",
+            errorMessage: message,
           })
+          onRejected?.({ file, reason: "unsupported_type", message })
           continue
         }
         accepted.push({
@@ -255,7 +305,7 @@ export function useAttachmentUploader(
         .filter((e) => e.status === "queued")
         .forEach((e) => void startUpload(e))
     },
-    [commitUploads, maxAttachmentBytes, startUpload]
+    [commitUploads, maxAttachmentBytes, onRejected, startUpload]
   )
 
   const remove = React.useCallback(
@@ -330,6 +380,16 @@ function errorMessage(err: unknown): string {
 function prefixError(prefix: string, err: unknown): string {
   const msg = errorMessage(err)
   return msg ? `${prefix}: ${msg}` : prefix
+}
+
+function tooLargeMessage(fileName: string, maxAttachmentBytes: number): string {
+  return `${fileName} exceeds the ${humanSize(maxAttachmentBytes)} attachment limit.`
+}
+
+function humanSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 interface PresignedResponse {

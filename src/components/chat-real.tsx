@@ -15,7 +15,14 @@
  * parse failures on the wire) render the recovery placeholder.
  */
 import * as React from "react"
-import { Loader2Icon, XIcon, AlertTriangleIcon } from "lucide-react"
+import {
+  AlertTriangleIcon,
+  FileIcon,
+  Loader2Icon,
+  UploadCloudIcon,
+  XIcon,
+} from "lucide-react"
+import { toast } from "sonner"
 
 import {
   Chat,
@@ -44,6 +51,7 @@ import { formatUserLabel } from "@/lib/userLabel"
 import { useChannelMessages, type ChatMessage } from "@/hooks/useChannelMessages"
 import {
   useAttachmentUploader,
+  type AttachmentUploadRejection,
   type UploadEntry,
 } from "@/hooks/useAttachmentUploader"
 import type { AttachmentRef, GifRef, MessageEnvelopeV1 } from "@/lib/messageEnvelope"
@@ -75,6 +83,8 @@ interface RealChatProps {
   maxAttachmentBytes?: number
 }
 
+const EMPTY_MEMBERS: ServerMember[] = []
+
 export function RealChat({
   channelId,
   channelName,
@@ -84,7 +94,7 @@ export function RealChat({
   getStore,
   getHistoryStore,
   wsClient,
-  members = [],
+  members = EMPTY_MEMBERS,
   baseUrl = "",
   markReadEnabled = false,
   onMarkRead = null,
@@ -130,6 +140,15 @@ export function RealChat({
   })
 
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
+  const dragDepthRef = React.useRef(0)
+  const [isFileDragActive, setFileDragActive] = React.useState(false)
+
+  const handleAttachmentRejected = React.useCallback(
+    (rejection: AttachmentUploadRejection) => {
+      toast.error(rejection.message)
+    },
+    []
+  )
 
   const handleScroll = React.useCallback(() => {
     const el = scrollRef.current
@@ -160,6 +179,7 @@ export function RealChat({
     getToken,
     baseUrl,
     maxAttachmentBytes,
+    onRejected: handleAttachmentRejected,
   })
 
   const [pendingGif, setPendingGif] = React.useState<GifRef | null>(null)
@@ -210,97 +230,164 @@ export function RealChat({
     [getToken, baseUrl]
   )
 
+  const handleDragEnter = React.useCallback((event: React.DragEvent) => {
+    if (!dragEventHasFiles(event)) return
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setFileDragActive(true)
+  }, [])
+
+  const handleDragOver = React.useCallback((event: React.DragEvent) => {
+    if (!dragEventHasFiles(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "copy"
+  }, [])
+
+  const handleDragLeave = React.useCallback((event: React.DragEvent) => {
+    if (!dragEventHasFiles(event)) return
+    event.preventDefault()
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) setFileDragActive(false)
+  }, [])
+
+  const handleDrop = React.useCallback(
+    (event: React.DragEvent) => {
+      if (!dragEventHasFiles(event)) return
+      event.preventDefault()
+      dragDepthRef.current = 0
+      setFileDragActive(false)
+      uploader.add(Array.from(event.dataTransfer.files))
+    },
+    [uploader]
+  )
+
   return (
     <MessageBodyContext.Provider value={messageBodyCtx}>
-    <Chat className="h-full">
-      <ChatMessages
-        ref={scrollRef as unknown as React.Ref<HTMLDivElement>}
-        onScroll={handleScroll}
-        aria-busy={isChannelTransitioning || isInitialLoading}
+      <Chat
+        className="relative h-full"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
-        {isChannelTransitioning || isInitialLoading ? (
-          <div className="flex flex-1 items-center justify-center py-10">
-            <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : messages.length === 0 ? (
-          <Empty className="flex-1">
-            <EmptyHeader>
-              <EmptyMedia className="text-muted-foreground" aria-hidden="true">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  focusable="false"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </EmptyMedia>
-              <EmptyDescription>
-                no messages yet, start the conversation
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <>
-            {groups
-              .slice()
-              .reverse()
-              .map((group, revIdx, reversed) => {
-                const showDateSep =
-                  revIdx === reversed.length - 1 ||
-                  reversed[revIdx + 1].dateKey !== group.dateKey
-                return (
-                  <React.Fragment key={group.head.id}>
-                    {group.followups
-                      .slice()
-                      .reverse()
-                      .map((m) => (
-                        <FollowupMessage
-                          key={m.id}
-                          message={m}
-                          onRetry={retry}
+        {isFileDragActive ? <AttachmentDropOverlay /> : null}
+        <ChatMessages
+          ref={scrollRef as unknown as React.Ref<HTMLDivElement>}
+          onScroll={handleScroll}
+          aria-busy={isChannelTransitioning || isInitialLoading}
+        >
+          {isChannelTransitioning || isInitialLoading ? (
+            <div className="flex flex-1 items-center justify-center py-10">
+              <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
+            <Empty className="flex-1">
+              <EmptyHeader>
+                <EmptyMedia className="text-muted-foreground" aria-hidden="true">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    focusable="false"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </EmptyMedia>
+                <EmptyDescription>
+                  no messages yet, start the conversation
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <>
+              {groups
+                .slice()
+                .reverse()
+                .map((group, revIdx, reversed) => {
+                  const showDateSep =
+                    revIdx === reversed.length - 1 ||
+                    reversed[revIdx + 1].dateKey !== group.dateKey
+                  return (
+                    <React.Fragment key={group.head.id}>
+                      {group.followups
+                        .slice()
+                        .reverse()
+                        .map((m) => (
+                          <FollowupMessage
+                            key={m.id}
+                            message={m}
+                            onRetry={retry}
+                          />
+                        ))}
+                      <PrimaryMessage
+                        message={group.head}
+                        currentUserId={currentUserId}
+                        displayNameMap={displayNameMap}
+                        onRetry={retry}
+                      />
+                      {showDateSep ? (
+                        <DateSeparator
+                          label={formatDateLabel(group.head.timestamp)}
                         />
-                      ))}
-                    <PrimaryMessage
-                      message={group.head}
-                      currentUserId={currentUserId}
-                      displayNameMap={displayNameMap}
-                      onRetry={retry}
-                    />
-                    {showDateSep ? (
-                      <DateSeparator label={formatDateLabel(group.head.timestamp)} />
-                    ) : null}
-                  </React.Fragment>
-                )
-              })}
-            {hasMoreOlder ? (
-              <div className="flex items-center justify-center py-2 text-xs text-muted-foreground">
-                {loadMoreLoading ? (
-                  <Loader2Icon className="size-4 animate-spin" />
-                ) : (
-                  "Scroll up for older messages"
-                )}
-              </div>
-            ) : null}
-          </>
-        )}
-      </ChatMessages>
-      <MessageComposer
-        key={channelId}
-        channelName={channelName}
-        onSend={handleSend}
-        onFilesSelected={(files) => uploader.add(files)}
-        sendDisabled={sendDisabled}
-        attachmentDock={attachmentDock}
-        getToken={getToken}
-        baseUrl={baseUrl}
-        onPickGif={(gif) => setPendingGif(gif)}
-      />
-    </Chat>
+                      ) : null}
+                    </React.Fragment>
+                  )
+                })}
+              {hasMoreOlder ? (
+                <div className="flex items-center justify-center py-2 text-xs text-muted-foreground">
+                  {loadMoreLoading ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    "Scroll up for older messages"
+                  )}
+                </div>
+              ) : null}
+            </>
+          )}
+        </ChatMessages>
+        <MessageComposer
+          key={channelId}
+          channelName={channelName}
+          onSend={handleSend}
+          onFilesSelected={(files) => uploader.add(files)}
+          sendDisabled={sendDisabled}
+          attachmentDock={attachmentDock}
+          getToken={getToken}
+          baseUrl={baseUrl}
+          onPickGif={(gif) => setPendingGif(gif)}
+        />
+      </Chat>
     </MessageBodyContext.Provider>
+  )
+}
+
+function dragEventHasFiles(event: React.DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files")
+}
+
+function AttachmentDropOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-2 z-50 flex items-center justify-center rounded-lg border border-dashed border-primary/60 bg-background/85 shadow-lg backdrop-blur-sm">
+      <div
+        className="flex flex-col items-center gap-2 text-center"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <UploadCloudIcon className="size-5" />
+        </span>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Drop files to attach</p>
+          <p className="text-xs text-muted-foreground">
+            Files are staged here before encrypted upload.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -374,16 +461,25 @@ function UploadChip({
   return (
     <div
       className={cn(
-        "flex max-w-xs items-center gap-2 rounded-md border bg-muted/40 px-2 py-1.5 text-xs",
+        "flex max-w-xs items-center gap-2 rounded-md border bg-muted/40 p-1.5 text-xs",
         failed && "border-destructive/50"
       )}
+      title={entry.errorMessage}
     >
+      <LocalUploadPreview file={entry.file} failed={failed} />
       {failed ? (
         <AlertTriangleIcon className="size-3.5 shrink-0 text-destructive" />
       ) : entry.status === "ready" ? null : (
         <Loader2Icon className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
       )}
-      <span className="min-w-0 flex-1 truncate">{entry.file.name}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{entry.file.name}</span>
+        {failed && entry.errorMessage ? (
+          <span className="block truncate text-[11px] text-destructive">
+            {entry.errorMessage}
+          </span>
+        ) : null}
+      </span>
       {failed ? (
         <Button
           type="button"
@@ -407,6 +503,67 @@ function UploadChip({
       </Button>
     </div>
   )
+}
+
+function LocalUploadPreview({
+  file,
+  failed,
+}: {
+  file: File
+  failed: boolean
+}) {
+  const objectUrl = useLocalObjectUrl(file)
+  if (!objectUrl || failed) {
+    return (
+      <span className="flex size-9 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+        <FileIcon className="size-4" />
+      </span>
+    )
+  }
+  if (file.type.startsWith("image/")) {
+    return (
+      <img
+        src={objectUrl}
+        alt=""
+        className="size-9 shrink-0 rounded object-cover"
+      />
+    )
+  }
+  if (file.type.startsWith("video/")) {
+    return (
+      <video
+        src={objectUrl}
+        muted
+        playsInline
+        preload="metadata"
+        className="size-9 shrink-0 rounded object-cover"
+      />
+    )
+  }
+  return (
+    <span className="flex size-9 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+      <FileIcon className="size-4" />
+    </span>
+  )
+}
+
+function useLocalObjectUrl(file: File): string | null {
+  const [objectUrl, setObjectUrl] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (
+      !file.type.startsWith("image/") &&
+      !file.type.startsWith("video/")
+    ) {
+      setObjectUrl(null)
+      return
+    }
+    const nextUrl = URL.createObjectURL(file)
+    setObjectUrl(nextUrl)
+    return () => URL.revokeObjectURL(nextUrl)
+  }, [file])
+
+  return objectUrl
 }
 
 interface MessageGroup {
@@ -588,6 +745,7 @@ interface MessageBodyContext {
 const MessageBodyContext = React.createContext<MessageBodyContext | null>(null)
 
 function MessageBody({ message }: { message: ChatMessage }) {
+  const ctx = React.useContext(MessageBodyContext)
   if (message.decryptionFailed || !message.envelope) {
     return (
       <span className="text-sm italic text-muted-foreground">
@@ -595,7 +753,6 @@ function MessageBody({ message }: { message: ChatMessage }) {
       </span>
     )
   }
-  const ctx = React.useContext(MessageBodyContext)
   const { envelope } = message
   const hasText = envelope.text.length > 0
   const attachments = envelope.attachments ?? []

@@ -18,8 +18,11 @@ vi.mock("@/lib/api", () => ({
 
 class MockUploadXHR {
   static instances: MockUploadXHR[] = []
+  static nextStatus = 200
+  static nextResponseText = ""
   status = 0
   readyState = 0
+  responseText = ""
   upload = { onprogress: null as ((e: ProgressEvent) => void) | null }
   onload: (() => void) | null = null
   onerror: (() => void) | null = null
@@ -36,7 +39,8 @@ class MockUploadXHR {
   send(body: unknown) {
     this.body = body
     queueMicrotask(() => {
-      this.status = 200
+      this.status = MockUploadXHR.nextStatus
+      this.responseText = MockUploadXHR.nextResponseText
       this.onload?.()
     })
   }
@@ -49,6 +53,8 @@ class MockUploadXHR {
 beforeEach(() => {
   vi.clearAllMocks()
   MockUploadXHR.instances = []
+  MockUploadXHR.nextStatus = 200
+  MockUploadXHR.nextResponseText = ""
   // @ts-expect-error — jsdom doesn't ship XMLHttpRequest; fake it.
   globalThis.XMLHttpRequest = MockUploadXHR
   mockPresignAttachment.mockResolvedValue({
@@ -111,12 +117,14 @@ describe("useAttachmentUploader", () => {
   })
 
   it("uses the instance max attachment size when provided", async () => {
+    const onRejected = vi.fn()
     const { result } = renderHook(() =>
       useAttachmentUploader({
         serverId: "srv-1",
         channelId: "ch-1",
         getToken: () => "token",
         maxAttachmentBytes: 128,
+        onRejected,
       })
     )
 
@@ -127,17 +135,25 @@ describe("useAttachmentUploader", () => {
     await waitFor(() => {
       expect(result.current.uploads[0]?.status).toBe("failed")
     })
-    expect(result.current.uploads[0]?.errorMessage).toMatch(/128 bytes/)
+    expect(result.current.uploads[0]?.errorMessage).toMatch(/128 B/)
+    expect(onRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "too_large",
+        message: expect.stringMatching(/128 B/),
+      })
+    )
     expect(mockPresignAttachment).not.toHaveBeenCalled()
   })
 
   it("propagates a presign 4xx as failed status", async () => {
+    const onRejected = vi.fn()
     mockPresignAttachment.mockRejectedValueOnce(new Error("presign 413"))
     const { result } = renderHook(() =>
       useAttachmentUploader({
         serverId: "srv-1",
         channelId: "ch-1",
         getToken: () => "token",
+        onRejected,
       })
     )
 
@@ -149,6 +165,71 @@ describe("useAttachmentUploader", () => {
       expect(result.current.uploads[0]?.status).toBe("failed")
     })
     expect(result.current.uploads[0]?.errorMessage).toMatch(/presign 413/)
+    expect(onRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "presign_failed",
+        message: expect.stringMatching(/presign 413/),
+      })
+    )
+  })
+
+  it("emits a too_many rejection when a batch exceeds the message slot limit", async () => {
+    const onRejected = vi.fn()
+    const { result } = renderHook(() =>
+      useAttachmentUploader({
+        serverId: "srv-1",
+        channelId: "ch-1",
+        getToken: () => "token",
+        onRejected,
+      })
+    )
+
+    await act(async () => {
+      result.current.add([
+        makeFile("1.png", 64),
+        makeFile("2.png", 64),
+        makeFile("3.png", 64),
+        makeFile("4.png", 64),
+        makeFile("5.png", 64),
+      ])
+    })
+
+    expect(result.current.uploads).toHaveLength(4)
+    expect(onRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "too_many",
+        message: "Cannot attach more than 4 files.",
+      })
+    )
+  })
+
+  it("emits an upload_failed rejection when the presigned PUT fails", async () => {
+    const onRejected = vi.fn()
+    MockUploadXHR.nextStatus = 503
+    MockUploadXHR.nextResponseText = "storage unavailable"
+    const { result } = renderHook(() =>
+      useAttachmentUploader({
+        serverId: "srv-1",
+        channelId: "ch-1",
+        getToken: () => "token",
+        onRejected,
+      })
+    )
+
+    await act(async () => {
+      result.current.add([makeFile("ok.png", 64)])
+    })
+
+    await waitFor(() => {
+      expect(result.current.uploads[0]?.status).toBe("failed")
+    })
+    expect(result.current.uploads[0]?.errorMessage).toMatch(/HTTP 503/)
+    expect(onRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "upload_failed",
+        message: expect.stringMatching(/HTTP 503/),
+      })
+    )
   })
 
   it("does not double-fire presign + upload under React StrictMode (P1.1 regression)", async () => {
@@ -182,11 +263,13 @@ describe("useAttachmentUploader", () => {
   })
 
   it("rejects a non-allowlisted mime type without hitting the network", async () => {
+    const onRejected = vi.fn()
     const { result } = renderHook(() =>
       useAttachmentUploader({
         serverId: "srv-1",
         channelId: "ch-1",
         getToken: () => "token",
+        onRejected,
       })
     )
 
@@ -197,6 +280,12 @@ describe("useAttachmentUploader", () => {
     await waitFor(() => {
       expect(result.current.uploads[0]?.status).toBe("failed")
     })
+    expect(onRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "unsupported_type",
+        message: "evil.bin is not a supported attachment type.",
+      })
+    )
     expect(mockPresignAttachment).not.toHaveBeenCalled()
   })
 
@@ -217,7 +306,7 @@ describe("useAttachmentUploader", () => {
       expect(result.current.uploads[0]?.status).toBe("failed")
     })
     expect(result.current.uploads[0]?.errorMessage).toBe(
-      "content type not allowed"
+      "logo.svg is not a supported attachment type."
     )
     expect(mockPresignAttachment).not.toHaveBeenCalled()
     expect(MockUploadXHR.instances).toHaveLength(0)

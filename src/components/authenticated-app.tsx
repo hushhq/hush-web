@@ -1364,13 +1364,14 @@ export function AuthenticatedApp() {
     : undefined
 
   // Sidebar user prop (prototype shape). `name` is the display
-  // name only; `email` is the username row (no email backend yet).
+  // name only; `username` stays undecorated and is rendered as a
+  // handle only by the user-menu presentation layer.
   const sidebarUser = React.useMemo(() => {
     const display = sanitizeDisplayName(getUserDisplayName(user), user?.username)
     const username = formatUserLabel({ username: user?.username, fallback: "" })
     return {
       name: display || "You",
-      email: username,
+      username,
       initials: deriveInitials(display || username || "you"),
     }
   }, [user?.displayName, user?.display_name, user?.username])
@@ -1898,7 +1899,7 @@ function HomeSidebar({
   onCreateServer,
   onDiscoverServers,
 }: {
-  user: { name: string; email: string; initials: string }
+  user: React.ComponentProps<typeof ChannelSidebar>["user"]
   railEntries: { id: string; name: string; initials: string }[]
   activeRailId: string
   onSelectRail: (target: RailSelection | string) => void
