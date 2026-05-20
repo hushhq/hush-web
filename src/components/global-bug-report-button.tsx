@@ -12,22 +12,10 @@ import { useOptionalAuth } from "@/contexts/AuthContext"
 import { deriveLifecycleStateFromAuth } from "@/lib/bugReportLifecycle"
 
 export interface GlobalBugReportButtonProps {
-  /**
-   * Surface name attached to the report. The button is mounted in the
-   * bottom dock of the authenticated shell, so `"chrome.bottom-dock"`
-   * is the truthful default; future hosts (e.g. an auth screen) can
-   * override this.
-   */
   appSurface?: string
   className?: string
 }
 
-/**
- * Always-visible icon button in the authenticated app chrome that opens
- * the existing `BugReportDialog`. Mounted from the bottom dock, above
- * the user menu / voice pip. Reuses the shared lifecycle helper so it
- * cannot drift from the settings entry point.
- */
 export function GlobalBugReportButton({
   appSurface = "chrome.bottom-dock",
   className,
