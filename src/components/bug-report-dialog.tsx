@@ -56,25 +56,10 @@ const SUCCESS_LABEL = "Sent"
 export interface BugReportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /**
-   * Auth lifecycle hint sourced from `useAuth().vaultState` (or
-   * equivalent) by the caller. Mapped onto the wire enum by
-   * `buildBugReportTelemetry`.
-   */
   lifecycleState?: BugReportLifecycleState | null
-  /**
-   * Surface name baked into the report. Callers passing a more specific
-   * label (e.g. `"settings.devices"`) help the triage team route the
-   * ticket without ever leaking identifiers.
-   */
   appSurface?: string
 }
 
-/**
- * Anonymous bug report dialog. All identity-bearing fields are
- * deliberately absent. Telemetry is shown verbatim before submission so
- * the user always sees exactly what leaves the device.
- */
 export function BugReportDialog({
   open,
   onOpenChange,
@@ -109,9 +94,6 @@ export function BugReportDialog({
     [telemetry]
   )
 
-  // Reset transient form state every time the dialog opens. The user
-  // never wants to see the previous attempt's body next time they hit
-  // "Report a bug" — and the telemetry might have changed.
   React.useEffect(() => {
     if (!open) return
     setType("bug")

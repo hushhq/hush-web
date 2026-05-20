@@ -24,7 +24,6 @@ import {
   FieldGroup,
   FieldTitle,
 } from "@/components/ui/field"
-import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import {
   Select,
@@ -67,8 +66,7 @@ import {
   getDesktopBridge,
 } from "@/lib/desktopBridge"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
-import { BugReportDialog } from "@/components/bug-report-dialog"
-import type { BugReportLifecycleState } from "@/lib/bugReport"
+import { HelpPanel } from "@/components/settings/help-panel"
 
 interface UserAccountInfo {
   displayName: string
@@ -80,20 +78,9 @@ interface UserSettingsDialogProps {
   onOpenChange: (open: boolean) => void
   account?: UserAccountInfo
   onSignOut?: () => void | Promise<void>
-  /**
-   * URL of the auth (home) instance — the one that issued the JWT and
-   * stores the user's device list. Distinct from the currently-selected
-   * server's instance, which may be a federated peer.
-   */
   homeInstanceUrl?: string | null
-  /** Hex transparency log public key for the home instance. */
   homeLogPublicKey?: string | null
-  /** Active voice runtime surface — null when the user is not joined
-   *  to any voice channel. Lets the Voice & Video panel temporarily
-   *  isolate the mic test from the live room and push filter changes
-   *  into the published capture graph. */
   voiceRuntime?: VoiceRuntime | null
-  /** Instance origin used to scope persisted voice device preferences. */
   voicePrefsScope?: string | null
 }
 
@@ -107,8 +94,6 @@ export function UserSettingsDialog({
   voiceRuntime,
   voicePrefsScope,
 }: UserSettingsDialogProps) {
-  // Keep unfinished surfaces visible but disabled so the settings map
-  // stays recognizable while only wired panels are reachable.
   const groups: SettingsGroup[] = [
     { id: "account", label: "Account" },
     { id: "app", label: "App settings" },
@@ -613,80 +598,6 @@ function AppearancePanel() {
           </FieldGroup>
         </div>
       </section>
-    </div>
-  )
-}
-
-/**
- * Maps the auth-hook `vaultState` onto the wire enum the bug-report
- * proxy accepts. The hook may legitimately not be mounted when the
- * settings dialog renders (e.g. the smoke tests stub the context); the
- * fallback keeps `unknown` rather than inventing a value.
- */
-function deriveLifecycleStateFromAuth(
-  auth: unknown
-): BugReportLifecycleState {
-  if (!auth || typeof auth !== "object") return "unknown"
-  const record = auth as { vaultState?: unknown; user?: unknown; token?: unknown }
-  const vaultState =
-    typeof record.vaultState === "string" ? record.vaultState : null
-  if (vaultState === "unlocked") return "authorized"
-  if (vaultState === "locked") return "locked"
-  if (vaultState === "none") {
-    return record.token ? "anonymous" : "anonymous"
-  }
-  return "unknown"
-}
-
-function HelpPanel() {
-  const auth = useAuth()
-  const lifecycleState = deriveLifecycleStateFromAuth(auth)
-  const [dialogOpen, setDialogOpen] = React.useState(false)
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">Help</h2>
-        <p className="text-sm text-muted-foreground">
-          Report a problem or request a change. Reports are anonymous.
-        </p>
-      </div>
-
-      <Separator />
-
-      <section className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Feedback
-        </h3>
-        <div className="rounded-lg border bg-card p-4">
-          <FieldGroup>
-            <Field orientation="horizontal">
-              <FieldContent>
-                <FieldTitle>Report a bug</FieldTitle>
-                <FieldDescription>
-                  Send an anonymous report with a small set of safe
-                  metadata. The dialog shows exactly what will be
-                  submitted before you confirm.
-                </FieldDescription>
-              </FieldContent>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDialogOpen(true)}
-              >
-                Open report
-              </Button>
-            </Field>
-          </FieldGroup>
-        </div>
-      </section>
-
-      <BugReportDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        lifecycleState={lifecycleState}
-        appSurface="settings.help"
-      />
     </div>
   )
 }
