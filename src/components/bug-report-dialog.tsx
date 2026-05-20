@@ -182,7 +182,10 @@ export function BugReportDialog({
                 <SelectTrigger id="bug-report-type" aria-label="Report type">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                {/* `position="popper"` anchors the menu to the trigger
+                    so the dropdown's vertical position does not shift
+                    based on which option is currently selected. */}
+                <SelectContent position="popper" sideOffset={4}>
                   {BUG_REPORT_TYPES.map((value) => (
                     <SelectItem key={value} value={value}>
                       {TYPE_LABELS[value]}
@@ -220,6 +223,10 @@ export function BugReportDialog({
                 maxLength={4000}
                 aria-invalid={fieldError?.field === "description" || undefined}
                 placeholder="What happened? What did you expect to happen?"
+                // Stable size: drag-resize disabled, internal scrolling
+                // takes over once the body exceeds the visible area so
+                // the dialog never grows past its column.
+                className="h-32 resize-none overflow-auto [field-sizing:fixed]"
               />
               {fieldError?.field === "description" ? (
                 <FieldError>{fieldError.message}</FieldError>
@@ -239,6 +246,7 @@ export function BugReportDialog({
                 rows={4}
                 maxLength={2000}
                 placeholder={"1. ...\n2. ...\n3. ..."}
+                className="h-24 resize-none overflow-auto"
               />
             </Field>
 
