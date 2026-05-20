@@ -255,7 +255,7 @@ export function BugReportDialog({
                 onChange={(event) => setSteps(event.target.value)}
                 disabled={submitting || succeeded}
                 rows={4}
-                maxLength={4000}
+                maxLength={2000}
                 placeholder={"1. ...\n2. ...\n3. ..."}
               />
             </Field>

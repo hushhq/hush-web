@@ -110,7 +110,7 @@ export const DEFAULT_BUG_REPORT_APP_SURFACE = "settings.help"
 
 const TITLE_MAX_LEN = 120
 const DESCRIPTION_MAX_LEN = 4000
-const STEPS_MAX_LEN = 4000
+const STEPS_MAX_LEN = 2000
 
 /**
  * Narrow shape `buildTelemetry` reads from the desktop preload bridge.
@@ -256,7 +256,10 @@ export function validateBugReportInput(
   if (!TYPE_SET.has(input.type)) {
     return { field: "type", message: "Pick a report type." }
   }
-  if (typeof input.description !== "string" || input.description.trim().length === 0) {
+  if (
+    typeof input.description !== "string" ||
+    input.description.trim().length === 0
+  ) {
     return {
       field: "description",
       message: "Describe what happened before sending.",
