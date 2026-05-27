@@ -66,7 +66,8 @@ import {
   bridgeCanSwitchGlassMaterial,
   getDesktopBridge,
 } from "@/lib/desktopBridge"
-import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
+import { formatUserLabel, formatUsername, sanitizeDisplayName } from "@/lib/userLabel"
+import { deriveInitials, instanceHostFromUrl } from "@/adapters/types"
 import { HelpPanel } from "@/components/settings/help-panel"
 import { DesktopUpdatePanel } from "@/components/settings/desktop-update-panel"
 
@@ -115,8 +116,9 @@ export function UserSettingsDialog({
       groupId: "account",
       label: "Profile",
       icon: <CircleUserIcon />,
-      disabled: true,
-      content: <PlaceholderPanel title="Profile" />,
+      content: (
+        <ProfilePanel account={account} homeInstanceUrl={homeInstanceUrl} />
+      ),
     },
     {
       id: "privacy",
@@ -823,6 +825,105 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
       <section className="flex flex-col gap-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Identity
+        </h3>
+        <div className="rounded-lg border bg-card">
+          {fields.map((field, idx) => (
+            <div
+              key={field.label}
+              className={
+                "flex items-center justify-between gap-4 px-4 py-3 " +
+                (idx < fields.length - 1 ? "border-b" : "")
+              }
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {field.label}
+                </span>
+                <span className="text-sm">{field.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+/**
+ * Read-only "this is how others see you" view of the current user's
+ * profile. Mirrors the inline ProfileCard popover in members-sidebar
+ * so the identity priority (display name → username, never `@@handle`
+ * or display-name-as-handle) stays consistent across surfaces — see
+ * CORE-INVARIANTS §"User Identity, Profiles, Members, and System Logs".
+ *
+ * Edit controls are deliberately omitted: PATCH /api/users/me has not
+ * shipped yet, and the AccountPanel above already documents that
+ * limitation for users browsing the Account group.
+ */
+function ProfilePanel({
+  account,
+  homeInstanceUrl,
+}: {
+  account?: UserAccountInfo
+  homeInstanceUrl?: string | null
+}) {
+  const displayName =
+    sanitizeDisplayName(account?.displayName, account?.username) || "Not set"
+  const username = formatUsername(account?.username)
+  const initialsSource = displayName !== "Not set" ? displayName : username
+  const initials = deriveInitials(initialsSource || "?")
+  const instanceHost = instanceHostFromUrl(homeInstanceUrl)
+
+  const fields: { label: string; value: React.ReactNode }[] = [
+    { label: "Display name", value: displayName },
+    {
+      label: "Username",
+      value: (
+        <UsernameHandle
+          username={username}
+          className="text-sm"
+          fallback={<span>Not set</span>}
+        />
+      ),
+    },
+  ]
+  if (instanceHost) {
+    fields.push({ label: "Home instance", value: instanceHost })
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">Profile</h2>
+        <p className="text-sm text-muted-foreground">
+          This is how you appear to other members on Hush. Editable fields
+          ship once the profile-update API lands.
+        </p>
+      </div>
+
+      <Separator />
+
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="h-14 bg-gradient-to-br from-primary/30 to-primary/5" />
+        <div className="-mt-7 flex flex-col gap-3 px-4 pb-4">
+          <span className="flex size-14 items-center justify-center rounded-full bg-muted text-sm text-muted-foreground">
+            {initials}
+          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-semibold">{displayName}</span>
+            {username ? (
+              <UsernameHandle
+                username={username}
+                className="text-xs text-muted-foreground"
+              />
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          About you
         </h3>
         <div className="rounded-lg border bg-card">
           {fields.map((field, idx) => (
