@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
   BellIcon,
+  CheckIcon,
   CircleUserIcon,
   HelpCircleIcon,
   InfoIcon,
@@ -11,11 +12,15 @@ import {
   MicIcon,
   MonitorSmartphoneIcon,
   PaletteIcon,
+  PencilIcon,
   PlugZapIcon,
   ShieldIcon,
   UserIcon,
   WrenchIcon,
+  XIcon,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 import { Separator } from "@/components/ui/separator.tsx"
 import {
@@ -793,9 +798,9 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
     account?.username
   ) || "Not set"
   const username = formatUserLabel({ username: account?.username, fallback: "" })
-  // TODO(yarin, 2026-05-04): backend lacks email/phone/password endpoints
-  // — identity is currently mnemonic-derived. Edit actions deferred until
-  // profile-update API lands.
+  // Display name is editable through the Profile tab via
+  // PATCH /api/auth/me. Username stays fixed at the BIP39 root key — see
+  // hush-server/internal/api/auth.go updateMe.
   const fields: { label: string; value: React.ReactNode }[] = [
     { label: "Display name", value: displayName },
     {
@@ -815,8 +820,8 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">My account</h2>
         <p className="text-sm text-muted-foreground">
-          Identity is derived from your recovery phrase. Profile editing
-          requires backend support. Shipping soon.
+          Identity is derived from your recovery phrase. Edit your display
+          name in the Profile tab; your username stays fixed.
         </p>
       </div>
 
@@ -849,16 +854,21 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
   )
 }
 
+// Max display-name length kept in lockstep with the server-side
+// `maxDisplayLen` constant in hush-server/internal/api/auth.go. Edit-time
+// rejection here is a UX nicety — the server enforces the same cap.
+const MAX_DISPLAY_NAME_LEN = 128
+
 /**
- * Read-only "this is how others see you" view of the current user's
- * profile. Mirrors the inline ProfileCard popover in members-sidebar
- * so the identity priority (display name → username, never `@@handle`
- * or display-name-as-handle) stays consistent across surfaces — see
+ * "This is how others see you" panel for the current user's own profile.
+ * Mirrors the inline ProfileCard popover in members-sidebar so identity
+ * priority (display name → username, never `@@handle` or
+ * display-name-as-handle) stays consistent across surfaces — see
  * CORE-INVARIANTS §"User Identity, Profiles, Members, and System Logs".
  *
- * Edit controls are deliberately omitted: PATCH /api/users/me has not
- * shipped yet, and the AccountPanel above already documents that
- * limitation for users browsing the Account group.
+ * Display name is editable via PATCH /api/auth/me. Username is NOT
+ * editable: it is cryptographically derived from the BIP39 root key at
+ * registration and may only change through the re-registration ceremony.
  */
 function ProfilePanel({
   account,
@@ -867,28 +877,78 @@ function ProfilePanel({
   account?: UserAccountInfo
   homeInstanceUrl?: string | null
 }) {
-  const displayName =
-    sanitizeDisplayName(account?.displayName, account?.username) || "Not set"
+  // Defensive read: in some test renders `useAuth()` is mocked to a
+  // partial value or returns undefined entirely. Treat the editor as
+  // unavailable in that case rather than crashing the panel.
+  const auth = useAuth() as
+    | { updateAccountProfile?: (fields: { displayName?: string }) => Promise<unknown> }
+    | null
+    | undefined
+  const updateAccountProfile = auth?.updateAccountProfile
+
+  const serverDisplayName = sanitizeDisplayName(
+    account?.displayName,
+    account?.username
+  )
   const username = formatUsername(account?.username)
-  const initialsSource = displayName !== "Not set" ? displayName : username
-  const initials = deriveInitials(initialsSource || "?")
   const instanceHost = instanceHostFromUrl(homeInstanceUrl)
 
-  const fields: { label: string; value: React.ReactNode }[] = [
-    { label: "Display name", value: displayName },
-    {
-      label: "Username",
-      value: (
-        <UsernameHandle
-          username={username}
-          className="text-sm"
-          fallback={<span>Not set</span>}
-        />
-      ),
-    },
-  ]
-  if (instanceHost) {
-    fields.push({ label: "Home instance", value: instanceHost })
+  const [isEditing, setIsEditing] = React.useState(false)
+  const [draft, setDraft] = React.useState(serverDisplayName)
+  const [isSaving, setIsSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  // Keep the draft in sync with the canonical server value while the row
+  // is in view mode. Once the user opens the editor we leave the draft
+  // alone so prop reflows don't clobber half-typed input.
+  React.useEffect(() => {
+    if (!isEditing) setDraft(serverDisplayName)
+  }, [serverDisplayName, isEditing])
+
+  const displayNameForRender = serverDisplayName || "Not set"
+  const initialsSource = serverDisplayName || username
+  const initials = deriveInitials(initialsSource || "?")
+
+  const enterEditMode = () => {
+    setDraft(serverDisplayName)
+    setError(null)
+    setIsEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setIsEditing(false)
+    setDraft(serverDisplayName)
+    setError(null)
+  }
+
+  const submit = async () => {
+    if (!updateAccountProfile) {
+      setError("Profile editing is unavailable in this session.")
+      return
+    }
+    const trimmed = draft.trim()
+    if (trimmed.length > MAX_DISPLAY_NAME_LEN) {
+      setError(`Display name must be ${MAX_DISPLAY_NAME_LEN} characters or fewer.`)
+      return
+    }
+    if (trimmed === serverDisplayName) {
+      // No-op — exit edit mode without a round-trip.
+      setIsEditing(false)
+      setError(null)
+      return
+    }
+    setIsSaving(true)
+    setError(null)
+    try {
+      await updateAccountProfile({ displayName: trimmed })
+      setIsEditing(false)
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message ? err.message : "Could not update profile."
+      setError(message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -896,8 +956,8 @@ function ProfilePanel({
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Profile</h2>
         <p className="text-sm text-muted-foreground">
-          This is how you appear to other members on Hush. Editable fields
-          ship once the profile-update API lands.
+          This is how you appear to other members on Hush. Your username
+          stays fixed — it is derived from your recovery phrase.
         </p>
       </div>
 
@@ -910,7 +970,7 @@ function ProfilePanel({
             {initials}
           </span>
           <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-semibold">{displayName}</span>
+            <span className="text-sm font-semibold">{displayNameForRender}</span>
             {username ? (
               <UsernameHandle
                 username={username}
@@ -926,24 +986,152 @@ function ProfilePanel({
           About you
         </h3>
         <div className="rounded-lg border bg-card">
-          {fields.map((field, idx) => (
-            <div
-              key={field.label}
-              className={
-                "flex items-center justify-between gap-4 px-4 py-3 " +
-                (idx < fields.length - 1 ? "border-b" : "")
-              }
-            >
+          <ProfileEditableRow
+            label="Display name"
+            isEditing={isEditing}
+            isSaving={isSaving}
+            error={error}
+            value={displayNameForRender}
+            draft={draft}
+            maxLength={MAX_DISPLAY_NAME_LEN}
+            onDraftChange={setDraft}
+            onEnterEdit={enterEditMode}
+            onCancel={cancelEdit}
+            onSubmit={submit}
+          />
+          <div
+            className={
+              "flex items-center justify-between gap-4 px-4 py-3 " +
+              (instanceHost ? "border-b" : "")
+            }
+          >
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Username
+              </span>
+              <UsernameHandle
+                username={username}
+                className="text-sm"
+                fallback={<span className="text-sm">Not set</span>}
+              />
+            </div>
+          </div>
+          {instanceHost ? (
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {field.label}
+                  Home instance
                 </span>
-                <span className="text-sm">{field.value}</span>
+                <span className="text-sm">{instanceHost}</span>
               </div>
             </div>
-          ))}
+          ) : null}
         </div>
       </section>
+    </div>
+  )
+}
+
+/**
+ * One row of the "About you" field list that can flip between a static
+ * label/value view and an inline editor. Pulled into its own component
+ * so the surrounding ProfilePanel JSX stays readable and the editor's
+ * keyboard handlers / busy / error states live next to each other.
+ */
+function ProfileEditableRow({
+  label,
+  isEditing,
+  isSaving,
+  error,
+  value,
+  draft,
+  maxLength,
+  onDraftChange,
+  onEnterEdit,
+  onCancel,
+  onSubmit,
+}: {
+  label: string
+  isEditing: boolean
+  isSaving: boolean
+  error: string | null
+  value: string
+  draft: string
+  maxLength: number
+  onDraftChange: (next: string) => void
+  onEnterEdit: () => void
+  onCancel: () => void
+  onSubmit: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-b px-4 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </span>
+          {isEditing ? (
+            <Input
+              value={draft}
+              maxLength={maxLength}
+              onChange={(event) => onDraftChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  onSubmit()
+                } else if (event.key === "Escape") {
+                  event.preventDefault()
+                  onCancel()
+                }
+              }}
+              disabled={isSaving}
+              aria-label={`Edit ${label.toLowerCase()}`}
+              autoFocus
+              className="h-8"
+            />
+          ) : (
+            <span className="truncate text-sm">{value}</span>
+          )}
+        </div>
+        {isEditing ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onCancel}
+              disabled={isSaving}
+              aria-label="Cancel"
+            >
+              <XIcon className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={onSubmit}
+              disabled={isSaving}
+              aria-label="Save"
+            >
+              {isSaving ? "Saving..." : <CheckIcon className="size-4" />}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onEnterEdit}
+            aria-label={`Edit ${label.toLowerCase()}`}
+          >
+            <PencilIcon className="size-3.5" />
+          </Button>
+        )}
+      </div>
+      {error ? (
+        <div role="alert" className="text-xs text-destructive">
+          {error}
+        </div>
+      ) : null}
     </div>
   )
 }
