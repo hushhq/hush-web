@@ -7,10 +7,10 @@
  *
  * The model separates two independent axes:
  *
- *   AudioRuntimeMode — determines capture behavior (DSP pipeline).
+ *   AudioRuntimeMode: determines capture behavior (DSP pipeline).
  *     Depends on platform.
  *
- *   AudioPlatform — determines playback constraints (output routing).
+ *   AudioPlatform: determines playback constraints (output routing).
  *     Depends only on the device/browser.
  */
 
@@ -78,14 +78,18 @@ export interface CaptureProfile {
 export const CAPTURE_PROFILES: Readonly<Record<AudioRuntimeMode, CaptureProfile>> = {
   'desktop-standard': {
     mode: 'desktop-standard',
-    // Temporary: Hush noise-gate / advanced-filter pipeline disabled
-    // until the v2 DSP ships. The transport graph stays so we get a
-    // deterministic mono downmix at MediaStreamDestination
-    // (channelCount = 1), independent of whatever the device hands
-    // back to getUserMedia. Browser EC + NS + AGC remain on.
+    // Publish the RAW getUserMedia track. Mono is enforced at the source by
+    // buildConstraints channelCount { exact: 1 } (getUserMedia rejects
+    // rather than hand back stereo), so the raw track is already mono and
+    // the old AudioContext mono-downmix is unnecessary. That downmix was
+    // also harmful: routing the mic through Web Audio makes the published
+    // track a Web-Audio track and strips Chromium's AEC render-reference, so
+    // echoCancellation stops cancelling and the mic captures speaker output
+    // (HUSHHQ-109). Browser EC + NS + AGC stay on; hushProcessing stays off
+    // until the v2 DSP ships.
     browserDsp: true,
     hushProcessing: false,
-    useRawTrack: false,
+    useRawTrack: true,
     localMonitoring: true,
     echoCanConfigurable: false,
   },

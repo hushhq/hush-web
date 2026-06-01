@@ -117,7 +117,7 @@ describe('CaptureOrchestrator: state transitions', () => {
       { source: 'microphone' },
     );
 
-    // Unpublish — passes the handle object, not a string sid
+    // Unpublish: passes the handle object, not a string sid
     await orch.unpublish(room);
     expect(room.unpublishTrack).toHaveBeenCalledTimes(1);
     const unpublishArg = (room.unpublishTrack as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -301,8 +301,8 @@ describe('CaptureOrchestrator: mobile-web conservative path', () => {
 
 // ─── Desktop Pipeline ───────────────────────────────────
 
-describe('CaptureOrchestrator: desktop-standard pipeline', () => {
-  it('desktop-standard creates the transport graph (mono downmix, no worklet)', async () => {
+describe('CaptureOrchestrator: desktop-standard capture', () => {
+  it('desktop-standard publishes the raw track (no AudioContext, AEC-preserving, HUSHHQ-109)', async () => {
     const ctxFactory = mockAudioContextFactory();
 
     const orch = new CaptureOrchestrator({
@@ -312,12 +312,12 @@ describe('CaptureOrchestrator: desktop-standard pipeline', () => {
 
     const session = await orch.acquire(CAPTURE_PROFILES['desktop-standard']);
 
-    // Pipeline path stays even with hushProcessing=false so the
-    // publish track gets mono-downmixed at the destinationNode.
-    expect(session.usesProcessingPipeline).toBe(true);
-    expect(session.audioContext).not.toBeNull();
-    expect(ctxFactory.create).toHaveBeenCalledWith({ sampleRate: 48_000 });
-    // No noise gate worklet until the v2 DSP returns.
+    // Raw path: routing the mic through an AudioContext would strip
+    // Chromium's AEC render-reference and reintroduce speaker echo
+    // (HUSHHQ-109). No transport graph is built.
+    expect(session.usesProcessingPipeline).toBe(false);
+    expect(session.audioContext).toBeNull();
+    expect(ctxFactory.create).not.toHaveBeenCalled();
     expect(session.noiseGateNode).toBeNull();
 
     await orch.teardown();

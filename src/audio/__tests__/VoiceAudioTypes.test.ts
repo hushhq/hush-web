@@ -25,15 +25,18 @@ describe('CAPTURE_PROFILES', () => {
   });
 
   // Temporary (until v2 DSP): Hush processing is OFF, but the
-  // transport graph stays so the published track is guaranteed mono
-  // via the AudioContext destinationNode (channelCount = 1). Browser
-  // owns NS + AGC + EC. `useRawTrack` is false so we still get the
-  // downmix; `hushProcessing` is false so no worklet is loaded.
-  it('desktop-standard: browser DSP ON, Hush processing OFF, transport graph kept (temporary)', () => {
+  // Requirement change (HUSHHQ-109): desktop-standard now publishes the
+  // RAW getUserMedia track so Chromium's AEC render-reference survives.
+  // Routing the mic through an AudioContext (the old mono-downmix transport
+  // graph) made the published track a Web-Audio track and broke echo
+  // cancellation (mic captured speaker output). Mono is enforced by the
+  // channelCount { exact: 1 } constraint, not a Web-Audio downmix. Browser
+  // owns NS + AGC + EC; no worklet is loaded (hushProcessing false).
+  it('desktop-standard: browser DSP ON, Hush processing OFF, raw track (AEC-preserving, HUSHHQ-109)', () => {
     const p = CAPTURE_PROFILES['desktop-standard'];
     expect(p.browserDsp).toBe(true);
     expect(p.hushProcessing).toBe(false);
-    expect(p.useRawTrack).toBe(false);
+    expect(p.useRawTrack).toBe(true);
     expect(p.echoCanConfigurable).toBe(false);
   });
 

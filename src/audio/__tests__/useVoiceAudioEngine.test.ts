@@ -40,9 +40,10 @@ describe('useVoiceAudioEngine', () => {
       useVoiceAudioEngine(),
     );
     expect(result.current.publishOptions.disableAudioFilters).toBe(false);
-    // Desktop runs the transport graph (no worklet) for mono
-    // downmix until the v2 DSP ships.
-    expect(result.current.publishOptions.useRawTrack).toBe(false);
+    // Desktop publishes the raw mic track so Chromium's AEC survives;
+    // mono comes from the channelCount { exact: 1 } constraint, not a
+    // Web-Audio downmix (HUSHHQ-109).
+    expect(result.current.publishOptions.useRawTrack).toBe(true);
   });
 
   it('state updates when engine operations are called', () => {

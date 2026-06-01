@@ -60,10 +60,10 @@ describe('resolvePlaybackContext', () => {
 // ─── derivePublishOptions ───────────────────────────────
 
 describe('derivePublishOptions', () => {
-  it('desktop-standard: pipeline graph for mono downmix + browser DSP (temporary)', () => {
+  it('desktop-standard: raw track + browser DSP (AEC-preserving, mono via constraint, HUSHHQ-109)', () => {
     const opts = derivePublishOptions(CAPTURE_PROFILES['desktop-standard']);
     expect(opts.disableAudioFilters).toBe(false);
-    expect(opts.useRawTrack).toBe(false);
+    expect(opts.useRawTrack).toBe(true);
     expect(opts.useBrowserDsp).toBe(true);
   });
 
