@@ -2734,6 +2734,24 @@ export function useAuth() {
     };
   }, [clearGuestTimers]);
 
+  // ── E2E diagnostics: MLS provision helper ────────────────────────────────
+  // Exposed on window only when VITE_E2E_DIAG=1. Allows Playwright specs to
+  // call uploadKeyPackagesAfterAuth from within the browser after the no-vault
+  // boot path (which skips it), so voice E2EE can proceed in fixture sessions.
+
+  useEffect(() => {
+    if (import.meta.env.VITE_E2E_DIAG !== '1') return;
+    if (typeof window === 'undefined') return;
+    if (!isAuthenticated || !token || !user?.id || hasLocalVault) {
+      delete window.__hushProvisionMls;
+      return;
+    }
+    const tok = token;
+    const uid = user.id;
+    window.__hushProvisionMls = () => uploadKeyPackagesAfterAuth(tok, uid, getDeviceId(), {}, '');
+    return () => { delete window.__hushProvisionMls; };
+  }, [isAuthenticated, token, user?.id, hasLocalVault]);
+
   // ── BroadcastChannel logout listener ─────────────────────────────────────
 
   useEffect(() => {

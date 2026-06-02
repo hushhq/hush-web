@@ -224,3 +224,57 @@ export async function injectSession(
     },
   );
 }
+
+// ---------------------------------------------------------------------------
+// injectVoicePrefs
+// ---------------------------------------------------------------------------
+
+/**
+ * Sets voice device prefs in IndexedDB via addInitScript so that
+ * VoiceChannelView skips the prejoin dialog and auto-joins with mic enabled.
+ *
+ * Must be called BEFORE page.goto() on the same context as injectSession.
+ *
+ * dontAskAgain=true causes VoiceChannelView to auto-connect without dialog.
+ * audioEnabled=true causes it to publish mic on join.
+ * videoEnabled=false: camera requires explicit user action per session policy.
+ *
+ * DB name mirrors voiceDevicePrefs.ts: "hush-voice-device-prefs-{userId}__{encodedOrigin}"
+ *
+ * @param context  - Playwright BrowserContext to inject into.
+ * @param userId   - The userId returned by createEphemeralSession().
+ * @param scope    - The instance origin (e.g. "http://127.0.0.1:8080").
+ */
+export async function injectVoicePrefs(
+  context: BrowserContext,
+  userId: string,
+  scope: string,
+): Promise<void> {
+  const origin = new URL(scope).origin;
+  const encodedOrigin = encodeURIComponent(origin);
+  const dbName = `hush-voice-device-prefs-${userId}__${encodedOrigin}`;
+
+  await context.addInitScript(
+    ({ dbName: db, prefs }) => {
+      const req = indexedDB.open(db, 1);
+      req.onupgradeneeded = () => {
+        req.result.createObjectStore('prefs');
+      };
+      req.onsuccess = () => {
+        const tx = req.result.transaction('prefs', 'readwrite');
+        tx.objectStore('prefs').put(prefs, 'current');
+      };
+    },
+    {
+      dbName,
+      prefs: {
+        audioEnabled: true,
+        audioDeviceId: null,
+        videoEnabled: false,
+        videoDeviceId: null,
+        dontAskAgain: true,
+        outputDeviceId: null,
+      },
+    },
+  );
+}
