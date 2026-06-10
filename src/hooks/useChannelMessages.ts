@@ -853,7 +853,19 @@ export function useChannelMessages(
           cursorTs = nextCursorTs
         }
         if (appended.length === 0) return
+        // appended arrives from the server via cursor-paginated fetch (after=cursorTs),
+        // so each page is typically ascending by timestamp. Sort appended alone first
+        // to normalise any within-batch disorder, then use a fast-path when the whole
+        // batch is newer than prev (the common catch-up case). Fall back to a full
+        // merged sort for the rare out-of-order scenario.
+        appended.sort((a, b) => a.timestamp - b.timestamp)
         setMessages((prev) => {
+          if (
+            prev.length === 0 ||
+            appended[0].timestamp >= prev[prev.length - 1].timestamp
+          ) {
+            return [...prev, ...appended]
+          }
           const merged = [...prev, ...appended]
           merged.sort((a, b) => a.timestamp - b.timestamp)
           return merged
