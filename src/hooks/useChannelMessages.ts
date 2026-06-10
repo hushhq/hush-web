@@ -7,7 +7,7 @@
  * and retry of failed sends.
  *
  * Plaintext is now the v1 envelope (`MessageEnvelopeV1`) instead of a raw
- * UTF-8 string — every send goes `envelope → JSON → bytes → MLS encrypt`
+ * UTF-8 string: every send goes `envelope -> JSON -> bytes -> MLS encrypt`
  * and every receive goes `MLS decrypt → bytes → JSON → envelope`. Legacy
  * cache rows that pre-date the cutover decode-failure into a synthetic
  * `{ v: 1, text: <stored string> }` so the chat surface still renders
@@ -228,7 +228,7 @@ async function cacheLocalEnvelope(
 
 /**
  * Decode a UTF-8 plaintext into a v1 envelope. Wire receives MUST be
- * strict v1 — but the local transcript cache from before the cutover
+ * strict v1, but the local transcript cache from before the cutover
  * stores bare strings, so we fall back to wrapping legacy plaintext as
  * `{ v: 1, text }` only on `cacheLegacyFallback === true`.
  */
@@ -240,6 +240,30 @@ function decodePlaintext(
   if (result.ok) return result.envelope
   if (cacheLegacyFallback) return envelopeFromText(plaintext)
   return null
+}
+
+/**
+ * Merge catch-up messages into the existing list. Exported for tests (HUSHHQ-115).
+ *
+ * Sorts a copy of `appended` first to normalise any within-batch disorder, then
+ * uses a fast-path concat when the batch is entirely newer than `prev`. Falls
+ * back to a full merged sort for the rare out-of-order scenario. Does not mutate
+ * either input array.
+ */
+export function mergeCatchupMessages(
+  prev: ChatMessage[],
+  appended: ChatMessage[]
+): ChatMessage[] {
+  const sorted = [...appended].sort((a, b) => a.timestamp - b.timestamp)
+  if (
+    prev.length === 0 ||
+    sorted[0].timestamp >= prev[prev.length - 1].timestamp
+  ) {
+    return [...prev, ...sorted]
+  }
+  const merged = [...prev, ...sorted]
+  merged.sort((a, b) => a.timestamp - b.timestamp)
+  return merged
 }
 
 async function decryptMessageRow(
@@ -302,7 +326,7 @@ async function decryptMessageRow(
       }
     }
     const plaintext = await deps.decryptFromChannel(ct)
-    // Strict v1 cutover on the wire — anything else is a corrupt
+    // Strict v1 cutover on the wire: anything else is a corrupt
     // payload and renders the recovery placeholder.
     const envelope = decodePlaintext(plaintext, false)
     if (envelope !== null) {
@@ -394,7 +418,7 @@ export function useChannelMessages(
   // Per-send watchdog timers keyed by the optimistic row's temp id.
   // The WS layer drops `message.send` silently if the socket flips to
   // disconnected between the isConnected() pre-check and the actual
-  // socket.send call, and there is no server ack channel — so a stuck
+  // socket.send call, and there is no server ack channel, so a stuck
   // message has no signal to flip pending → failed without this. The
   // echo handler clears the timer when it lands; otherwise the row
   // surfaces as failed + retryable after the timeout.
@@ -783,7 +807,7 @@ export function useChannelMessages(
       // Drop orphan temp rows whose watchdog never fired (the socket
       // dropped the send AND the watchdog was cancelled by an unmount
       // / channel switch before it could trip). Reconnect implies the
-      // pre-disconnect sends are gone — anything still pending after
+      // pre-disconnect sends are gone; anything still pending after
       // the cutoff is dead and should surface as failed so the retry
       // affordance shows.
       const reconcileCutoff = Date.now() - SEND_ECHO_TIMEOUT_MS
@@ -853,24 +877,13 @@ export function useChannelMessages(
           cursorTs = nextCursorTs
         }
         if (appended.length === 0) return
-        // appended arrives from the server via cursor-paginated fetch (after=cursorTs),
-        // so each page is typically ascending by timestamp. Sort appended alone first
-        // to normalise any within-batch disorder, then use a fast-path when the whole
-        // batch is newer than prev (the common catch-up case). Fall back to a full
-        // merged sort for the rare out-of-order scenario.
-        appended.sort((a, b) => a.timestamp - b.timestamp)
-        setMessages((prev) => {
-          if (
-            prev.length === 0 ||
-            appended[0].timestamp >= prev[prev.length - 1].timestamp
-          ) {
-            return [...prev, ...appended]
-          }
-          const merged = [...prev, ...appended]
-          merged.sort((a, b) => a.timestamp - b.timestamp)
-          return merged
-        })
-        const lastTs = appended[appended.length - 1].timestamp
+        // appended arrives from the server via cursor-paginated fetch (after=cursorTs).
+        // mergeCatchupMessages handles sorting and fast-path vs. full-merge selection.
+        setMessages((prev) => mergeCatchupMessages(prev, appended))
+        const lastTs = appended.reduce(
+          (max, m) => (m.timestamp > max ? m.timestamp : max),
+          appended[0].timestamp
+        )
         if (lastTs > latestTs) latestBackendTsRef.current = lastTs
         if (
           markReadEnabledRef.current &&

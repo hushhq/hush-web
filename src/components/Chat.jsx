@@ -623,7 +623,7 @@ export default function Chat({
           aria-busy={isChannelTransitioning || isInitialLoading}
         >
           {/* Spacer: grows to push messages to the bottom when they don't fill the container.
-              Must come BEFORE messages — justify-content: flex-end is not usable here because
+              Must come BEFORE messages; justify-content: flex-end is not usable here because
               it makes top-overflow unreachable (negative scrollTop territory). */}
           <div className="chat-messages-spacer" />
           {!isChannelTransitioning && hasMoreOlder && (loadMoreLoading || visibleMessages.length > 0) && (
