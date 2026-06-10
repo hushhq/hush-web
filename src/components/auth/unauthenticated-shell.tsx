@@ -47,9 +47,6 @@ export function UnauthenticatedShell() {
       instanceUrl: string
     ) => Promise<void>
     user: { id: string } | null
-    hasSession: boolean
-    needsPinSetup: boolean
-    needsUnlock: boolean
     hasVault: boolean
     authInvalidation: { reason: string } | null
     clearAuthInvalidation: () => void
