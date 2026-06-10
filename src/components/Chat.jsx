@@ -598,6 +598,21 @@ export default function Chat({
   const visibleMessages = isChannelTransitioning ? [] : messages;
   const hasMessages = visibleMessages.length > 0;
 
+  // Precompute per-row display values so toDateKey/formatDateLabel/formatTime
+  // are not called multiple times per row on every render (HUSHHQ-115).
+  const visibleRows = useMemo(
+    () =>
+      visibleMessages.map((msg, idx) => {
+        const prevMsg = idx > 0 ? visibleMessages[idx - 1] : null;
+        const dateKey = toDateKey(msg.timestamp);
+        const showDateSep = prevMsg ? dateKey !== toDateKey(prevMsg.timestamp) : true;
+        const timeLabel = formatTime(msg.timestamp);
+        const dateLabel = showDateSep ? formatDateLabel(msg.timestamp) : null;
+        return { msg, prevMsg, dateKey, showDateSep, timeLabel, dateLabel };
+      }),
+    [visibleMessages]
+  );
+
   return (
     <div className="chat-container">
       <div className="chat-messages-section">
@@ -646,24 +661,18 @@ export default function Chat({
               </EmptyHeader>
             </Empty>
           ) : (
-            visibleMessages.map((msg, idx) => {
+            visibleRows.map(({ msg, prevMsg, showDateSep, timeLabel, dateLabel }) => {
               const isOwn = msg.sender === currentUserId;
               const isFailed = msg.failed === true;
               const isPending = msg.pending === true;
-              const prevMsg = idx > 0 ? visibleMessages[idx - 1] : null;
               const consecutive = isConsecutive(prevMsg, msg);
               const displayName = isOwn ? 'You' : (displayNameMap.get(msg.sender) ?? truncateUserId(msg.sender));
-
-              // Build date separator when the calendar day changes
-              const showDateSep = prevMsg
-                ? toDateKey(msg.timestamp) !== toDateKey(prevMsg.timestamp)
-                : true;
 
               return (
                 <div key={msg.id}>
                   {showDateSep && (
                     <div className="date-separator">
-                      <span className="date-separator-label">{formatDateLabel(msg.timestamp)}</span>
+                      <span className="date-separator-label">{dateLabel}</span>
                     </div>
                   )}
                   <div
@@ -680,11 +689,11 @@ export default function Chat({
                         <span className={`chat-username${isOwn ? ' chat-username--own' : ''}`}>
                           {displayName}
                         </span>
-                        <span className="chat-timestamp message-timestamp">{formatTime(msg.timestamp)}</span>
+                        <span className="chat-timestamp message-timestamp">{timeLabel}</span>
                       </div>
                     )}
                     {consecutive && (
-                      <span className="chat-timestamp message-timestamp">{formatTime(msg.timestamp)}</span>
+                      <span className="chat-timestamp message-timestamp">{timeLabel}</span>
                     )}
                     <div className="chat-body">
                       {msg.decryptionFailed ? (
