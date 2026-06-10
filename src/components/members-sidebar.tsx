@@ -119,10 +119,14 @@ export function MembersSidebar({
   onKickMember,
   onDirectMessage,
 }: MembersSidebarProps) {
-  const grouped = ROLE_ORDER.map((role) => ({
-    role,
-    items: members.filter((m) => m.role === role),
-  })).filter((group) => group.items.length > 0)
+  const grouped = React.useMemo(
+    () =>
+      ROLE_ORDER.map((role) => ({
+        role,
+        items: members.filter((m) => m.role === role),
+      })).filter((group) => group.items.length > 0),
+    [members]
+  )
 
   const body = (
     <MembersList
