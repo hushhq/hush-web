@@ -1000,6 +1000,64 @@ describe('useAuth - unlockVault', () => {
     expect(result.current.isAuthenticated).toBe(true);
   });
 
+  it('falls back to offline unlock when a 2xx response is not JSON (captive portal)', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    const portalError = Object.assign(
+      new Error('requestChallenge returned text/html instead of JSON'),
+      { status: 200 },
+    );
+    vi.mocked(apiMod.requestChallenge).mockRejectedValueOnce(portalError);
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+
+    expect(result.current.vaultState).toBe('unlocked');
+  });
+
+  it('reports lifecycle=authorized after an offline unlock', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    vi.mocked(apiMod.requestChallenge).mockRejectedValueOnce(new Error('offline'));
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+
+    expect(result.current.lifecycle).toBe('authorized');
+    expect(result.current.needsUnlock).toBe(false);
+  });
+
+  it('does not resurrect the session via the online event after lockVault', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    vi.mocked(apiMod.requestChallenge).mockRejectedValueOnce(new Error('offline'));
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+    expect(result.current.vaultState).toBe('unlocked');
+
+    act(() => result.current.lockVault());
+    await waitFor(() => expect(result.current.vaultState).toBe('locked'));
+    vi.mocked(apiMod.verifyChallenge).mockClear();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    expect(apiMod.verifyChallenge).not.toHaveBeenCalled();
+    expect(result.current.token).toBeNull();
+    expect(result.current.vaultState).toBe('locked');
+  });
+
   it('mints a fresh JWT via the online event after an offline unlock', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));

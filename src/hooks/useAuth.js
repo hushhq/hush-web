@@ -687,7 +687,11 @@ function isServerSessionInvalidationError(err) {
 function isServerUnavailableError(err) {
   const status = Number(err?.status);
   if (!Number.isFinite(status) || status === 0) return true;
-  return status >= 500;
+  if (status >= 500) return true;
+  // A 2xx that still produced an error means the body was not the API's
+  // JSON (captive portal, CDN interstitial). The server never answered the
+  // auth question, so this is unavailability, not a rejection.
+  return status >= 200 && status < 300;
 }
 
 const USER_SNAPSHOT_KEY_PREFIX = 'hush_user_snapshot_';
@@ -725,7 +729,15 @@ function readUserSnapshot(userId) {
     const raw = localStorage.getItem(`${USER_SNAPSHOT_KEY_PREFIX}${userId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed?.id === userId ? parsed : null;
+    if (parsed?.id !== userId) return null;
+    // Rebuild only the fields this module wrote: localStorage is
+    // attacker-writable (local access/XSS) and must not inject arbitrary
+    // `user` fields such as `role`.
+    return {
+      id: parsed.id,
+      username: typeof parsed.username === 'string' ? parsed.username : null,
+      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : null,
+    };
   } catch {
     return null;
   }
@@ -2812,6 +2824,11 @@ export function useAuth() {
     let inFlight = false;
     const tryReauth = async () => {
       if (inFlight) return;
+      // The vault locked or the user logged out since this effect armed:
+      // re-authenticating now would resurrect a deliberately ended session
+      // (rewrites the JWT, re-plants the vault marker, re-seals the session
+      // key store). identityKeyRef is nulled by both lock and logout.
+      if (identityKeyRef.current !== identity) return;
       inFlight = true;
       try {
         await performChallengeResponse(identity.privateKey, identity.publicKey, resolveReauthInstanceUrl());

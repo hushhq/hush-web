@@ -448,7 +448,10 @@ export function deriveAuthLifecycle(snapshot = {}) {
 
   if (loading) return AUTH_LIFECYCLE_STATES.BOOTING;
 
-  const hasSession = Boolean(hasToken && hasUser);
+  // An unlocked vault counts as a session even without a token: offline
+  // unlock (server unreachable) proves identity locally and the JWT is
+  // minted lazily on reconnect. Keep in sync with `hasSession` in useAuth.
+  const hasSession = Boolean(hasUser && (hasToken || isVaultUnlocked));
 
   if (hasSession) {
     if (needsPinSetup) return AUTH_LIFECYCLE_STATES.PIN_SETUP_REQUIRED;
