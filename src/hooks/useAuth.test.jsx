@@ -978,6 +978,82 @@ describe('useAuth - unlockVault', () => {
     expect(result.current.hasVault).toBe(true);
   });
 
+  it('falls back to offline unlock when the server is unreachable (no JWT)', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    const networkError = new Error('request challenge failed. Could not reach https://app.gethush.live/api/auth/challenge.');
+    vi.mocked(apiMod.requestChallenge).mockRejectedValueOnce(networkError);
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+
+    expect(result.current.vaultState).toBe('unlocked');
+    expect(localStorage.getItem('hush_pin_attempts_user-1')).toBeNull();
+    expect(result.current.authInvalidation).toBeNull();
+    // Offline unlock must be a full session: user rebuilt from the local
+    // snapshot so the boot controller routes into the app, not to login.
+    expect(result.current.user?.id).toBe('user-1');
+    expect(result.current.user?.username).toBe('alice');
+    expect(result.current.isAuthenticated).toBe(true);
+  });
+
+  it('mints a fresh JWT via the online event after an offline unlock', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    const networkError = new Error('request challenge failed. Could not reach the server.');
+    vi.mocked(apiMod.requestChallenge).mockRejectedValueOnce(networkError);
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+    expect(result.current.vaultState).toBe('unlocked');
+    expect(result.current.token).toBeNull();
+
+    // Server comes back: requestChallenge resolves again (default mock).
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(result.current.token).toBe('jwt-test'));
+  });
+
+  it('falls back to offline unlock when the server returns a 5xx/CDN error (no JWT)', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    const cdnError = Object.assign(new Error('requestChallenge 526'), { status: 526 });
+    vi.mocked(apiMod.requestChallenge).mockRejectedValueOnce(cdnError);
+
+    await act(async () => {
+      await result.current.unlockVault('correct');
+    });
+
+    expect(result.current.vaultState).toBe('unlocked');
+  });
+
+  it('still surfaces explicit auth rejections instead of unlocking offline (no JWT)', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await setupLockedVault(result);
+    clearSession();
+    const rejection = Object.assign(new Error('bad signature'), { status: 401 });
+    vi.mocked(apiMod.verifyChallenge).mockRejectedValueOnce(rejection);
+
+    let caught;
+    await act(async () => {
+      try { await result.current.unlockVault('correct'); } catch (err) { caught = err; }
+    });
+
+    expect(caught?.status).toBe(401);
+    expect(result.current.vaultState).not.toBe('unlocked');
+  });
+
   it('hydrates the transcript cache BEFORE flipping vaultState back to unlocked', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
