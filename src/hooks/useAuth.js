@@ -297,6 +297,9 @@ const PIN_DELAY_TABLE = [
 
 const MAX_PIN_FAILURES = 10;
 
+/** Retry cadence for minting a JWT after an offline unlock. */
+const OFFLINE_REAUTH_INTERVAL_MS = 30_000;
+
 // ── Module-level helpers ─────────────────────────────────────────────────────
 
 /**
@@ -671,6 +674,76 @@ function isServerSessionInvalidationError(err) {
 }
 
 /**
+ * Returns true when a challenge-response failure means the server could not
+ * be reached or is broken (fetch/network failure, 5xx, CDN errors such as
+ * Cloudflare 52x) rather than an explicit auth rejection. In these cases the
+ * vault has already been decrypted locally with the correct PIN, so unlock
+ * must proceed offline: server state must never lock users out of their own
+ * local data.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isServerUnavailableError(err) {
+  const status = Number(err?.status);
+  if (!Number.isFinite(status) || status === 0) return true;
+  if (status >= 500) return true;
+  // A 2xx that still produced an error means the body was not the API's
+  // JSON (captive portal, CDN interstitial). The server never answered the
+  // auth question, so this is unavailability, not a rejection.
+  return status >= 200 && status < 300;
+}
+
+const USER_SNAPSHOT_KEY_PREFIX = 'hush_user_snapshot_';
+
+/**
+ * Persists a minimal, non-secret profile snapshot so an offline unlock can
+ * rebuild the `user` object without the server. Only identity-display fields
+ * are stored; never tokens or key material. Guests are excluded: their
+ * sessions are server-minted and must not survive offline.
+ *
+ * @param {{ id: string, username?: string, displayName?: string, role?: string }|null} u
+ */
+function persistUserSnapshot(u) {
+  if (!u?.id || u.role === 'guest') return;
+  try {
+    localStorage.setItem(`${USER_SNAPSHOT_KEY_PREFIX}${u.id}`, JSON.stringify({
+      id: u.id,
+      username: u.username ?? null,
+      displayName: u.displayName ?? u.display_name ?? null,
+    }));
+  } catch {
+    // Best-effort: without a snapshot, offline unlock falls back to {id}.
+  }
+}
+
+/**
+ * Reads the persisted profile snapshot for `userId`, or null when absent
+ * or unreadable.
+ *
+ * @param {string} userId
+ * @returns {{ id: string, username: string|null, displayName: string|null }|null}
+ */
+function readUserSnapshot(userId) {
+  try {
+    const raw = localStorage.getItem(`${USER_SNAPSHOT_KEY_PREFIX}${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.id !== userId) return null;
+    // Rebuild only the fields this module wrote: localStorage is
+    // attacker-writable (local access/XSS) and must not inject arbitrary
+    // `user` fields such as `role`.
+    return {
+      id: parsed.id,
+      username: typeof parsed.username === 'string' ? parsed.username : null,
+      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Returns true only for errors produced by local vault decryption with an
  * incorrect PIN/passphrase. Server auth errors and storage corruption must not
  * consume PIN attempts or trigger local vault wipe.
@@ -856,9 +929,12 @@ export function useAuth() {
    */
   const voiceDisconnectRef = useRef(null);
 
-  const hasSession = Boolean(token && user);
-  const isAuthenticated = hasSession;
   const isVaultUnlocked = vaultState === 'unlocked' && Boolean(identityKeyRef.current?.privateKey);
+  // An unlocked vault is a session even without a JWT: the PIN/keystore
+  // already proved identity locally, and the server may be unreachable.
+  // The JWT is minted lazily by the offline re-auth effect below.
+  const hasSession = Boolean(user && (token || isVaultUnlocked));
+  const isAuthenticated = hasSession;
   const hasVault = hasLocalVault || vaultState === 'locked' || (vaultState === 'unlocked' && !isGuest);
   // An `authInvalidation` marker only short-circuits the PIN gate when
   // there is no live JWT/user session left. With a session still
@@ -1188,6 +1264,7 @@ export function useAuth() {
       localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}_last_user`);
       localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
       localStorage.removeItem(`hush_vault_config_${userId}`);
+      localStorage.removeItem(`${USER_SNAPSHOT_KEY_PREFIX}${userId}`);
     }
 
     localStorage.removeItem(DEVICE_ID_KEY);
@@ -1366,6 +1443,7 @@ export function useAuth() {
     currentUserIdRef.current = user.id;
     setToken(jwt);
     setUser(user);
+    persistUserSnapshot(user);
   }, [clearGuestTimers, clearAuthInvalidation]);
 
   const prepareAuthenticatedSession = useCallback(async (data, baseUrl = '') => {
@@ -1918,6 +1996,7 @@ export function useAuth() {
         }
         localStorage.removeItem(`${VAULT_USER_KEY_PREFIX}${userId}`);
         localStorage.removeItem(`${PIN_ATTEMPTS_KEY_PREFIX}${userId}`);
+        localStorage.removeItem(`${USER_SNAPSHOT_KEY_PREFIX}${userId}`);
         setToken(null);
         setUser(null);
         setVaultState(failurePlan.nextVaultState);
@@ -1969,8 +2048,25 @@ export function useAuth() {
           invalidatedError.cause = err;
           throw invalidatedError;
         }
-        throw err;
+        if (!isServerUnavailableError(err)) {
+          throw err;
+        }
+        // Server unreachable/broken: the PIN already proved ownership of the
+        // local vault, so continue with the local-only unlock below. A fresh
+        // JWT is minted later once the server is reachable again.
+        console.warn('[useAuth] server unreachable during PIN unlock; continuing offline:', err);
+        // No JWT exists in storage (checked above) — align React state so the
+        // offline re-auth effect can arm.
+        setToken(null);
       }
+    }
+
+    // Offline entry (no live server session): rebuild `user` from the local
+    // snapshot so the boot controller treats the unlocked vault as a session.
+    if (!user) {
+      const offlineUser = readUserSnapshot(userId) ?? { id: userId };
+      currentUserIdRef.current = userId;
+      setUser(prev => prev ?? offlineUser);
     }
 
     clearPinSetup();
@@ -2259,15 +2355,26 @@ export function useAuth() {
 
       if (!existingJwt) {
         const reauthBaseUrl = resolveReauthInstanceUrl();
-        // performChallengeResponse handles identityKeyRef, token, user,
-        // vaultState, transcript cache, and applyVaultTimeout.
-        await performChallengeResponse(privateKey, publicKey, reauthBaseUrl);
-        return true;
+        try {
+          // performChallengeResponse handles identityKeyRef, token, user,
+          // vaultState, transcript cache, and applyVaultTimeout.
+          await performChallengeResponse(privateKey, publicKey, reauthBaseUrl);
+          return true;
+        } catch (err) {
+          // Auth rejections keep today's behavior: outer catch → false →
+          // PIN fallback (which owns invalidation handling). Only a server
+          // that cannot be reached falls through to the offline unlock.
+          if (!isServerUnavailableError(err)) throw err;
+          console.warn('[useAuth] desktop auto-unlock: server unreachable; unlocking offline:', err);
+        }
       }
 
-      // JWT still valid — unlock in memory only.
+      // JWT still valid (or server unreachable) — unlock in memory only.
       identityKeyRef.current = { privateKey, publicKey };
       setHasLocalVault(true);
+      // Offline entry: rebuild `user` locally (see unlockVault fall-through).
+      currentUserIdRef.current = userId;
+      setUser(prev => prev ?? (readUserSnapshot(userId) ?? { id: userId }));
       clearPinSetup();
       try {
         await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
@@ -2352,14 +2459,21 @@ export function useAuth() {
         await performChallengeResponse(privateKey, publicKey, reauthBaseUrl);
         return true;
       } catch (err) {
-        console.warn('[useAuth] vault session-key challenge-response failed:', err);
-        return false;
+        if (!isServerUnavailableError(err)) {
+          console.warn('[useAuth] vault session-key challenge-response failed:', err);
+          return false;
+        }
+        // Server unreachable: fall through to the in-memory unlock below.
+        console.warn('[useAuth] vault session-key auto-unlock: server unreachable; unlocking offline:', err);
       }
     }
 
-    // JWT still valid — unlock in memory only.
+    // JWT still valid (or server unreachable) — unlock in memory only.
     identityKeyRef.current = { privateKey, publicKey };
     setHasLocalVault(true);
+    // Offline entry: rebuild `user` locally (see unlockVault fall-through).
+    currentUserIdRef.current = userId;
+    setUser(prev => prev ?? (readUserSnapshot(userId) ?? { id: userId }));
     clearPinSetup();
     try {
       await loadTranscriptCacheFromDisk({ userId, rootPrivateKey: privateKey });
@@ -2546,6 +2660,7 @@ export function useAuth() {
           if (cancelled) return;
           setToken(stored);
           setUser(u);
+          persistUserSnapshot(u);
 
           let vaultPublicKeyHex = localStorage.getItem(`${VAULT_USER_KEY_PREFIX}${u.id}`);
           let idbVaultCheck = null;
@@ -2694,6 +2809,47 @@ export function useAuth() {
       presence.close();
     };
   }, [vaultState, user?.id]);
+
+  // ── Offline re-auth: mint a JWT once the server is reachable again ────────
+  //
+  // An offline unlock (PIN or auto-unlock with the server unreachable) leaves
+  // the vault unlocked with no token. Retry challenge-response on the
+  // browser `online` signal and on a slow interval until a session exists.
+
+  useEffect(() => {
+    if (vaultState !== 'unlocked' || token || isGuest) return undefined;
+    const identity = identityKeyRef.current;
+    if (!identity?.privateKey || !identity?.publicKey) return undefined;
+
+    let inFlight = false;
+    const tryReauth = async () => {
+      if (inFlight) return;
+      // The vault locked or the user logged out since this effect armed:
+      // re-authenticating now would resurrect a deliberately ended session
+      // (rewrites the JWT, re-plants the vault marker, re-seals the session
+      // key store). identityKeyRef is nulled by both lock and logout.
+      if (identityKeyRef.current !== identity) return;
+      inFlight = true;
+      try {
+        await performChallengeResponse(identity.privateKey, identity.publicKey, resolveReauthInstanceUrl());
+      } catch (err) {
+        if (isServerSessionInvalidationError(err)) {
+          markServerSessionInvalidated(AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID);
+          return;
+        }
+        // Still unreachable — the next trigger retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    window.addEventListener('online', tryReauth);
+    const interval = setInterval(tryReauth, OFFLINE_REAUTH_INTERVAL_MS);
+    return () => {
+      window.removeEventListener('online', tryReauth);
+      clearInterval(interval);
+    };
+  }, [vaultState, token, isGuest, performChallengeResponse, markServerSessionInvalidated]);
 
   // ── Visibility change re-verification ─────────────────────────────────────
 

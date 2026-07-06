@@ -342,6 +342,17 @@ describe('deriveAuthLifecycle', () => {
     ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
   });
 
+  it('returns authorized for an offline unlock (unlocked vault, user, no token)', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: false,
+        hasUser: true,
+        hasLocalVault: true,
+        isVaultUnlocked: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
+  });
+
   it('returns authorized for a live session without a local vault', () => {
     expect(
       deriveAuthLifecycle({
