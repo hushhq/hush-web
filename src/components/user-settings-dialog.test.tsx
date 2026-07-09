@@ -125,7 +125,6 @@ describe("UserSettingsDialog", () => {
     ).not.toBeInTheDocument()
 
     const disabledSections = [
-      /^profile$/i,
       /^privacy & safety$/i,
       /^notifications$/i,
       /^keybinds$/i,
@@ -138,15 +137,102 @@ describe("UserSettingsDialog", () => {
       expect(screen.getByRole("button", { name })).toBeDisabled()
     }
 
+    // Clicking a still-disabled section must not navigate away from
+    // the default Account panel. (Profile used to live here too, but
+    // is now enabled — exercised by the dedicated tests below.)
     const u = userEvent.setup()
-    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /^notifications$/i }))
 
     expect(
       screen.getByRole("heading", { name: /^my account$/i })
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole("heading", { name: /^profile$/i })
+      screen.queryByRole("heading", { name: /^notifications$/i })
     ).not.toBeInTheDocument()
+  })
+
+  it("enables the Profile section and renders the user's profile", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+        homeInstanceUrl="https://chat.example.com"
+      />
+    )
+
+    const profileBtn = screen.getByRole("button", { name: /^profile$/i })
+    expect(profileBtn).toBeEnabled()
+
+    const u = userEvent.setup()
+    await u.click(profileBtn)
+
+    expect(
+      screen.getByRole("heading", { name: /^profile$/i })
+    ).toBeInTheDocument()
+    // Display name appears in both the hero card and the field list.
+    expect(screen.getAllByText("Yarin").length).toBeGreaterThanOrEqual(1)
+    // Username renders as a handle (`@` is decorative + aria-hidden,
+    // so the visible text is just "yarin").
+    expect(screen.getAllByText("yarin").length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText("chat.example.com")).toBeInTheDocument()
+    expect(screen.getByText(/home instance/i)).toBeInTheDocument()
+  })
+
+  it("falls back to 'Not set' on the Profile panel when display name is blank", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    // Display-name field renders "Not set" — username MUST NOT fall
+    // through into the display-name slot at this surface
+    // (CORE-INVARIANTS §"User Identity, Profiles, Members, …").
+    expect(screen.getAllByText("Not set").length).toBeGreaterThanOrEqual(1)
+    // Username still renders as a handle below.
+    expect(screen.getAllByText("yarin").length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("sanitizes a legacy @-prefixed display name on the Profile panel", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "@yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    // The leading "@" on display name is stripped before render; the
+    // username handle's "@" is decorative and aria-hidden. Together,
+    // "@@yarin" must never appear in the visible DOM.
+    expect(document.body.textContent ?? "").not.toMatch(/@@/)
+    // displayName + username collapse to "yarin" across hero card +
+    // both field rows — at least 3 occurrences expected.
+    expect(screen.getAllByText("yarin").length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("omits the home instance row on the Profile panel when no URL is provided", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    expect(screen.queryByText(/home instance/i)).not.toBeInTheDocument()
   })
 
   it("enables Appearance theme and glass controls", async () => {
