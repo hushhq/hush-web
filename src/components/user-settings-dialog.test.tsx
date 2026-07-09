@@ -4,7 +4,7 @@
  * persists the Security → Vault timeout choice through useAuth.
  */
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -125,7 +125,6 @@ describe("UserSettingsDialog", () => {
     ).not.toBeInTheDocument()
 
     const disabledSections = [
-      /^profile$/i,
       /^privacy & safety$/i,
       /^notifications$/i,
       /^keybinds$/i,
@@ -138,15 +137,272 @@ describe("UserSettingsDialog", () => {
       expect(screen.getByRole("button", { name })).toBeDisabled()
     }
 
+    // Clicking a still-disabled section must not navigate away from
+    // the default Account panel. (Profile used to live here too, but
+    // is now enabled — exercised by the dedicated tests below.)
     const u = userEvent.setup()
-    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /^notifications$/i }))
 
     expect(
       screen.getByRole("heading", { name: /^my account$/i })
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole("heading", { name: /^profile$/i })
+      screen.queryByRole("heading", { name: /^notifications$/i })
     ).not.toBeInTheDocument()
+  })
+
+  it("enables the Profile section and renders the user's profile", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+        homeInstanceUrl="https://chat.example.com"
+      />
+    )
+
+    const profileBtn = screen.getByRole("button", { name: /^profile$/i })
+    expect(profileBtn).toBeEnabled()
+
+    const u = userEvent.setup()
+    await u.click(profileBtn)
+
+    expect(
+      screen.getByRole("heading", { name: /^profile$/i })
+    ).toBeInTheDocument()
+    // Display name appears in both the hero card and the field list.
+    expect(screen.getAllByText("Yarin").length).toBeGreaterThanOrEqual(1)
+    // Username renders as a handle (`@` is decorative + aria-hidden,
+    // so the visible text is just "yarin").
+    expect(screen.getAllByText("yarin").length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText("chat.example.com")).toBeInTheDocument()
+    expect(screen.getByText(/home instance/i)).toBeInTheDocument()
+  })
+
+  it("falls back to 'Not set' on the Profile panel when display name is blank", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    // Display-name field renders "Not set" — username MUST NOT fall
+    // through into the display-name slot at this surface
+    // (CORE-INVARIANTS §"User Identity, Profiles, Members, …").
+    expect(screen.getAllByText("Not set").length).toBeGreaterThanOrEqual(1)
+    // Username still renders as a handle below.
+    expect(screen.getAllByText("yarin").length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("sanitizes a legacy @-prefixed display name on the Profile panel", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "@yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    // The leading "@" on display name is stripped before render; the
+    // username handle's "@" is decorative and aria-hidden. Together,
+    // "@@yarin" must never appear in the visible DOM.
+    expect(document.body.textContent ?? "").not.toMatch(/@@/)
+    // displayName + username collapse to "yarin" across hero card +
+    // both field rows — at least 3 occurrences expected.
+    expect(screen.getAllByText("yarin").length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("omits the home instance row on the Profile panel when no URL is provided", async () => {
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    expect(screen.queryByText(/home instance/i)).not.toBeInTheDocument()
+  })
+
+  // ---------- Profile edit flow ----------
+
+  it("calls updateAccountProfile with the trimmed display name on Save", async () => {
+    const updateAccountProfile = vi.fn().mockResolvedValue(undefined)
+    mockUseAuth.mockReturnValue({ updateAccountProfile })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+
+    // Find the row's edit pencil. The aria-label matches "edit display name".
+    await u.click(screen.getByRole("button", { name: /edit display name/i }))
+
+    const input = screen.getByRole("textbox", { name: /edit display name/i })
+    await u.clear(input)
+    await u.type(input, "  Alice Cooper  ")
+    await u.click(screen.getByRole("button", { name: /^save$/i }))
+
+    await waitFor(() => {
+      expect(updateAccountProfile).toHaveBeenCalledTimes(1)
+    })
+    expect(updateAccountProfile).toHaveBeenCalledWith({ displayName: "Alice Cooper" })
+  })
+
+  it("submits on Enter and exits edit mode on success", async () => {
+    const updateAccountProfile = vi.fn().mockResolvedValue(undefined)
+    mockUseAuth.mockReturnValue({ updateAccountProfile })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /edit display name/i }))
+
+    const input = screen.getByRole("textbox", { name: /edit display name/i })
+    await u.clear(input)
+    await u.type(input, "Alice{Enter}")
+
+    await waitFor(() => {
+      expect(updateAccountProfile).toHaveBeenCalledWith({ displayName: "Alice" })
+    })
+    // After success the input is removed and the static value shows again.
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("textbox", { name: /edit display name/i })
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  it("Escape cancels the edit and does not call the server", async () => {
+    const updateAccountProfile = vi.fn()
+    mockUseAuth.mockReturnValue({ updateAccountProfile })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /edit display name/i }))
+
+    const input = screen.getByRole("textbox", { name: /edit display name/i })
+    await u.type(input, "draft change")
+    await u.keyboard("{Escape}")
+
+    expect(updateAccountProfile).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole("textbox", { name: /edit display name/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it("does not call the server when the value is unchanged", async () => {
+    const updateAccountProfile = vi.fn()
+    mockUseAuth.mockReturnValue({ updateAccountProfile })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /edit display name/i }))
+    await u.click(screen.getByRole("button", { name: /^save$/i }))
+
+    expect(updateAccountProfile).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole("textbox", { name: /edit display name/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it("shows an inline error and keeps edit mode open when the server rejects", async () => {
+    const updateAccountProfile = vi
+      .fn()
+      .mockRejectedValue(new Error("display name too long"))
+    mockUseAuth.mockReturnValue({ updateAccountProfile })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /edit display name/i }))
+
+    const input = screen.getByRole("textbox", { name: /edit display name/i })
+    await u.clear(input)
+    await u.type(input, "Alice{Enter}")
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/too long/i)
+    })
+    // Input is still mounted so the user can correct + retry.
+    expect(
+      screen.getByRole("textbox", { name: /edit display name/i })
+    ).toBeInTheDocument()
+  })
+
+  it("rejects an over-length draft client-side without calling the server", async () => {
+    const updateAccountProfile = vi.fn()
+    mockUseAuth.mockReturnValue({ updateAccountProfile })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^profile$/i }))
+    await u.click(screen.getByRole("button", { name: /edit display name/i }))
+
+    const input = screen.getByRole("textbox", { name: /edit display name/i })
+    // The input's `maxLength` prevents the user from TYPING past 128
+    // chars; this test guards the submit-time check by pasting straight
+    // into value via fireEvent.change which bypasses maxLength.
+    const tooLong = "a".repeat(129)
+    fireEvent.change(input, { target: { value: tooLong } })
+    await u.click(screen.getByRole("button", { name: /^save$/i }))
+
+    expect(updateAccountProfile).not.toHaveBeenCalled()
+    expect(screen.getByRole("alert")).toHaveTextContent(/128 characters or fewer/i)
   })
 
   it("enables Appearance theme and glass controls", async () => {

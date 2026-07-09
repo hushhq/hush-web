@@ -101,6 +101,7 @@ import {
   registerWithPublicKey,
   requestGuestSession,
   resolveAuthAudience,
+  updateProfile,
 } from '../lib/api';
 import {
   HOSTED_AUTH_INSTANCE_URL,
@@ -2212,6 +2213,36 @@ export function useAuth() {
     }
   }, [applyVaultTimeout, getEffectiveVaultConfig, user?.id, vaultState]);
 
+  /**
+   * Updates the current user's profile fields via PATCH /api/auth/me on
+   * the home instance and threads the server-returned user payload back
+   * into local React state so every surface that derives from
+   * `useAuth().user` (member rosters, sidebar avatars, settings panels,
+   * inline profile-card popovers) reflects the change immediately —
+   * without a separate refetch round-trip.
+   *
+   * Username is intentionally not accepted: usernames are derived from
+   * the BIP39 root key at registration and cannot be edited through a
+   * regular profile-update endpoint.
+   *
+   * Returns the updated user on success. Throws if not authenticated,
+   * or if the server rejects the update (e.g. validation failure).
+   *
+   * @param {{ displayName?: string }} fields
+   * @returns {Promise<object>} updated user payload
+   */
+  const updateAccountProfile = useCallback(async (fields) => {
+    const jwt = getLocalToken();
+    if (!jwt) throw new Error('not authenticated');
+    if (!user?.id) throw new Error('no authenticated user');
+
+    const updated = await updateProfile(jwt, fields ?? {});
+    if (updated && typeof updated === 'object') {
+      setUser(updated);
+    }
+    return updated;
+  }, [user?.id]);
+
   // ── Scorched-earth logout ──────────────────────────────────────────────────
 
   /**
@@ -2965,6 +2996,7 @@ export function useAuth() {
     lockVault,
     setPIN,
     updateVaultTimeout,
+    updateAccountProfile,
     skipPinSetup,
     performLogout,
     clearError,

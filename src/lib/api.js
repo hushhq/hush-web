@@ -777,6 +777,45 @@ export async function registerWithPublicKey(
 }
 
 /**
+ * PATCH /api/auth/me — update the current user's profile.
+ *
+ * Only `displayName` is editable today. Username is derived from the
+ * BIP39 root key at registration and can only change through the
+ * re-registration ceremony, so it is intentionally not accepted here.
+ *
+ * Server-side validation rules (must match `validateDisplayName` in
+ * `hush-server/internal/api/auth.go`):
+ *   - trimmed length ≤ 128 (server `maxDisplayLen`)
+ *   - no control characters (< 0x20 or 0x7f)
+ *   - empty string is allowed and clears the field to the schema default
+ *
+ * Returns the full updated user object so callers can refresh their
+ * caches without a separate `GET /me` round-trip.
+ *
+ * @param {string} token - JWT.
+ * @param {{ displayName?: string }} fields - Fields to update. Omitted
+ *   keys are not touched on the server (pointer fields on the wire).
+ * @param {string} [baseUrl=''] - Optional base URL for cross-instance calls.
+ * @returns {Promise<object>} The updated user payload.
+ */
+export async function updateProfile(token, fields, baseUrl = '') {
+  const body = {};
+  if (fields && fields.displayName !== undefined) {
+    body.displayName = fields.displayName;
+  }
+  const res = await fetchWithAuth(token, '/api/auth/me', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, baseUrl);
+  if (!res.ok) {
+    const data = await readJsonResponseOrNull(res, 'updateProfile');
+    throw createApiHttpError(data, `updateProfile ${res.status}`, res.status);
+  }
+  return await readJsonResponse(res, 'updateProfile');
+}
+
+/**
  * List all registered device keys for the authenticated user.
  *
  * @param {string} token - JWT
